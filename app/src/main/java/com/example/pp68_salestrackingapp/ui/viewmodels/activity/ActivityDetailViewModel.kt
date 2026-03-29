@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.pp68_salestrackingapp.data.repository.ActivityRepository
 import com.example.pp68_salestrackingapp.data.model.SalesActivity
 import com.example.pp68_salestrackingapp.data.model.PlanItemDto
+import com.example.pp68_salestrackingapp.data.model.MasterActDto
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -22,7 +23,7 @@ data class ActivityDetailUiState(
     // Check-in
     val showCheckinDialog: Boolean = false,
     val isLocationMismatch: Boolean = false,
-    val currentDistance: Double = 0.0,
+    val currentDistance: Double = 0.0, // in meters
     val isCheckingIn: Boolean = false,
     
     // Finish
@@ -44,7 +45,6 @@ class ActivityDetailViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, error = null) }
             val actResult = repo.getActivityById(id)
-            // Mocking plan items for now as repo might not have it yet
             val itemsResult = repo.getPlanItems(id)
             
             _uiState.update { 
@@ -64,11 +64,42 @@ class ActivityDetailViewModel @Inject constructor(
         }
     }
 
+    fun updateCurrentLocation(lat: Double, lng: Double) {
+        val act = _uiState.value.activity ?: return
+        val plannedLat = act.plannedLat ?: return
+        val plannedLng = act.plannedLong ?: return
+
+        val distance = calculateDistance(lat, lng, plannedLat, plannedLng)
+        _uiState.update { 
+            it.copy(
+                currentDistance = distance,
+                isLocationMismatch = distance > 200 // 200 meters threshold
+            )
+        }
+    }
+
+    private fun calculateDistance(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
+        val r = 6371e3 // Earth radius in meters
+        val phi1 = lat1 * PI / 180
+        val phi2 = lat2 * PI / 180
+        val deltaPhi = (lat2 - lat1) * PI / 180
+        val deltaLambda = (lon2 - lon1) * PI / 180
+
+        val a = sin(deltaPhi / 2).pow(2) +
+                cos(phi1) * cos(phi2) *
+                sin(deltaLambda / 2).pow(2)
+        val c = 2 * atan2(sqrt(a), sqrt(1 - a))
+
+        return r * c
+    }
+
     fun confirmCheckin(lat: Double, lng: Double) {
         val act = _uiState.value.activity ?: return
+        val isVerified = !(_uiState.value.isLocationMismatch)
+
         viewModelScope.launch {
             _uiState.update { it.copy(isCheckingIn = true, error = null) }
-            repo.checkIn(act.activityId, lat, lng).fold(
+            repo.checkIn(act.activityId, lat, lng, isVerified).fold(
                 onSuccess = {
                     _uiState.update { it.copy(isCheckingIn = false, showCheckinDialog = false) }
                     loadActivity(act.activityId)
@@ -86,15 +117,11 @@ class ActivityDetailViewModel @Inject constructor(
         else current.add(masterId)
         _uiState.update { it.copy(selectedItemIds = current) }
 
-        // ✅ บันทึกสถานะลง DB และ API ทันทีที่ tick
         val activityId = _uiState.value.activity?.activityId ?: return
         val isDone = current.contains(masterId)
 
         viewModelScope.launch {
-            // อัปเดต local DB
             repo.updatePlanItemStatus(activityId, masterId, isDone)
-
-            // ✅ อัปเดต activity_checklist ใน API ด้วย
             repo.updateChecklistItem(activityId, masterId, isDone)
         }
     }
@@ -111,7 +138,6 @@ class ActivityDetailViewModel @Inject constructor(
                 doneMasterIds = doneIds,
                 note          = null
             ).onSuccess {
-                // ✅ set isFinished = true เพื่อ trigger navigate กลับ
                 _uiState.update { it.copy(isFinishing = false, isFinished = true) }
             }.onFailure { e ->
                 _uiState.update { it.copy(isFinishing = false, error = "Finish ไม่สำเร็จ: ${e.message}") }
@@ -119,9 +145,11 @@ class ActivityDetailViewModel @Inject constructor(
         }
     }
 
+    fun setShowCheckinDialog(show: Boolean) {
+        _uiState.update { it.copy(showCheckinDialog = show) }
+    }
+
     fun clearError() {
         _uiState.update { it.copy(error = null) }
     }
-
-
 }

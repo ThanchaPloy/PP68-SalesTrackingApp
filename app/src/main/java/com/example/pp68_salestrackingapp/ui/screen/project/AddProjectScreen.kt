@@ -137,14 +137,14 @@ fun AddProjectContent(
                 )
             }
 
-            // ── Branch ────────────────────────────────────────
-            FormField("Branch") {
-                FormTextField(
-                    value         = uiState.branch,
-                    onValueChange = { onEvent(AddProjectEvent.BranchChanged(it)) },
-                    placeholder   = "branch"
-                )
-            }
+//            // ── Branch ────────────────────────────────────────
+//            FormField("Branch") {
+//                FormTextField(
+//                    value         = uiState.branch,
+//                    onValueChange = { onEvent(AddProjectEvent.BranchChanged(it)) },
+//                    placeholder   = "branch"
+//                )
+//            }
 
             // ── Customer/Company * ────────────────────────────
             FormField("Customer/Company", required = true) {

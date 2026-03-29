@@ -1,12 +1,14 @@
 package com.example.pp68_salestrackingapp.ui.viewmodels.activity
 
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
 import com.example.pp68_salestrackingapp.data.model.AuthUser
 import com.example.pp68_salestrackingapp.data.repository.AuthRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 data class SettingsUiState(
@@ -31,6 +33,8 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun logout() {
-        authRepo.logout()
+        viewModelScope.launch {
+            authRepo.logout()
+        }
     }
 }

@@ -24,7 +24,6 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
-import java.time.LocalDate
 
 import com.example.pp68_salestrackingapp.data.model.Project
 import com.example.pp68_salestrackingapp.ui.components.AppTopBar
@@ -357,8 +356,9 @@ private fun ProjectHeaderCard(
     onEdit:      () -> Unit
 ) {
     Surface(
-        color    = BgPink,
-        modifier = Modifier.fillMaxWidth()
+        color    = White,
+        modifier = Modifier.fillMaxWidth(),
+        border = androidx.compose.foundation.BorderStroke(1.dp, BorderGray)
     ) {
         Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp)) {
             Row(
@@ -402,7 +402,7 @@ private fun ProjectHeaderCard(
             ) {
                 Column {
                     Text("Status", fontSize = 12.sp, color = TextGray)
-                    ProjectStatusBadge(status = project.projectStatus)
+                    ProjectStatusBadge(status = project.projectStatus ?: "N/A")
                 }
                 Column(horizontalAlignment = Alignment.End) {
                     Text("Expected Value", fontSize = 12.sp, color = TextGray)
@@ -417,7 +417,7 @@ private fun ProjectHeaderCard(
             // ✅ เพิ่ม Progress Bar
             if (project.projectStatus !in listOf("Lost", "Failed")) {
                 Spacer(Modifier.height(16.dp))
-                HorizontalDivider(color = Color(0xFFFFCDD2).copy(alpha = 0.5f))
+                HorizontalDivider(color = Color(0xFFFFFFFF).copy(alpha = 0.5f))
                 Spacer(Modifier.height(12.dp))
                 Text(
                     "Sales Progress",
@@ -460,11 +460,6 @@ private fun ProjectHeaderCard(
             }
         }
     }
-}
-
-@Composable
-fun ProjectProgressBar(status: String?, modifier: Modifier) {
-    TODO("Not yet implemented")
 }
 
 @Composable

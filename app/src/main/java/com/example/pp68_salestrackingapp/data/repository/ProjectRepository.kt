@@ -23,16 +23,27 @@ class ProjectRepository @Inject constructor(
     suspend fun refreshProjects(userId: String): Result<Unit> {
         return withContext(Dispatchers.IO) {
             try {
+                // 1. ดึง project_id และ project_number ของ User จาก project_sales_member
                 val memberResp = apiService.getMyProjectIds(userId = "eq.$userId")
                 if (!memberResp.isSuccessful || memberResp.body().isNullOrEmpty()) {
                     projectDao.clearAndInsert(emptyList())
                     return@withContext Result.success(Unit)
                 }
-                val projectIds = memberResp.body()!!.map { it.projectId }
+                
+                val memberData = memberResp.body()!!
+                val projectIds = memberData.map { it.projectId }
+                
+                // 2. ดึงรายละเอียด Project ทั้งหมด
                 val idsParam   = "in.(${projectIds.joinToString(",")})"
                 val projectResp = apiService.getProjectsByIds(projectIds = idsParam)
+                
                 if (projectResp.isSuccessful && projectResp.body() != null) {
-                    projectDao.clearAndInsert(projectResp.body()!!)
+                    val projects = projectResp.body()!!.map { project ->
+                        // 3. Mapping project_number จาก memberData กลับเข้า Object Project
+                        val myNumber = memberData.find { it.projectId == project.projectId }?.projectNumber
+                        project.copy(projectNumber = myNumber)
+                    }
+                    projectDao.clearAndInsert(projects)
                     Result.success(Unit)
                 } else {
                     Result.failure(Exception("โหลด Project ไม่สำเร็จ: HTTP ${projectResp.code()}"))
@@ -48,11 +59,12 @@ class ProjectRepository @Inject constructor(
             try {
                 val local = projectDao.getProjectById(projectId)
                 if (local != null) return@withContext Result.success(local)
+                
                 val response = apiService.getProjectById("eq.$projectId")
-                val body     = response.body()
-                if (response.isSuccessful && !body.isNullOrEmpty()) {
-                    projectDao.insertProject(body.first())
-                    Result.success(body.first())
+                if (response.isSuccessful && !response.body().isNullOrEmpty()) {
+                    val project = response.body()!!.first()
+                    projectDao.insertProject(project)
+                    Result.success(project)
                 } else {
                     Result.failure(Exception("ไม่พบข้อมูล Project"))
                 }
@@ -62,13 +74,30 @@ class ProjectRepository @Inject constructor(
         }
     }
 
-    suspend fun createProject(project: Project): Result<Unit> {
+    suspend fun createProject(project: Project, userId: String): Result<Unit> {
         return withContext(Dispatchers.IO) {
             try {
-                val response = apiService.addProject(project)
-                projectDao.insertProject(project)
-                if (response.isSuccessful) Result.success(Unit)
-                else Result.failure(Exception("HTTP ${response.code()}: ${response.errorBody()?.string()}"))
+                // 1. สร้าง Project (โดยไม่ส่ง project_number ไปที่ตาราง project)
+                val response = apiService.addProject(project.copy(projectNumber = null))
+                if (response.isSuccessful) {
+                    // 2. Insert ลงตาราง project_sales_member พร้อม project_number
+                    val member = ProjectMemberInsertDto(
+                        projectId = project.projectId,
+                        userId = userId,
+                        saleRole = "owner",
+                        projectNumber = project.projectNumber
+                    )
+                    val memberResp = apiService.addProjectMembers(listOf(member))
+                    
+                    if (memberResp.isSuccessful) {
+                        projectDao.insertProject(project)
+                        Result.success(Unit)
+                    } else {
+                        Result.failure(Exception("สร้าง Member ไม่สำเร็จ: ${memberResp.code()}"))
+                    }
+                } else {
+                    Result.failure(Exception("HTTP ${response.code()}: ${response.errorBody()?.string()}"))
+                }
             } catch (e: Exception) {
                 Result.failure(e)
             }
@@ -78,7 +107,6 @@ class ProjectRepository @Inject constructor(
     suspend fun updateProject(project: Project): kotlin.Result<Unit> {
         return withContext(Dispatchers.IO) {
             try {
-                // ✅ คำนวณ progress_pct จาก status
                 val progressPct = when (project.projectStatus) {
                     "Lead"            -> 10
                     "New Project"     -> 20
@@ -95,7 +123,7 @@ class ProjectRepository @Inject constructor(
                     "project_status" to (project.projectStatus ?: ""),
                     "expected_value" to (project.expectedValue?.toString() ?: ""),
                     "branch_id"      to (project.branchId ?: ""),
-                    "progress_pct"   to progressPct.toString()  // ✅ เพิ่ม
+                    "progress_pct"   to progressPct.toString()
                 )
                 val response = apiService.updateProject("eq.${project.projectId}", updates)
                 projectDao.insertProject(project.copy(progressPct = progressPct))
@@ -125,20 +153,12 @@ class ProjectRepository @Inject constructor(
             try {
                 val response = apiService.updateProject("eq.$projectId", fields)
                 if (response.isSuccessful) {
-                    // ✅ แจ้ง Firebase ถ้ามีการเปลี่ยน status
                     fields["project_status"]?.let { newStatus ->
                         val project = projectDao.getProjectById(projectId)
                         firebaseService.updateProjectStatus(
                             projectId   = projectId,
                             newStatus   = newStatus,
                             projectName = project?.projectName ?: projectId,
-                            updatedBy   = ""
-                        )
-                        firebaseService.pushStatusChangeEvent(
-                            projectId   = projectId,
-                            projectName = project?.projectName ?: projectId,
-                            oldStatus   = project?.projectStatus ?: "",
-                            newStatus   = newStatus,
                             updatedBy   = ""
                         )
                     }
@@ -183,7 +203,8 @@ class ProjectRepository @Inject constructor(
     suspend fun addProjectMembers(
         projectId: String,
         userIds:   List<String>,
-        role:      String = "support"
+        role:      String = "support",
+        projectNumber: String? = null
     ): Result<Unit> {
         return withContext(Dispatchers.IO) {
             try {
@@ -191,7 +212,8 @@ class ProjectRepository @Inject constructor(
                     ProjectMemberInsertDto(
                         projectId = projectId,
                         userId    = userId,
-                        saleRole  = role
+                        saleRole  = role,
+                        projectNumber = projectNumber
                     )
                 }
                 val response = apiService.addProjectMembers(members)

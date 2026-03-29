@@ -14,6 +14,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.MyLocation
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -34,8 +35,13 @@ import androidx.compose.ui.tooling.preview.Preview
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
 import com.google.android.gms.tasks.CancellationTokenSource
+import com.google.android.gms.maps.CameraUpdateFactory
+import com.google.android.gms.maps.model.BitmapDescriptorFactory
 import com.google.android.gms.maps.model.CameraPosition
+import com.google.android.gms.maps.model.Dash
+import com.google.android.gms.maps.model.Gap
 import com.google.android.gms.maps.model.LatLng
+import com.google.android.gms.maps.model.LatLngBounds
 import com.google.maps.android.compose.*
 
 private val RedPrimary = Color(0xFFCC1D1D)
@@ -43,6 +49,7 @@ private val White      = Color.White
 private val TextDark   = Color(0xFF1A1A1A)
 private val TextGray   = Color(0xFF888888)
 private val BgLight    = Color(0xFFF5F5F5)
+private val WarningOrange = Color(0xFFF59E0B)
 
 @Composable
 fun CheckInScreen(
@@ -67,6 +74,7 @@ fun CheckInScreen(
             fetchLocation(fusedLocationClient) { lat, lng ->
                 currentLat = lat
                 currentLng = lng
+                viewModel.updateCurrentLocation(lat, lng)
             }
         }
     }
@@ -79,6 +87,7 @@ fun CheckInScreen(
             fetchLocation(fusedLocationClient) { lat, lng ->
                 currentLat = lat
                 currentLng = lng
+                viewModel.updateCurrentLocation(lat, lng)
                 isFetchingLocation = false
             }
         } else {
@@ -93,6 +102,31 @@ fun CheckInScreen(
         LaunchedEffect(Unit) { onBack() }
     }
 
+    // Confirmation Dialog for Mismatch
+    if (s.showCheckinDialog) {
+        AlertDialog(
+            onDismissRequest = { viewModel.setShowCheckinDialog(false) },
+            icon = { Icon(Icons.Default.Warning, null, tint = WarningOrange) },
+            title = { Text("ยืนยันการเช็คอินนอกพื้นที่") },
+            text = { 
+                Text("คุณอยู่ห่างจากจุดนัดหมายเป็นระยะทางประมาณ ${"%.0f".format(s.currentDistance)} เมตร " +
+                     "ซึ่งเกินกว่าระยะที่กำหนด (200ม.) ต้องการยืนยันการเช็คอินใช่หรือไม่?") 
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        if (currentLat != null && currentLng != null) {
+                            viewModel.confirmCheckin(currentLat!!, currentLng!!)
+                        }
+                    }
+                ) { Text("ยืนยัน", color = RedPrimary, fontWeight = FontWeight.Bold) }
+            },
+            dismissButton = {
+                TextButton(onClick = { viewModel.setShowCheckinDialog(false) }) { Text("ยกเลิก") }
+            }
+        )
+    }
+
     CheckInContent(
         uiState = s,
         currentLat = currentLat,
@@ -104,11 +138,16 @@ fun CheckInScreen(
             fetchLocation(fusedLocationClient) { lat, lng ->
                 currentLat = lat
                 currentLng = lng
+                viewModel.updateCurrentLocation(lat, lng)
                 isFetchingLocation = false
             }
         },
         onConfirmCheckin = { lat, lng ->
-            viewModel.confirmCheckin(lat, lng)
+            if (s.isLocationMismatch) {
+                viewModel.setShowCheckinDialog(true)
+            } else {
+                viewModel.confirmCheckin(lat, lng)
+            }
         }
     )
 }
@@ -142,18 +181,56 @@ fun CheckInContent(
         ) {
             Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
                 if (currentLat != null && currentLng != null) {
+                    val currentPos = LatLng(currentLat, currentLng)
                     val cameraPositionState = rememberCameraPositionState {
-                        position = CameraPosition.fromLatLngZoom(LatLng(currentLat, currentLng), 17f)
+                        position = CameraPosition.fromLatLngZoom(currentPos, 15f)
+                    }
+
+                    // ปรับตำแหน่งกล้องให้เห็นทั้งสองจุดเมื่อข้อมูลพร้อม
+                    val targetLat = uiState.activity?.plannedLat
+                    val targetLng = uiState.activity?.plannedLong
+                    LaunchedEffect(currentLat, currentLng, targetLat, targetLng) {
+                        if (targetLat != null && targetLng != null) {
+                            val targetPos = LatLng(targetLat, targetLng)
+                            val bounds = LatLngBounds.builder()
+                                .include(currentPos)
+                                .include(targetPos)
+                                .build()
+                            cameraPositionState.animate(
+                                CameraUpdateFactory.newLatLngBounds(bounds, 150)
+                            )
+                        }
                     }
 
                     GoogleMap(
                         modifier = Modifier.fillMaxSize(),
-                        cameraPositionState = cameraPositionState
+                        cameraPositionState = cameraPositionState,
+                        uiSettings = MapUiSettings(zoomControlsEnabled = false)
                     ) {
                         Marker(
-                            state = rememberMarkerState(position = LatLng(currentLat, currentLng)),
-                            title = "ตำแหน่งปัจจุบันของคุณ"
+                            state = rememberMarkerState(position = currentPos),
+                            title = "ตำแหน่งปัจจุบันของคุณ",
+                            snippet = "คุณอยู่ที่นี่"
                         )
+                        
+                        // Marker สำหรับจุดนัดหมาย
+                        if (targetLat != null && targetLng != null) {
+                            val targetPos = LatLng(targetLat, targetLng)
+                            Marker(
+                                state = rememberMarkerState(position = targetPos),
+                                title = "จุดนัดหมาย",
+                                snippet = "เป้าหมายการเช็คอิน",
+                                icon = BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_AZURE)
+                            )
+
+                            // เส้น Polyline เชื่อมระหว่าง 2 จุด
+                            Polyline(
+                                points = listOf(currentPos, targetPos),
+                                color = if (uiState.isLocationMismatch) RedPrimary else Color(0xFF10B981),
+                                width = 5f,
+                                pattern = listOf(Dash(20f), Gap(10f))
+                            )
+                        }
                     }
                 } else {
                     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -192,19 +269,51 @@ fun CheckInContent(
                         textAlign = TextAlign.Center
                     )
                     
-                    Row(
+                    Column(
                         modifier = Modifier.fillMaxWidth().background(BgLight, RoundedCornerShape(12.dp)).padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Icon(Icons.Default.LocationOn, null, tint = RedPrimary, modifier = Modifier.size(20.dp))
-                        Spacer(Modifier.width(12.dp))
-                        Column {
-                            Text("Current Location", fontSize = 12.sp, color = TextGray)
-                            Text(
-                                if (currentLat != null && currentLng != null) "Lat: %.5f, Lng: %.5f".format(currentLat, currentLng)
-                                else "กำลังค้นหาตำแหน่ง...",
-                                fontSize = 14.sp, fontWeight = FontWeight.Medium, color = TextDark
-                            )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.LocationOn, null, tint = RedPrimary, modifier = Modifier.size(20.dp))
+                            Spacer(Modifier.width(12.dp))
+                            Column {
+                                Text("Current Location", fontSize = 12.sp, color = TextGray)
+                                Text(
+                                    if (currentLat != null && currentLng != null) "Lat: %.5f, Lng: %.5f".format(currentLat, currentLng)
+                                    else "กำลังค้นหาตำแหน่ง...",
+                                    fontSize = 14.sp, fontWeight = FontWeight.Medium, color = TextDark
+                                )
+                            }
+                        }
+                        
+                        // แสดงระยะห่างและคำเตือน
+                        if (currentLat != null && uiState.activity?.plannedLat != null) {
+                            Divider(color = Color.LightGray.copy(alpha = 0.5f))
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = if (uiState.isLocationMismatch) Icons.Default.Warning else Icons.Default.LocationOn,
+                                    contentDescription = null,
+                                    tint = if (uiState.isLocationMismatch) WarningOrange else Color(0xFF10B981),
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Spacer(Modifier.width(12.dp))
+                                Column {
+                                    Text("Distance from target", fontSize = 12.sp, color = TextGray)
+                                    Text(
+                                        text = "${"%.0f".format(uiState.currentDistance)} meters",
+                                        fontSize = 14.sp, 
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (uiState.isLocationMismatch) RedPrimary else Color(0xFF10B981)
+                                    )
+                                    if (uiState.isLocationMismatch) {
+                                        Text(
+                                            "อยู่นอกระยะที่กำหนด (เกิน 200ม.)",
+                                            fontSize = 11.sp,
+                                            color = RedPrimary
+                                        )
+                                    }
+                                }
+                            }
                         }
                     }
 
@@ -251,25 +360,56 @@ private fun fetchLocation(
 
 @Preview(showBackground = true)
 @Composable
-fun CheckInScreenPreview() {
-    val sampleActivity = SalesActivity(
-        activityId = "1",
-        projectId = "P1",
-        customerId = "C1",
-        userId = "U1",
-        activityType = "Check-in",
-        activityDate = "2023-10-27",
-        detail = "เยี่ยมชมลูกค้าประจำสัปดาห์",
-        status = "Planned",
-        projectName = "โครงการก่อสร้างตึก A",
-        companyName = "บริษัท ตัวอย่าง จำกัด"
-    )
-    
+fun CheckInContentPreview() {
     SalesTrackingTheme {
         CheckInContent(
-            uiState = ActivityDetailUiState(activity = sampleActivity),
-            currentLat = 13.7563,
-            currentLng = 100.5018,
+            uiState = ActivityDetailUiState(
+                activity = SalesActivity(
+                    activityId = "1",
+                    userId = "user1",
+                    customerId = "cust1",
+                    activityType = "Meeting",
+                    activityDate = "2023-10-27",
+                    detail = "Meeting with ABC Company",
+                    status = "pending",
+                    plannedLat = 13.7563,
+                    plannedLong = 100.5018
+                ),
+                currentDistance = 50.0,
+                isLocationMismatch = false
+            ),
+            currentLat = 13.7565,
+            currentLng = 100.5020,
+            isFetchingLocation = false,
+            onBack = {},
+            onRefreshLocation = {},
+            onConfirmCheckin = { _, _ -> }
+        )
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+fun CheckInContentMismatchPreview() {
+    SalesTrackingTheme {
+        CheckInContent(
+            uiState = ActivityDetailUiState(
+                activity = SalesActivity(
+                    activityId = "1",
+                    userId = "user1",
+                    customerId = "cust1",
+                    activityType = "Meeting",
+                    activityDate = "2023-10-27",
+                    detail = "Meeting with ABC Company",
+                    status = "pending",
+                    plannedLat = 13.7563,
+                    plannedLong = 100.5018
+                ),
+                currentDistance = 350.0,
+                isLocationMismatch = true
+            ),
+            currentLat = 13.7600,
+            currentLng = 100.5050,
             isFetchingLocation = false,
             onBack = {},
             onRefreshLocation = {},

@@ -39,15 +39,12 @@ class ActivityRepository @Inject constructor(
             try {
                 val resp = apiService.getMyAppointments("eq.$userId")
                 if (resp.isSuccessful && resp.body() != null) {
-                    // ✅ อัปเดต local เฉพาะตอน API สำเร็จ
                     activityDao.clearAndInsert(resp.body()!!)
                     kotlin.Result.success(Unit)
                 } else {
-                    // ✅ API fail → ใช้ข้อมูล local เดิม ไม่ลบทิ้ง
                     kotlin.Result.failure(Exception("API error: ${resp.code()}"))
                 }
             } catch (e: Exception) {
-                // ✅ Network error → ใช้ข้อมูล local เดิม
                 kotlin.Result.failure(e)
             }
         }
@@ -57,7 +54,6 @@ class ActivityRepository @Inject constructor(
         return withContext(Dispatchers.IO) {
             try {
                 val response = apiService.addActivity(activity)
-                // ✅ 201 Created = isSuccessful = true
                 activityDao.insertActivity(activity)
                 if (response.isSuccessful) {
                     kotlin.Result.success(Unit)
@@ -66,7 +62,6 @@ class ActivityRepository @Inject constructor(
                     kotlin.Result.failure(Exception("บันทึก Appointment ไม่สำเร็จ: ${response.code()} — $errBody"))
                 }
             } catch (e: Exception) {
-                // offline mode — บันทึก local
                 activityDao.insertActivity(activity)
                 kotlin.Result.success(Unit)
             }
@@ -91,11 +86,9 @@ class ActivityRepository @Inject constructor(
 
     suspend fun savePlanItems(appointmentId: String, items: List<ActivityPlanItem>) {
         withContext(Dispatchers.IO) {
-            // บันทึก local
             planItemDao.deletePlanItemsByAppointmentId(appointmentId)
             planItemDao.insertPlanItems(items)
 
-            // ✅ บันทึกขึ้น API ด้วย
             try {
                 val dtos = items.map { item ->
                     ChecklistInsertDto(
@@ -105,20 +98,16 @@ class ActivityRepository @Inject constructor(
                     )
                 }
                 apiService.insertChecklist(dtos)
-            } catch (e: Exception) {
-                // ถ้า API fail ก็ไม่เป็นไร มี local แล้ว
-            }
+            } catch (e: Exception) { }
         }
     }
 
     suspend fun getPlanItems(activityId: String): kotlin.Result<List<PlanItemDto>> {
         return withContext(Dispatchers.IO) {
             try {
-                // ✅ ดึงจาก local ก่อน
                 val localItems = planItemDao.getPlanItemsByAppointmentId(activityId)
 
                 if (localItems.isNotEmpty()) {
-                    // มีใน local ใช้เลย
                     val dtos = localItems.map {
                         PlanItemDto(
                             masterId      = it.masterId,
@@ -129,12 +118,9 @@ class ActivityRepository @Inject constructor(
                     return@withContext kotlin.Result.success(dtos)
                 }
 
-                // ✅ ถ้า local ว่าง ดึงจาก API
                 val checklistResp = apiService.getChecklistByAppointment("eq.$activityId")
                 if (checklistResp.isSuccessful && !checklistResp.body().isNullOrEmpty()) {
                     val checklist = checklistResp.body()!!
-
-                    // ดึง master name จาก activity_master
                     val masterResp = apiService.getMasterActivities()
                     val masters = if (masterResp.isSuccessful) masterResp.body() ?: emptyList()
                     else emptyList()
@@ -148,7 +134,6 @@ class ActivityRepository @Inject constructor(
                         )
                     }
 
-                    // บันทึกลง local ด้วย
                     val planItems = dtos.map { dto ->
                         ActivityPlanItem(
                             appointmentId = activityId,
@@ -182,19 +167,14 @@ class ActivityRepository @Inject constructor(
     ) {
         withContext(Dispatchers.IO) {
             try {
-                // อัปเดต local ก่อน
                 planItemDao.updateItemStatus(appointmentId, masterId, isDone)
-
-                // อัปเดต API
                 val updates = mapOf<String, Any>("is_done" to isDone)
                 apiService.updateChecklist(
                     appointmentId = "eq.$appointmentId",
                     masterId      = "eq.$masterId",
                     updates       = updates
                 )
-            } catch (e: Exception) {
-                // ถ้า API fail ก็ไม่เป็นไร local บันทึกแล้ว
-            }
+            } catch (e: Exception) { }
         }
     }
 
@@ -220,23 +200,39 @@ class ActivityRepository @Inject constructor(
         }
     }
 
-    suspend fun checkIn(activityId: String, lat: Double, lng: Double): kotlin.Result<Unit> {
+    suspend fun checkIn(
+        activityId: String,
+        lat: Double,
+        lng: Double,
+        isVerified: Boolean
+    ): kotlin.Result<Unit> {
         return withContext(Dispatchers.IO) {
             try {
                 val updates = mapOf(
-                    "checkin_lat" to lat as Any,
-                    "checkin_lng" to lng as Any,
-                    "checkin_time" to java.time.Instant.now().toString() as Any,
-                    "plan_status" to "checked_in"
+                    "check_in_lat" to lat as Any,
+                    "check_in_long" to lng as Any,
+                    "check_in_time" to java.time.Instant.now().toString() as Any,
+                    "plan_status" to "checked_in",
+                    "is_location_verified" to isVerified
                 )
-                apiService.updateActivity(activityId, updates)
+                apiService.updateActivity("eq.$activityId", updates)
                 activityDao.getActivityById(activityId)?.let {
-                    activityDao.insertActivity(it.copy(status = "checked_in"))
+                    activityDao.insertActivity(it.copy(
+                        status = "checked_in",
+                        checkInLat = lat,
+                        checkInLong = lng,
+                        isLocationVerified = isVerified
+                    ))
                 }
                 kotlin.Result.success(Unit)
             } catch (e: Exception) {
                 activityDao.getActivityById(activityId)?.let {
-                    activityDao.insertActivity(it.copy(status = "checked_in"))
+                    activityDao.insertActivity(it.copy(
+                        status = "checked_in",
+                        checkInLat = lat,
+                        checkInLong = lng,
+                        isLocationVerified = isVerified
+                    ))
                 }
                 kotlin.Result.success(Unit)
             }
@@ -258,8 +254,6 @@ class ActivityRepository @Inject constructor(
                 note?.let { updates["note"] = it }
 
                 val response = apiService.updateActivity("eq.$activityId", updates)
-
-                // อัปเดต local
                 activityDao.getActivityById(activityId)?.let {
                     activityDao.insertActivity(it.copy(status = "completed"))
                 }
@@ -267,7 +261,6 @@ class ActivityRepository @Inject constructor(
                 if (response.isSuccessful) kotlin.Result.success(Unit)
                 else kotlin.Result.failure(Exception("HTTP ${response.code()}"))
             } catch (e: Exception) {
-                // offline mode — อัปเดต local แล้ว return success
                 activityDao.getActivityById(activityId)?.let {
                     activityDao.insertActivity(it.copy(status = "completed"))
                 }
@@ -308,7 +301,6 @@ class ActivityRepository @Inject constructor(
         }
     }
 
-    // เพิ่มใน ActivityRepository.kt
     suspend fun getMasterActivities(): List<ActivityMaster> {
         return withContext(Dispatchers.IO) {
             try {
@@ -328,28 +320,16 @@ class ActivityRepository @Inject constructor(
         }
     }
 
-    // เพิ่ม DTO
-    data class ActivityMasterDto(
-        @SerializedName("master_id")  val masterId:  Int,
-        @SerializedName("category")   val category:  String,
-        @SerializedName("act_name")   val actName:   String,
-        @SerializedName("is_active")  val isActive:  Boolean = true
-    )
-
     suspend fun deleteActivity(activityId: String): kotlin.Result<Unit> {
         return withContext(Dispatchers.IO) {
             try {
-                // ลบจาก API ก่อน
-                val response = apiService.deleteActivity("eq.$activityId")
-                // ลบจาก local DB เสมอ
+                apiService.deleteActivity("eq.$activityId")
                 activityDao.deleteActivityById(activityId)
                 kotlin.Result.success(Unit)
             } catch (e: Exception) {
-                // ถ้า API fail ก็ยังลบ local ได้
                 activityDao.deleteActivityById(activityId)
                 kotlin.Result.success(Unit)
             }
         }
     }
 }
-

@@ -2,17 +2,15 @@ package com.example.pp68_salestrackingapp.ui.navigation
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
-import com.example.pp68_salestrackingapp.data.repository.AuthRepository
 import com.example.pp68_salestrackingapp.ui.screen.activity.*
 import com.example.pp68_salestrackingapp.ui.screen.auth.LoginScreen
 import com.example.pp68_salestrackingapp.ui.screen.auth.RegisterScreen
@@ -27,9 +25,12 @@ import com.example.pp68_salestrackingapp.ui.screen.contact.*
 @Composable
 fun SalesTrackingApp() {
     val navController = rememberNavController()
-    var currentTab by remember { mutableIntStateOf(0) }
+    
+    // ✅ ติดตาม Route ปัจจุบันเพื่อให้ Bottom Bar อัปเดตถูกต้องเสมอ
+    val navBackStackEntry by navController.currentBackStackEntryAsState()
+    val currentRoute = navBackStackEntry?.destination?.route
+    val currentTab = remember(currentRoute) { getTabIndex(currentRoute) }
 
-    // ✅ เช็ค login state
     val appViewModel: SalesTrackingAppViewModel = hiltViewModel()
     val isLoggedIn = remember { appViewModel.isLoggedIn() }
 
@@ -41,7 +42,7 @@ fun SalesTrackingApp() {
 
     NavHost(
         navController    = navController,
-        startDestination = if (isLoggedIn) Route.Home.path else Route.Login.path  // ✅
+        startDestination = if (isLoggedIn) Route.Home.path else Route.Login.path
     ) {
 
         // --- Auth ---
@@ -62,7 +63,6 @@ fun SalesTrackingApp() {
             RegisterScreen(
                 onBack = { navController.popBackStack() },
                 onRegisterSuccess = {
-                    // ✅ ไปหน้า Home เลย ไม่ต้อง login ใหม่
                     navController.navigate(Route.Home.path) {
                         popUpTo(0) { inclusive = true }
                     }
@@ -75,22 +75,14 @@ fun SalesTrackingApp() {
             HomeScreen(
                 onAddClick  = { navController.navigate(Route.CreateActivity.path) },
                 onCardClick = { id -> navController.navigate(Route.ActivityDetail.createRoute(id)) },
-
-                // ✅ ทั้ง Check-in และ Finish → ไป ActivityDetail ก่อนเสมอ
-                onCheckin = { id -> navController.navigate(Route.ActivityDetail.createRoute(id)) },
+                onCheckin = { id -> navController.navigate(Route.CheckIn.createRoute(id)) },
                 onFinish  = { id -> navController.navigate(Route.ActivityDetail.createRoute(id)) },
-
-                // ✅ บันทึกผล → ไป SalesResult (เฉพาะ completed แล้ว)
                 onReport  = { id -> navController.navigate(Route.SalesResult.createRoute(id)) },
-
                 onNotificationClick = { navController.navigate(Route.Notification.path) },
                 onSettingsClick     = { navController.navigate(Route.Settings.path) },
                 onLogoutClick       = onLogout,
                 currentTab          = currentTab,
-                onTabChange         = { tab ->
-                    currentTab = tab
-                    navigateToTab(navController, tab)
-                }
+                onTabChange         = { tab -> navigateToTab(navController, tab) }
             )
         }
 
@@ -172,10 +164,7 @@ fun SalesTrackingApp() {
                 onSettingsClick = { navController.navigate(Route.Settings.path) },
                 onLogoutClick = onLogout,
                 currentTab = currentTab,
-                onTabChange = { tab ->
-                    currentTab = tab
-                    navigateToTab(navController, tab)
-                }
+                onTabChange = { tab -> navigateToTab(navController, tab) }
             )
         }
 
@@ -211,10 +200,7 @@ fun SalesTrackingApp() {
                 onProjectClick = { id -> navController.navigate(Route.ProjectDetail.createRoute(id)) },
                 onNotificationClick = { navController.navigate(Route.Notification.path) },
                 onSettingsClick = { navController.navigate(Route.Settings.path) },
-                onTabChange = { tab ->
-                    currentTab = tab
-                    navigateToTab(navController, tab)
-                }
+                onTabChange = { tab -> navigateToTab(navController, tab) }
             )
         }
 
@@ -227,10 +213,7 @@ fun SalesTrackingApp() {
                 onSettingsClick = { navController.navigate(Route.Settings.path) },
                 onLogoutClick = onLogout,
                 currentTab = currentTab,
-                onTabChange = { tab ->
-                    currentTab = tab
-                    navigateToTab(navController, tab)
-                }
+                onTabChange = { tab -> navigateToTab(navController, tab) }
             )
         }
 
@@ -279,6 +262,7 @@ fun SalesTrackingApp() {
             )
         }
 
+        // ✅ เพิ่ม Composable สำหรับ ProjectInventory
         composable(
             route = Route.ProjectInventory.path,
             arguments = listOf(navArgument("projectId") { type = NavType.StringType })
@@ -288,14 +272,15 @@ fun SalesTrackingApp() {
                 projectId = projectId,
                 onBack = { navController.popBackStack() },
                 onAddProduct = { id -> navController.navigate(Route.AddProduct.createRoute(id)) },
+                onNotificationClick = { navController.navigate(Route.Notification.path) },
+                onSettingsClick = { navController.navigate(Route.Settings.path) },
+                onLogoutClick = onLogout,
                 currentTab = currentTab,
-                onTabChange = { tab ->
-                    currentTab = tab
-                    navigateToTab(navController, tab)
-                }
+                onTabChange = { tab -> navigateToTab(navController, tab) }
             )
         }
 
+        // ✅ เพิ่ม Composable สำหรับ AddProduct
         composable(
             route = Route.AddProduct.path,
             arguments = listOf(navArgument("projectId") { type = NavType.StringType })
@@ -312,10 +297,7 @@ fun SalesTrackingApp() {
         composable(Route.Stats.path) {
             DashboardScreen(
                 currentTab = currentTab,
-                onTabChange = { tab ->
-                    currentTab = tab
-                    navigateToTab(navController, tab)
-                },
+                onTabChange = { tab -> navigateToTab(navController, tab) },
                 onNotificationClick = { navController.navigate(Route.Notification.path) },
                 onSettingsClick = { navController.navigate(Route.Settings.path) },
                 onExportClick = { navController.navigate(Route.ExportMenu.path) },
@@ -330,13 +312,42 @@ fun SalesTrackingApp() {
                 onWeeklyClick = { navController.navigate(Route.WeeklyReport.path) },
                 onMonthlyClick = { navController.navigate(Route.MonthlyReport.path) },
                 currentTab = currentTab,
-                onTabChange = { tab ->
-                    currentTab = tab
-                    navigateToTab(navController, tab)
-                },
+                onTabChange = { tab -> navigateToTab(navController, tab) },
                 onNotificationClick = { navController.navigate(Route.Notification.path) },
                 onSettingsClick = { navController.navigate(Route.Settings.path) },
                 onLogoutClick = onLogout
+            )
+        }
+
+        // --- Contacts ---
+        composable(Route.ContactList.path) {
+            ContactListScreen(
+                onAddClick = { navController.navigate(Route.AddContact.path) },
+                onEditClick = { id -> navController.navigate(Route.EditContact.createRoute(id)) },
+                onNotificationClick = { navController.navigate(Route.Notification.path) },
+                onSettingsClick = { navController.navigate(Route.Settings.path) },
+                onLogoutClick = onLogout,
+                currentTab = currentTab,
+                onTabChange = { tab -> navigateToTab(navController, tab) }
+            )
+        }
+        
+        composable(Route.AddContact.path) {
+            AddContactScreen(
+                onBack = { navController.popBackStack() },
+                onSaved = { navController.popBackStack() }
+            )
+        }
+
+        composable(
+            route = Route.EditContact.path,
+            arguments = listOf(navArgument("contactId") { type = NavType.StringType })
+        ) { backStackEntry ->
+            val contactId = backStackEntry.arguments?.getString("contactId")
+            AddContactScreen(
+                contactId = contactId,
+                onBack = { navController.popBackStack() },
+                onSaved = { navController.popBackStack() }
             )
         }
 
@@ -364,41 +375,18 @@ fun SalesTrackingApp() {
                 onLogout = onLogout
             )
         }
-        
-        // --- Contacts ---
-        composable(Route.ContactList.path) {
-            ContactListScreen(
-                onAddClick = { navController.navigate(Route.AddContact.path) },
-                onEditClick = { id -> navController.navigate(Route.EditContact.createRoute(id)) },
-                onNotificationClick = { navController.navigate(Route.Notification.path) },
-                onSettingsClick = { navController.navigate(Route.Settings.path) },
-                onLogoutClick = onLogout,
-                currentTab = currentTab,
-                onTabChange = { tab ->
-                    currentTab = tab
-                    navigateToTab(navController, tab)
-                }
-            )
-        }
-        
-        composable(Route.AddContact.path) {
-            AddContactScreen(
-                onBack = { navController.popBackStack() },
-                onSaved = { navController.popBackStack() }
-            )
-        }
+    }
+}
 
-        composable(
-            route = Route.EditContact.path,
-            arguments = listOf(navArgument("contactId") { type = NavType.StringType })
-        ) { backStackEntry ->
-            val contactId = backStackEntry.arguments?.getString("contactId")
-            AddContactScreen(
-                contactId = contactId,
-                onBack = { navController.popBackStack() },
-                onSaved = { navController.popBackStack() }
-            )
-        }
+private fun getTabIndex(route: String?): Int {
+    return when {
+        route == null -> 0
+        route.contains("home") || route.contains("activity") || route.contains("check_in") || route.contains("sales_result") -> 0
+        route.contains("customer") -> 1
+        route.contains("contact") -> 2
+        route.contains("project") -> 3
+        route.contains("stats") || route.contains("export") -> 4
+        else -> 0
     }
 }
 

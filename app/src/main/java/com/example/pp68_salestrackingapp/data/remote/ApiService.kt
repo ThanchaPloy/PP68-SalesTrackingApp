@@ -2,7 +2,6 @@ package com.example.pp68_salestrackingapp.data.remote
 
 import com.example.pp68_salestrackingapp.data.model.UserDto
 import com.example.pp68_salestrackingapp.data.model.*
-import com.example.pp68_salestrackingapp.data.repository.ActivityRepository.ActivityMasterDto
 import com.google.gson.annotations.SerializedName
 import retrofit2.Response
 import retrofit2.http.*
@@ -14,7 +13,7 @@ interface ApiService {
     @GET("user")
     suspend fun getUserById(
         @Query("user_id") userId: String,
-        @Query("select") select: String = "user_id,full_name,branch_id,role,email,phone_number", // ✅ เพิ่ม
+        @Query("select") select: String = "user_id,full_name,branch_id,role,email,phone_number",
         @Query("limit") limit: Int = 1
     ): Response<List<UserDto>>
 
@@ -29,21 +28,19 @@ interface ApiService {
     @PATCH("user")
     @Headers("Prefer: return=representation")
     suspend fun updateFcmToken(
-        @Query("user_id") userId: String,  // format: "eq.USR-0002"
+        @Query("user_id") userId: String,
         @Body updates: Map<String, String>
     ): Response<List<UserDto>>
 
-    // เพิ่ม phone_number ใน UserDto
     data class UserDto(
         @SerializedName("user_id")      val userId:      String,
         @SerializedName("full_name")    val fullName:    String?,
         @SerializedName("branch_id")    val branchId:    String?,
         @SerializedName("role")         val role:        String?,
         @SerializedName("email")        val email:       String?,
-        @SerializedName("phone_number") val phoneNumber: String?  // ✅ เพิ่ม
+        @SerializedName("phone_number") val phoneNumber: String?
     )
 
-    // update profile
     @PATCH("user")
     @Headers("Prefer: return=representation")
     suspend fun updateUserProfile(
@@ -128,37 +125,28 @@ interface ApiService {
     ): Response<List<Project>>
 
     // ── Product ───────────────────────────────────────────────────
-// ✅ แก้จาก product_master เป็น products
     @GET("products")
     suspend fun getProductMaster(
         @Query("limit") limit: Int = 1000
     ): Response<List<ProductMasterDto>>
 
-    // ✅ เพิ่ม — ดึงสินค้าในโปรเจค
     @GET("project_product")
     suspend fun getProjectProducts(
-        @Query("project_id") projectId: String,  // format: "eq.PJ-001"
+        @Query("project_id") projectId: String,
         @Query("limit") limit: Int = 100
     ): Response<List<ProjectProductDto>>
 
     @POST("project_product")
     @Headers("Prefer: return=representation")
     suspend fun addProductToProject(
-        @Body item: com.example.pp68_salestrackingapp.data.remote.ProjectProductInsertDto
+        @Body item: ProjectProductInsertDto
     ): Response<List<ProjectProductInsertDto>>
 
-    data class ProjectProductInsertDto(
-        @com.google.gson.annotations.SerializedName("project_id")  val projectId:  String,
-        @com.google.gson.annotations.SerializedName("product_id")  val productId:  String,
-        @com.google.gson.annotations.SerializedName("quantity")    val quantity:   Double,
-        @com.google.gson.annotations.SerializedName("wanted_date") val wantedDate: String?
-    )
-
     data class ProjectProductDto(
-        @com.google.gson.annotations.SerializedName("project_id")   val projectId:  String,
-        @com.google.gson.annotations.SerializedName("product_id")   val productId:  String,
-        @com.google.gson.annotations.SerializedName("quantity")     val quantity:   Double?,
-        @com.google.gson.annotations.SerializedName("desired_date") val desiredDate: String?
+        @SerializedName("project_id")   val projectId:  String,
+        @SerializedName("product_id")   val productId:  String,
+        @SerializedName("quantity")     val quantity:   Double?,
+        @SerializedName("desired_date") val desiredDate: String?
     )
 
     // ── Appointment ──────────────────────────────────────────
@@ -222,7 +210,7 @@ interface ApiService {
     @GET("project_sales_member")
     suspend fun getMyProjectIds(
         @Query("user_id") userId: String,
-        @Query("select") select: String = "project_id",
+        @Query("select") select: String = "project_id,project_number", // ✅ ดึง project_number ด้วย
         @Query("limit") limit: Int = 1000
     ): Response<List<ProjectMemberDto>>
 
@@ -237,25 +225,15 @@ interface ApiService {
 
 // ── DTOs ─────────────────────────────────────────────────────
 data class ProductMasterDto(
-    @com.google.gson.annotations.SerializedName("product_id")       val productId:       String,
-    @com.google.gson.annotations.SerializedName("product_group")    val productGroup:    String?,  // ✅ แก้
-    @com.google.gson.annotations.SerializedName("product_type")     val productType:     String?,  // ✅ แก้
-    @com.google.gson.annotations.SerializedName("product_subgroup") val productSubgroup: String?,  // ✅ แก้
-    @com.google.gson.annotations.SerializedName("product_brand")    val brand:           String?,
-    @com.google.gson.annotations.SerializedName("unit")             val unit:            String?
+    @SerializedName("product_id")       val productId:       String,
+    @SerializedName("product_group")    val productGroup:    String?,
+    @SerializedName("product_type")     val productType:     String?,
+    @SerializedName("product_subgroup") val productSubgroup: String?,
+    @SerializedName("product_brand")    val brand:           String?,
+    @SerializedName("unit")             val unit:            String?
 )
 
-data class ProjectProductInsertDto(
-    @com.google.gson.annotations.SerializedName("project_id")  val projectId:  String,
-    @com.google.gson.annotations.SerializedName("product_id")  val productId:  String,
-    @com.google.gson.annotations.SerializedName("quantity")    val quantity:   Double,
-    @com.google.gson.annotations.SerializedName("wanted_date") val wantedDate: String?
+data class ProjectMemberDto(
+    @SerializedName("project_id")     val projectId:     String,
+    @SerializedName("project_number") val projectNumber: String? // ✅ เพิ่ม
 )
-
-data class ProjectProductDto(
-    @com.google.gson.annotations.SerializedName("project_id")   val projectId:   String,
-    @com.google.gson.annotations.SerializedName("product_id")   val productId:   String,
-    @com.google.gson.annotations.SerializedName("quantity")     val quantity:    Double?,
-    @com.google.gson.annotations.SerializedName("desired_date") val desiredDate: String?
-)
-

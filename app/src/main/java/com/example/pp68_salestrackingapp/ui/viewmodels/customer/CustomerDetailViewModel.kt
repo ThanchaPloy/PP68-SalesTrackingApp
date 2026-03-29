@@ -69,6 +69,8 @@ class CustomerDetailViewModel @Inject constructor(
     }
 
     fun logout() {
-        authRepo.logout()
+        viewModelScope.launch {
+            authRepo.logout()
+        }
     }
 }

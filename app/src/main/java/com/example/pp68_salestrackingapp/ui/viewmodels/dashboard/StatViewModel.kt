@@ -16,6 +16,8 @@ import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.YearMonth
 import java.time.format.DateTimeFormatter
+import java.time.temporal.WeekFields
+import java.util.Locale
 import javax.inject.Inject
 import java.time.ZoneId
 
@@ -57,12 +59,17 @@ class StatsViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(StatsUiState(authUser = authRepo.currentUser()))
     val uiState: StateFlow<StatsUiState> = _uiState
 
-    // date helpers
-    private val today      = LocalDate.now(ZoneId.of("UTC"))
-    private val weekStart  = today.minusDays(today.dayOfWeek.value.toLong() - 1)
-    private val monthStart = today.withDayOfMonth(1)
-    private val currentMonth = YearMonth.now(ZoneId.of("UTC"))
-    private val fmt        = DateTimeFormatter.ofPattern("yyyy-MM-dd", java.util.Locale.US)
+    // ── Date Logic matching Export UI ────────────────────────────
+    private val today        = LocalDate.now(ZoneId.systemDefault())
+    private val weekFields   = WeekFields.of(Locale.getDefault())
+    private val weekStart    = today.with(weekFields.dayOfWeek(), 1L)
+    private val weekEnd      = today.with(weekFields.dayOfWeek(), 7L)
+    
+    private val currentMonth = YearMonth.now(ZoneId.systemDefault())
+    private val monthStart   = currentMonth.atDay(1)
+    private val monthEnd     = currentMonth.atEndOfMonth()
+    
+    private val fmt          = DateTimeFormatter.ofPattern("yyyy-MM-dd", Locale.US)
 
     init { load() }
 
@@ -80,24 +87,23 @@ class StatsViewModel @Inject constructor(
                 // ── Weekly ────────────────────────────────────────────────────
                 val weeklyLeads = projects.count { p ->
                     p.projectStatus == "Lead" &&
-                            isInRange(p.createdAt?.take(10), weekStart, today)
+                            isInRange(p.createdAt?.take(10), weekStart, weekEnd)
                 }
 
                 val weeklyNewProj = projects.count { p ->
                     p.projectStatus !in listOf("Lead", "Completed", "Lost", "Failed") &&
-                            isInRange(p.createdAt?.take(10), weekStart, today)
+                            isInRange(p.createdAt?.take(10), weekStart, weekEnd)
                 }
 
-
-                // คำนวณจำนวน Visit (เช็คจาก ActivityCard)
+                // จำนวน Visit (เช็คจาก ActivityCard)
                 val weeklyVisit = activities.count { a ->
-                    a.planStatus == "completed" && isInRange(a.plannedDate, weekStart, today)
+                    a.planStatus == "completed" && isInRange(a.plannedDate, weekStart, weekEnd)
                 }
 
                 // ── Monthly ───────────────────────────────────
                 val closedSales = projects
                     .filter { it.projectStatus in listOf("PO", "Completed") &&
-                            isInRange(it.closingDate ?: it.startDate, monthStart, today) }
+                            isInRange(it.closingDate ?: it.startDate, monthStart, monthEnd) }
                     .sumOf { it.expectedValue ?: 0.0 }
 
                 val activeProjectsList = projects.filter {
@@ -110,7 +116,7 @@ class StatsViewModel @Inject constructor(
 
                 val monthlyLeads = projects.count { p ->
                     p.projectStatus == "Lead" &&
-                            isInRange(p.createdAt?.take(10), monthStart, today)
+                            isInRange(p.createdAt?.take(10), monthStart, monthEnd)
                 }
 
                 val closingMonthCount = projects.count { p ->

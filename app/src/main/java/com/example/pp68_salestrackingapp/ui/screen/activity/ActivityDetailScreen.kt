@@ -19,6 +19,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -87,8 +88,8 @@ fun ActivityDetailContent(
     onFinish: () -> Unit,
     onClearError: () -> Unit,
     onNotificationClick: () -> Unit = {},
-    onSettingsClick: () -> Unit = {},
-    onLogoutClick: () -> Unit = {}
+    onSettingsClick:     () -> Unit = {},
+    onLogoutClick:       () -> Unit = {}
 ) {
     val snackbarHostState = remember { SnackbarHostState() }
 
@@ -148,7 +149,6 @@ fun ActivityDetailContent(
                     } else {
                         s.planItems.forEach { item ->
                             val isCompleted = s.activity?.status == "completed"
-                            // ✅ แก้: ให้ tick ได้ทั้ง planned, checked_in ไม่ใช่แค่ checked_in
                             val canToggle = s.activity?.status == "planned" ||
                                     s.activity?.status == "checked_in"
 
@@ -164,7 +164,6 @@ fun ActivityDetailContent(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 if (canToggle) {
-                                    // ✅ planned และ checked_in → tick ได้
                                     val isSelected = s.selectedItemIds.contains(item.masterId)
                                     Checkbox(
                                         checked         = isSelected,
@@ -172,7 +171,6 @@ fun ActivityDetailContent(
                                         colors = CheckboxDefaults.colors(checkedColor = RedPrimary)
                                     )
                                 } else {
-                                    // completed → แสดงผลอย่างเดียว
                                     Icon(
                                         if (item.isDone) Icons.Default.CheckCircle
                                         else Icons.Default.RadioButtonUnchecked,
@@ -204,10 +202,9 @@ fun ActivityDetailContent(
 
                 when (s.activity?.status) {
                     "planned" -> {
-                        val isOnsiteVisit = s.activity.activityType == "onsite"
+                        val isOnsiteVisit = s.activity?.activityType == "onsite"
 
                         if (isOnsiteVisit) {
-                            // ✅ onsite เท่านั้น → Check-in (GPS)
                             Button(
                                 onClick  = onCheckin,
                                 modifier = Modifier.fillMaxWidth().height(54.dp),
@@ -219,7 +216,6 @@ fun ActivityDetailContent(
                                 Text("Check-in", fontWeight = FontWeight.Bold, color = White)
                             }
                         } else {
-                            // ✅ online / call → Finish ได้เลย ไม่ต้อง check-in
                             Button(
                                 onClick  = onFinish,
                                 modifier = Modifier.fillMaxWidth().height(54.dp),
@@ -239,7 +235,6 @@ fun ActivityDetailContent(
                     }
 
                     "checked_in" -> {
-                        // ✅ checked_in → Finish Activity
                         Button(
                             onClick  = onFinish,
                             modifier = Modifier.fillMaxWidth().height(54.dp),

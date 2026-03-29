@@ -1,7 +1,7 @@
 package com.example.pp68_salestrackingapp.data.repository
 
 import com.example.pp68_salestrackingapp.data.remote.ApiService
-import com.example.pp68_salestrackingapp.data.remote.ProjectProductInsertDto
+import com.example.pp68_salestrackingapp.data.model.ProjectProductInsertDto
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import javax.inject.Inject

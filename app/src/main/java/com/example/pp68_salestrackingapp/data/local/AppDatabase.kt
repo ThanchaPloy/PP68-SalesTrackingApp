@@ -29,4 +29,8 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun contactDao(): ContactDao
     abstract fun branchDao(): BranchDao
     abstract fun activityPlanItemDao(): ActivityPlanItemDao
+
+    fun clearAllData() {
+        this.clearAllTables()
+    }
 }

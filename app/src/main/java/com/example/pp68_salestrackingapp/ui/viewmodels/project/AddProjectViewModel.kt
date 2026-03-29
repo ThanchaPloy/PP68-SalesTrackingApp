@@ -359,7 +359,7 @@ class AddProjectViewModel @Inject constructor(
                 val result = if (s.projectId != null) {
                     projectRepo.updateProject(projectToSave)
                 } else {
-                    projectRepo.createProject(projectToSave)
+                    projectRepo.createProject(projectToSave, userId)
                 }
 
                 result.onSuccess {

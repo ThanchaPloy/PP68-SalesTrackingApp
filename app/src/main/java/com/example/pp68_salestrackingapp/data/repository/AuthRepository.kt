@@ -1,5 +1,6 @@
 package com.example.pp68_salestrackingapp.data.repository
 
+import com.example.pp68_salestrackingapp.data.local.AppDatabase
 import com.example.pp68_salestrackingapp.data.model.*
 import com.example.pp68_salestrackingapp.data.remote.ApiService
 import com.example.pp68_salestrackingapp.data.remote.AuthService
@@ -11,7 +12,8 @@ import javax.inject.Inject
 class AuthRepository @Inject constructor(
     private val apiService: ApiService,
     private val authService: AuthService,
-    private val tokenManager: TokenManager
+    private val tokenManager: TokenManager,
+    private val database: AppDatabase
 ) {
     suspend fun login(email: String, password: String): kotlin.Result<LoginResponse> {
         return withContext(Dispatchers.IO) {
@@ -20,6 +22,9 @@ class AuthRepository @Inject constructor(
                 if (response.isSuccessful && response.body() != null) {
                     val loginResp = response.body()!!
                     tokenManager.saveToken(loginResp.token)
+
+                    // ✅ ล้างข้อมูลทั้งหมดในเครื่องก่อนบันทึกของคนใหม่
+                    database.clearAllTables()
 
                     // ✅ ดึงข้อมูล user เพิ่มเติมจาก PostgREST
                     val userDetail = fetchUserDetail(loginResp.userId)
@@ -61,7 +66,7 @@ class AuthRepository @Inject constructor(
         password: String,
         fullName: String,
         branchId: String
-    ): kotlin.Result<LoginResponse> {  // ✅ เปลี่ยนจาก RegisterResponse
+    ): kotlin.Result<LoginResponse> {
         return withContext(Dispatchers.IO) {
             try {
                 val request  = RegisterApiRequest(
@@ -74,6 +79,10 @@ class AuthRepository @Inject constructor(
                 if (response.isSuccessful && response.body() != null) {
                     val loginResp = response.body()!!
                     tokenManager.saveToken(loginResp.token)
+                    
+                    // ✅ ล้างข้อมูลเก่า
+                    database.clearAllTables()
+
                     val userDetail = fetchUserDetail(loginResp.userId)
                     val authUser = AuthUser(
                         userId     = loginResp.userId,
@@ -103,7 +112,6 @@ class AuthRepository @Inject constructor(
             val userResp = apiService.getUserById("eq.$userId")
             val user = userResp.body()?.firstOrNull() ?: return null
 
-            // ✅ เรียก getBranchById แทน getBranches
             val branchResp = user.branchId?.let {
                 apiService.getBranchById("eq.$it").body()?.firstOrNull()
             }
@@ -122,8 +130,11 @@ class AuthRepository @Inject constructor(
         val branchName: String?
     )
 
-    fun logout() {
-        tokenManager.clearToken()
+    suspend fun logout() {
+        withContext(Dispatchers.IO) {
+            database.clearAllTables()
+            tokenManager.clearToken()
+        }
     }
 
     fun isUserLoggedIn(): Boolean {
@@ -165,6 +176,4 @@ class AuthRepository @Inject constructor(
             }
         }
     }
-
-
 }

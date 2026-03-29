@@ -5,5 +5,6 @@ import com.google.gson.annotations.SerializedName
 data class ProjectMemberInsertDto(
     @SerializedName("project_id") val projectId: String,
     @SerializedName("user_id")    val userId:    String,
-    @SerializedName("sale_role")  val saleRole:  String = "support"
+    @SerializedName("sale_role")  val saleRole:  String = "support",
+    @SerializedName("project_number") val projectNumber: String? = null
 )

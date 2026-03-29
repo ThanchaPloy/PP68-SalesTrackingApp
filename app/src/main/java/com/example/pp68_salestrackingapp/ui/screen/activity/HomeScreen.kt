@@ -88,7 +88,7 @@ fun HomeScreen(
         onCheckin           = onCheckin,
         onFinish            = onFinish,
         onReport            = onReport,
-        onDelete            = { viewModel.deleteActivity(it) },  // ✅ เพิ่ม
+        onDelete            = { viewModel.deleteActivity(it) },
         onNotificationClick = onNotificationClick,
         onSettingsClick     = onSettingsClick,
         onLogoutClick       = { viewModel.logout(); onLogoutClick() },
@@ -106,7 +106,7 @@ private fun HomeScreenContent(
     onCheckin:           (String) -> Unit,
     onFinish:            (String) -> Unit,
     onReport:            (String) -> Unit,
-    onDelete:            (String) -> Unit,  // ✅ เพิ่ม
+    onDelete:            (String) -> Unit,
     onNotificationClick: () -> Unit,
     onSettingsClick:     () -> Unit,
     onLogoutClick:       () -> Unit,
@@ -166,7 +166,7 @@ private fun HomeScreenContent(
                             onCheckin = { onCheckin(card.activityId) },
                             onFinish  = { onFinish(card.activityId) },
                             onReport  = { onReport(card.activityId) },
-                            onDelete  = { onDelete(card.activityId) }  // ✅ เพิ่ม
+                            onDelete  = { onDelete(card.activityId) }
                         )
                         Spacer(Modifier.height(10.dp))
                     }
@@ -185,7 +185,7 @@ fun ActivityCard(
     onCheckin: () -> Unit,
     onFinish:  () -> Unit,
     onReport:  () -> Unit,
-    onDelete:  () -> Unit   // ✅ เพิ่ม
+    onDelete:  () -> Unit
 ) {
     val typeConf   = typeConfigs[card.activityType]
         ?: TypeConfig(card.activityType.uppercase(), Icons.Default.Event, TextGray)
@@ -193,14 +193,10 @@ fun ActivityCard(
         ?: StatusConfig(card.planStatus, TextGray, BgLight, null)
 
     val hasNote    = !card.weeklyNote.isNullOrBlank()
-
-    // ✅ สามารถลบได้เฉพาะ planned เท่านั้น
     val canDelete  = card.planStatus == "planned"
 
-    // ✅ Confirm dialog state
     var showDeleteDialog by remember { mutableStateOf(false) }
 
-    // ✅ Confirm dialog
     if (showDeleteDialog) {
         AlertDialog(
             onDismissRequest = { showDeleteDialog = false },
@@ -261,7 +257,6 @@ fun ActivityCard(
         modifier        = Modifier.fillMaxWidth()
     ) {
         Column(modifier = Modifier.padding(14.dp)) {
-            // ── Top row: type badge + status badge + delete icon ──
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -275,7 +270,6 @@ fun ActivityCard(
                 ) {
                     Badge(statusConf.label, Icons.Default.AccessTime, statusConf.textColor, statusConf.bgColor)
 
-                    // ✅ Delete icon — แสดงเฉพาะ planned
                     if (canDelete) {
                         IconButton(
                             onClick  = { showDeleteDialog = true },
@@ -322,8 +316,6 @@ fun ActivityCard(
                             else ActionButton("Check-in", BlueBtn, onClick = onCheckin)
                         }
                         "finish"  -> ActionButton("Finish", BlueBtn, onClick = onFinish)
-                        "report"  -> if (card.planStatus == "completed")
-                            StatusTag("เสร็จสิ้น", GrayStatus)
                     }
                 }
             }
@@ -487,7 +479,7 @@ fun HomeScreenPreview() {
         )
     )
 
-    val groupedCards = sampleCards.groupBy { "16 JAN 2024" } // Simplified grouping for preview
+    val groupedCards = sampleCards.groupBy { "16 JAN 2024" }
 
     val uiState = HomeUiState(
         selectedMonth = YearMonth.of(2024, 1),

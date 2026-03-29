@@ -117,6 +117,8 @@ class ProjectDetailViewModel @Inject constructor(
     }
 
     fun logout() {
-        authRepo.logout()
+        viewModelScope.launch {
+            authRepo.logout()
+        }
     }
 }

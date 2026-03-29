@@ -50,19 +50,18 @@ class HomeViewModel @Inject constructor(
     val uiState: StateFlow<HomeUiState> = _uiState
 
     init {
-        // Kotlin prohibited 'return' in init block
         if (authRepo.currentUser()?.userId != null) {
             refreshData()
-            syncCallLogs()  // ✅ sync call log ตอน init
+            syncCallLogs()
         } else {
-            loadActivities() // โหลด local แม้ไม่ได้ login (ถ้ามีข้อมูล)
+            loadActivities()
         }
+        observeActivities() // ✅ เรียกใช้ observeActivities เพื่อติดตามการเปลี่ยนแปลงข้อมูล
     }
 
     private fun syncCallLogs() {
         viewModelScope.launch {
             try {
-                // ดึง contact phone map จาก local DB
                 val contacts = customerRepo.getAllContactPhoneMap()
                 callLogRepo.syncCallLogs(contacts)
                 android.util.Log.d("CallLog", "Sync call logs สำเร็จ")
@@ -74,7 +73,7 @@ class HomeViewModel @Inject constructor(
 
     private fun observeActivities() {
         viewModelScope.launch {
-            // ผูก Flow จาก Local DB ให้หน้าจอ Update อัตโนมัติเมื่อข้อมูลเปลี่ยน
+            // ✅ ผูก Flow จาก Local DB ให้หน้าจอ Update อัตโนมัติเมื่อข้อมูลเปลี่ยน
             activityRepo.getAllActivitiesFlow().collect { _ ->
                 loadActivities()
             }
@@ -120,14 +119,11 @@ class HomeViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
             val userId = authRepo.currentUser()?.userId ?: run {
-                // ✅ ถ้าไม่มี userId ก็ยังโหลด local ได้
                 loadActivities()
                 _uiState.update { it.copy(isLoading = false) }
                 return@launch
             }
-            // refresh จาก API (ถ้า fail ก็ไม่เป็นไร local ยังอยู่)
             activityRepo.refreshActivities(userId)
-            // โหลดจาก local เสมอ
             loadActivities()
             _uiState.update { it.copy(isLoading = false) }
         }
