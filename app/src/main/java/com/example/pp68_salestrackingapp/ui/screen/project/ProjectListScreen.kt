@@ -1,0 +1,486 @@
+package com.example.pp68_salestrackingapp.ui.screen.project
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.hilt.navigation.compose.hiltViewModel
+import com.example.pp68_salestrackingapp.data.model.AuthUser
+import com.example.pp68_salestrackingapp.data.model.Project
+import com.example.pp68_salestrackingapp.ui.components.AddFloatingActionButton
+import com.example.pp68_salestrackingapp.ui.components.AppTopBar
+import com.example.pp68_salestrackingapp.ui.components.BottomNavBar
+import com.example.pp68_salestrackingapp.ui.components.ProjectProgressBar
+import com.example.pp68_salestrackingapp.ui.theme.SalesTrackingTheme
+import com.example.pp68_salestrackingapp.ui.viewmodels.project.ProjectListViewModel
+
+private val BgLight    = Color(0xFFF5F5F5)
+private val White      = Color.White
+private val TextDark   = Color(0xFF1A1A1A)
+private val TextGray   = Color(0xFF888888)
+private val RedPrimary = Color(0xFFCC1D1D)
+private val RedFab     = Color(0xFFE53935)
+
+// ─── Project Status Badge ─────────────────────────────────────
+@Composable
+fun ProjectStatusBadge(status: String?) {
+    val (bg, fg) = when (status) {
+        "Lead"            -> Color(0xFFE8EAF6) to Color(0xFF283593)
+        "New Project"     -> Color(0xFFDBEAFE) to Color(0xFF1D4ED8)
+        "Quotation"       -> Color(0xFFFEF9C3) to Color(0xFF92400E)
+        "Bidding"         -> Color(0xFFFEE2E2) to Color(0xFFB91C1C)
+        "Make a Decision" -> Color(0xFFFEF3C7) to Color(0xFFB45309)
+        "Assured"         -> Color(0xFFD1FAE5) to Color(0xFF065F46)
+        "Product Processing" -> Color(0xFFE0F2FE) to Color(0xFF0369A1)
+        "Working"         -> Color(0xFFF0F9FF) to Color(0xFF0E7490)
+        "Quality Issue"   -> Color(0xFFFFF7ED) to Color(0xFFC2410C)
+        "PO"              -> Color(0xFFE0F2FE) to Color(0xFF0369A1)
+        "Completed"       -> Color(0xFFF3F4F6) to Color(0xFF374151)
+        "Lost"            -> Color(0xFFFEE2E2) to Color(0xFF991B1B)
+        "Failed"          -> Color(0xFF1F2937) to Color(0xFF9CA3AF)
+        else              -> Color(0xFFF3F4F6) to Color(0xFF6B7280)
+    }
+    val label = when (status) {
+        "Lead"            -> "Lead-ลูกค้าใหม่"
+        "New Project"     -> "New-โครงการใหม่"
+        "Quotation"       -> "QT-เสนอราคา"
+        "Bidding"         -> "Bid-ประมูล"
+        "Make a Decision" -> "MaD-ตัดสินใจ"
+        "Assured"         -> "Assured-ยืนยัน"
+        "PO"              -> "PO-สั่งซื้อแล้ว"
+        "Completed"       -> "Done-เสร็จสิ้น"
+        "Lost"            -> "Lost-เราไม่ได้งาน"
+        "Failed"          -> "Failed-ล้มเหลว"
+        else              -> status ?: "-"
+    }
+    Surface(shape = RoundedCornerShape(20.dp), color = bg) {
+        Text(label, color = fg, fontSize = 11.sp, fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp))
+    }
+}
+
+// ─── HOT / COLD Badge ─────────────────────────────────────────
+@Composable
+fun HotColdBadge(score: String?) {
+    val isHot  = score?.uppercase() == "HOT"
+    val isWarm = score?.uppercase() == "WARM"
+    val isCold = score?.uppercase() == "COLD"
+    if (!isHot && !isWarm && !isCold) return
+    val (bg, label) = when {
+        isHot  -> Color(0xFFE53935) to "HOT"
+        isWarm -> Color(0xFFF57C00) to "WARM"
+        else   -> Color(0xFF60A5FA) to "COLD"
+    }
+    Surface(shape = RoundedCornerShape(20.dp), color = bg) {
+        Text(label, color = White, fontSize = 11.sp, fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp))
+    }
+}
+
+// ─── Opportunity % bar ────────────────────────────────────────
+@Composable
+fun OpportunityBar(score: Int, modifier: Modifier = Modifier) {
+    val pct      = score.coerceIn(0, 100) / 100f
+    val barColor = when {
+        pct >= 0.7f -> Color(0xFF22C55E)
+        pct >= 0.4f -> Color(0xFFF59E0B)
+        else        -> Color(0xFFEF4444)
+    }
+    Column(modifier = modifier) {
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+            Text("$score%", color = TextGray, fontSize = 12.sp)
+        }
+        Spacer(Modifier.height(4.dp))
+        Box(modifier = Modifier.fillMaxWidth().height(4.dp)
+            .clip(RoundedCornerShape(2.dp)).background(Color(0xFFE5E7EB))
+        ) {
+            Box(modifier = Modifier.fillMaxWidth(pct).fillMaxHeight()
+                .clip(RoundedCornerShape(2.dp)).background(barColor))
+        }
+    }
+}
+
+private fun formatValue(value: Double?): String {
+    if (value == null) return "-"
+    return when {
+        value >= 1_000_000 -> "฿${"%.1f".format(value / 1_000_000)}M"
+        value >= 1_000     -> "฿${"%.0f".format(value / 1_000)}k"
+        else               -> "฿${"%.0f".format(value)}"
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════
+@Composable
+fun ProjectListScreen(
+    onProjectClick: (String) -> Unit = {},
+    onAddClick: () -> Unit = {},
+    onNotificationClick: () -> Unit = {},
+    onSettingsClick: () -> Unit = {},
+    onLogoutClick: () -> Unit = {},
+    currentTab: Int = 3,
+    onTabChange: (Int) -> Unit = {},
+    viewModel: ProjectListViewModel = hiltViewModel()
+) {
+    val projects    by viewModel.projects.collectAsState()
+    val isLoading   by viewModel.isLoading.collectAsState()
+    val searchQuery by viewModel.searchQuery.collectAsState()
+    val showClosed  by viewModel.showClosed.collectAsState()
+    val error       by viewModel.error.collectAsState()
+    val authUser    by viewModel.authUser.collectAsState()
+
+    val selectedStatuses by viewModel.selectedStatuses.collectAsState()
+    val selectedScores   by viewModel.selectedScores.collectAsState()
+
+    var showFilterModal by remember { mutableStateOf(false) }
+
+    ProjectListContent(
+        projects = projects, isLoading = isLoading,
+        searchQuery = searchQuery, showClosed = showClosed, error = error,
+        authUser = authUser,
+        selectedStatuses = selectedStatuses, selectedScores = selectedScores,
+        onSearchChange = viewModel::onSearchChange, onToggleTab = viewModel::onToggleTab,
+        onFilterClick = { showFilterModal = true },
+        onProjectClick = onProjectClick, onAddClick = onAddClick,
+        onNotificationClick = onNotificationClick,
+        onSettingsClick = onSettingsClick,
+        onLogoutClick = {
+            viewModel.logout()
+            onLogoutClick()
+        },
+        currentTab = currentTab, onTabChange = onTabChange
+    )
+
+    if (showFilterModal) {
+        FilterModal(
+            selectedStatuses = selectedStatuses,
+            selectedScores   = selectedScores,
+            onStatusToggle   = viewModel::toggleStatusFilter,
+            onScoreToggle    = viewModel::toggleScoreFilter,
+            onDismiss        = { showFilterModal = false },
+            onReset          = viewModel::resetFilters
+        )
+    }
+}
+
+@Composable
+fun ProjectListContent(
+    projects: List<Project>, isLoading: Boolean,
+    searchQuery: String, showClosed: Boolean, error: String?,
+    authUser: AuthUser?,
+    selectedStatuses: Set<String>, selectedScores: Set<String>,
+    onSearchChange: (String) -> Unit, onToggleTab: (Boolean) -> Unit,
+    onFilterClick: () -> Unit,
+    onProjectClick: (String) -> Unit, onAddClick: () -> Unit,
+    onNotificationClick: () -> Unit,
+    onSettingsClick: () -> Unit,
+    onLogoutClick: () -> Unit,
+    currentTab: Int, onTabChange: (Int) -> Unit
+) {
+    Scaffold(
+        topBar = {
+            AppTopBar(
+                title = "Project",
+                onNotificationClick = onNotificationClick,
+                onSettingsClick = onSettingsClick,
+                onLogoutClick = onLogoutClick,
+                user = authUser
+            )
+        },
+        bottomBar = { BottomNavBar(currentTab = currentTab, onTabChange = onTabChange) },
+        floatingActionButton = {
+            AddFloatingActionButton(onClick = onAddClick, contentDescription = "Add Project")
+        },
+        containerColor = BgLight
+    ) { padding ->
+        Column(modifier = Modifier.fillMaxSize().padding(padding).padding(horizontal = 12.dp)) {
+            Spacer(Modifier.height(12.dp))
+            OutlinedTextField(
+                value = searchQuery, onValueChange = onSearchChange,
+                placeholder = { Text("Search project...", color = TextGray, fontSize = 14.sp) },
+                leadingIcon = { Icon(Icons.Default.Search, null, tint = TextGray) },
+                trailingIcon = {
+                    if (searchQuery.isNotEmpty())
+                        IconButton(onClick = { onSearchChange("") }) {
+                            Icon(Icons.Default.Close, null, tint = TextGray)
+                        }
+                },
+                modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(24.dp),
+                colors = OutlinedTextFieldDefaults.colors(
+                    unfocusedBorderColor = Color.Transparent, focusedBorderColor = RedPrimary,
+                    unfocusedContainerColor = White, focusedContainerColor = White,
+                    unfocusedTextColor = TextDark, focusedTextColor = TextDark, cursorColor = RedPrimary
+                ), singleLine = true
+            )
+            Spacer(Modifier.height(12.dp))
+            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Surface(shape = RoundedCornerShape(20.dp),
+                    color = if (!showClosed) RedPrimary else Color(0xFFE5E7EB),
+                    modifier = Modifier.clickable { onToggleTab(false) }
+                ) {
+                    Text("Active", color = if (!showClosed) White else TextGray,
+                        fontSize = 13.sp, fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.padding(horizontal = 18.dp, vertical = 8.dp))
+                }
+                Spacer(Modifier.width(8.dp))
+                Surface(shape = RoundedCornerShape(20.dp),
+                    color = if (showClosed) RedPrimary else Color(0xFFE5E7EB),
+                    modifier = Modifier.clickable { onToggleTab(true) }
+                ) {
+                    Text("Closed", color = if (showClosed) White else TextGray,
+                        fontSize = 13.sp, fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.padding(horizontal = 18.dp, vertical = 8.dp))
+                }
+                Spacer(Modifier.weight(1f))
+                
+                val hasFilter = selectedStatuses.isNotEmpty() || selectedScores.isNotEmpty()
+                Row(modifier = Modifier.clickable { onFilterClick() }.padding(4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Text("Filter", color = if (hasFilter) RedPrimary else TextDark, fontSize = 13.sp)
+                    Icon(Icons.Default.Tune, null, tint = if (hasFilter) RedPrimary else TextDark, modifier = Modifier.size(18.dp))
+                }
+            }
+            Spacer(Modifier.height(12.dp))
+            error?.let { Text(it, color = RedFab, fontSize = 13.sp, modifier = Modifier.padding(bottom = 8.dp)) }
+            if (isLoading) {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator(color = RedPrimary)
+                }
+            } else if (projects.isEmpty()) {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Icon(Icons.Default.WorkOff, null, tint = TextGray, modifier = Modifier.size(48.dp))
+                        Spacer(Modifier.height(8.dp))
+                        Text(if (showClosed) "ไม่มีโครงการที่ปิดแล้ว" else "ไม่มีโครงการที่กำลังดำเนินการ",
+                            color = TextGray, fontSize = 14.sp)
+                    }
+                }
+            } else {
+                LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    items(projects, key = { it.projectId }) { project ->
+                        ProjectListItem(project = project, onClick = { onProjectClick(project.projectId) })
+                    }
+                    item { Spacer(Modifier.height(80.dp)) }
+                }
+            }
+        }
+    }
+}
+
+// ─── Filter Modal ─────────────────────────────────────────────
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun FilterModal(
+    selectedStatuses: Set<String>,
+    selectedScores:   Set<String>,
+    onStatusToggle:   (String) -> Unit,
+    onScoreToggle:    (String) -> Unit,
+    onDismiss:        () -> Unit,
+    onReset:          () -> Unit
+) {
+    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = White) {
+        Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp).padding(bottom = 40.dp)) {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                Text("Filter", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = TextDark)
+                Text("Reset", color = RedPrimary, fontSize = 14.sp, modifier = Modifier.clickable { onReset() })
+            }
+            Spacer(Modifier.height(20.dp))
+            
+            Text("Project Status", fontWeight = FontWeight.SemiBold, fontSize = 15.sp, color = TextDark)
+            Spacer(Modifier.height(12.dp))
+            val statuses = listOf(
+                "New Project", "Quotation", "Bidding", 
+                "Make a Decision", "Assured", "Product Processing", 
+                "Working", "Quality Issue", "Completed"
+            )
+            FlowRow(mainAxisSpacing = 8.dp, crossAxisSpacing = 8.dp) {
+                statuses.forEach { s ->
+                    FilterTag(label = s, isSelected = s in selectedStatuses, onClick = { onStatusToggle(s) })
+                }
+            }
+            
+            Spacer(Modifier.height(24.dp))
+            Text("Hot/Warm/Cold", fontWeight = FontWeight.SemiBold, fontSize = 15.sp, color = TextDark)
+            Spacer(Modifier.height(12.dp))
+            val scores = listOf("Hot", "Warm", "Cold")
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                scores.forEach { s ->
+                    FilterTag(label = s, isSelected = s.uppercase() in selectedScores, onClick = { onScoreToggle(s) })
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun FilterTag(label: String, isSelected: Boolean, onClick: () -> Unit) {
+    Surface(
+        shape   = RoundedCornerShape(20.dp),
+        border  = androidx.compose.foundation.BorderStroke(1.dp, if (isSelected) RedPrimary else Color(0xFFE0E0E0)),
+        color   = if (isSelected) RedPrimary.copy(alpha = 0.1f) else White,
+        modifier = Modifier.clickable { onClick() }
+    ) {
+        Text(label, color = if (isSelected) RedPrimary else TextDark, 
+            fontSize = 13.sp, modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp))
+    }
+}
+
+@Composable
+fun FlowRow(
+    mainAxisSpacing: Dp = 0.dp,
+    crossAxisSpacing: Dp = 0.dp,
+    content: @Composable () -> Unit
+) {
+    androidx.compose.ui.layout.Layout(content) { measurables, constraints ->
+        val placeables = measurables.map { it.measure(constraints) }
+        val rows = mutableListOf<List<androidx.compose.ui.layout.Placeable>>()
+        var currentRow = mutableListOf<androidx.compose.ui.layout.Placeable>()
+        var currentRowWidth = 0
+
+        placeables.forEach { p ->
+            if (currentRowWidth + p.width + mainAxisSpacing.roundToPx() > constraints.maxWidth && currentRow.isNotEmpty()) {
+                rows.add(currentRow)
+                currentRow = mutableListOf()
+                currentRowWidth = 0
+            }
+            currentRow.add(p)
+            currentRowWidth += p.width + mainAxisSpacing.roundToPx()
+        }
+        rows.add(currentRow)
+
+        val height = rows.sumOf { row -> row.maxOf { it.height } } + (rows.size - 1) * crossAxisSpacing.roundToPx()
+        layout(constraints.maxWidth, height) {
+            var y = 0
+            rows.forEach { row ->
+                var x = 0
+                row.forEach { p ->
+                    p.place(x, y)
+                    x += p.width + mainAxisSpacing.roundToPx()
+                }
+                y += row.maxOf { it.height } + crossAxisSpacing.roundToPx()
+            }
+        }
+    }
+}
+
+// ─── Project List Item ────────────────────────────────────────
+@Composable
+fun ProjectListItem(project: Project, onClick: () -> Unit) {
+    Surface(
+        modifier        = Modifier.fillMaxWidth(),
+        shape           = RoundedCornerShape(16.dp),
+        color           = White,
+        shadowElevation = 2.dp,
+        onClick         = onClick
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            // ── Row 1: ชื่อ + มูลค่า ──────────────────────────
+            Row(
+                modifier            = Modifier.fillMaxWidth(),
+                verticalAlignment   = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(
+                    project.projectName,
+                    color      = TextDark,
+                    fontSize   = 16.sp,
+                    fontWeight = FontWeight.Bold,
+                    maxLines   = 1,
+                    overflow   = TextOverflow.Ellipsis,
+                    modifier   = Modifier.weight(1f).padding(end = 8.dp)
+                )
+                Text(
+                    formatValue(project.expectedValue),
+                    color      = RedPrimary,
+                    fontSize   = 14.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+
+            Spacer(Modifier.height(2.dp))
+            Text(project.custId, color = TextGray, fontSize = 13.sp)
+            Spacer(Modifier.height(8.dp))
+
+            // ── Row 2: Status Badge + HOT/WARM/COLD ──────────
+            Row(
+                modifier              = Modifier.fillMaxWidth(),
+                verticalAlignment     = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                ProjectStatusBadge(project.projectStatus)
+                Spacer(Modifier.weight(1f))
+                HotColdBadge(project.opportunityScore)
+            }
+
+            Spacer(Modifier.height(10.dp))
+
+            // ── Row 3: Progress Bar ───────────────────────────
+            // ✅ ไม่แสดง progress สำหรับ Lost/Failed
+            if (project.projectStatus !in listOf("Lost", "Failed")) {
+                ProjectProgressBar(
+                    progressPct = project.progressPct,
+                    status      = project.projectStatus,
+                    modifier    = Modifier.fillMaxWidth()
+                )
+            } else {
+                // Lost/Failed แสดง badge แดงแทน
+                Surface(
+                    color = Color(0xFFFEE2E2),
+                    shape = RoundedCornerShape(4.dp)
+                ) {
+                    Text(
+                        text     = if (project.projectStatus == "Lost") "❌ ไม่ได้งาน" else "❌ ยกเลิก",
+                        fontSize = 11.sp,
+                        color    = Color(0xFF991B1B),
+                        fontWeight = FontWeight.Medium,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Preview(showBackground = true, backgroundColor = 0xFFF5F5F5)
+@Composable
+fun ProjectListScreenPreview() {
+    val sampleProjects = listOf(
+        Project("PJ-001", "CST-001", "B-001", "PJ-2024-001", "Condo AA", 1200000.0, "PO", "2024-01-01", null, null, null, null, "HOT"),
+        Project("PJ-002", "CST-002", "B-001", "PJ-2024-002", "หมู่บ้าน Happy", 500000.0, "New Project", "2024-03-01", null, null, null, null, "COLD"),
+        Project("PJ-003", "CST-003", "B-001", "PJ-2024-003", "The Prestige", 8500000.0, "Make a Decision", "2024-02-01", null, null, null, null, "HOT"),
+        Project("PJ-004", "CST-004", "B-001", "PJ-2024-004", "H Village", 320000.0, "Lost", "2023-11-01", "2024-01-15", null, null, null, null),
+        Project("PJ-005", "CST-006", "B-001", "PJ-2024-005", "Green Residence", 2100000.0, "Lead", "2024-04-01", null, null, null, null, "COLD"),
+        Project("PJ-006", "CST-005", "B-001", "PJ-2024-006", "Sunset Office", 4800000.0, "Assured", "2024-03-10", null, null, null, null, "HOT"),
+    )
+    SalesTrackingTheme {
+        ProjectListContent(
+            projects = sampleProjects, isLoading = false,
+            searchQuery = "", showClosed = false, error = null,
+            authUser = null,
+            selectedStatuses = emptySet(), selectedScores = emptySet(),
+            onSearchChange = {}, onToggleTab = {}, onFilterClick = {},
+            onProjectClick = {}, onAddClick = {},
+            onNotificationClick = {},
+            onSettingsClick = {},
+            onLogoutClick = {},
+            currentTab = 3, onTabChange = {}
+        )
+    }
+}
