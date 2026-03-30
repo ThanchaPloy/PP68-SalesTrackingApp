@@ -27,6 +27,7 @@ import com.example.pp68_salestrackingapp.ui.theme.SalesTrackingTheme
 import com.example.pp68_salestrackingapp.ui.viewmodels.activity.ActivityCard
 import com.example.pp68_salestrackingapp.ui.viewmodels.activity.HomeUiState
 import com.example.pp68_salestrackingapp.ui.viewmodels.activity.HomeViewModel
+import java.time.LocalDate
 import java.time.YearMonth
 import java.time.format.DateTimeFormatter
 import java.util.Locale
@@ -430,13 +431,82 @@ private fun HomeTopBar(
 
 @Composable
 private fun MonthPicker(current: YearMonth, onSelect: (YearMonth) -> Unit) {
-    val months = (-6..6).map { current.plusMonths(it.toLong()) }
-    Surface(color = White, border = androidx.compose.foundation.BorderStroke(1.dp, BorderGray), modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
-        Column {
-            months.forEach { m ->
-                TextButton(onClick = { onSelect(m) }, modifier = Modifier.fillMaxWidth()) {
-                    Text(m.format(DateTimeFormatter.ofPattern("MMMM yyyy", Locale("th", "TH"))).replaceFirstChar { it.uppercase() }, color = if (m == current) RedPrimary else TextDark)
+    var viewedYear by remember { mutableIntStateOf(current.year) }
+    val months = (1..12).map { month -> YearMonth.of(viewedYear, month) }
+    
+    Surface(
+        color = White,
+        border = androidx.compose.foundation.BorderStroke(1.dp, BorderGray),
+        shape = RoundedCornerShape(bottomStart = 12.dp, bottomEnd = 12.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp)
+            .padding(bottom = 16.dp)
+    ) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            // ส่วนเลือกปี
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(onClick = { viewedYear-- }) {
+                    Icon(Icons.Default.ChevronLeft, "Previous Year", tint = RedPrimary)
                 }
+                Text(
+                    text = "${viewedYear + 543}", // แสดงเป็น พ.ศ.
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 17.sp,
+                    color = TextDark
+                )
+                IconButton(onClick = { viewedYear++ }) {
+                    Icon(Icons.Default.ChevronRight, "Next Year", tint = RedPrimary)
+                }
+            }
+
+            Spacer(Modifier.height(8.dp))
+
+            // ส่วนเลือกเดือน (Grid 3x4)
+            val monthNames = listOf("ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค.")
+            
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                for (row in 0 until 4) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        for (col in 0 until 3) {
+                            val index = row * 3 + col
+                            val m = months[index]
+                            val isSelected = m == current
+                            
+                            Button(
+                                onClick = { onSelect(m) },
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(44.dp),
+                                shape = RoundedCornerShape(8.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = if (isSelected) RedPrimary else Color(0xFFF5F5F5),
+                                    contentColor = if (isSelected) White else TextDark
+                                ),
+                                contentPadding = PaddingValues(0.dp)
+                            ) {
+                                Text(monthNames[index], fontSize = 13.sp, fontWeight = if(isSelected) FontWeight.Bold else FontWeight.Normal)
+                            }
+                        }
+                    }
+                }
+            }
+            
+            Spacer(Modifier.height(8.dp))
+
+            // ปุ่มกลับไปเดือนปัจจุบัน
+            TextButton(
+                onClick = { onSelect(YearMonth.now()) },
+                modifier = Modifier.align(Alignment.CenterHorizontally)
+            ) {
+                Text("ไปยังเดือนปัจจุบัน", fontSize = 13.sp, color = RedPrimary, fontWeight = FontWeight.SemiBold)
             }
         }
     }

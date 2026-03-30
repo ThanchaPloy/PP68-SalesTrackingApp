@@ -233,10 +233,10 @@ class CreateAppointmentViewModel @Inject constructor(
                         titleTopic        = activity.detail ?: "",
                         activityType      = activity.activityType,
                         plannedDate       = formatDateForUI(activity.activityDate),
-                        startTime         = activity.plannedTime?.take(5)  // "10:00"
-                            ?.let { t -> formatTimeForUI(t) },
-                        endTime           = activity.plannedEndTime?.take(5)
-                            ?.let { t -> formatTimeForUI(t) },
+                        startTime         = activity.plannedTime?.  // "10:00"
+                            let { t -> formatTimeForUI(t) },
+                        endTime           = activity.plannedEndTime?.
+                            let { t -> formatTimeForUI(t) },
                         lat               = activity.plannedLat,
                         lng               = activity.plannedLong,
                         selectedMasterIds = selectedIds,
@@ -257,17 +257,33 @@ class CreateAppointmentViewModel @Inject constructor(
         }
     }
 
-    private fun formatTimeForUI(time24: String): String {
+    private fun formatTimeForUI(timeStr: String): String {
         return try {
-            val parts = time24.split(":")
-            val h = parts[0].toInt()
-            val m = parts[1].toInt()
-            "%02d:%02d %s".format(
-                if (h > 12) h - 12 else if (h == 0) 12 else h,
-                m,
-                if (h >= 12) "PM" else "AM"
-            )
-        } catch (e: Exception) { time24 }
+            val cleanTime = timeStr.trim()
+
+            // เตรียมรูปแบบเวลาที่ DB อาจจะส่งมาได้ทั้งหมด
+            val inputFormats = listOf("HH:mm:ss", "HH:mm", "hh:mm:ss a", "hh:mm a")
+            var parsedDate: java.util.Date? = null
+
+            // ลองแปลงเวลาดูว่าเข้าเคสไหน
+            for (format in inputFormats) {
+                try {
+                    val sdf = java.text.SimpleDateFormat(format, java.util.Locale.ENGLISH)
+                    parsedDate = sdf.parse(cleanTime)
+                    if (parsedDate != null) break
+                } catch (e: Exception) { continue }
+            }
+
+            // ถ้าแปลงไม่ได้เลย ให้โชว์ค่าเดิมจาก DB ป้องกันแอปแครช
+            if (parsedDate == null) return timeStr
+
+            // แปลงเป็น 12 ชั่วโมง (hh:mm a) เพื่อโชว์บนหน้าจอ UI สวยๆ
+            val outputFormat = java.text.SimpleDateFormat("hh:mm a", java.util.Locale.ENGLISH)
+            outputFormat.format(parsedDate)
+
+        } catch (e: Exception) {
+            timeStr
+        }
     }
 
     private fun loadInitialProject(projectId: String) {

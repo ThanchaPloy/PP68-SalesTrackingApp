@@ -23,7 +23,10 @@ fun BottomNavBar(currentTab: Int, onTabChange: (Int) -> Unit) {
         Icons.Default.Assignment   to "Project",
         Icons.Default.BarChart     to "Stats"
     )
-    NavigationBar(containerColor = White, tonalElevation = 4.dp) {
+    NavigationBar(
+        containerColor = Color.White,
+        tonalElevation = 0.dp // ✅ ปรับ tonalElevation เป็น 0 เพื่อให้สีขาวสนิทเหมือน TopBar
+    ) {
         tabs.forEachIndexed { index, (icon, label) ->
             NavigationBarItem(
                 selected = currentTab == index,

@@ -414,6 +414,32 @@ private fun ProjectHeaderCard(
                 }
             }
 
+            Spacer(Modifier.height(12.dp))
+
+            Row(
+                modifier              = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column {
+                    Text("Start Date", fontSize = 12.sp, color = TextGray)
+                    Text(
+                        project.startDate ?: "-",
+                        fontSize   = 14.sp,
+                        fontWeight = FontWeight.Medium,
+                        color      = TextDark
+                    )
+                }
+                Column(horizontalAlignment = Alignment.End) {
+                    Text("Expected Closing Date", fontSize = 12.sp, color = TextGray)
+                    Text(
+                        project.closingDate ?: "-",
+                        fontSize   = 14.sp,
+                        fontWeight = FontWeight.Medium,
+                        color      = TextDark
+                    )
+                }
+            }
+
             // ✅ เพิ่ม Progress Bar
             if (project.projectStatus !in listOf("Lost", "Failed")) {
                 Spacer(Modifier.height(16.dp))

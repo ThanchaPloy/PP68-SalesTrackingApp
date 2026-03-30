@@ -11,14 +11,22 @@ import dagger.hilt.android.AndroidEntryPoint
 import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Build
+import android.util.Log
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.lifecycleScope
+import com.example.pp68_salestrackingapp.data.remote.ApiService
+import com.example.pp68_salestrackingapp.di.TokenManager
 import com.google.firebase.messaging.FirebaseMessaging
+import kotlinx.coroutines.launch
+import javax.inject.Inject
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
 
-    // ✅ Launcher สำหรับขอ permission
+    @Inject lateinit var apiService: ApiService
+    @Inject lateinit var tokenManager: TokenManager
+
     private val requestPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { isGranted ->
@@ -31,22 +39,7 @@ class MainActivity : ComponentActivity() {
         ActivityResultContracts.RequestPermission()
     ) { granted ->
         if (granted) {
-            android.util.Log.d("CallLog", "READ_CALL_LOG permission granted")
-        }
-    }
-
-    private fun askCallLogPermission() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            when {
-                ContextCompat.checkSelfPermission(
-                    this, Manifest.permission.READ_CALL_LOG
-                ) == PackageManager.PERMISSION_GRANTED -> {
-                    // มี permission แล้ว
-                }
-                else -> {
-                    callLogPermissionLauncher.launch(Manifest.permission.READ_CALL_LOG)
-                }
-            }
+            Log.d("CallLog", "READ_CALL_LOG permission granted")
         }
     }
 
@@ -80,12 +73,33 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private fun askCallLogPermission() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_CALL_LOG) != PackageManager.PERMISSION_GRANTED) {
+                callLogPermissionLauncher.launch(Manifest.permission.READ_CALL_LOG)
+            }
+        }
+    }
+
     private fun getFcmToken() {
         FirebaseMessaging.getInstance().token.addOnCompleteListener { task ->
             if (task.isSuccessful) {
                 val token = task.result
-                android.util.Log.d("FCM", "Token: $token")
-                // TODO: ส่ง token ขึ้น API
+                Log.d("FCM", "Current Token: $token")
+                tokenManager.saveFcmToken(token)
+                
+                // ✅ ส่ง Token ไปที่ Server จริงๆ
+                val userId = tokenManager.getUserData()?.userId
+                if (userId != null) {
+                    lifecycleScope.launch {
+                        try {
+                            apiService.updateFcmToken("eq.$userId", mapOf("fcm_token" to token))
+                            Log.d("FCM", "ส่ง Token ไป Server สำเร็จ")
+                        } catch (e: Exception) {
+                            Log.e("FCM", "ส่ง Token ล้มเหลว: ${e.message}")
+                        }
+                    }
+                }
             }
         }
     }

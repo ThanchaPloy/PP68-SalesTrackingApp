@@ -274,7 +274,7 @@ private fun StatCard(
 ) {
     Surface(
         shape    = RoundedCornerShape(14.dp),
-        color    = CardPink,
+        color    = White,
         modifier = modifier
     ) {
         Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp)) {
@@ -297,7 +297,7 @@ private fun StatCard(
 private fun VisitCountCard(count: Int) {
     Surface(
         shape    = RoundedCornerShape(14.dp),
-        color    = CardPink,
+        color    = White,
         modifier = Modifier.fillMaxWidth()
     ) {
         Row(
