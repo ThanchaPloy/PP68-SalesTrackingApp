@@ -20,13 +20,12 @@ import java.time.format.DateTimeFormatter
 import java.util.Locale
 import java.util.UUID
 import javax.inject.Inject
-import kotlin.text.category
 
 data class CreateAppointmentUiState(
     val activityId:          String? = null,
     val selectedProjectId:   String? = null,
     val selectedProjectName: String? = null,
-    val selectedCustomerId:  String? = null,   // ✅ เพิ่ม
+    val selectedCustomerId:  String? = null,
     val titleTopic:          String  = "",
     val activityType:        String  = "onsite",
     val plannedDate:         String? = null,
@@ -39,9 +38,9 @@ data class CreateAppointmentUiState(
     val selectedMasterIds:   Set<Int>             = emptySet(),
 
     val projectOptions:  List<ProjectOption>   = emptyList(),
-    val contactOptions:  List<ContactOption>   = emptyList(),  // ✅ โหลดจาก project จริง
+    val contactOptions:  List<ContactOption>   = emptyList(),
     val masterOptions:   List<ActivityMaster>  = emptyList(),
-    val allMasterOptions:  List<ActivityMaster> = emptyList(),  // ✅ เก็บทั้งหมด
+    val allMasterOptions:  List<ActivityMaster> = emptyList(),
 
 
     val isLoading:         Boolean = false,
@@ -95,8 +94,6 @@ class CreateAppointmentViewModel @Inject constructor(
         loadMasterObjectives()
     }
 
-    // ── ดึง activity_master จาก API (ใช้ตาราง activity_master จริง) ──────────
-    // ✅ ตอน init โหลดทั้งหมดก่อน ยังไม่ filter
     private fun loadMasterObjectives() {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoadingMasters = true) }
@@ -106,7 +103,7 @@ class CreateAppointmentViewModel @Inject constructor(
                 _uiState.update {
                     it.copy(
                         allMasterOptions = all,
-                        masterOptions    = emptyList(),  // ✅ ยังไม่แสดงจนกว่าจะเลือก project
+                        masterOptions    = emptyList(),
                         isLoadingMasters = false
                     )
                 }
@@ -115,7 +112,7 @@ class CreateAppointmentViewModel @Inject constructor(
                 _uiState.update {
                     it.copy(
                         allMasterOptions = all,
-                        masterOptions    = emptyList(),  // ✅ เหมือนกัน
+                        masterOptions    = emptyList(),
                         isLoadingMasters = false
                     )
                 }
@@ -180,7 +177,6 @@ class CreateAppointmentViewModel @Inject constructor(
 
                 _uiState.update { it.copy(selectedCustomerId = custId) }
 
-                // ✅ Filter master ตาม project status เสมอ
                 val category = getCategoryForProjectStatus(status)
                 val filtered = if (category != null) {
                     _uiState.value.allMasterOptions.filter { it.category == category }
@@ -190,7 +186,6 @@ class CreateAppointmentViewModel @Inject constructor(
 
                 _uiState.update { it.copy(masterOptions = filtered) }
 
-                // โหลด contacts
                 customerRepo.getContactPersons(custId).onSuccess { contacts ->
                     _uiState.update {
                         it.copy(
@@ -225,7 +220,6 @@ class CreateAppointmentViewModel @Inject constructor(
                 val savedItems  = activityRepo.getPlanItems(id).getOrDefault(emptyList())
                 val selectedIds = savedItems.map { it.masterId }.toSet()
 
-                // ✅ Pre-fill ข้อมูลเดิมทั้งหมด
                 _uiState.update {
                     it.copy(
                         activityId        = activity.activityId,
@@ -233,10 +227,8 @@ class CreateAppointmentViewModel @Inject constructor(
                         titleTopic        = activity.detail ?: "",
                         activityType      = activity.activityType,
                         plannedDate       = formatDateForUI(activity.activityDate),
-                        startTime         = activity.plannedTime?.  // "10:00"
-                            let { t -> formatTimeForUI(t) },
-                        endTime           = activity.plannedEndTime?.
-                            let { t -> formatTimeForUI(t) },
+                        startTime         = activity.plannedTime?.let { t -> formatTimeForUI(t) },
+                        endTime           = activity.plannedEndTime?.let { t -> formatTimeForUI(t) },
                         lat               = activity.plannedLat,
                         lng               = activity.plannedLong,
                         selectedMasterIds = selectedIds,
@@ -244,7 +236,6 @@ class CreateAppointmentViewModel @Inject constructor(
                     )
                 }
 
-                // โหลด project name + contacts + filter masters
                 activity.projectId?.let { pid ->
                     projectRepo.getProjectById(pid).onSuccess { p ->
                         _uiState.update { it.copy(selectedProjectName = p.projectName) }
@@ -260,12 +251,9 @@ class CreateAppointmentViewModel @Inject constructor(
     private fun formatTimeForUI(timeStr: String): String {
         return try {
             val cleanTime = timeStr.trim()
-
-            // เตรียมรูปแบบเวลาที่ DB อาจจะส่งมาได้ทั้งหมด
             val inputFormats = listOf("HH:mm:ss", "HH:mm", "hh:mm:ss a", "hh:mm a")
             var parsedDate: java.util.Date? = null
 
-            // ลองแปลงเวลาดูว่าเข้าเคสไหน
             for (format in inputFormats) {
                 try {
                     val sdf = java.text.SimpleDateFormat(format, java.util.Locale.ENGLISH)
@@ -274,13 +262,9 @@ class CreateAppointmentViewModel @Inject constructor(
                 } catch (e: Exception) { continue }
             }
 
-            // ถ้าแปลงไม่ได้เลย ให้โชว์ค่าเดิมจาก DB ป้องกันแอปแครช
             if (parsedDate == null) return timeStr
-
-            // แปลงเป็น 12 ชั่วโมง (hh:mm a) เพื่อโชว์บนหน้าจอ UI สวยๆ
             val outputFormat = java.text.SimpleDateFormat("hh:mm a", java.util.Locale.ENGLISH)
             outputFormat.format(parsedDate)
-
         } catch (e: Exception) {
             timeStr
         }
@@ -296,7 +280,7 @@ class CreateAppointmentViewModel @Inject constructor(
                         selectedCustomerId  = p.custId
                     )
                 }
-                loadContactsForProject(projectId)  // ✅ โหลด contact ด้วย
+                loadContactsForProject(projectId)
             }
         }
     }
@@ -316,7 +300,6 @@ class CreateAppointmentViewModel @Inject constructor(
                         selectedProjectName = event.name,
                         projectError        = null,
                         selectedContactIds  = emptySet(),
-                        // ✅ reset master selection เฉพาะตอนสร้างใหม่
                         selectedMasterIds   = if (it.activityId == null) emptySet() else it.selectedMasterIds,
                         contactOptions      = emptyList()
                     )
@@ -367,6 +350,18 @@ class CreateAppointmentViewModel @Inject constructor(
         }
     }
 
+    private fun formatTimeToDb(uiTime: String?): String? {
+        if (uiTime.isNullOrBlank()) return null
+        return try {
+            val inputFormat = java.text.SimpleDateFormat("hh:mm a", java.util.Locale.ENGLISH)
+            val outputFormat = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.ENGLISH)
+            val date = inputFormat.parse(uiTime)
+            date?.let { outputFormat.format(it) } ?: uiTime
+        } catch (e: Exception) {
+            uiTime
+        }
+    }
+
     private fun save() {
         val s = _uiState.value
 
@@ -391,12 +386,12 @@ class CreateAppointmentViewModel @Inject constructor(
                 return@launch
             }
 
+            val isEditMode = s.activityId != null
             val appointmentId = s.activityId
                 ?: ("APT-" + UUID.randomUUID().toString().take(8).uppercase())
 
             val isoDate = s.plannedDate?.let { parseToIsoDate(it) } ?: LocalDate.now().toString()
 
-            // ✅ เอาชื่อ contact ที่เลือกมาต่อกัน
             val selectedContactNames = s.contactOptions
                 .filter { it.id in s.selectedContactIds }
                 .joinToString(", ") { it.name }
@@ -410,15 +405,45 @@ class CreateAppointmentViewModel @Inject constructor(
                 activityDate   = isoDate,
                 detail         = s.titleTopic.ifBlank { null },
                 status         = "planned",
-                plannedTime    = s.startTime,
-                plannedEndTime = s.endTime,
+                plannedTime    = formatTimeToDb(s.startTime),
+                plannedEndTime = formatTimeToDb(s.endTime),
                 plannedLat     = s.lat,
                 plannedLong    = s.lng,
                 isAppointment  = s.selectedContactIds.isNotEmpty(),
-                contactName    = selectedContactNames.ifBlank { null }  // ✅ เพิ่มตรงนี้
+                contactName    = selectedContactNames.ifBlank { null }
             )
 
-            val result = activityRepo.addActivity(activity)
+            val result = if (isEditMode) {
+                // สำหรับโหมดแก้ไข ส่งข้อมูลที่จะอัปเดต (PATCH)
+                val updates = mutableMapOf<String, Any>(
+                    "type" to s.activityType,
+                    "planned_date" to isoDate,
+                    "topic" to s.titleTopic,
+                    "planned_time" to (formatTimeToDb(s.startTime) ?: ""),
+                    "planned_end_time" to (formatTimeToDb(s.endTime) ?: ""),
+                    "planned_lat" to (s.lat ?: 0.0),
+                    "planned_long" to (s.lng ?: 0.0),
+                    "is_appointment" to s.selectedContactIds.isNotEmpty()
+                )
+                // อัปเดตผ่าน API และ Local
+                activityRepo.updateActivity(appointmentId, updates).onSuccess {
+                    // อัปเดตข้อมูลเต็มลง Local DB ด้วย
+                    activityRepo.addActivity(activity)
+                }
+            } else {
+                // สำหรับของใหม่ (POST)
+                activityRepo.addActivity(activity)
+            }
+
+            if (result.isFailure) {
+                _uiState.update { 
+                    it.copy(
+                        isLoading = false, 
+                        saveError = result.exceptionOrNull()?.message ?: "บันทึกไม่สำเร็จ"
+                    ) 
+                }
+                return@launch
+            }
 
             if (s.selectedMasterIds.isNotEmpty()) {
                 val planItems = s.selectedMasterIds.map { mid ->
@@ -441,7 +466,6 @@ class CreateAppointmentViewModel @Inject constructor(
             val formatter = DateTimeFormatter.ofPattern("MMM dd, yyyy", Locale.ENGLISH)
             LocalDate.parse(uiDate, formatter).toString()
         } catch (e: Exception) {
-            // ลอง format อื่น
             try {
                 val formatter = DateTimeFormatter.ofPattern("d MMM yyyy", Locale.ENGLISH)
                 LocalDate.parse(uiDate, formatter).toString()
@@ -470,10 +494,9 @@ class CreateAppointmentViewModel @Inject constructor(
         }
     }
 
-    // ── Filter masterOptions ตาม project status ───────────────────
     private fun filterMastersByProjectStatus(status: String) {
         val category = getCategoryForProjectStatus(status)
-        val allMasters = _uiState.value.allMasterOptions  // เก็บไว้ใน state
+        val allMasters = _uiState.value.allMasterOptions
         val filtered = if (category != null) {
             allMasters.filter { it.category == category }
         } else {

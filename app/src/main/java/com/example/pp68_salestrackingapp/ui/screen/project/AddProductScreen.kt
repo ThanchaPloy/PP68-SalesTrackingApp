@@ -24,6 +24,8 @@ import com.example.pp68_salestrackingapp.ui.components.DropdownField
 import com.example.pp68_salestrackingapp.ui.components.FormTextField
 import com.example.pp68_salestrackingapp.ui.theme.AppColors
 import com.example.pp68_salestrackingapp.ui.theme.SalesTrackingTheme
+import com.example.pp68_salestrackingapp.ui.viewmodels.project.AddProductUiState
+import com.example.pp68_salestrackingapp.ui.viewmodels.project.AddProductViewModel
 
 @Composable
 fun AddProductScreen(

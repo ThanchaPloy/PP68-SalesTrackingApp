@@ -366,6 +366,7 @@ fun SalesTrackingApp() {
                 onCheckIn = { id -> navController.navigate(Route.CheckIn.createRoute(id)) },
                 onWeeklyReport = { navController.navigate(Route.WeeklyReport.path) },
                 onMonthlyReport = { navController.navigate(Route.MonthlyReport.path) },
+                onViewDetails = { id -> navController.navigate(Route.ActivityDetail.createRoute(id)) } // ✅ เพิ่ม View Details
             )
         }
 

@@ -1,4 +1,4 @@
-package com.example.pp68_salestrackingapp.ui.screen.project
+package com.example.pp68_salestrackingapp.ui.viewmodels.project
 
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
@@ -23,8 +23,6 @@ data class AddProductUiState(
     val wantedDate: String? = null,
     
     val filteredNames: List<String> = emptyList(),
-    val filteredGroups: List<String> = emptyList(),
-    val filteredSubgroups: List<String> = emptyList(),
     
     val isLoading: Boolean = false,
     val isSaving: Boolean = false,
@@ -34,11 +32,13 @@ data class AddProductUiState(
 
 @HiltViewModel
 class AddProductViewModel @Inject constructor(
-    savedStateHandle: SavedStateHandle,
+    private val savedStateHandle: SavedStateHandle,
     private val productRepo: ProductRepository
 ) : ViewModel() {
 
-    private val projectId: String = checkNotNull(savedStateHandle["projectId"])
+    // ✅ ใช้ Key "projectId" ให้ตรงกับ NavGraph
+    // และดึงค่าออกมาเก็บไว้เพื่อให้มั่นใจว่าไม่หาย
+    val projectId: String? = savedStateHandle["projectId"]
 
     private val _uiState = MutableStateFlow(AddProductUiState())
     val uiState: StateFlow<AddProductUiState> = _uiState
@@ -55,7 +55,7 @@ class AddProductViewModel @Inject constructor(
                     _uiState.update { it.copy(products = list, isLoading = false) }
                 }
                 .onFailure { e ->
-                    _uiState.update { it.copy(error = e.message, isLoading = false) }
+                    _uiState.update { it.copy(error = "โหลดสินค้าไม่สำเร็จ: ${e.message}", isLoading = false) }
                 }
         }
     }
@@ -67,6 +67,7 @@ class AddProductViewModel @Inject constructor(
             selectedProductName = "",
             selectedGroup = "",
             selectedSubgroup = "",
+            unit = "",
             filteredNames = filtered.map { it.productName }.distinct()
         ) }
     }
@@ -93,13 +94,19 @@ class AddProductViewModel @Inject constructor(
 
     fun save() {
         val state = _uiState.value
+        
+        if (projectId.isNullOrBlank()) {
+            _uiState.update { it.copy(error = "Error: ไม่พบข้อมูล Project ID") }
+            return
+        }
+
         val product = state.products.find { 
             it.productName == state.selectedProductName && 
             (it.brand == state.selectedBrand || state.selectedBrand.isBlank())
         }
         
         if (product == null) {
-            _uiState.update { it.copy(error = "กรุณาเลือกสินค้า") }
+            _uiState.update { it.copy(error = "กรุณาเลือกสินค้าให้ถูกต้อง") }
             return
         }
         
@@ -111,16 +118,21 @@ class AddProductViewModel @Inject constructor(
 
         viewModelScope.launch {
             _uiState.update { it.copy(isSaving = true, error = null) }
+            
             productRepo.addProductToProject(
                 projectId = projectId,
                 productId = product.productId,
                 quantity = qty,
                 wantedDate = state.wantedDate
-            ).onSuccess {
-                _uiState.update { it.copy(isSaving = false, isSaved = true) }
-            }.onFailure { e ->
-                _uiState.update { it.copy(isSaving = false, error = e.message) }
-            }
+            ).fold(
+                onSuccess = {
+                    // ✅ เมื่อบันทึกสำเร็จ ต้องเปลี่ยนสถานะเพื่อให้ UI กลับหน้าเดิม
+                    _uiState.update { it.copy(isSaving = false, isSaved = true) }
+                },
+                onFailure = { e ->
+                    _uiState.update { it.copy(isSaving = false, error = "บันทึกไม่สำเร็จ: ${e.message}") }
+                }
+            )
         }
     }
 }

@@ -53,15 +53,26 @@ class ActivityRepository @Inject constructor(
     suspend fun addActivity(activity: SalesActivity): kotlin.Result<Unit> {
         return withContext(Dispatchers.IO) {
             try {
-                val response = apiService.addActivity(activity)
+                // ✅ ตัดฟิลด์ local ออกก่อนส่ง API เพื่อป้องกัน Error 400
+                val apiActivity = activity.copy(
+                    projectName = null,
+                    companyName = null,
+                    contactName = null
+                )
+                
+                val response = apiService.addActivity(apiActivity)
+                
+                // บันทึกตัวเต็มลง Local DB เพื่อให้หน้าจอแสดงผลได้ทันที
                 activityDao.insertActivity(activity)
+                
                 if (response.isSuccessful) {
                     kotlin.Result.success(Unit)
                 } else {
                     val errBody = response.errorBody()?.string() ?: ""
-                    kotlin.Result.failure(Exception("บันทึก Appointment ไม่สำเร็จ: ${response.code()} — $errBody"))
+                    kotlin.Result.failure(Exception("API Error: ${response.code()} — $errBody"))
                 }
             } catch (e: Exception) {
+                // กรณี Offline บันทึกแค่ Local และถือว่าสำเร็จ (จะ Sync ทีหลัง)
                 activityDao.insertActivity(activity)
                 kotlin.Result.success(Unit)
             }

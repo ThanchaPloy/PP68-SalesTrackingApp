@@ -14,10 +14,12 @@ interface CustomerDao {
     @Query("SELECT * FROM customer")
     fun getAllCustomersFlow(): Flow<List<Customer>>
 
-    @Query("SELECT * FROM customer WHERE companyStatus = 'customer' ORDER BY companyName ASC")
+    // ✅ นำเงื่อนไข companyStatus = 'customer' ออกเพื่อให้แสดงข้อมูลทุกสถานะ (รวมถึง New Lead)
+    @Query("SELECT * FROM customer ORDER BY companyName ASC")
     fun getAllCustomers(): Flow<List<Customer>>
 
-    @Query("SELECT * FROM customer WHERE companyName LIKE '%' || :searchQuery || '%' AND companyStatus = 'customer'")
+    // ✅ นำเงื่อนไข companyStatus = 'customer' ออกเพื่อให้ค้นหาเจอทุกสถานะ
+    @Query("SELECT * FROM customer WHERE companyName LIKE '%' || :searchQuery || '%'")
     fun searchCustomers(searchQuery: String): Flow<List<Customer>>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
@@ -32,10 +34,10 @@ interface CustomerDao {
     @Query("DELETE FROM customer")
     suspend fun deleteAll()
 
-
     @Transaction
     suspend fun clearAndInsert(customers: List<Customer>) {
-        deleteAll()          // ✅ ลบทั้งหมดก่อน
+        // ❌ ไม่ใช้ deleteAll() เพื่อป้องกันข้อมูลที่บันทึกใหม่แต่ยังไม่ได้ผูกโปรเจกต์หายไปตอนรีเฟรช
+        // ใช้ insertCustomers ซึ่งมี OnConflictStrategy.REPLACE เพื่ออัปเดตข้อมูลที่มีอยู่แล้ว
         if (customers.isNotEmpty()) {
             insertCustomers(customers)
         }

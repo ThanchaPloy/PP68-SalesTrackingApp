@@ -54,7 +54,6 @@ data class NotificationItem(
     val isToday: Boolean
 )
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun NotificationScreen(
     onBackClick: () -> Unit,
@@ -66,8 +65,30 @@ fun NotificationScreen(
     onViewDetails: (String) -> Unit = {}
 ) {
     val uiState by viewModel.uiState.collectAsState()
-    val notificationList = uiState.notifications
+    
+    // Refactored to pass state to a stateless Composable
+    NotificationContent(
+        notificationList = uiState.notifications,
+        onBackClick = onBackClick,
+        onReport = onReport,
+        onCheckIn = onCheckIn,
+        onWeeklyReport = onWeeklyReport,
+        onMonthlyReport = onMonthlyReport,
+        onViewDetails = onViewDetails
+    )
+}
 
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun NotificationContent(
+    notificationList: List<NotificationItem>,
+    onBackClick: () -> Unit,
+    onReport: (String) -> Unit,
+    onCheckIn: (String) -> Unit,
+    onWeeklyReport: () -> Unit,
+    onMonthlyReport: () -> Unit,
+    onViewDetails: (String) -> Unit
+) {
     Scaffold(
         topBar = {
             CenterAlignedTopAppBar(
@@ -275,12 +296,36 @@ private fun NotificationCard(
 @Composable
 fun NotificationScreenPreview() {
     SalesTrackingTheme {
-        NotificationScreen(
+        // Use the stateless NotificationContent for the Preview to avoid ViewModel instantiation issues
+        NotificationContent(
+            notificationList = listOf(
+                NotificationItem(
+                    id = "1",
+                    type = NotiType.REMINDER,
+                    title = "Meeting with Client",
+                    timeLabel = "อีก 10 นาที",
+                    subtitle = "Project Alpha",
+                    location = "Office A",
+                    action = NotiAction.CHECK_IN,
+                    isToday = true
+                ),
+                NotificationItem(
+                    id = "2",
+                    type = NotiType.REPORT_WEEKLY,
+                    title = "Weekly Report",
+                    timeLabel = "Action required",
+                    subtitle = "Due today",
+                    location = "",
+                    action = NotiAction.VIEW_WEEKLY,
+                    isToday = true
+                )
+            ),
             onBackClick = {},
             onReport = {},
             onCheckIn = {},
             onWeeklyReport = {},
-            onMonthlyReport = {}
+            onMonthlyReport = {},
+            onViewDetails = {}
         )
     }
 }

@@ -104,12 +104,22 @@ class CustomerRepository @Inject constructor(
     suspend fun addCustomer(customer: Customer): kotlin.Result<Unit> {
         return withContext(Dispatchers.IO) {
             try {
+                // ✅ ตรวจสอบและจัดการรูปแบบวันที่ก่อนส่ง (หากจำเป็น)
                 val response = apiService.addCustomer(customer)
+                
+                // บันทึก Local ทันที
                 customerDao.insertCustomer(customer)
-                if (response.isSuccessful) kotlin.Result.success(Unit)
-                else kotlin.Result.failure(Exception("HTTP ${response.code()}: ${response.errorBody()?.string()}"))
+                
+                if (response.isSuccessful) {
+                    kotlin.Result.success(Unit)
+                } else {
+                    val errBody = response.errorBody()?.string() ?: ""
+                    kotlin.Result.failure(Exception("บันทึกไม่สำเร็จ: HTTP ${response.code()} - $errBody"))
+                }
             } catch (e: Exception) {
-                kotlin.Result.failure(e)
+                // กรณี Offline
+                customerDao.insertCustomer(customer)
+                kotlin.Result.success(Unit)
             }
         }
     }

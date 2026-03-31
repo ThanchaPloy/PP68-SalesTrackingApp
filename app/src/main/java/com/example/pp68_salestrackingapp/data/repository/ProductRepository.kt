@@ -29,7 +29,7 @@ class ProductRepository @Inject constructor(
                     val list = response.body()!!.map {
                         ProductSimpleDto(
                             productId   = it.productId,
-                            productName = it.productGroup ?: it.productId,  // ✅ ใช้ product_group เป็นชื่อ
+                            productName = it.productGroup ?: it.productId,
                             brand       = it.brand?.trim()?.ifBlank { "ไม่ระบุแบรนด์" } ?: "ไม่ระบุแบรนด์",
                             category    = it.productType ?: "ทั่วไป",
                             subCategory = it.productSubgroup ?: "",
@@ -38,7 +38,8 @@ class ProductRepository @Inject constructor(
                     }
                     kotlin.Result.success(list)
                 } else {
-                    kotlin.Result.failure(Exception("HTTP ${response.code()}: ${response.errorBody()?.string()}"))
+                    val errorBody = response.errorBody()?.string() ?: ""
+                    kotlin.Result.failure(Exception("HTTP ${response.code()}: $errorBody"))
                 }
             } catch (e: Exception) {
                 kotlin.Result.failure(e)
@@ -58,13 +59,14 @@ class ProductRepository @Inject constructor(
                     projectId = projectId,
                     productId = productId,
                     quantity  = quantity,
-                    wantedDate = wantedDate
+                    desiredDate = wantedDate?.ifBlank { null }
                 )
                 val response = apiService.addProductToProject(body)
                 if (response.isSuccessful) {
                     kotlin.Result.success(Unit)
                 } else {
-                    kotlin.Result.failure(Exception("เพิ่มสินค้าไม่สำเร็จ: HTTP ${response.code()}"))
+                    val errorBody = response.errorBody()?.string() ?: ""
+                    kotlin.Result.failure(Exception("HTTP ${response.code()}: $errorBody"))
                 }
             } catch (e: Exception) {
                 kotlin.Result.failure(e)
