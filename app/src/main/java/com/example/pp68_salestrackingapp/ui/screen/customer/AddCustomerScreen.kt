@@ -144,9 +144,10 @@ fun AddCustomerContent(
             GoogleMapPickerField(
                 lat = uiState.selectedLat ?: DEFAULT_LAT,
                 lng = uiState.selectedLng ?: DEFAULT_LNG,
-                onLocationPicked = { pickedLat, pickedLng -> // ระบุชื่อตัวแปรที่รับมา
+                onLocationPicked = { pickedLat, pickedLng ->
                     onEvent(AddCustomerEvent.LocationPicked(pickedLat, pickedLng))
-                }            )
+                }
+            )
 
             // ── Select Project (Optional) ─────────────────────
             FormField("Select Project  (Optional)") {
@@ -177,41 +178,42 @@ fun AddCustomerContent(
                 )
             }
 
-            // ── Customer Status ───────────────────────────────
-            FormField("Customer Status") {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    CUSTOMER_STATUSES.forEach { (value, label) ->
-                        val isSelected = uiState.companyStatus == value
-                        FilterChip(
-                            selected = isSelected,
-                            onClick = { onEvent(AddCustomerEvent.StatusChanged(value)) },
-                            label = { Text(label, fontSize = 12.sp) },
-                            colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = when(value) {
-                                    "new lead" -> Color(0xFFE3F2FD)
-                                    "customer" -> Color(0xFFE8F5E9)
-                                    else -> Color(0xFFF5F5F5)
-                                },
-                                selectedLabelColor = when(value) {
-                                    "new lead" -> Color(0xFF1976D2)
-                                    "customer" -> Color(0xFF388E3C)
-                                    else -> Color(0xFF616161)
-                                }
-                            ),
-                            border = FilterChipDefaults.filterChipBorder(
-                                enabled = true,
+            // ── Customer Status (แสดงเฉพาะตอน Edit) ──────────────
+            if (uiState.custId != null) {
+                FormField("Customer Status") {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        // กรองแสดงเฉพาะ customer และ inactive ในหน้า Edit
+                        val editStatuses = CUSTOMER_STATUSES.filter { it.first != "new lead" }
+                        editStatuses.forEach { (value, label) ->
+                            val isSelected = uiState.companyStatus == value
+                            FilterChip(
                                 selected = isSelected,
-                                borderColor = AppColors.Border,
-                                selectedBorderColor = when(value) {
-                                    "new lead" -> Color(0xFF1976D2)
-                                    "customer" -> Color(0xFF388E3C)
-                                    else -> Color(0xFF616161)
-                                }
+                                onClick = { onEvent(AddCustomerEvent.StatusChanged(value)) },
+                                label = { Text(label, fontSize = 12.sp) },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = when(value) {
+                                        "customer" -> Color(0xFFE8F5E9)
+                                        else -> Color(0xFFF5F5F5)
+                                    },
+                                    selectedLabelColor = when(value) {
+                                        "customer" -> Color(0xFF388E3C)
+                                        else -> Color(0xFF616161)
+                                    }
+                                ),
+                                border = FilterChipDefaults.filterChipBorder(
+                                    enabled = true,
+                                    selected = isSelected,
+                                    borderColor = AppColors.Border,
+                                    selectedBorderColor = when(value) {
+                                        "customer" -> Color(0xFF388E3C)
+                                        else -> Color(0xFF616161)
+                                    }
+                                )
                             )
-                        )
+                        }
                     }
                 }
             }

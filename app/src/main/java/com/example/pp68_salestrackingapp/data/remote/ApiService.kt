@@ -1,6 +1,5 @@
 package com.example.pp68_salestrackingapp.data.remote
 
-import com.example.pp68_salestrackingapp.data.model.UserDto
 import com.example.pp68_salestrackingapp.data.model.*
 import com.google.gson.annotations.SerializedName
 import retrofit2.Response
@@ -31,15 +30,6 @@ interface ApiService {
         @Query("user_id") userId: String,
         @Body updates: Map<String, String>
     ): Response<List<UserDto>>
-
-    data class UserDto(
-        @SerializedName("user_id")      val userId:      String,
-        @SerializedName("full_name")    val fullName:    String?,
-        @SerializedName("branch_id")    val branchId:    String?,
-        @SerializedName("role")         val role:        String?,
-        @SerializedName("email")        val email:       String?,
-        @SerializedName("phone_number") val phoneNumber: String?
-    )
 
     @PATCH("user")
     @Headers("Prefer: return=representation")
@@ -124,6 +114,23 @@ interface ApiService {
         @Body updates: Map<String, String>
     ): Response<List<Project>>
 
+    // ── Project Contact (Multi-Contact) ──────────────────────────
+    @GET("project_contact")
+    suspend fun getProjectContacts(
+        @Query("project_id") projectId: String,
+        @Query("select") select: String = "contact_id,contact_person(full_name)"
+    ): Response<List<ProjectContactResponse>>
+
+    @POST("project_contact")
+    suspend fun addProjectContacts(
+        @Body contacts: List<ProjectContact>
+    ): Response<Unit>
+
+    @DELETE("project_contact")
+    suspend fun deleteProjectContacts(
+        @Query("project_id") projectId: String
+    ): Response<Unit>
+
     // ── Product ───────────────────────────────────────────────────
     @GET("products")
     suspend fun getProductMaster(
@@ -141,13 +148,6 @@ interface ApiService {
     suspend fun addProductToProject(
         @Body item: ProjectProductInsertDto
     ): Response<List<ProjectProductInsertDto>>
-
-    data class ProjectProductDto(
-        @SerializedName("project_id")   val projectId:  String,
-        @SerializedName("product_id")   val productId:  String,
-        @SerializedName("quantity")     val quantity:   Double?,
-        @SerializedName("desired_date") val desiredDate: String?
-    )
 
     // ── Appointment ──────────────────────────────────────────
     @GET("appointment")
@@ -210,7 +210,7 @@ interface ApiService {
     @GET("project_sales_member")
     suspend fun getMyProjectIds(
         @Query("user_id") userId: String,
-        @Query("select") select: String = "project_id,project_number", // ✅ ดึง project_number ด้วย
+        @Query("select") select: String = "project_id,project_number",
         @Query("limit") limit: Int = 1000
     ): Response<List<ProjectMemberDto>>
 
@@ -220,6 +220,26 @@ interface ApiService {
     suspend fun insertCallLog(
         @Body log: Map<String, String>
     ): Response<List<Map<String, String>>>
+
+    // ── Activity Result ───────────────────────────────────────────
+    @POST("activity_result")
+    @Headers("Prefer: return=representation")
+    suspend fun insertActivityResult(
+        @Body result: ActivityResult
+    ): Response<List<ActivityResult>>
+
+    @PATCH("activity_result")
+    @Headers("Prefer: return=representation")
+    suspend fun updateActivityResult(
+        @Query("appointment_id") appointmentId: String,
+        @Body result: ActivityResult
+    ): Response<List<ActivityResult>>
+
+    @GET("activity_result")
+    suspend fun getActivityResult(
+        @Query("appointment_id") appointmentId: String,
+        @Query("limit") limit: Int = 1
+    ): Response<List<ActivityResult>>
 }
 
 
@@ -233,7 +253,7 @@ data class ProductMasterDto(
     @SerializedName("unit")             val unit:            String?
 )
 
-data class ProjectMemberDto(
-    @SerializedName("project_id")     val projectId:     String,
-    @SerializedName("project_number") val projectNumber: String? // ✅ เพิ่ม
+data class ProjectContactResponse(
+    @SerializedName("contact_id") val contactId: String,
+    @SerializedName("contact_person") val contactPerson: ContactPerson? = null
 )

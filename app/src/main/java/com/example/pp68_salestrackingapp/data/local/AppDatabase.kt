@@ -8,6 +8,8 @@ import com.example.pp68_salestrackingapp.data.model.SalesActivity
 import com.example.pp68_salestrackingapp.data.model.ContactPerson
 import com.example.pp68_salestrackingapp.data.model.Branch
 import com.example.pp68_salestrackingapp.data.model.ActivityPlanItem
+import com.example.pp68_salestrackingapp.data.model.ActivityResult
+import com.example.pp68_salestrackingapp.data.model.ProjectContact
 
 @Database(
     entities = [
@@ -16,9 +18,11 @@ import com.example.pp68_salestrackingapp.data.model.ActivityPlanItem
         SalesActivity::class,
         ContactPerson::class,
         Branch::class,
-        ActivityPlanItem::class
+        ActivityPlanItem::class,
+        ActivityResult::class,
+        ProjectContact::class
     ],
-    version = 11,
+    version = 16,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -29,6 +33,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun contactDao(): ContactDao
     abstract fun branchDao(): BranchDao
     abstract fun activityPlanItemDao(): ActivityPlanItemDao
+    abstract fun activityResultDao(): ActivityResultDao
 
     fun clearAllData() {
         this.clearAllTables()

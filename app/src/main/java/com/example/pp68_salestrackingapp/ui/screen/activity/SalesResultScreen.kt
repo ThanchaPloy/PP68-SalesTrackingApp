@@ -24,8 +24,8 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.pp68_salestrackingapp.ui.components.DatePickerField
 import com.example.pp68_salestrackingapp.ui.components.DropdownField
 import com.example.pp68_salestrackingapp.ui.theme.SalesTrackingTheme
-import com.example.pp68_salestrackingapp.ui.viewmodels.activity.SalesResultViewModel
 import com.example.pp68_salestrackingapp.ui.viewmodels.activity.SalesResultUiState
+import com.example.pp68_salestrackingapp.ui.viewmodels.activity.SalesResultViewModel
 
 private val White      = Color.White
 private val TextDark   = Color(0xFF1A1A1A)
@@ -49,28 +49,26 @@ fun SalesResultScreen(
     }
 
     LaunchedEffect(s.error) {
-        s.error?.let {
-            snackbarHostState.showSnackbar(it)
-        }
+        s.error?.let { snackbarHostState.showSnackbar(it) }
     }
 
     SalesResultContent(
-        s = s,
-        snackbarHostState = snackbarHostState,
-        onBack = onBack,
-        onReportDateChanged = viewModel::onReportDateChanged,
-        onStatusToggle = viewModel::onStatusToggle,
-        onNewStatusSelected = viewModel::onNewStatusSelected,
-        onOpportunitySelected = viewModel::onOpportunitySelected,
-        onDealPositionChanged = viewModel::onDealPositionChanged,
-        onPreviousSolutionChanged = viewModel::onPreviousSolutionChanged,
+        s                               = s,
+        snackbarHostState               = snackbarHostState,
+        onBack                          = onBack,
+        onReportDateChanged             = viewModel::onReportDateChanged,
+        onStatusToggle                  = viewModel::onStatusToggle,
+        onNewStatusSelected             = viewModel::onNewStatusSelected,
+        onOpportunitySelected           = viewModel::onOpportunitySelected,
+        onDealPositionChanged           = viewModel::onDealPositionChanged,
+        onPreviousSolutionChanged       = viewModel::onPreviousSolutionChanged,
         onCounterpartyMultiplierChanged = viewModel::onCounterpartyMultiplierChanged,
-        onResponseSpeedChanged = viewModel::onResponseSpeedChanged,
-        onProposalToggle = viewModel::onProposalToggle,
-        onProposalDateChanged = viewModel::onProposalDateChanged,
-        onCompetitorCountChanged = viewModel::onCompetitorCountChanged,
-        onSummaryChanged = viewModel::onSummaryChanged,
-        onSave = viewModel::save
+        onResponseSpeedChanged          = viewModel::onResponseSpeedChanged,
+        onProposalToggle                = viewModel::onProposalToggle,
+        onProposalDateChanged           = viewModel::onProposalDateChanged,
+        onCompetitorCountChanged        = viewModel::onCompetitorCountChanged,
+        onSummaryChanged                = viewModel::onSummaryChanged,
+        onSave                          = viewModel::save
     )
 }
 
@@ -122,24 +120,21 @@ private fun SalesResultContent(
                     .padding(20.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                // 0️⃣ วันที่บันทึกผล
+                // วันที่บันทึกผล
                 SectionCard(title = "วันที่บันทึกผล", icon = Icons.Default.CalendarToday) {
                     DatePickerField(
-                        selectedDate = s.reportDate,
-                        placeholder = "เลือกวันที่บันทึกผล",
+                        selectedDate  = s.reportDate,
+                        placeholder   = "เลือกวันที่บันทึกผล",
                         onDateSelected = onReportDateChanged
                     )
                 }
 
-                // 1️⃣ สถานะโครงการ
+                // 1. สถานะโครงการ
                 SectionCard(title = "1. สถานะโครงการ", icon = Icons.Default.Info) {
                     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text("สถานะปัจจุบัน: ", fontSize = 14.sp, color = TextGray)
-                            Surface(
-                                shape = RoundedCornerShape(16.dp),
-                                color = Color(0xFFEEEEEE)
-                            ) {
+                            Surface(shape = RoundedCornerShape(16.dp), color = Color(0xFFEEEEEE)) {
                                 Text(
                                     text = s.currentStatus.ifBlank { "N/A" },
                                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
@@ -147,7 +142,6 @@ private fun SalesResultContent(
                                 )
                             }
                         }
-
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween,
@@ -156,108 +150,97 @@ private fun SalesResultContent(
                             Text("มีการอัปเดตสถานะ", fontSize = 15.sp, fontWeight = FontWeight.Medium)
                             Switch(
                                 checked = s.isStatusUpdateEnabled,
-                                onCheckedChange = { onStatusToggle(it) },
+                                onCheckedChange = onStatusToggle,
                                 colors = SwitchDefaults.colors(checkedThumbColor = White, checkedTrackColor = RedPrimary)
                             )
                         }
-
                         if (s.isStatusUpdateEnabled) {
                             val statusList = listOf(
                                 "Lead", "New Project", "Quotation", "Bidding",
                                 "Make a Decision", "Assured", "PO", "Completed", "Lost", "Failed"
                             )
                             DropdownField(
-                                value = s.newStatus,
+                                value       = s.newStatus,
                                 placeholder = "เลือกสถานะใหม่",
-                                options = statusList,
-                                onSelect = { onNewStatusSelected(statusList[it]) }
+                                options     = statusList,
+                                onSelect    = { onNewStatusSelected(statusList[it]) }
                             )
                         }
                     }
                 }
 
-                // 2️⃣ โอกาสในการสำเร็จ
+                // 2. โอกาสในการสำเร็จ
                 SectionCard(title = "2. โอกาสในการสำเร็จ", icon = Icons.AutoMirrored.Filled.TrendingUp) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        OpportunityButton("HOT 🔥", s.opportunityScore == "HOT", Modifier.weight(1f)) {
-                            onOpportunitySelected("HOT")
-                        }
-                        OpportunityButton("WARM ☀️", s.opportunityScore == "WARM", Modifier.weight(1f)) {
-                            onOpportunitySelected("WARM")
-                        }
-                        OpportunityButton("COLD ❄️", s.opportunityScore == "COLD", Modifier.weight(1f)) {
-                            onOpportunitySelected("COLD")
-                        }
+                        OpportunityButton("HOT 🔥",  s.opportunityScore == "HOT",  Modifier.weight(1f)) { onOpportunitySelected("HOT") }
+                        OpportunityButton("WARM ☀️", s.opportunityScore == "WARM", Modifier.weight(1f)) { onOpportunitySelected("WARM") }
+                        OpportunityButton("COLD ❄️", s.opportunityScore == "COLD", Modifier.weight(1f)) { onOpportunitySelected("COLD") }
                     }
                 }
 
-                // 3️⃣ สรุปการเข้าพบ
+                // 3. สรุปการเข้าพบ
                 SectionCard(title = "3. สรุปการเข้าพบ", icon = Icons.AutoMirrored.Filled.Notes) {
                     OutlinedTextField(
-                        value = s.visitSummary,
-                        onValueChange = { onSummaryChanged(it) },
-                        placeholder = { Text("เขียนสรุปรายละเอียดการสนทนา...", fontSize = 14.sp) },
-                        modifier = Modifier.fillMaxWidth().height(150.dp),
-                        shape = RoundedCornerShape(12.dp)
+                        value         = s.visitSummary,
+                        onValueChange = onSummaryChanged,
+                        placeholder   = { Text("เขียนสรุปรายละเอียดการสนทนา...", fontSize = 14.sp) },
+                        modifier      = Modifier.fillMaxWidth().height(150.dp),
+                        shape         = RoundedCornerShape(12.dp)
                     )
                 }
 
-                // 4️⃣ Deal Position
+                // 4. Deal Position
                 SectionCard(title = "4. Deal Position", icon = Icons.Default.Place) {
                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        val options = listOf(
+                        listOf(
                             "ลูกค้าใช้เราอยู่แล้ว การต่อสัญญามีโอกาสสูงมาก",
                             "ลูกค้าเลือกเราเป็นตัวหลัก คู่แข่งอื่นเป็นแค่ backup",
                             "ถูกเชิญมาเพื่อ benchmark ราคา โอกาสต่ำ"
-                        )
-                        options.forEach { opt ->
+                        ).forEach { opt ->
                             SelectOption(opt, s.dealPosition == opt) { onDealPositionChanged(opt) }
                         }
                     }
                 }
 
-                // 5️⃣ Solution เดิมของลูกค้า
+                // 5. Solution เดิมของลูกค้า
                 SectionCard(title = "5. Solution เดิมของลูกค้า", icon = Icons.Default.History) {
                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        val options = listOf(
+                        listOf(
                             "ไม่มี Solution เดิม",
                             "มีระบบเดิมที่ไม่ใช่คู่แข่ง",
                             "ใช้คู่แข่งอยู่และไม่มีปัญหา"
-                        )
-                        options.forEach { opt ->
+                        ).forEach { opt ->
                             SelectOption(opt, s.previousSolution == opt) { onPreviousSolutionChanged(opt) }
                         }
                     }
                 }
 
-                // 6️⃣ Counterparty Multiplier
-                SectionCard(title = "6. Counterparty Multiplier", icon = Icons.Default.Groups) {
+                // 6. Counterparty Type
+                SectionCard(title = "6. Counterparty Type", icon = Icons.Default.Groups) {
                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        val options = listOf(
+                        listOf(
                             "ดีลกับ Main Contractor โดยตรง",
                             "ดีลผ่าน Installer — Main Contractor ได้งานแล้ว",
                             "ดีลผ่าน Installer — Main Contractor ยังไม่ได้งาน"
-                        )
-                        options.forEach { opt ->
+                        ).forEach { opt ->
                             SelectOption(opt, s.counterpartyMultiplier == opt) { onCounterpartyMultiplierChanged(opt) }
                         }
                     }
                 }
 
-                // 7️⃣ ความเร็วในการตอบกลับ
+                // 7. ความเร็วในการตอบกลับ
                 SectionCard(title = "7. ความเร็วในการตอบกลับ", icon = Icons.Default.Speed) {
                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        val options = listOf("เร็ว", "ปกติ", "ช้าหรือเงียบ")
-                        options.forEach { opt ->
+                        listOf("เร็ว", "ปกติ", "ช้าหรือเงียบ").forEach { opt ->
                             SelectOption(opt, s.responseSpeed == opt) { onResponseSpeedChanged(opt) }
                         }
                     }
                 }
 
-                // 8️⃣ การส่ง Proposal
+                // 8. การส่ง Proposal
                 SectionCard(title = "8. การส่ง Proposal", icon = Icons.Default.Description) {
                     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         Row(
@@ -268,22 +251,21 @@ private fun SalesResultContent(
                             Text("ส่ง Proposal แล้ว", fontSize = 15.sp, fontWeight = FontWeight.Medium)
                             Switch(
                                 checked = s.isProposalSent,
-                                onCheckedChange = { onProposalToggle(it) },
+                                onCheckedChange = onProposalToggle,
                                 colors = SwitchDefaults.colors(checkedThumbColor = White, checkedTrackColor = RedPrimary)
                             )
                         }
-
                         if (s.isProposalSent) {
                             DatePickerField(
-                                selectedDate = s.proposalDate,
-                                placeholder = "วันที่ส่ง Proposal",
-                                onDateSelected = { onProposalDateChanged(it) }
+                                selectedDate   = s.proposalDate,
+                                placeholder    = "วันที่ส่ง Proposal",
+                                onDateSelected = onProposalDateChanged
                             )
                         }
                     }
                 }
 
-                // 9️⃣ จำนวนคู่แข่ง
+                // 9. จำนวนคู่แข่ง
                 SectionCard(title = "9. จำนวนคู่แข่ง (ถ้ามี)", icon = Icons.Default.Compare) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -291,35 +273,31 @@ private fun SalesResultContent(
                         horizontalArrangement = Arrangement.Center
                     ) {
                         IconButton(
-                            onClick = { onCompetitorCountChanged(-1) },
+                            onClick  = { onCompetitorCountChanged(-1) },
                             modifier = Modifier.border(1.dp, BorderGray, RoundedCornerShape(8.dp))
-                        ) {
-                            Icon(Icons.Default.Remove, null, tint = RedPrimary)
-                        }
-                        
+                        ) { Icon(Icons.Default.Remove, null, tint = RedPrimary) }
+
                         Text(
-                            text = "${s.competitorCount}",
+                            text     = "${s.competitorCount}",
                             modifier = Modifier.padding(horizontal = 32.dp),
                             fontSize = 20.sp, fontWeight = FontWeight.Bold
                         )
 
                         IconButton(
-                            onClick = { onCompetitorCountChanged(1) },
+                            onClick  = { onCompetitorCountChanged(1) },
                             modifier = Modifier.border(1.dp, BorderGray, RoundedCornerShape(8.dp))
-                        ) {
-                            Icon(Icons.Default.Add, null, tint = RedPrimary)
-                        }
+                        ) { Icon(Icons.Default.Add, null, tint = RedPrimary) }
                     }
                 }
 
                 Spacer(Modifier.height(16.dp))
 
                 Button(
-                    onClick = { onSave() },
+                    onClick  = onSave,
                     modifier = Modifier.fillMaxWidth().height(52.dp),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = RedPrimary),
-                    enabled = !s.isSaving
+                    shape    = RoundedCornerShape(12.dp),
+                    colors   = ButtonDefaults.buttonColors(containerColor = RedPrimary),
+                    enabled  = !s.isSaving
                 ) {
                     if (s.isSaving) {
                         CircularProgressIndicator(color = White, modifier = Modifier.size(24.dp))
@@ -327,7 +305,7 @@ private fun SalesResultContent(
                         Text("บันทึกข้อมูล", fontWeight = FontWeight.Bold, fontSize = 16.sp)
                     }
                 }
-                
+
                 Spacer(Modifier.height(40.dp))
             }
         }
@@ -335,15 +313,22 @@ private fun SalesResultContent(
 }
 
 @Composable
-private fun SectionCard(title: String, icon: androidx.compose.ui.graphics.vector.ImageVector, content: @Composable () -> Unit) {
+private fun SectionCard(
+    title: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    content: @Composable () -> Unit
+) {
     Surface(
-        shape = RoundedCornerShape(16.dp),
-        color = White,
+        shape          = RoundedCornerShape(16.dp),
+        color          = White,
         shadowElevation = 1.dp,
-        modifier = Modifier.fillMaxWidth()
+        modifier       = Modifier.fillMaxWidth()
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(
+                verticalAlignment    = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
                 Icon(icon, null, tint = RedPrimary, modifier = Modifier.size(20.dp))
                 Text(title, fontWeight = FontWeight.Bold, fontSize = 15.sp, color = TextDark)
             }
@@ -354,13 +339,18 @@ private fun SectionCard(title: String, icon: androidx.compose.ui.graphics.vector
 }
 
 @Composable
-private fun OpportunityButton(label: String, isSelected: Boolean, modifier: Modifier, onClick: () -> Unit) {
+private fun OpportunityButton(
+    label: String,
+    isSelected: Boolean,
+    modifier: Modifier,
+    onClick: () -> Unit
+) {
     Surface(
-        onClick = onClick,
+        onClick  = onClick,
         modifier = modifier.height(44.dp),
-        shape = RoundedCornerShape(8.dp),
-        color = if (isSelected) RedPrimary else BgLight,
-        border = if (isSelected) null else androidx.compose.foundation.BorderStroke(1.dp, BorderGray)
+        shape    = RoundedCornerShape(8.dp),
+        color    = if (isSelected) RedPrimary else BgLight,
+        border   = if (isSelected) null else androidx.compose.foundation.BorderStroke(1.dp, BorderGray)
     ) {
         Box(contentAlignment = Alignment.Center) {
             Text(label, color = if (isSelected) White else TextGray, fontSize = 12.sp, fontWeight = FontWeight.Bold)
@@ -375,13 +365,13 @@ private fun SelectOption(label: String, isSelected: Boolean, onClick: () -> Unit
             .fillMaxWidth()
             .clickable { onClick() }
             .padding(vertical = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
+        verticalAlignment    = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         RadioButton(
             selected = isSelected,
-            onClick = onClick,
-            colors = RadioButtonDefaults.colors(selectedColor = RedPrimary)
+            onClick  = onClick,
+            colors   = RadioButtonDefaults.colors(selectedColor = RedPrimary)
         )
         Text(label, fontSize = 13.sp, color = TextDark, lineHeight = 18.sp)
     }
@@ -393,34 +383,34 @@ fun SalesResultScreenPreview() {
     SalesTrackingTheme {
         SalesResultContent(
             s = SalesResultUiState(
-                currentStatus = "Quotation",
+                currentStatus         = "Quotation",
                 isStatusUpdateEnabled = true,
-                newStatus = "Bidding",
-                opportunityScore = "HOT",
-                dealPosition = "ลูกค้าเลือกเราเป็นตัวหลัก คู่แข่งอื่นเป็นแค่ backup",
-                previousSolution = "ไม่มี Solution เดิม",
+                newStatus             = "Bidding",
+                opportunityScore      = "HOT",
+                dealPosition          = "ลูกค้าเลือกเราเป็นตัวหลัก คู่แข่งอื่นเป็นแค่ backup",
+                previousSolution      = "ไม่มี Solution เดิม",
                 counterpartyMultiplier = "ดีลกับ Main Contractor โดยตรง",
-                responseSpeed = "เร็ว",
-                isProposalSent = true,
-                proposalDate = "2023-10-27",
-                competitorCount = 2,
-                visitSummary = "Met with the CTO and discussed the project timeline."
+                responseSpeed         = "เร็ว",
+                isProposalSent        = true,
+                proposalDate          = "2026-04-10",
+                competitorCount       = 2,
+                visitSummary          = "นัดพบและนำเสนอสินค้าให้กับลูกค้า"
             ),
-            snackbarHostState = remember { SnackbarHostState() },
-            onBack = {},
-            onReportDateChanged = {},
-            onStatusToggle = {},
-            onNewStatusSelected = {},
-            onOpportunitySelected = {},
-            onDealPositionChanged = {},
-            onPreviousSolutionChanged = {},
+            snackbarHostState               = remember { SnackbarHostState() },
+            onBack                          = {},
+            onReportDateChanged             = {},
+            onStatusToggle                  = {},
+            onNewStatusSelected             = {},
+            onOpportunitySelected           = {},
+            onDealPositionChanged           = {},
+            onPreviousSolutionChanged       = {},
             onCounterpartyMultiplierChanged = {},
-            onResponseSpeedChanged = {},
-            onProposalToggle = {},
-            onProposalDateChanged = {},
-            onCompetitorCountChanged = {},
-            onSummaryChanged = {},
-            onSave = {}
+            onResponseSpeedChanged          = {},
+            onProposalToggle                = {},
+            onProposalDateChanged           = {},
+            onCompetitorCountChanged        = {},
+            onSummaryChanged                = {},
+            onSave                          = {}
         )
     }
 }

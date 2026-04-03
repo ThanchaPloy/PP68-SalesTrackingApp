@@ -21,6 +21,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
@@ -54,6 +55,7 @@ fun GoogleMapPickerField(
     val context      = LocalContext.current
     val focusManager = LocalFocusManager.current
     val scope        = rememberCoroutineScope()
+    val isPreview    = LocalInspectionMode.current
 
     // ── State ────────────────────────────────────────────────
     var searchQuery       by remember { mutableStateOf("") }
@@ -69,16 +71,20 @@ fun GoogleMapPickerField(
     val markerState = rememberMarkerState(position = markerPosition.value)
 
     // ── Places Client ────────────────────────────────────────
+    // Skip initialization in Preview mode to avoid "Unsupported Service: dropbox" error
     val placesClient = remember {
-        if (!Places.isInitialized()) {
-            // ✅ ใส่ API key ตรงๆ
-            Places.initialize(context, "AIzaSyAM5_FQ66C5ALdPA2XM1rtHwE8VW3eAkOs")
+        if (isPreview) null else {
+            if (!Places.isInitialized()) {
+                // ✅ ใส่ API key ตรงๆ
+                Places.initialize(context, "AIzaSyAM5_FQ66C5ALdPA2XM1rtHwE8VW3eAkOs")
+            }
+            Places.createClient(context)
         }
-        Places.createClient(context)
     }
 
     // ── Search function (debounce 400ms) ──────────────────────
     fun searchPlaces(query: String) {
+        val client = placesClient ?: return
         searchJob?.cancel()
         if (query.length < 2) {
             suggestions     = emptyList()
@@ -94,7 +100,7 @@ fun GoogleMapPickerField(
                     .setCountries("TH")  // จำกัดเฉพาะไทย
                     .build()
 
-                placesClient.findAutocompletePredictions(request)
+                client.findAutocompletePredictions(request)
                     .addOnSuccessListener { response ->
                         suggestions     = response.autocompletePredictions
                         showSuggestions = suggestions.isNotEmpty()
@@ -117,10 +123,11 @@ fun GoogleMapPickerField(
 
     // ── Select place from suggestion ──────────────────────────
     fun selectPlace(prediction: AutocompletePrediction) {
+        val client = placesClient ?: return
         val placeFields = listOf(Place.Field.LAT_LNG, Place.Field.NAME)
         val request     = FetchPlaceRequest.newInstance(prediction.placeId, placeFields)
 
-        placesClient.fetchPlace(request)
+        client.fetchPlace(request)
             .addOnSuccessListener { response ->
                 val place  = response.place
                 val latLng = place.latLng ?: return@addOnSuccessListener
@@ -263,23 +270,33 @@ fun GoogleMapPickerField(
                 .clip(RoundedCornerShape(10.dp))
                 .border(1.dp, BorderGray, RoundedCornerShape(10.dp))
         ) {
-            GoogleMap(
-                modifier            = Modifier.fillMaxSize(),
-                cameraPositionState = cameraPositionState,
-                onMapClick          = { latLng ->
-                    // แตะแผนที่เพื่อปักหมุด
-                    markerPosition.value = latLng
-                    markerState.position = latLng
-                    onLocationPicked(latLng.latitude, latLng.longitude)
-                    focusManager.clearFocus()
-                    showSuggestions = false
+            if (isPreview) {
+                // Show a placeholder in Preview to avoid potential map rendering issues
+                Box(
+                    modifier = Modifier.fillMaxSize().background(Color.LightGray),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text("Map Preview Not Available", color = Color.DarkGray)
                 }
-            ) {
-                Marker(
-                    state   = markerState,
-                    title   = "Site Location",
-                    snippet = "${"%.4f".format(markerState.position.latitude)}, ${"%.4f".format(markerState.position.longitude)}"
-                )
+            } else {
+                GoogleMap(
+                    modifier            = Modifier.fillMaxSize(),
+                    cameraPositionState = cameraPositionState,
+                    onMapClick          = { latLng ->
+                        // แตะแผนที่เพื่อปักหมุด
+                        markerPosition.value = latLng
+                        markerState.position = latLng
+                        onLocationPicked(latLng.latitude, latLng.longitude)
+                        focusManager.clearFocus()
+                        showSuggestions = false
+                    }
+                ) {
+                    Marker(
+                        state   = markerState,
+                        title   = "Site Location",
+                        snippet = "${"%.4f".format(markerState.position.latitude)}, ${"%.4f".format(markerState.position.longitude)}"
+                    )
+                }
             }
 
             // hint overlay

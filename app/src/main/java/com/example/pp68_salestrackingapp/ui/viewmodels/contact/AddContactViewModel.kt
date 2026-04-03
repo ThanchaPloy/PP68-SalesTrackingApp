@@ -1,4 +1,4 @@
-package com.example.pp68_salestrackingapp.ui.screen.contact
+package com.example.pp68_salestrackingapp.ui.viewmodels.contact
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -26,6 +26,7 @@ data class AddContactUiState(
     val email:     String = "",
     val lineId:    String = "",
     val isActive:  Boolean = true,
+    val isDecisionMaker: Boolean = false,
 
     val companyOptions:      List<Pair<String, String>> = emptyList(),
     val selectedCompanyId:   String? = null,
@@ -58,6 +59,7 @@ sealed class AddContactEvent {
     data class EmailChanged(val value: String)     : AddContactEvent()
     data class LineIdChanged(val value: String)    : AddContactEvent()
     object IsActiveToggled : AddContactEvent()
+    object IsDecisionMakerToggled : AddContactEvent()
     object Save            : AddContactEvent()
 }
 
@@ -78,12 +80,10 @@ class AddContactViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
             try {
-                // ดึงรายการทั้งหมดออกมาก่อน แล้วค้นหา ID ที่ต้องการ (เลี่ยงปัญหาไม่มีฟังก์ชัน getContactById)
                 val contacts = contactRepo.getAllContactsFlow().first()
                 val contact = contacts.find { it.contactId == id }
 
                 if (contact != null) {
-                    // ค้นหาชื่อบริษัทจาก custId
                     var cName = ""
                     customerRepo.getCustomerById(contact.custId).onSuccess { cust ->
                         cName = cust.companyName
@@ -95,12 +95,13 @@ class AddContactViewModel @Inject constructor(
                             fullName = contact.fullName ?: "",
                             nickname = contact.nickname ?: "",
                             position = contact.position ?: "",
-                            phoneNum = contact.phoneNumber ?: "", // เปลี่ยนให้ตรงกับ Model
+                            phoneNum = contact.phoneNumber ?: "",
                             email = contact.email ?: "",
-                            lineId = contact.line ?: "", // เปลี่ยนให้ตรงกับ Model
+                            lineId = contact.line ?: "",
                             isActive = contact.isActive ?: true,
+                            isDecisionMaker = contact.isDmConfirmed ?: false,
                             selectedCompanyId = contact.custId,
-                            selectedCompanyName = cName, // ใช้ชื่อที่หามาได้
+                            selectedCompanyName = cName,
                             isLoading = false
                         )
                     }
@@ -186,6 +187,8 @@ class AddContactViewModel @Inject constructor(
                 _uiState.update { it.copy(lineId = event.value) }
             is AddContactEvent.IsActiveToggled ->
                 _uiState.update { it.copy(isActive = !it.isActive) }
+            is AddContactEvent.IsDecisionMakerToggled ->
+                _uiState.update { it.copy(isDecisionMaker = !it.isDecisionMaker) }
             is AddContactEvent.Save -> save()
         }
     }
@@ -215,7 +218,6 @@ class AddContactViewModel @Inject constructor(
             _uiState.update { it.copy(isLoading = true, saveError = null) }
             val s = _uiState.value
 
-            // สร้าง Object ตามหน้าตา Model จริงๆ ของคุณ
             val contactToSave = ContactPerson(
                 contactId = s.contactId ?: ("CNT-" + UUID.randomUUID().toString().take(8).uppercase()),
                 custId = s.selectedCompanyId!!,
@@ -226,10 +228,9 @@ class AddContactViewModel @Inject constructor(
                 email = s.email.ifBlank { null },
                 line = s.lineId.ifBlank { null },
                 isActive = s.isActive,
-                isDmConfirmed = false // Default
+                isDmConfirmed = s.isDecisionMaker
             )
 
-            // ตอนนี้ใช้ addContact ไปก่อนสำหรับทั้งสร้างใหม่และอัปเดต เพราะ ContactRepository ยังไม่มี updateContact
             val result = contactRepo.addContact(contactToSave)
 
             result.fold(

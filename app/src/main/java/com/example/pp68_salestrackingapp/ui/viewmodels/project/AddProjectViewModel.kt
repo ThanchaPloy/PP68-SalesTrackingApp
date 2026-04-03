@@ -34,8 +34,7 @@ data class AddProjectUiState(
     val selectedCustomerName:   String? = null,
     val isLoadingCustomers:     Boolean = false,
     val contactOptions:         List<Pair<String, String>> = emptyList(),
-    val selectedContactId:      String? = null,
-    val selectedContactName:    String? = null,
+    val selectedContactIds:     Set<String> = emptySet(),
     val isLoadingContacts:      Boolean = false,
     val teamOptions:            List<Pair<String, String>> = emptyList(),
     val selectedTeamId:         String? = null,
@@ -50,7 +49,7 @@ data class AddProjectUiState(
     val isLoading:              Boolean = false,
     val isSaved:                Boolean = false,
     val saveError:              String? = null,
-    val projectNumber:          String  = ""   // ✅ เพิ่ม default value
+    val projectNumber:          String  = ""
 )
 
 sealed class AddProjectEvent {
@@ -58,7 +57,7 @@ sealed class AddProjectEvent {
     data class ProjectNameChanged(val value: String)              : AddProjectEvent()
     data class BranchChanged(val value: String)                   : AddProjectEvent()
     data class CustomerSelected(val id: String, val name: String) : AddProjectEvent()
-    data class ContactSelected(val id: String, val name: String)  : AddProjectEvent()
+    data class ContactToggled(val id: String)                     : AddProjectEvent()
     data class ExpectedValueChanged(val value: String)            : AddProjectEvent()
     data class StartDateChanged(val value: String)                : AddProjectEvent()
     data class CloseDateChanged(val value: String)                : AddProjectEvent()
@@ -86,7 +85,6 @@ class AddProjectViewModel @Inject constructor(
         generateAndSetProjectNumber()
     }
 
-    // ── Gen Project Number ────────────────────────────────────
     private fun generateAndSetProjectNumber() {
         viewModelScope.launch {
             val userId   = authRepo.currentUser()?.userId ?: return@launch
@@ -99,21 +97,12 @@ class AddProjectViewModel @Inject constructor(
     private suspend fun generateProjectNumber(branchId: String, userId: String): String {
         return withContext(Dispatchers.IO) {
             try {
-                // TS-0001 → TS
                 val branchCode = branchId.substringBefore("-").uppercase()
-
-                // USR-0002 → S002
                 val saleCode = "S" + userId.filter { it.isDigit() }.takeLast(3)
-
-                // 2026 → 26
                 val year = java.time.LocalDate.now().year.toString().takeLast(2)
-
                 val prefix = "$branchCode-$year-$saleCode-"
-
-                // นับจาก local DB
                 val count = projectRepo.countProjectsByPrefix(prefix)
                 val seq   = "%03d".format(count + 1)
-
                 "$branchCode-$year-$saleCode-$seq"
             } catch (e: Exception) {
                 "PRJ-" + UUID.randomUUID().toString().take(6).uppercase()
@@ -145,6 +134,11 @@ class AddProjectViewModel @Inject constructor(
                         _uiState.update { it.copy(selectedCustomerName = c.companyName) }
                     }
                     loadContacts(project.custId)
+                    
+                    // Load associated contacts for project
+                    projectRepo.getProjectContacts(id).onSuccess { contacts ->
+                        _uiState.update { it.copy(selectedContactIds = contacts.map { it.contactId }.toSet()) }
+                    }
                 },
                 onFailure = { e ->
                     _uiState.update { it.copy(isLoading = false, saveError = e.message) }
@@ -156,7 +150,6 @@ class AddProjectViewModel @Inject constructor(
     private fun loadCustomers() {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoadingCustomers = true) }
-            // ✅ ใช้ getLocalCustomers เท่านั้น ไม่ fallback ไป API
             customerRepo.getLocalCustomers().fold(
                 onSuccess = { list ->
                     _uiState.update {
@@ -194,14 +187,8 @@ class AddProjectViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.update { it.copy(isLoadingTeams = true) }
             try {
-                // ✅ sync จาก API ก่อน
                 branchRepo.syncFromRemote()
-
-                // ✅ ดึงทั้งหมดจาก local DB
                 val branches = branchRepo.observeBranches()
-
-                android.util.Log.d("BranchDebug", "AddProject branches: ${branches.size}")
-
                 _uiState.update {
                     it.copy(
                         teamOptions    = branches.map { b -> b.branchId to b.branchName },
@@ -209,7 +196,6 @@ class AddProjectViewModel @Inject constructor(
                     )
                 }
             } catch (e: Exception) {
-                // fallback
                 projectRepo.getBranches().fold(
                     onSuccess = { list ->
                         _uiState.update { it.copy(teamOptions = list, isLoadingTeams = false) }
@@ -247,17 +233,18 @@ class AddProjectViewModel @Inject constructor(
                         selectedCustomerId   = event.id,
                         selectedCustomerName = event.name,
                         customerError        = null,
-                        selectedContactId    = null,
-                        selectedContactName  = null,
+                        selectedContactIds   = emptySet(),
                         contactOptions       = emptyList()
                     )
                 }
                 loadContacts(event.id)
             }
-            is AddProjectEvent.ContactSelected    ->
-                _uiState.update {
-                    it.copy(selectedContactId = event.id, selectedContactName = event.name)
-                }
+            is AddProjectEvent.ContactToggled    -> {
+                val current = _uiState.value.selectedContactIds.toMutableSet()
+                if (event.id in current) current.remove(event.id)
+                else current.add(event.id)
+                _uiState.update { it.copy(selectedContactIds = current) }
+            }
             is AddProjectEvent.ExpectedValueChanged ->
                 _uiState.update { it.copy(expectedValue = event.value) }
             is AddProjectEvent.StartDateChanged   ->
@@ -276,8 +263,6 @@ class AddProjectViewModel @Inject constructor(
                     )
                 }
                 loadMembersForTeam(event.id)
-
-                // ✅ re-gen project number เมื่อเปลี่ยน branch
                 viewModelScope.launch {
                     val userId = authRepo.currentUser()?.userId ?: return@launch
                     val number = generateProjectNumber(event.id, userId)
@@ -325,51 +310,38 @@ class AddProjectViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, saveError = null) }
             val s = _uiState.value
-
             try {
                 val userId   = authRepo.currentUser()?.userId ?: "USR-0000"
-                val branchId = s.selectedTeamId
-                    ?: authRepo.currentUser()?.teamId
-                    ?: "XX-0001"
-
-                // ✅ ใช้ที่ gen ไว้แล้ว
-                val projectNumber = s.generatedProjectNumber.ifBlank {
-                    generateProjectNumber(branchId, userId)
-                }
-
-                val projectId = s.projectId
-                    ?: ("PJ-" + UUID.randomUUID().toString().take(8).uppercase())
+                val branchId = s.selectedTeamId ?: authRepo.currentUser()?.teamId ?: "XX-0001"
+                val projectNumber = s.generatedProjectNumber.ifBlank { generateProjectNumber(branchId, userId) }
+                val projectId = s.projectId ?: ("PJ-" + UUID.randomUUID().toString().take(8).uppercase())
 
                 val projectToSave = Project(
                     projectId             = projectId,
                     custId                = s.selectedCustomerId ?: "",
                     branchId              = branchId,
-                    projectNumber         = projectNumber,        // ✅ ชื่อต้องตรงกับ model
+                    projectNumber         = projectNumber,
                     projectName           = s.projectName,
                     expectedValue         = s.expectedValue.replace(",", "").toDoubleOrNull(),
                     projectStatus         = s.projectStatus,
                     startDate             = s.startDate,
-                    closingDate           = s.closeDate,          // ✅ ต้องเป็น closingDate ไม่ใช่ closeDate
+                    closingDate           = s.closeDate,
                     desiredCompletionDate = null,
                     projectLat            = s.siteLat,
                     projectLong           = s.siteLong,
                     opportunityScore      = null
                 )
 
-                val result = if (s.projectId != null) {
-                    projectRepo.updateProject(projectToSave)
-                } else {
-                    projectRepo.createProject(projectToSave, userId)
-                }
+                val result = if (s.projectId != null) projectRepo.updateProject(projectToSave)
+                else projectRepo.createProject(projectToSave, userId)
 
                 result.onSuccess {
-                    // ✅ เพิ่ม user ที่สร้างเป็น owner
-                    val memberIds = if (s.selectedMemberIds.isNotEmpty()) {
-                        s.selectedMemberIds.toList()
-                    } else {
-                        listOf(userId)
-                    }
+                    val memberIds = if (s.selectedMemberIds.isNotEmpty()) s.selectedMemberIds.toList() else listOf(userId)
                     projectRepo.addProjectMembers(projectId, memberIds, role = "owner")
+                    
+                    // Save contact persons for project
+                    projectRepo.saveProjectContacts(projectId, s.selectedContactIds.toList())
+
                     _uiState.update { it.copy(isLoading = false, isSaved = true) }
                 }.onFailure { e ->
                     _uiState.update { it.copy(isLoading = false, saveError = e.message) }

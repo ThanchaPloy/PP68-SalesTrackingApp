@@ -5,9 +5,9 @@ import com.google.gson.annotations.SerializedName
 
 data class UserDto(
     @SerializedName("user_id")      val userId:      String,
-    @SerializedName("full_name")    val fullName:    String?,
-    @SerializedName("branch_id")    val branchId:    String?,
-    @SerializedName("role")         val role:        String?,
-    @SerializedName("email")        val email:       String?,
-    @SerializedName("phone_number") val phoneNumber: String?  // ✅ เพิ่ม
+    @SerializedName("full_name")    val fullName:    String? = null,
+    @SerializedName("branch_id")    val branchId:    String? = null,
+    @SerializedName("role")         val role:        String? = null,
+    @SerializedName("email")        val email:       String? = null,
+    @SerializedName("phone_number") val phoneNumber: String? = null
 )

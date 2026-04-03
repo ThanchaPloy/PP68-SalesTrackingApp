@@ -213,22 +213,20 @@ class CreateAppointmentViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
             activityRepo.getActivityById(id).onSuccess { list ->
-                val activity = list.firstOrNull() ?: run {
-                    _uiState.update { it.copy(isLoading = false) }
-                    return@onSuccess
-                }
-                val savedItems  = activityRepo.getPlanItems(id).getOrDefault(emptyList())
+                val activity = list.firstOrNull() ?: return@onSuccess
+
+                val savedItems = activityRepo.getPlanItems(id).getOrDefault(emptyList())
                 val selectedIds = savedItems.map { it.masterId }.toSet()
 
                 _uiState.update {
                     it.copy(
                         activityId        = activity.activityId,
                         selectedProjectId = activity.projectId,
-                        titleTopic        = activity.detail ?: "",
-                        activityType      = activity.activityType,
-                        plannedDate       = formatDateForUI(activity.activityDate),
-                        startTime         = activity.plannedTime?.let { t -> formatTimeForUI(t) },
-                        endTime           = activity.plannedEndTime?.let { t -> formatTimeForUI(t) },
+                        titleTopic        = activity.detail ?: "",        // ✅ detail → @SerializedName("topic")
+                        activityType      = activity.activityType,         // ✅ activityType → @SerializedName("type")
+                        plannedDate       = formatDateForUI(activity.activityDate), // ✅ activityDate → @SerializedName("planned_date")
+                        startTime         = activity.plannedTime,          // ✅ plannedTime → @SerializedName("planned_time")
+                        endTime           = activity.plannedEndTime,       // ✅ plannedEndTime → @SerializedName("planned_end_time")
                         lat               = activity.plannedLat,
                         lng               = activity.plannedLong,
                         selectedMasterIds = selectedIds,
@@ -240,10 +238,7 @@ class CreateAppointmentViewModel @Inject constructor(
                     projectRepo.getProjectById(pid).onSuccess { p ->
                         _uiState.update { it.copy(selectedProjectName = p.projectName) }
                     }
-                    loadContactsForProject(pid)
                 }
-            }.onFailure {
-                _uiState.update { it.copy(isLoading = false) }
             }
         }
     }
@@ -401,17 +396,18 @@ class CreateAppointmentViewModel @Inject constructor(
                 userId         = userId,
                 customerId     = customerId,
                 projectId      = s.selectedProjectId,
-                activityType   = s.activityType,
-                activityDate   = isoDate,
-                detail         = s.titleTopic.ifBlank { null },
-                status         = "planned",
-                plannedTime    = formatTimeToDb(s.startTime),
-                plannedEndTime = formatTimeToDb(s.endTime),
+                activityType   = s.activityType,          // map → @SerializedName("type")
+                isAppointment  = true,
+                detail         = s.titleTopic,            // map → @SerializedName("topic")
+                activityDate   = s.plannedDate?.let { parseToIsoDate(it) }
+                    ?: LocalDate.now().toString(), // map → @SerializedName("planned_date")
+                plannedTime    = s.startTime,             // map → @SerializedName("planned_time")
+                plannedEndTime = s.endTime,               // map → @SerializedName("planned_end_time")
                 plannedLat     = s.lat,
                 plannedLong    = s.lng,
-                isAppointment  = s.selectedContactIds.isNotEmpty(),
-                contactName    = selectedContactNames.ifBlank { null }
+                status         = "planned"                // map → @SerializedName("plan_status")
             )
+
 
             val result = if (isEditMode) {
                 // สำหรับโหมดแก้ไข ส่งข้อมูลที่จะอัปเดต (PATCH)

@@ -16,7 +16,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -27,8 +26,9 @@ import com.example.pp68_salestrackingapp.ui.components.AddFloatingActionButton
 import com.example.pp68_salestrackingapp.ui.components.AppTopBar
 import com.example.pp68_salestrackingapp.ui.components.BottomNavBar
 import com.example.pp68_salestrackingapp.ui.components.ProjectProgressBar
-import com.example.pp68_salestrackingapp.ui.theme.SalesTrackingTheme
 import com.example.pp68_salestrackingapp.ui.viewmodels.project.ProjectListViewModel
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 
 private val BgLight    = Color(0xFFF5F5F5)
 private val White      = Color.White
@@ -137,12 +137,12 @@ fun ProjectListScreen(
     onTabChange: (Int) -> Unit = {},
     viewModel: ProjectListViewModel = hiltViewModel()
 ) {
-    val projects    by viewModel.projects.collectAsState()
-    val isLoading   by viewModel.isLoading.collectAsState()
-    val searchQuery by viewModel.searchQuery.collectAsState()
-    val showClosed  by viewModel.showClosed.collectAsState()
-    val error       by viewModel.error.collectAsState()
-    val authUser    by viewModel.authUser.collectAsState()
+    val projects         by viewModel.projects.collectAsState()
+    val isLoading        by viewModel.isLoading.collectAsState()
+    val searchQuery      by viewModel.searchQuery.collectAsState()
+    val selectedTabIndex by viewModel.selectedTabIndex.collectAsState()
+    val error            by viewModel.error.collectAsState()
+    val authUser         by viewModel.authUser.collectAsState()
 
     val selectedStatuses by viewModel.selectedStatuses.collectAsState()
     val selectedScores   by viewModel.selectedScores.collectAsState()
@@ -151,10 +151,10 @@ fun ProjectListScreen(
 
     ProjectListContent(
         projects = projects, isLoading = isLoading,
-        searchQuery = searchQuery, showClosed = showClosed, error = error,
+        searchQuery = searchQuery, selectedTabIndex = selectedTabIndex, error = error,
         authUser = authUser,
         selectedStatuses = selectedStatuses, selectedScores = selectedScores,
-        onSearchChange = viewModel::onSearchChange, onToggleTab = viewModel::onToggleTab,
+        onSearchChange = viewModel::onSearchChange, onSelectTab = viewModel::onSelectTab,
         onFilterClick = { showFilterModal = true },
         onProjectClick = onProjectClick, onAddClick = onAddClick,
         onNotificationClick = onNotificationClick,
@@ -181,10 +181,10 @@ fun ProjectListScreen(
 @Composable
 fun ProjectListContent(
     projects: List<Project>, isLoading: Boolean,
-    searchQuery: String, showClosed: Boolean, error: String?,
+    searchQuery: String, selectedTabIndex: Int, error: String?,
     authUser: AuthUser?,
     selectedStatuses: Set<String>, selectedScores: Set<String>,
-    onSearchChange: (String) -> Unit, onToggleTab: (Boolean) -> Unit,
+    onSearchChange: (String) -> Unit, onSelectTab: (Int) -> Unit,
     onFilterClick: () -> Unit,
     onProjectClick: (String) -> Unit, onAddClick: () -> Unit,
     onNotificationClick: () -> Unit,
@@ -228,24 +228,29 @@ fun ProjectListContent(
                 ), singleLine = true
             )
             Spacer(Modifier.height(12.dp))
-            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Surface(shape = RoundedCornerShape(20.dp),
-                    color = if (!showClosed) RedPrimary else Color(0xFFE5E7EB),
-                    modifier = Modifier.clickable { onToggleTab(false) }
-                ) {
-                    Text("Active", color = if (!showClosed) White else TextGray,
-                        fontSize = 13.sp, fontWeight = FontWeight.SemiBold,
-                        modifier = Modifier.padding(horizontal = 18.dp, vertical = 8.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(), 
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                val tabs = listOf("Active", "Closed", "Inactive")
+                tabs.forEachIndexed { index, label ->
+                    val isSelected = selectedTabIndex == index
+                    Surface(
+                        shape = RoundedCornerShape(20.dp),
+                        color = if (isSelected) RedPrimary else Color(0xFFE5E7EB),
+                        modifier = Modifier.clickable { onSelectTab(index) }
+                    ) {
+                        Text(
+                            label,
+                            color = if (isSelected) White else TextGray,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                        )
+                    }
+                    if (index < tabs.size - 1) Spacer(Modifier.width(8.dp))
                 }
-                Spacer(Modifier.width(8.dp))
-                Surface(shape = RoundedCornerShape(20.dp),
-                    color = if (showClosed) RedPrimary else Color(0xFFE5E7EB),
-                    modifier = Modifier.clickable { onToggleTab(true) }
-                ) {
-                    Text("Closed", color = if (showClosed) White else TextGray,
-                        fontSize = 13.sp, fontWeight = FontWeight.SemiBold,
-                        modifier = Modifier.padding(horizontal = 18.dp, vertical = 8.dp))
-                }
+                
                 Spacer(Modifier.weight(1f))
                 
                 val hasFilter = selectedStatuses.isNotEmpty() || selectedScores.isNotEmpty()
@@ -268,8 +273,12 @@ fun ProjectListContent(
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Icon(Icons.Default.WorkOff, null, tint = TextGray, modifier = Modifier.size(48.dp))
                         Spacer(Modifier.height(8.dp))
-                        Text(if (showClosed) "ไม่มีโครงการที่ปิดแล้ว" else "ไม่มีโครงการที่กำลังดำเนินการ",
-                            color = TextGray, fontSize = 14.sp)
+                        val emptyMsg = when (selectedTabIndex) {
+                            1 -> "ไม่มีโครงการที่ปิดแล้ว"
+                            2 -> "ไม่มีโครงการที่ไม่เคลื่อนไหว"
+                            else -> "ไม่มีโครงการที่กำลังดำเนินการ"
+                        }
+                        Text(emptyMsg, color = TextGray, fontSize = 14.sp)
                     }
                 }
             } else {
@@ -308,7 +317,7 @@ fun FilterModal(
             val statuses = listOf(
                 "New Project", "Quotation", "Bidding", 
                 "Make a Decision", "Assured", "Product Processing", 
-                "Working", "Quality Issue", "Completed"
+                "Working", "Quality Issue", "Completed", "Lost", "Failed"
             )
             FlowRow(mainAxisSpacing = 8.dp, crossAxisSpacing = 8.dp) {
                 statuses.forEach { s ->
@@ -397,90 +406,48 @@ fun ProjectListItem(project: Project, onClick: () -> Unit) {
                 verticalAlignment   = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Text(
-                    project.projectName,
-                    color      = TextDark,
-                    fontSize   = 16.sp,
-                    fontWeight = FontWeight.Bold,
-                    maxLines   = 1,
-                    overflow   = TextOverflow.Ellipsis,
-                    modifier   = Modifier.weight(1f).padding(end = 8.dp)
-                )
-                Text(
-                    formatValue(project.expectedValue),
-                    color      = RedPrimary,
-                    fontSize   = 14.sp,
-                    fontWeight = FontWeight.Bold
-                )
-            }
-
-            Spacer(Modifier.height(2.dp))
-            Text(project.custId, color = TextGray, fontSize = 13.sp)
-            Spacer(Modifier.height(8.dp))
-
-            // ── Row 2: Status Badge + HOT/WARM/COLD ──────────
-            Row(
-                modifier              = Modifier.fillMaxWidth(),
-                verticalAlignment     = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                ProjectStatusBadge(project.projectStatus)
-                Spacer(Modifier.weight(1f))
-                HotColdBadge(project.opportunityScore)
-            }
-
-            Spacer(Modifier.height(10.dp))
-
-            // ── Row 3: Progress Bar ───────────────────────────
-            // ✅ ไม่แสดง progress สำหรับ Lost/Failed
-            if (project.projectStatus !in listOf("Lost", "Failed")) {
-                ProjectProgressBar(
-                    progressPct = project.progressPct,
-                    status      = project.projectStatus,
-                    modifier    = Modifier.fillMaxWidth()
-                )
-            } else {
-                // Lost/Failed แสดง badge แดงแทน
-                Surface(
-                    color = Color(0xFFFEE2E2),
-                    shape = RoundedCornerShape(4.dp)
-                ) {
+                Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text     = if (project.projectStatus == "Lost") "❌ ไม่ได้งาน" else "❌ ยกเลิก",
-                        fontSize = 11.sp,
-                        color    = Color(0xFF991B1B),
-                        fontWeight = FontWeight.Medium,
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                        text = project.projectName,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = TextDark,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        text = "No: ${project.projectNumber ?: "-"}",
+                        fontSize = 12.sp,
+                        color = TextGray
                     )
                 }
+                Text(
+                    text = formatValue(project.expectedValue),
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = RedPrimary
+                )
             }
-        }
-    }
-}
 
-@Preview(showBackground = true, backgroundColor = 0xFFF5F5F5)
-@Composable
-fun ProjectListScreenPreview() {
-    val sampleProjects = listOf(
-        Project("PJ-001", "CST-001", "B-001", "PJ-2024-001", "Condo AA", 1200000.0, "PO", "2024-01-01", null, null, null, null, "HOT"),
-        Project("PJ-002", "CST-002", "B-001", "PJ-2024-002", "หมู่บ้าน Happy", 500000.0, "New Project", "2024-03-01", null, null, null, null, "COLD"),
-        Project("PJ-003", "CST-003", "B-001", "PJ-2024-003", "The Prestige", 8500000.0, "Make a Decision", "2024-02-01", null, null, null, null, "HOT"),
-        Project("PJ-004", "CST-004", "B-001", "PJ-2024-004", "H Village", 320000.0, "Lost", "2023-11-01", "2024-01-15", null, null, null, null),
-        Project("PJ-005", "CST-006", "B-001", "PJ-2024-005", "Green Residence", 2100000.0, "Lead", "2024-04-01", null, null, null, null, "COLD"),
-        Project("PJ-006", "CST-005", "B-001", "PJ-2024-006", "Sunset Office", 4800000.0, "Assured", "2024-03-10", null, null, null, null, "HOT"),
-    )
-    SalesTrackingTheme {
-        ProjectListContent(
-            projects = sampleProjects, isLoading = false,
-            searchQuery = "", showClosed = false, error = null,
-            authUser = null,
-            selectedStatuses = emptySet(), selectedScores = emptySet(),
-            onSearchChange = {}, onToggleTab = {}, onFilterClick = {},
-            onProjectClick = {}, onAddClick = {},
-            onNotificationClick = {},
-            onSettingsClick = {},
-            onLogoutClick = {},
-            currentTab = 3, onTabChange = {}
-        )
+            Spacer(Modifier.height(12.dp))
+
+            // ── Row 2: Status + Hot/Cold ──────────────────────
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                ProjectStatusBadge(status = project.projectStatus)
+                HotColdBadge(score = project.opportunityScore)
+            }
+
+            Spacer(Modifier.height(12.dp))
+
+            // ── Row 3: Progress ──────────────────────────────
+            ProjectProgressBar(
+                progressPct = project.progressPct,
+                status      = project.projectStatus
+            )
+        }
     }
 }

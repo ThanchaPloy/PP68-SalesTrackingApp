@@ -10,19 +10,19 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface ActivityDao {
-    @Query("SELECT * FROM activity_table ORDER BY activityDate DESC")
+    @Query("SELECT * FROM activity_table ORDER BY planned_date DESC")
     fun getAllActivities(): Flow<List<SalesActivity>>
 
-    @Query("SELECT * FROM activity_table WHERE activityDate >= :startDate AND activityDate <= :endDate")
+    @Query("SELECT * FROM activity_table WHERE planned_date >= :startDate AND planned_date <= :endDate")
     fun getActivitiesByDateRange(startDate: String, endDate: String): Flow<List<SalesActivity>>
 
-    @Query("SELECT * FROM activity_table WHERE projectId = :projectId")
+    @Query("SELECT * FROM activity_table WHERE project_id = :projectId")
     fun getActivitiesByProject(projectId: String): Flow<List<SalesActivity>>
 
-    @Query("SELECT * FROM activity_table WHERE customerId = :customerId")
+    @Query("SELECT * FROM activity_table WHERE cust_id = :customerId")
     fun getActivitiesByCustomer(customerId: String): Flow<List<SalesActivity>>
 
-    @Query("SELECT * FROM activity_table WHERE activityId = :id LIMIT 1")
+    @Query("SELECT * FROM activity_table WHERE appointment_id = :id LIMIT 1")
     suspend fun getActivityById(id: String): SalesActivity?
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
@@ -40,16 +40,12 @@ interface ActivityDao {
     @Query("DELETE FROM activity_table")
     suspend fun deleteAll()
 
-    @Query("SELECT * FROM activity_table")
-    fun getAllActivitiesFlow(): Flow<List<SalesActivity>>
-
     @Transaction
     suspend fun clearAndInsert(activities: List<SalesActivity>) {
-        deleteAll()    // ตอนนี้มันจะรู้จัก deleteAll แล้วเพราะอยู่ข้างบน
-        insertAll(activities) // ตอนนี้มันจะรู้จัก insertAll แล้ว
+        deleteAll()
+        insertAll(activities)
     }
 
-    @Query("DELETE FROM activity_table WHERE activityId = :activityId")
+    @Query("DELETE FROM activity_table WHERE appointment_id = :activityId")
     suspend fun deleteActivityById(activityId: String)
-
 }

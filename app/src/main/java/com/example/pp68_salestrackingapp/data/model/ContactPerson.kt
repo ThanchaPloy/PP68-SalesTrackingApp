@@ -10,12 +10,12 @@ data class ContactPerson(
     @SerializedName("contact_id") val contactId: String,
 
     @SerializedName("cust_id") val custId: String,
-    @SerializedName("full_name") val fullName: String?,
-    @SerializedName("nickname") val nickname: String?,
-    @SerializedName("position") val position: String?,
-    @SerializedName("phone_number") val phoneNumber: String?,
-    @SerializedName("email") val email: String?,
-    @SerializedName("line") val line: String?,
+    @SerializedName("full_name") val fullName: String? = null,
+    @SerializedName("nickname") val nickname: String? = null,
+    @SerializedName("position") val position: String? = null,
+    @SerializedName("phone_number") val phoneNumber: String? = null,
+    @SerializedName("email") val email: String? = null,
+    @SerializedName("line") val line: String? = null,
     @SerializedName("is_active") val isActive: Boolean? = true,
     @SerializedName("is_dm_confirmed") val isDmConfirmed: Boolean? = false
 )

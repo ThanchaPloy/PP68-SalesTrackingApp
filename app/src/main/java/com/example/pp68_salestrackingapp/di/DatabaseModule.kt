@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.room.Room
 import com.example.pp68_salestrackingapp.data.local.ActivityDao
 import com.example.pp68_salestrackingapp.data.local.ActivityPlanItemDao
+import com.example.pp68_salestrackingapp.data.local.ActivityResultDao
 import com.example.pp68_salestrackingapp.data.local.AppDatabase
 import com.example.pp68_salestrackingapp.data.local.BranchDao
 import com.example.pp68_salestrackingapp.data.local.CustomerDao
@@ -67,4 +68,8 @@ object DatabaseModule {
     fun provideActivityPlanItemDao(database: AppDatabase): ActivityPlanItemDao {
         return database.activityPlanItemDao()
     }
+
+    @Provides
+    @Singleton
+    fun provideActivityResultDao(db: AppDatabase): ActivityResultDao = db.activityResultDao()
 }

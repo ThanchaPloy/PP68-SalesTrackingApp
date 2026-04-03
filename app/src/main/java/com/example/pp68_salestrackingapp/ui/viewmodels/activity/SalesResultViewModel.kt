@@ -7,14 +7,13 @@ import com.example.pp68_salestrackingapp.data.repository.ActivityRepository
 import com.example.pp68_salestrackingapp.data.repository.AuthRepository
 import com.example.pp68_salestrackingapp.data.repository.ProjectRepository
 import com.example.pp68_salestrackingapp.data.model.Project
-import com.example.pp68_salestrackingapp.data.model.SalesActivity
+import com.example.pp68_salestrackingapp.data.model.ActivityResult
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.time.LocalDate
-import java.util.UUID
 import javax.inject.Inject
 
 data class SalesResultUiState(
@@ -56,7 +55,6 @@ class SalesResultViewModel @Inject constructor(
     init {
         val pId = savedStateHandle.get<String>("projectId")
         val aId = savedStateHandle.get<String>("activityId")
-
         _uiState.update { it.copy(projectId = pId, activityId = aId) }
 
         if (!aId.isNullOrBlank()) {
@@ -84,113 +82,163 @@ class SalesResultViewModel @Inject constructor(
             }
         }
     }
+    companion object {
+        val DEAL_POSITION_MAP = mapOf(
+            "ลูกค้าใช้เราอยู่แล้ว การต่อสัญญามีโอกาสสูงมาก" to "incumbent",
+            "ลูกค้าเลือกเราเป็นตัวหลัก คู่แข่งอื่นเป็นแค่ backup"  to "vendor_of_choice",
+            "ถูกเชิญมาเพื่อ benchmark ราคา โอกาสต่ำ"              to "invited_to_compare"
+        )
+        val SOLUTION_MAP = mapOf(
+            "ไม่มี Solution เดิม"              to "no_solution",
+            "มีระบบเดิมที่ไม่ใช่คู่แข่ง"       to "non_competitor_system",
+            "ใช้คู่แข่งอยู่และไม่มีปัญหา"      to "competitor_no_issue"
+        )
+        val COUNTERPARTY_MAP = mapOf(
+            "ดีลกับ Main Contractor โดยตรง"                       to "direct_main_contractor",
+            "ดีลผ่าน Installer — Main Contractor ได้งานแล้ว"      to "via_installer_main_awarded",
+            "ดีลผ่าน Installer — Main Contractor ยังไม่ได้งาน"    to "via_installer_main_pending"
+        )
+        val RESPONSE_SPEED_MAP = mapOf(
+            "เร็ว"           to "fast",
+            "ปกติ"           to "normal",
+            "ช้าหรือเงียบ"   to "slow_silent"
+        )
+
+        val DEAL_POSITION_REVERSE    = DEAL_POSITION_MAP.entries.associate { (k, v) -> v to k }
+        val SOLUTION_REVERSE         = SOLUTION_MAP.entries.associate { (k, v) -> v to k }
+        val COUNTERPARTY_REVERSE     = COUNTERPARTY_MAP.entries.associate { (k, v) -> v to k }
+        val RESPONSE_SPEED_REVERSE   = RESPONSE_SPEED_MAP.entries.associate { (k, v) -> v to k }
+    }
 
     private fun loadActivityData(aId: String) {
         viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true, error = null) }
-            activityRepo.getActivityById(aId).onSuccess { actList ->
-                val act = actList.firstOrNull()
-                if (act != null) {
-                    custId = act.customerId
+            _uiState.update { it.copy(isLoading = true) }
+
+            activityRepo.getActivityById(aId).onSuccess { list ->
+                list.firstOrNull()?.let { act ->
                     _uiState.update {
                         it.copy(
-                            activityId   = aId,
-                            projectId    = act.projectId,
-                            visitSummary = act.weeklyNote ?: act.detail ?: "",
-                            reportDate   = act.activityDate,
-                            isLoading    = false
+                            activityId = aId,
+                            projectId  = act.projectId,
+                            reportDate = act.activityDate ?: LocalDate.now().toString()
                         )
                     }
-                    // โหลด project ต่อ
                     act.projectId?.let { loadProjectData(it) }
-                } else {
-                    _uiState.update { it.copy(isLoading = false, error = "ไม่พบข้อมูลกิจกรรม") }
                 }
-            }.onFailure { e ->
-                _uiState.update { it.copy(error = "โหลดข้อมูลกิจกรรมไม่สำเร็จ: ${e.message}", isLoading = false) }
             }
+
+            // โหลดผลการขายที่เคยบันทึกไว้ (ถ้ามี)
+            val result = activityRepo.getActivityResult(aId)
+            if (result != null) {
+                _uiState.update {
+                    it.copy(
+                        reportDate             = result.reportDate ?: it.reportDate,
+                        newStatus              = result.newStatus ?: "",
+                        isStatusUpdateEnabled  = !result.newStatus.isNullOrBlank(),
+                        opportunityScore       = result.opportunityScore ?: it.opportunityScore,
+                        dealPosition           = DEAL_POSITION_REVERSE[result.dealPosition] ?: result.dealPosition ?: "",
+                        previousSolution       = SOLUTION_REVERSE[result.previousSolution] ?: result.previousSolution ?: "",
+                        counterpartyMultiplier = COUNTERPARTY_REVERSE[result.counterpartyMultiplier] ?: result.counterpartyMultiplier ?: "",
+                        responseSpeed          = RESPONSE_SPEED_REVERSE[result.responseSpeed] ?: result.responseSpeed ?: "",
+                        isProposalSent         = result.isProposalSent,
+                        proposalDate           = result.proposalDate,
+                        competitorCount        = result.competitorCount,
+                        visitSummary           = result.summary ?: ""
+                    )
+                }
+            }
+            _uiState.update { it.copy(isLoading = false) }
         }
     }
 
-    fun onReportDateChanged(date: String)        { _uiState.update { it.copy(reportDate = date) } }
-    fun onStatusToggle(enabled: Boolean)         { _uiState.update { it.copy(isStatusUpdateEnabled = enabled) } }
-    fun onNewStatusSelected(status: String)      { _uiState.update { it.copy(newStatus = status) } }
-    fun onOpportunitySelected(score: String)     { _uiState.update { it.copy(opportunityScore = score) } }
-    fun onDealPositionChanged(value: String)     { _uiState.update { it.copy(dealPosition = value) } }
-    fun onPreviousSolutionChanged(value: String) { _uiState.update { it.copy(previousSolution = value) } }
+    fun onReportDateChanged(date: String)         { _uiState.update { it.copy(reportDate = date) } }
+    fun onStatusToggle(enabled: Boolean)          { _uiState.update { it.copy(isStatusUpdateEnabled = enabled) } }
+    fun onNewStatusSelected(status: String)       { _uiState.update { it.copy(newStatus = status) } }
+    fun onOpportunitySelected(score: String)      { _uiState.update { it.copy(opportunityScore = score) } }
+    fun onDealPositionChanged(value: String)      { _uiState.update { it.copy(dealPosition = value) } }
+    fun onPreviousSolutionChanged(value: String)  { _uiState.update { it.copy(previousSolution = value) } }
     fun onCounterpartyMultiplierChanged(v: String){ _uiState.update { it.copy(counterpartyMultiplier = v) } }
-    fun onResponseSpeedChanged(value: String)    { _uiState.update { it.copy(responseSpeed = value) } }
-    fun onProposalToggle(sent: Boolean)          { _uiState.update { it.copy(isProposalSent = sent) } }
-    fun onProposalDateChanged(date: String)      { _uiState.update { it.copy(proposalDate = date) } }
-    fun onCompetitorCountChanged(delta: Int)     {
+    fun onResponseSpeedChanged(value: String)     { _uiState.update { it.copy(responseSpeed = value) } }
+    fun onProposalToggle(sent: Boolean)           { _uiState.update { it.copy(isProposalSent = sent) } }
+    fun onProposalDateChanged(date: String)       { _uiState.update { it.copy(proposalDate = date) } }
+    fun onCompetitorCountChanged(delta: Int)      {
         _uiState.update { it.copy(competitorCount = (it.competitorCount + delta).coerceAtLeast(0)) }
     }
-    fun onSummaryChanged(text: String)           { _uiState.update { it.copy(visitSummary = text) } }
+    fun onSummaryChanged(text: String)            { _uiState.update { it.copy(visitSummary = text) } }
 
     fun save() {
-        val s = _uiState.value
-        if (s.visitSummary.isBlank()) {
+        val currentState = _uiState.value
+
+        if (currentState.visitSummary.isBlank()) {
             _uiState.update { it.copy(error = "กรุณากรอกสรุปการเข้าพบ") }
             return
         }
+        if (currentState.activityId.isNullOrBlank()) {
+            _uiState.update { it.copy(error = "ไม่พบรหัสนัดหมาย") }
+            return
+        }
 
-        val finalCustId = if (custId.isNotBlank()) custId else s.project?.custId ?: ""
+        val finalCustId = if (custId.isNotBlank()) custId else currentState.project?.custId ?: ""
         if (finalCustId.isBlank()) {
-            _uiState.update { it.copy(error = "ไม่พบข้อมูลลูกค้า กรุณาลองใหม่อีกครั้ง") }
+            _uiState.update { it.copy(error = "ไม่พบข้อมูลลูกค้า") }
             return
         }
 
         viewModelScope.launch {
             _uiState.update { it.copy(isSaving = true, error = null) }
+            val s = _uiState.value
 
-            val userId = authRepo.currentUser()?.userId ?: "USR-0001"
-            val summaryContent = buildString {
-                append(s.visitSummary)
-                append("\n\n--- ผลการขาย ---")
-                append("\nDeal Position: ${s.dealPosition}")
-                append("\nPrevious Solution: ${s.previousSolution}")
-                append("\nCounterparty Multiplier: ${s.counterpartyMultiplier}")
-                append("\nResponse Speed: ${s.responseSpeed}")
-                append("\nProposal: ${if (s.isProposalSent) s.proposalDate else "No"}")
-                append("\nCompetitors: ${s.competitorCount}")
-            }
+            // 1. บันทึก ActivityResult ลง Local DB + API
+            val resultToSave = ActivityResult(
+                activityId             = s.activityId!!,
+                createdBy              = authRepo.currentUser()?.userId,
+                reportDate             = s.reportDate,
+                newStatus              = if (s.isStatusUpdateEnabled) s.newStatus else null,
+                opportunityScore       = s.opportunityScore,
+                dealPosition           = DEAL_POSITION_MAP[s.dealPosition] ?: s.dealPosition.ifBlank { null },
+                previousSolution       = SOLUTION_MAP[s.previousSolution] ?: s.previousSolution.ifBlank { null },
+                counterpartyMultiplier = COUNTERPARTY_MAP[s.counterpartyMultiplier] ?: s.counterpartyMultiplier.ifBlank { null },
+                responseSpeed          = RESPONSE_SPEED_MAP[s.responseSpeed] ?: s.responseSpeed.ifBlank { null },
+                isProposalSent         = s.isProposalSent,
+                proposalDate           = s.proposalDate,
+                competitorCount        = s.competitorCount,
+                summary                = s.visitSummary
+            )
 
-            // 1. บันทึก/อัปเดต Appointment
-            val actResult = if (!s.activityId.isNullOrBlank()) {
-                // ✅ ใช้ updateActivity แทน updateActivityMap
-                val updates = mapOf<String, Any>(
-                    "plan_status" to "completed",
-                    "note"        to summaryContent
-                )
-                activityRepo.updateActivity(s.activityId, updates)
-            } else {
-                val newId = "APT-" + UUID.randomUUID().toString().take(8).uppercase()
-                val newActivity = SalesActivity(
-                    activityId   = newId,
-                    userId       = userId,
-                    customerId   = finalCustId,
-                    projectId    = s.projectId,
-                    activityType = "onsite",
-                    activityDate = s.reportDate,
-                    detail       = summaryContent,
-                    status       = "completed"
-                )
-                activityRepo.addActivity(newActivity)
-            }
-
-            if (actResult.isFailure) {
-                _uiState.update { it.copy(isSaving = false, error = "บันทึกไม่สำเร็จ: ${actResult.exceptionOrNull()?.message}") }
+            val saveResult = activityRepo.saveActivityResult(resultToSave)
+            if (saveResult.isFailure) {
+                _uiState.update {
+                    it.copy(isSaving = false, error = "บันทึกผลไม่สำเร็จ: ${saveResult.exceptionOrNull()?.message}")
+                }
                 return@launch
             }
 
-            // 2. อัปเดต Project status/score (ถ้ามี)
+            // 2. อัปเดต appointment → plan_status = completed + note
+            val actResult = activityRepo.updateActivity(
+                s.activityId!!,
+                mapOf<String, Any>(
+                    "plan_status" to "completed",
+                    "note"        to s.visitSummary
+                )
+            )
+            if (actResult.isFailure) {
+                _uiState.update {
+                    it.copy(isSaving = false, error = "อัปเดตนัดหมายไม่สำเร็จ: ${actResult.exceptionOrNull()?.message}")
+                }
+                return@launch
+            }
+
+            // 3. อัปเดต project status/score (ถ้าเปิด toggle หรือมี score)
             if (!s.projectId.isNullOrBlank()) {
                 val pUpdates = mutableMapOf<String, String>()
-                val statusToUpdate = if (s.isStatusUpdateEnabled && s.newStatus.isNotBlank()) s.newStatus else s.currentStatus
-                if (statusToUpdate.isNotBlank()) pUpdates["project_status"] = statusToUpdate
-                val score = s.opportunityScore ?: s.project?.opportunityScore
-                if (score != null) pUpdates["opportunity_score"] = score
-                if (pUpdates.isNotEmpty()) projectRepo.updateProjectFields(s.projectId, pUpdates)
+                if (s.isStatusUpdateEnabled && s.newStatus.isNotBlank()) {
+                    pUpdates["project_status"] = s.newStatus
+                }
+                s.opportunityScore?.let { pUpdates["opportunity_score"] = it }
+
+                if (pUpdates.isNotEmpty()) {
+                    projectRepo.updateProjectFields(s.projectId, pUpdates)
+                }
             }
 
             _uiState.update { it.copy(isSaving = false, isSaved = true) }

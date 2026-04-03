@@ -24,6 +24,9 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.pp68_salestrackingapp.ui.components.*
 import com.example.pp68_salestrackingapp.ui.theme.SalesTrackingTheme
+import com.example.pp68_salestrackingapp.ui.viewmodels.contact.AddContactViewModel
+import com.example.pp68_salestrackingapp.ui.viewmodels.contact.AddContactUiState
+import com.example.pp68_salestrackingapp.ui.viewmodels.contact.AddContactEvent
 
 // ─── Colors ───────────────────────────────────────────────────
 private val White      = Color.White
@@ -207,6 +210,36 @@ fun AddContactContent(
                     placeholder   = "Enter Line ID",
                     leadingIcon   = Icons.Default.Chat
                 )
+            }
+
+            // ── Is Decision Maker Checkbox ────────────────────
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(10.dp))
+                    .border(1.dp, BorderGray, RoundedCornerShape(10.dp))
+                    .clickable { onEvent(AddContactEvent.IsDecisionMakerToggled) }
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Checkbox(
+                    checked         = uiState.isDecisionMaker,
+                    onCheckedChange = { onEvent(AddContactEvent.IsDecisionMakerToggled) },
+                    colors = CheckboxDefaults.colors(
+                        checkedColor   = RedPrimary,
+                        uncheckedColor = TextGray
+                    )
+                )
+                Column {
+                    Text("Is Decision Maker?", fontSize = 14.sp,
+                        fontWeight = FontWeight.SemiBold, color = TextDark)
+                    Text(
+                        if (uiState.isDecisionMaker) "ผู้ติดต่อนี้เป็นผู้ตัดสินใจหลัก"
+                        else "ผู้ติดต่อนี้ไม่ใช่ผู้ตัดสินใจหลัก",
+                        fontSize = 12.sp, color = TextGray
+                    )
+                }
             }
 
             // ── Is Active Checkbox ────────────────────────────

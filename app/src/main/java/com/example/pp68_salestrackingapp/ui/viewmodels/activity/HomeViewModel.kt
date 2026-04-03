@@ -7,6 +7,7 @@ import com.example.pp68_salestrackingapp.data.repository.AuthRepository
 import com.example.pp68_salestrackingapp.data.model.AuthUser
 import com.example.pp68_salestrackingapp.data.repository.CallLogRepository
 import com.example.pp68_salestrackingapp.data.repository.CustomerRepository
+import com.example.pp68_salestrackingapp.data.repository.ProjectRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -43,6 +44,7 @@ class HomeViewModel @Inject constructor(
     private val activityRepo: ActivityRepository,
     private val authRepo:     AuthRepository,
     private val customerRepo: CustomerRepository,
+    private val projectRepo:  ProjectRepository,
     private val callLogRepo: CallLogRepository
 ) : ViewModel() {
 
@@ -56,7 +58,7 @@ class HomeViewModel @Inject constructor(
         } else {
             loadActivities()
         }
-        observeActivities() // ✅ เรียกใช้ observeActivities เพื่อติดตามการเปลี่ยนแปลงข้อมูล
+        observeActivities()
     }
 
     private fun syncCallLogs() {
@@ -64,19 +66,22 @@ class HomeViewModel @Inject constructor(
             try {
                 val contacts = customerRepo.getAllContactPhoneMap()
                 callLogRepo.syncCallLogs(contacts)
-                android.util.Log.d("CallLog", "Sync call logs สำเร็จ")
             } catch (e: Exception) {
-                android.util.Log.w("CallLog", "Sync call logs ไม่สำเร็จ: ${e.message}")
+                android.util.Log.w("CallLog", "Sync call logs ไม่สำเร็จ: \${e.message}")
             }
         }
     }
 
     private fun observeActivities() {
         viewModelScope.launch {
-            // ✅ ผูก Flow จาก Local DB ให้หน้าจอ Update อัตโนมัติเมื่อข้อมูลเปลี่ยน
-            activityRepo.getAllActivitiesFlow().collect { _ ->
+            // Observe multiple flows to update UI when any relevant data changes
+            combine(
+                activityRepo.getAllActivitiesFlow(),
+                customerRepo.getAllCustomersFlow(),
+                projectRepo.getAllProjectsFlow()
+            ) { _, _, _ -> 
                 loadActivities()
-            }
+            }.collect()
         }
     }
 
@@ -123,7 +128,16 @@ class HomeViewModel @Inject constructor(
                 _uiState.update { it.copy(isLoading = false) }
                 return@launch
             }
-            activityRepo.refreshActivities(userId)
+            
+            // Refresh all relevant data from remote
+            try {
+                activityRepo.refreshActivities(userId)
+                customerRepo.refreshCustomers(userId)
+                projectRepo.refreshProjects(userId)
+            } catch (e: Exception) {
+                android.util.Log.e("HomeVM", "Error refreshing data: \${e.message}")
+            }
+
             loadActivities()
             _uiState.update { it.copy(isLoading = false) }
         }

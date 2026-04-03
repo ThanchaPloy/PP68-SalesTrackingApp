@@ -2,6 +2,7 @@ package com.example.pp68_salestrackingapp.data.repository
 
 import com.example.pp68_salestrackingapp.data.local.ProjectDao
 import com.example.pp68_salestrackingapp.data.model.Project
+import com.example.pp68_salestrackingapp.data.model.ProjectContact
 import com.example.pp68_salestrackingapp.data.model.ProjectMemberInsertDto
 import com.example.pp68_salestrackingapp.data.remote.ApiService
 import com.example.pp68_salestrackingapp.data.remote.FirebaseRealtimeService
@@ -231,6 +232,40 @@ class ProjectRepository @Inject constructor(
                 projectDao.getAllProjects().first()
                     .count { it.projectNumber?.startsWith(prefix) == true }
             } catch (e: Exception) { 0 }
+        }
+    }
+
+    suspend fun saveProjectContacts(projectId: String, contactIds: List<String>): Result<Unit> {
+        return withContext(Dispatchers.IO) {
+            try {
+                // 1. Delete old contacts
+                apiService.deleteProjectContacts("eq.$projectId")
+                
+                // 2. Add new contacts
+                if (contactIds.isNotEmpty()) {
+                    val contacts = contactIds.map { ProjectContact(projectId, it) }
+                    val response = apiService.addProjectContacts(contacts)
+                    if (response.isSuccessful) Result.success(Unit)
+                    else Result.failure(Exception("HTTP ${response.code()}"))
+                } else {
+                    Result.success(Unit)
+                }
+            } catch (e: Exception) {
+                Result.failure(e)
+            }
+        }
+    }
+
+    suspend fun getProjectContacts(projectId: String): Result<List<com.example.pp68_salestrackingapp.data.model.ContactPerson>> {
+        return withContext(Dispatchers.IO) {
+            try {
+                val response = apiService.getProjectContacts("eq.$projectId")
+                if (response.isSuccessful && response.body() != null) {
+                    Result.success(response.body()!!.mapNotNull { it.contactPerson })
+                } else Result.success(emptyList())
+            } catch (e: Exception) {
+                Result.failure(e)
+            }
         }
     }
 }

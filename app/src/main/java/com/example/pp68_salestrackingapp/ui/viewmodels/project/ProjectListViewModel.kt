@@ -11,9 +11,8 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import java.time.LocalDate
 import javax.inject.Inject
-
-private val CLOSED_STATUSES = setOf("Completed", "Lost", "Failed")
 
 @OptIn(FlowPreview::class, ExperimentalCoroutinesApi::class)
 @HiltViewModel
@@ -25,16 +24,18 @@ class ProjectListViewModel @Inject constructor(
     private val _isLoading   = MutableStateFlow(false)
     private val _error       = MutableStateFlow<String?>(null)
     private val _searchQuery = MutableStateFlow("")
-    private val _showClosed  = MutableStateFlow(false)
-    private val _authUser    = MutableStateFlow<AuthUser?>(authRepo.currentUser())
+    
+    // 0: Active, 1: Closed, 2: Inactive
+    private val _selectedTabIndex = MutableStateFlow(0)
 
     private val _selectedStatuses = MutableStateFlow<Set<String>>(emptySet())
     private val _selectedScores   = MutableStateFlow<Set<String>>(emptySet())
+    private val _authUser         = MutableStateFlow<AuthUser?>(authRepo.currentUser())
 
     val isLoading:   StateFlow<Boolean> = _isLoading.asStateFlow()
     val error:       StateFlow<String?> = _error.asStateFlow()
     val searchQuery: StateFlow<String>  = _searchQuery.asStateFlow()
-    val showClosed:  StateFlow<Boolean> = _showClosed.asStateFlow()
+    val selectedTabIndex: StateFlow<Int> = _selectedTabIndex.asStateFlow()
     val authUser:    StateFlow<AuthUser?> = _authUser.asStateFlow()
 
     val selectedStatuses: StateFlow<Set<String>> = _selectedStatuses.asStateFlow()
@@ -42,14 +43,15 @@ class ProjectListViewModel @Inject constructor(
 
     val projects: StateFlow<List<Project>> = combine(
         _searchQuery.debounce(300),
-        _showClosed,
+        _selectedTabIndex,
         _selectedStatuses,
         _selectedScores
-    ) { query, closed, statuses, scores ->
-        FilterCriteria(query, closed, statuses, scores)
+    ) { query, tabIndex, statuses, scores ->
+        FilterCriteria(query, tabIndex, statuses, scores)
     }
         .flatMapLatest { criteria ->
             _isLoading.value = true
+
             val sourceFlow = if (criteria.query.isBlank()) {
                 repo.getAllProjectsFlow()
             } else {
@@ -57,10 +59,24 @@ class ProjectListViewModel @Inject constructor(
             }
 
             sourceFlow.map { all ->
-                var filtered = if (criteria.closed) {
-                    all.filter { it.projectStatus in CLOSED_STATUSES }
-                } else {
-                    all.filter { it.projectStatus !in CLOSED_STATUSES }
+                val today = LocalDate.now().toString()
+                
+                var filtered = all.filter { p ->
+                    when (criteria.tabIndex) {
+                        1 -> { // Closed: PO & closing date reached, OR Completed
+                            p.projectStatus == "Completed" || 
+                            (p.projectStatus == "PO" && p.closingDate != null && p.closingDate <= today)
+                        }
+                        2 -> { // Inactive: Lost or Failed
+                            p.projectStatus == "Lost" || p.projectStatus == "Failed"
+                        }
+                        else -> { // Active: Everything else
+                            val isClosed = p.projectStatus == "Completed" || 
+                                           (p.projectStatus == "PO" && p.closingDate != null && p.closingDate <= today)
+                            val isInactive = p.projectStatus == "Lost" || p.projectStatus == "Failed"
+                            !isClosed && !isInactive
+                        }
+                    }
                 }
 
                 if (criteria.statuses.isNotEmpty()) {
@@ -69,6 +85,7 @@ class ProjectListViewModel @Inject constructor(
                 if (criteria.scores.isNotEmpty()) {
                     filtered = filtered.filter { it.opportunityScore?.uppercase() in criteria.scores }
                 }
+
                 filtered
             }
         }
@@ -80,8 +97,23 @@ class ProjectListViewModel @Inject constructor(
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    fun refreshDataFromApi() {
+        val userId = authRepo.currentUser()?.userId
+        if (userId == null) {
+            _error.value = "กรุณาเข้าสู่ระบบใหม่"
+            return
+        }
+
+        viewModelScope.launch {
+            _isLoading.value = true
+            repo.refreshProjects(userId).onFailure { _error.value = it.message }
+            _isLoading.value = false
+        }
+    }
+
     fun onSearchChange(query: String) { _searchQuery.value = query }
-    fun onToggleTab(showClosed: Boolean) { _showClosed.value = showClosed }
+    
+    fun onSelectTab(index: Int) { _selectedTabIndex.value = index }
 
     fun toggleStatusFilter(status: String) {
         _selectedStatuses.update { current ->
@@ -101,20 +133,11 @@ class ProjectListViewModel @Inject constructor(
         _selectedScores.value = emptySet()
     }
 
+    fun clearError() { _error.value = null }
+
     fun logout() {
         viewModelScope.launch {
             authRepo.logout()
-        }
-    }
-
-    fun clearError() { _error.value = null }
-
-    fun refreshDataFromApi() {
-        viewModelScope.launch {
-            _isLoading.value = true
-            val userId = authRepo.currentUser()?.userId ?: return@launch
-            repo.refreshProjects(userId)
-            _isLoading.value = false
         }
     }
 
@@ -124,7 +147,7 @@ class ProjectListViewModel @Inject constructor(
 
     private data class FilterCriteria(
         val query: String,
-        val closed: Boolean,
+        val tabIndex: Int,
         val statuses: Set<String>,
         val scores: Set<String>
     )

@@ -21,6 +21,7 @@ import com.example.pp68_salestrackingapp.ui.screen.export.MonthlyReportScreen
 import com.example.pp68_salestrackingapp.ui.screen.export.WeeklyReportScreen
 import com.example.pp68_salestrackingapp.ui.screen.project.*
 import com.example.pp68_salestrackingapp.ui.screen.contact.*
+import com.example.pp68_salestrackingapp.ui.screen.activity.SalesResultScreen
 
 @Composable
 fun SalesTrackingApp() {

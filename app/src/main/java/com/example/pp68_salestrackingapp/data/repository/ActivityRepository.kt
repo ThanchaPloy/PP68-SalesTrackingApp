@@ -1,20 +1,16 @@
 package com.example.pp68_salestrackingapp.data.repository
 
-import com.example.pp68_salestrackingapp.data.local.ActivityDao
-import com.example.pp68_salestrackingapp.data.local.CustomerDao
-import com.example.pp68_salestrackingapp.data.local.ProjectDao
-import com.example.pp68_salestrackingapp.data.local.ContactDao
-import com.example.pp68_salestrackingapp.data.local.ActivityPlanItemDao
+import com.example.pp68_salestrackingapp.data.local.*
 import com.example.pp68_salestrackingapp.data.model.SalesActivity
 import com.example.pp68_salestrackingapp.data.model.ActivityMaster
 import com.example.pp68_salestrackingapp.data.model.ContactPerson
 import com.example.pp68_salestrackingapp.data.model.PlanItemDto
 import com.example.pp68_salestrackingapp.data.model.MasterActDto
 import com.example.pp68_salestrackingapp.data.model.ActivityPlanItem
+import com.example.pp68_salestrackingapp.data.model.ActivityResult
 import com.example.pp68_salestrackingapp.data.model.ChecklistInsertDto
 import com.example.pp68_salestrackingapp.data.remote.ApiService
 import com.example.pp68_salestrackingapp.ui.viewmodels.activity.ActivityCard
-import com.google.gson.annotations.SerializedName
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
@@ -27,7 +23,8 @@ class ActivityRepository @Inject constructor(
     private val projectDao: ProjectDao,
     private val customerDao: CustomerDao,
     private val contactDao: ContactDao,
-    private val planItemDao: ActivityPlanItemDao
+    private val planItemDao: ActivityPlanItemDao,
+    private val resultDao: ActivityResultDao
 ) {
     fun getAllActivitiesFlow(): Flow<List<SalesActivity>> = activityDao.getAllActivities()
 
@@ -53,16 +50,14 @@ class ActivityRepository @Inject constructor(
     suspend fun addActivity(activity: SalesActivity): kotlin.Result<Unit> {
         return withContext(Dispatchers.IO) {
             try {
-                // ✅ ตัดฟิลด์ local ออกก่อนส่ง API เพื่อป้องกัน Error 400
                 val apiActivity = activity.copy(
                     projectName = null,
                     companyName = null,
-                    contactName = null
+                    contactName = null,
+                    weeklyNote  = null
                 )
                 
                 val response = apiService.addActivity(apiActivity)
-                
-                // บันทึกตัวเต็มลง Local DB เพื่อให้หน้าจอแสดงผลได้ทันที
                 activityDao.insertActivity(activity)
                 
                 if (response.isSuccessful) {
@@ -72,7 +67,6 @@ class ActivityRepository @Inject constructor(
                     kotlin.Result.failure(Exception("API Error: ${response.code()} — $errBody"))
                 }
             } catch (e: Exception) {
-                // กรณี Offline บันทึกแค่ Local และถือว่าสำเร็จ (จะ Sync ทีหลัง)
                 activityDao.insertActivity(activity)
                 kotlin.Result.success(Unit)
             }
@@ -82,7 +76,22 @@ class ActivityRepository @Inject constructor(
     suspend fun updateActivity(activityId: String, updates: Map<String, Any>): kotlin.Result<Unit> {
         return withContext(Dispatchers.IO) {
             try {
+                activityDao.getActivityById(activityId)?.let { local ->
+                    var updated = local
+                    if (updates.containsKey("plan_status")) {
+                        updated = updated.copy(status = updates["plan_status"] as String)
+                    }
+                    if (updates.containsKey("note")) {
+                        updated = updated.copy(weeklyNote = updates["note"] as? String)
+                    }
+                    if (updates.containsKey("topic")) {
+                        updated = updated.copy(detail = updates["topic"] as? String)
+                    }
+                    activityDao.insertActivity(updated)
+                }
+
                 val response = apiService.updateActivity("eq.$activityId", updates)
+                
                 if (response.isSuccessful) {
                     kotlin.Result.success(Unit)
                 } else {
@@ -266,14 +275,14 @@ class ActivityRepository @Inject constructor(
 
                 val response = apiService.updateActivity("eq.$activityId", updates)
                 activityDao.getActivityById(activityId)?.let {
-                    activityDao.insertActivity(it.copy(status = "completed"))
+                    activityDao.insertActivity(it.copy(status = "completed", weeklyNote = note))
                 }
 
                 if (response.isSuccessful) kotlin.Result.success(Unit)
                 else kotlin.Result.failure(Exception("HTTP ${response.code()}"))
             } catch (e: Exception) {
                 activityDao.getActivityById(activityId)?.let {
-                    activityDao.insertActivity(it.copy(status = "completed"))
+                    activityDao.insertActivity(it.copy(status = "completed", weeklyNote = note))
                 }
                 kotlin.Result.success(Unit)
             }
@@ -339,6 +348,49 @@ class ActivityRepository @Inject constructor(
                 kotlin.Result.success(Unit)
             } catch (e: Exception) {
                 activityDao.deleteActivityById(activityId)
+                kotlin.Result.success(Unit)
+            }
+        }
+    }
+
+    suspend fun getActivityResult(activityId: String): ActivityResult? {
+        return withContext(Dispatchers.IO) {
+            try {
+                // ดึง local ก่อน
+                val local = resultDao.getResultByActivityId(activityId)
+                if (local != null) return@withContext local
+
+                // fallback API
+                val resp = apiService.getActivityResult("eq.$activityId")
+                if (resp.isSuccessful && !resp.body().isNullOrEmpty()) {
+                    val result = resp.body()!!.first()
+                    resultDao.insertResult(result)
+                    result
+                } else null
+            } catch (e: Exception) {
+                resultDao.getResultByActivityId(activityId)
+            }
+        }
+    }
+
+    suspend fun saveActivityResult(result: ActivityResult): kotlin.Result<Unit> {
+        return withContext(Dispatchers.IO) {
+            try {
+                // บันทึก local ทันที
+                resultDao.insertResult(result)
+
+                // ตรวจว่ามีอยู่แล้วใน API ไหม → INSERT หรือ PATCH
+                val existing = apiService.getActivityResult("eq.${result.activityId}")
+                val apiResp = if (existing.isSuccessful && !existing.body().isNullOrEmpty()) {
+                    apiService.updateActivityResult("eq.${result.activityId}", result)
+                } else {
+                    apiService.insertActivityResult(result)
+                }
+
+                if (apiResp.isSuccessful) kotlin.Result.success(Unit)
+                else kotlin.Result.failure(Exception("HTTP ${apiResp.code()}: ${apiResp.errorBody()?.string()}"))
+            } catch (e: Exception) {
+                // offline → local saved แล้ว ถือว่าสำเร็จ
                 kotlin.Result.success(Unit)
             }
         }

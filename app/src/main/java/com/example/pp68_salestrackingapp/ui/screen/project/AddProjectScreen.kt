@@ -137,15 +137,6 @@ fun AddProjectContent(
                 )
             }
 
-//            // ── Branch ────────────────────────────────────────
-//            FormField("Branch") {
-//                FormTextField(
-//                    value         = uiState.branch,
-//                    onValueChange = { onEvent(AddProjectEvent.BranchChanged(it)) },
-//                    placeholder   = "branch"
-//                )
-//            }
-
             // ── Customer/Company * ────────────────────────────
             FormField("Customer/Company", required = true) {
                 if (uiState.isLoadingCustomers) LoadingFieldProject()
@@ -166,19 +157,62 @@ fun AddProjectContent(
 
             // ── Contact Person (กรองตาม customer) ────────────
             FormField("Contact Person") {
-                if (uiState.isLoadingContacts) LoadingFieldProject()
-                else DropdownField(
-                    value       = uiState.selectedContactName ?: "",
-                    placeholder = if (uiState.selectedCustomerId == null)
-                        "เลือก Customer ก่อน" else "Select a contact",
-                    options     = uiState.contactOptions.map { it.second },
-                    onSelect    = { idx ->
-                        onEvent(AddProjectEvent.ContactSelected(
-                            uiState.contactOptions[idx].first,
-                            uiState.contactOptions[idx].second
-                        ))
+                if (uiState.isLoadingContacts) {
+                    LoadingFieldProject()
+                } else if (uiState.contactOptions.isNotEmpty()) {
+                    MemberChipGrid(
+                        options     = uiState.contactOptions,
+                        selectedIds = uiState.selectedContactIds,
+                        onToggle    = { onEvent(AddProjectEvent.ContactToggled(it)) }
+                    )
+                } else {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(10.dp))
+                            .border(1.dp, AppColors.Border, RoundedCornerShape(10.dp))
+                            .background(AppColors.BgGray)
+                            .padding(14.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            if (uiState.selectedCustomerId == null) "เลือก Customer ก่อน" else "ไม่พบรายชื่อผู้ติดต่อ",
+                            color = AppColors.TextHint, fontSize = 14.sp
+                        )
                     }
-                )
+                }
+            }
+
+            // ── Branch/Team ────────────────────────────────────
+            FormField("สาขาที่รับผิดชอบ") {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    if (uiState.isLoadingTeams) LoadingFieldProject()
+                    else DropdownField(
+                        value       = uiState.selectedTeamName ?: "",
+                        placeholder = "เลือกสาขา",
+                        options     = uiState.teamOptions.map { it.second },
+                        onSelect    = { idx ->
+                            onEvent(AddProjectEvent.TeamSelected(
+                                uiState.teamOptions[idx].first,
+                                uiState.teamOptions[idx].second
+                            ))
+                        }
+                    )
+
+                    if (uiState.selectedTeamId != null) {
+                        if (uiState.isLoadingMembers) {
+                            LoadingFieldProject()
+                        } else if (uiState.teamMemberOptions.isNotEmpty()) {
+                            Text("เลือกสมาชิกที่รับผิดชอบ",
+                                fontSize = 12.sp, color = AppColors.TextSecondary)
+                            MemberChipGrid(
+                                options     = uiState.teamMemberOptions,
+                                selectedIds = uiState.selectedMemberIds,
+                                onToggle    = { onEvent(AddProjectEvent.MemberToggled(it)) }
+                            )
+                        }
+                    }
+                }
             }
 
             // ── Expected Value ────────────────────────────────
@@ -226,38 +260,6 @@ fun AddProjectContent(
                         onEvent(AddProjectEvent.StatusChanged(statusList[idx]))
                     }
                 )
-            }
-
-            // ── Sales Team ────────────────────────────────────
-            FormField("Sales Team") {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    if (uiState.isLoadingTeams) LoadingFieldProject()
-                    else DropdownField(
-                        value       = uiState.selectedTeamName ?: "",
-                        placeholder = "Select sales team",
-                        options     = uiState.teamOptions.map { it.second },
-                        onSelect    = { idx ->
-                            onEvent(AddProjectEvent.TeamSelected(
-                                uiState.teamOptions[idx].first,
-                                uiState.teamOptions[idx].second
-                            ))
-                        }
-                    )
-
-                    if (uiState.selectedTeamId != null) {
-                        if (uiState.isLoadingMembers) {
-                            LoadingFieldProject()
-                        } else if (uiState.teamMemberOptions.isNotEmpty()) {
-                            Text("เลือกสมาชิกที่รับผิดชอบ",
-                                fontSize = 12.sp, color = AppColors.TextSecondary)
-                            MemberChipGrid(
-                                options     = uiState.teamMemberOptions,
-                                selectedIds = uiState.selectedMemberIds,
-                                onToggle    = { onEvent(AddProjectEvent.MemberToggled(it)) }
-                            )
-                        }
-                    }
-                }
             }
 
             // ── Site Location + Google Maps ──────────────────
@@ -400,11 +402,11 @@ private fun MemberChipGrid(
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             options.chunked(3).forEach { row ->
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    row.forEach { (userId, name) ->
-                        val selected = userId in selectedIds
+                    row.forEach { (id, name) ->
+                        val selected = id in selectedIds
                         FilterChip(
                             selected = selected,
-                            onClick  = { onToggle(userId) },
+                            onClick  = { onToggle(id) },
                             label    = { Text(name, fontSize = 12.sp, maxLines = 1) },
                             colors   = FilterChipDefaults.filterChipColors(
                                 selectedContainerColor   = AppColors.Primary,
@@ -458,7 +460,7 @@ fun AddProjectScreenPreview() {
                 selectedCustomerName = "ACME Corp",
                 selectedCustomerId = "1",
                 contactOptions = listOf("c1" to "John Smith"),
-                selectedContactName = "John Smith",
+                selectedContactIds = setOf("c1"),
                 expectedValue = "1500000",
                 startDate = "2023-11-01",
                 closeDate = "2024-05-01",
