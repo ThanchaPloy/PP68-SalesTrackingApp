@@ -105,7 +105,7 @@ class ProjectRepository @Inject constructor(
         }
     }
 
-    suspend fun updateProject(project: Project): kotlin.Result<Unit> {
+    suspend fun updateProject(project: Project, updatedBy: String = ""): kotlin.Result<Unit> {
         return withContext(Dispatchers.IO) {
             try {
                 val progressPct = when (project.projectStatus) {
@@ -134,7 +134,7 @@ class ProjectRepository @Inject constructor(
                         projectId   = project.projectId,
                         newStatus   = project.projectStatus ?: "",
                         projectName = project.projectName,
-                        updatedBy   = ""
+                        updatedBy   = updatedBy
                     )
                     kotlin.Result.success(Unit)
                 } else {
@@ -148,7 +148,8 @@ class ProjectRepository @Inject constructor(
 
     suspend fun updateProjectFields(
         projectId: String,
-        fields: Map<String, String>
+        fields:    Map<String, String>,
+        updatedBy: String = ""
     ): Result<Unit> {
         return withContext(Dispatchers.IO) {
             try {
@@ -156,11 +157,20 @@ class ProjectRepository @Inject constructor(
                 if (response.isSuccessful) {
                     fields["project_status"]?.let { newStatus ->
                         val project = projectDao.getProjectById(projectId)
+                        // 1. อัปเดตสถานะล่าสุดในโหนดหลัก
                         firebaseService.updateProjectStatus(
                             projectId   = projectId,
                             newStatus   = newStatus,
                             projectName = project?.projectName ?: projectId,
-                            updatedBy   = ""
+                            updatedBy   = updatedBy
+                        )
+                        // 2. เพิ่ม log การเปลี่ยนแปลงสถานะเพื่อให้ Dashboard แสดง Feed ได้
+                        firebaseService.pushStatusChangeEvent(
+                            projectId   = projectId,
+                            projectName = project?.projectName ?: projectId,
+                            oldStatus   = project?.projectStatus ?: "N/A",
+                            newStatus   = newStatus,
+                            updatedBy   = updatedBy
                         )
                     }
                     Result.success(Unit)
@@ -196,7 +206,7 @@ class ProjectRepository @Inject constructor(
                     )
                 } else Result.success(emptyList())
             } catch (e: Exception) {
-                Result.failure(e)
+                Result.success(emptyList())
             }
         }
     }

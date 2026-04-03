@@ -277,18 +277,28 @@ private fun InfoCard(s: ActivityDetailUiState) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.size(40.dp).background(RedPrimary.copy(0.1f), CircleShape), contentAlignment = Alignment.Center) {
-                    Icon(Icons.Default.Work, null, tint = RedPrimary, modifier = Modifier.size(20.dp))
+                    Icon(Icons.Default.Topic, null, tint = RedPrimary, modifier = Modifier.size(20.dp))
                 }
                 Spacer(Modifier.width(12.dp))
                 Column {
-                    Text("ACTIVITY ID", fontSize = 10.sp, color = TextGray, fontWeight = FontWeight.Bold)
-                    Text(act.activityId, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                    Text("ACTIVITY TOPIC", fontSize = 10.sp, color = TextGray, fontWeight = FontWeight.Bold)
+                    Text(act.detail ?: "No Topic", fontWeight = FontWeight.Bold, fontSize = 16.sp)
                 }
             }
             HorizontalDivider(color = Color.LightGray.copy(0.3f))
-            DetailRow(Icons.AutoMirrored.Filled.Label, "Detail", act.detail ?: "No Detail")
-            DetailRow(Icons.Default.CalendarMonth, "Date", act.activityDate)
-            DetailRow(Icons.Default.AccessTime, "Type", act.activityType)
+            
+            DetailRow(Icons.Default.Person, "Contact", act.contactName ?: "N/A")
+            DetailRow(Icons.Default.Business, "Company", act.companyName ?: "N/A")
+            DetailRow(Icons.Default.Work, "Project", act.projectName ?: "N/A")
+            DetailRow(Icons.Default.CalendarToday, "Date", act.activityDate)
+            
+            val timeRange = if (!act.plannedTime.isNullOrBlank()) {
+                if (!act.plannedEndTime.isNullOrBlank()) "${act.plannedTime} - ${act.plannedEndTime}"
+                else act.plannedTime
+            } else "N/A"
+            DetailRow(Icons.Default.AccessTime, "Time", timeRange)
+            
+            DetailRow(Icons.Default.Category, "Type", act.activityType)
         }
     }
 }
@@ -314,7 +324,12 @@ fun ActivityDetailScreenPreview() {
         activityType = "Meeting",
         activityDate = "2023-10-27",
         detail = "Project Kick-off Meeting",
-        status = "planned"
+        status = "planned",
+        projectName = "Alpha Project",
+        companyName = "Example Corp",
+        contactName = "John Doe",
+        plannedTime = "10:00",
+        plannedEndTime = "11:30"
     )
     
     val samplePlanItems = listOf(

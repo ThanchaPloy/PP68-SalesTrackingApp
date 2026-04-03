@@ -187,11 +187,13 @@ class SalesResultViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.update { it.copy(isSaving = true, error = null) }
             val s = _uiState.value
+            val user = authRepo.currentUser()
+            val userName = user?.fullName ?: user?.userId ?: "Unknown User"
 
             // 1. บันทึก ActivityResult ลง Local DB + API
             val resultToSave = ActivityResult(
                 activityId             = s.activityId!!,
-                createdBy              = authRepo.currentUser()?.userId,
+                createdBy              = user?.userId,
                 reportDate             = s.reportDate,
                 newStatus              = if (s.isStatusUpdateEnabled) s.newStatus else null,
                 opportunityScore       = s.opportunityScore,
@@ -237,7 +239,11 @@ class SalesResultViewModel @Inject constructor(
                 s.opportunityScore?.let { pUpdates["opportunity_score"] = it }
 
                 if (pUpdates.isNotEmpty()) {
-                    projectRepo.updateProjectFields(s.projectId, pUpdates)
+                    projectRepo.updateProjectFields(
+                        projectId = s.projectId,
+                        fields    = pUpdates,
+                        updatedBy = userName
+                    )
                 }
             }
 
