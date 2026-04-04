@@ -55,7 +55,7 @@ fun ExportMenuScreen(
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text(
-                "เลือกประเภทการส่งรายงาน",
+                "เลือกประเภทการส่งออกรายงาน",
                 fontSize = 18.sp,
                 fontWeight = FontWeight.Bold,
                 color = Color(0xFF1A1A1A),
@@ -64,7 +64,7 @@ fun ExportMenuScreen(
 
             ExportMenuCard(
                 title = "รายงานรายสัปดาห์ (Weekly)",
-                subtitle = "สรุปการเข้าพบลูกค้าและแผนงานรายอาทิตย์",
+                subtitle = "สรุปการเข้าพบลูกค้าและแผนงานรายสัปดาห์",
                 icon = Icons.Default.CalendarViewWeek,
                 color = Color(0xFF1976D2),
                 onClick = onWeeklyClick
@@ -72,7 +72,7 @@ fun ExportMenuScreen(
 
             ExportMenuCard(
                 title = "รายงานรายเดือน (Monthly)",
-                subtitle = "สรุปผลการดำเนินงานรายเดือน",
+                subtitle = "สรุปผลการดำเนินงานและโครงการรายเดือน",
                 icon = Icons.Default.CalendarMonth,
                 color = Color(0xFFAE2138),
                 onClick = onMonthlyClick

@@ -32,6 +32,9 @@ interface ProjectDao {
     @Update
     suspend fun updateProject(project: Project)
 
+    @Query("DELETE FROM project WHERE projectId = :projectId")
+    suspend fun deleteProjectById(projectId: String)
+
     @Query("DELETE FROM project")
     suspend fun deleteAllProjects()
 

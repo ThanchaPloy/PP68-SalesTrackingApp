@@ -246,7 +246,7 @@ fun CheckInContent(
                     shape = CircleShape
                 ) {
                     if (isFetchingLocation) CircularProgressIndicator(modifier = Modifier.size(24.dp), color = RedPrimary, strokeWidth = 2.dp)
-                    else Icon(Icons.Default.MyLocation, "My Location")
+                    else Icon(Icons.Default.MyLocation, "ตำแหน่งของฉัน")
                 }
             }
 
@@ -277,7 +277,7 @@ fun CheckInContent(
                             Icon(Icons.Default.LocationOn, null, tint = RedPrimary, modifier = Modifier.size(20.dp))
                             Spacer(Modifier.width(12.dp))
                             Column {
-                                Text("Current Location", fontSize = 12.sp, color = TextGray)
+                                Text("ตำแหน่งปัจจุบัน", fontSize = 12.sp, color = TextGray)
                                 Text(
                                     if (currentLat != null && currentLng != null) "Lat: %.5f, Lng: %.5f".format(currentLat, currentLng)
                                     else "กำลังค้นหาตำแหน่ง...",
@@ -298,9 +298,9 @@ fun CheckInContent(
                                 )
                                 Spacer(Modifier.width(12.dp))
                                 Column {
-                                    Text("Distance from target", fontSize = 12.sp, color = TextGray)
+                                    Text("ระยะห่างจากจุดนัดหมาย", fontSize = 12.sp, color = TextGray)
                                     Text(
-                                        text = "${"%.0f".format(uiState.currentDistance)} meters",
+                                        text = "${"%.0f".format(uiState.currentDistance)} เมตร",
                                         fontSize = 14.sp, 
                                         fontWeight = FontWeight.Bold,
                                         color = if (uiState.isLocationMismatch) RedPrimary else Color(0xFF10B981)
@@ -333,7 +333,7 @@ fun CheckInContent(
                         enabled = currentLat != null && !uiState.isCheckingIn
                     ) {
                         if (uiState.isCheckingIn) CircularProgressIndicator(color = White, modifier = Modifier.size(24.dp))
-                        else Text("Confirm Check-in", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                        else Text("ยืนยันการเช็คอิน", fontWeight = FontWeight.Bold, fontSize = 16.sp)
                     }
                     
                     Spacer(Modifier.height(8.dp))

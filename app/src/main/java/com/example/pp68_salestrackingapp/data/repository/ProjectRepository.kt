@@ -146,6 +146,28 @@ class ProjectRepository @Inject constructor(
         }
     }
 
+    suspend fun deleteProject(projectId: String): Result<Unit> {
+        return withContext(Dispatchers.IO) {
+            try {
+                // 1. Delete relations first
+                apiService.deleteProjectMembers("eq.$projectId")
+                apiService.deleteProjectContacts("eq.$projectId")
+                
+                // 2. Delete project from remote
+                val response = apiService.deleteProject("eq.$projectId")
+                if (response.isSuccessful) {
+                    // 3. Delete from local
+                    projectDao.deleteProjectById(projectId)
+                    Result.success(Unit)
+                } else {
+                    Result.failure(Exception("HTTP ${response.code()}"))
+                }
+            } catch (e: Exception) {
+                Result.failure(e)
+            }
+        }
+    }
+
     suspend fun updateProjectFields(
         projectId: String,
         fields:    Map<String, String>,

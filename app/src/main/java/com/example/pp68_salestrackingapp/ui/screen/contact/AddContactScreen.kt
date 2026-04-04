@@ -107,13 +107,13 @@ fun AddContactContent(
         ) {
 
             // ── Select Company * ──────────────────────────────
-            FormField("Select Company", required = true) {
+            FormField("เลือกบริษัท", required = true) {
                 if (uiState.isLoadingCompanies) {
                     LoadingField()
                 } else {
                     DropdownField(
                         value       = uiState.selectedCompanyName ?: "",
-                        placeholder = "Choose customer company",
+                        placeholder = "เลือกบริษัทลูกค้า",
                         options     = uiState.companyOptions.map { it.second },
                         isError     = uiState.companyError != null,
                         errorMsg    = uiState.companyError,
@@ -128,14 +128,14 @@ fun AddContactContent(
             }
 
             // ── Select Project (กรองตาม company) ─────────────
-            FormField("Select Project  (Optional)") {
+            FormField("เลือกโครงการ (ไม่บังคับ)") {
                 if (uiState.isLoadingProjects) {
                     LoadingField()
                 } else {
                     DropdownField(
                         value       = uiState.selectedProjectName ?: "",
                         placeholder = if (uiState.selectedCompanyId == null)
-                            "เลือก Company ก่อน" else "Choose project",
+                            "เลือกบริษัทก่อน" else "เลือกโครงการ",
                         options     = uiState.projectOptions.map { it.second },
                         onSelect    = { idx ->
                             onEvent(AddContactEvent.ProjectSelected(
@@ -148,11 +148,11 @@ fun AddContactContent(
             }
 
             // ── Full Name * ───────────────────────────────────
-            FormField("Full Name", required = true) {
+            FormField("ชื่อ-นามสกุล", required = true) {
                 FormTextField(
                     value         = uiState.fullName,
                     onValueChange = { onEvent(AddContactEvent.FullNameChanged(it)) },
-                    placeholder   = "Enter full name",
+                    placeholder   = "กรอกชื่อ-นามสกุล",
                     leadingIcon   = Icons.Default.Person,
                     isError       = uiState.fullNameError != null,
                     errorMsg      = uiState.fullNameError
@@ -160,41 +160,41 @@ fun AddContactContent(
             }
 
             // ── Nickname (Optional) ───────────────────────────
-            FormField("Nickname  (Optional)") {
+            FormField("ชื่อเล่น (ไม่บังคับ)") {
                 FormTextField(
                     value         = uiState.nickname,
                     onValueChange = { onEvent(AddContactEvent.NicknameChanged(it)) },
-                    placeholder   = "Enter nickname"
+                    placeholder   = "กรอกชื่อเล่น"
                 )
             }
 
             // ── Position ──────────────────────────────────────
-            FormField("Position") {
+            FormField("ตำแหน่ง") {
                 FormTextField(
                     value         = uiState.position,
                     onValueChange = { onEvent(AddContactEvent.PositionChanged(it)) },
-                    placeholder   = "e.g., Sales Manager, CEO",
+                    placeholder   = "เช่น ผู้จัดการฝ่ายขาย, CEO",
                     leadingIcon   = Icons.Default.Work
                 )
             }
 
             // ── Mobile Number ─────────────────────────────────
-            FormField("Mobile Number") {
+            FormField("เบอร์โทรศัพท์มือถือ") {
                 FormTextField(
                     value         = uiState.phoneNum,
                     onValueChange = { onEvent(AddContactEvent.PhoneChanged(it)) },
-                    placeholder   = "e.g., 06x-xxx-xxxx",
+                    placeholder   = "เช่น 06x-xxx-xxxx",
                     leadingIcon   = Icons.Default.Phone,
                     keyboardType  = KeyboardType.Phone
                 )
             }
 
             // ── Email ─────────────────────────────────────────
-            FormField("Email") {
+            FormField("อีเมล") {
                 FormTextField(
                     value         = uiState.email,
                     onValueChange = { onEvent(AddContactEvent.EmailChanged(it)) },
-                    placeholder   = "Enter Email",
+                    placeholder   = "กรอกอีเมล",
                     leadingIcon   = Icons.Default.Email,
                     keyboardType  = KeyboardType.Email,
                     isError       = uiState.emailError != null,
@@ -203,11 +203,11 @@ fun AddContactContent(
             }
 
             // ── Line ID (Optional) ────────────────────────────
-            FormField("Line ID  (Optional)") {
+            FormField("Line ID (ไม่บังคับ)") {
                 FormTextField(
                     value         = uiState.lineId,
                     onValueChange = { onEvent(AddContactEvent.LineIdChanged(it)) },
-                    placeholder   = "Enter Line ID",
+                    placeholder   = "กรอก Line ID",
                     leadingIcon   = Icons.Default.Chat
                 )
             }
@@ -232,7 +232,7 @@ fun AddContactContent(
                     )
                 )
                 Column {
-                    Text("Is Decision Maker?", fontSize = 14.sp,
+                    Text("เป็นผู้ตัดสินใจ?", fontSize = 14.sp,
                         fontWeight = FontWeight.SemiBold, color = TextDark)
                     Text(
                         if (uiState.isDecisionMaker) "ผู้ติดต่อนี้เป็นผู้ตัดสินใจหลัก"
@@ -262,7 +262,7 @@ fun AddContactContent(
                     )
                 )
                 Column {
-                    Text("Is Active?", fontSize = 14.sp,
+                    Text("ใช้งานอยู่?", fontSize = 14.sp,
                         fontWeight = FontWeight.SemiBold, color = TextDark)
                     Text(
                         if (uiState.isActive) "ผู้ติดต่อนี้ยังใช้งานอยู่"
@@ -292,7 +292,7 @@ fun AddContactContent(
                         color = White, modifier = Modifier.size(20.dp), strokeWidth = 2.dp
                     )
                 } else {
-                    Text(if (uiState.contactId != null) "Update Contact" else "Save Contact", fontSize = 16.sp,
+                    Text(if (uiState.contactId != null) "อัปเดตข้อมูลผู้ติดต่อ" else "บันทึกข้อมูลผู้ติดต่อ", fontSize = 16.sp,
                         fontWeight = FontWeight.SemiBold, color = White)
                 }
             }

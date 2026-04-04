@@ -1,13 +1,17 @@
 package com.example.pp68_salestrackingapp.ui.viewmodels.activity
 
+import android.content.Context
+import android.net.Uri
+import android.util.Log
+import androidx.exifinterface.media.ExifInterface
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.pp68_salestrackingapp.data.model.ActivityResult
+import com.example.pp68_salestrackingapp.data.model.Project
 import com.example.pp68_salestrackingapp.data.repository.ActivityRepository
 import com.example.pp68_salestrackingapp.data.repository.AuthRepository
 import com.example.pp68_salestrackingapp.data.repository.ProjectRepository
-import com.example.pp68_salestrackingapp.data.model.Project
-import com.example.pp68_salestrackingapp.data.model.ActivityResult
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -36,7 +40,15 @@ data class SalesResultUiState(
     val isLoading: Boolean = false,
     val isSaving: Boolean = false,
     val isSaved: Boolean = false,
-    val error: String? = null
+    val error: String? = null,
+    val photoUri: Uri? = null,
+    val photoUrl: String? = null,
+    val isUploadingPhoto: Boolean = false,
+    // EXIF data
+    val photoTakenAt: String? = null,
+    val photoLat: Double? = null,
+    val photoLng: Double? = null,
+    val photoDeviceModel: String? = null
 )
 
 @HiltViewModel
@@ -104,10 +116,31 @@ class SalesResultViewModel @Inject constructor(
             "ช้าหรือเงียบ"   to "slow_silent"
         )
 
+        val STATUS_MAP = mapOf(
+            "Lead"             to "Lead",
+            "New Project"     to "New Project",
+            "Quotation"         to "Quotation",
+            "Bidding"         to "Bidding",
+            "Decision Making"  to "Make a Decision",
+            "Assured"        to "Assured",
+            "PO"           to "PO",
+            "Lost"              to "Lost",
+            "Failed"        to "Failed"
+        )
+
+        val OPPORTUNITY_MAP = mapOf(
+            "สูง (HOT)"  to "HOT",
+            "กลาง (WARM)" to "WARM",
+            "ต่ำ (COLD)"  to "COLD"
+        )
+
         val DEAL_POSITION_REVERSE    = DEAL_POSITION_MAP.entries.associate { (k, v) -> v to k }
         val SOLUTION_REVERSE         = SOLUTION_MAP.entries.associate { (k, v) -> v to k }
         val COUNTERPARTY_REVERSE     = COUNTERPARTY_MAP.entries.associate { (k, v) -> v to k }
         val RESPONSE_SPEED_REVERSE   = RESPONSE_SPEED_MAP.entries.associate { (k, v) -> v to k }
+        
+        val STATUS_REVERSE           = STATUS_MAP.entries.associate { (k, v) -> v to k }
+        val OPPORTUNITY_REVERSE      = OPPORTUNITY_MAP.entries.associate { (k, v) -> v to k }
     }
 
     private fun loadActivityData(aId: String) {
@@ -133,9 +166,9 @@ class SalesResultViewModel @Inject constructor(
                 _uiState.update {
                     it.copy(
                         reportDate             = result.reportDate ?: it.reportDate,
-                        newStatus              = result.newStatus ?: "",
+                        newStatus              = STATUS_REVERSE[result.newStatus] ?: result.newStatus ?: "",
                         isStatusUpdateEnabled  = !result.newStatus.isNullOrBlank(),
-                        opportunityScore       = result.opportunityScore ?: it.opportunityScore,
+                        opportunityScore       = OPPORTUNITY_REVERSE[result.opportunityScore] ?: result.opportunityScore ?: it.opportunityScore,
                         dealPosition           = DEAL_POSITION_REVERSE[result.dealPosition] ?: result.dealPosition ?: "",
                         previousSolution       = SOLUTION_REVERSE[result.previousSolution] ?: result.previousSolution ?: "",
                         counterpartyMultiplier = COUNTERPARTY_REVERSE[result.counterpartyMultiplier] ?: result.counterpartyMultiplier ?: "",
@@ -143,7 +176,12 @@ class SalesResultViewModel @Inject constructor(
                         isProposalSent         = result.isProposalSent,
                         proposalDate           = result.proposalDate,
                         competitorCount        = result.competitorCount,
-                        visitSummary           = result.summary ?: ""
+                        visitSummary           = result.summary ?: "",
+                        photoUrl               = result.photoUrl,
+                        photoTakenAt           = result.photoTakenAt,
+                        photoLat               = result.photoLat,
+                        photoLng               = result.photoLng,
+                        photoDeviceModel       = result.photoDeviceModel
                     )
                 }
             }
@@ -160,6 +198,38 @@ class SalesResultViewModel @Inject constructor(
     fun onCounterpartyMultiplierChanged(v: String){ _uiState.update { it.copy(counterpartyMultiplier = v) } }
     fun onResponseSpeedChanged(value: String)     { _uiState.update { it.copy(responseSpeed = value) } }
     fun onProposalToggle(sent: Boolean)           { _uiState.update { it.copy(isProposalSent = sent) } }
+
+    fun onPhotoPicked(context: Context, uri: Uri) {
+        _uiState.update { it.copy(photoUri = uri, photoUrl = null) }
+        extractExifData(context, uri)
+    }
+
+    private fun extractExifData(context: Context, uri: Uri) {
+        try {
+            context.contentResolver.openInputStream(uri)?.use { inputStream ->
+                val exif = ExifInterface(inputStream)
+                val dateTaken = exif.getAttribute(ExifInterface.TAG_DATETIME)
+                val deviceModel = exif.getAttribute(ExifInterface.TAG_MODEL)
+                
+                val latLong = FloatArray(2)
+                val hasGps = exif.getLatLong(latLong)
+                val lat = if (hasGps) latLong[0].toDouble() else null
+                val lng = if (hasGps) latLong[1].toDouble() else null
+
+                _uiState.update {
+                    it.copy(
+                        photoTakenAt = dateTaken,
+                        photoLat = lat,
+                        photoLng = lng,
+                        photoDeviceModel = deviceModel
+                    )
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("SalesResult", "Error extracting EXIF: ${e.message}")
+        }
+    }
+
     fun onProposalDateChanged(date: String)       { _uiState.update { it.copy(proposalDate = date) } }
     fun onCompetitorCountChanged(delta: Int)      {
         _uiState.update { it.copy(competitorCount = (it.competitorCount + delta).coerceAtLeast(0)) }
@@ -190,64 +260,135 @@ class SalesResultViewModel @Inject constructor(
             val user = authRepo.currentUser()
             val userName = user?.fullName ?: user?.userId ?: "Unknown User"
 
-            // 1. บันทึก ActivityResult ลง Local DB + API
-            val resultToSave = ActivityResult(
-                activityId             = s.activityId!!,
-                createdBy              = user?.userId,
-                reportDate             = s.reportDate,
-                newStatus              = if (s.isStatusUpdateEnabled) s.newStatus else null,
-                opportunityScore       = s.opportunityScore,
-                dealPosition           = DEAL_POSITION_MAP[s.dealPosition] ?: s.dealPosition.ifBlank { null },
-                previousSolution       = SOLUTION_MAP[s.previousSolution] ?: s.previousSolution.ifBlank { null },
-                counterpartyMultiplier = COUNTERPARTY_MAP[s.counterpartyMultiplier] ?: s.counterpartyMultiplier.ifBlank { null },
-                responseSpeed          = RESPONSE_SPEED_MAP[s.responseSpeed] ?: s.responseSpeed.ifBlank { null },
-                isProposalSent         = s.isProposalSent,
-                proposalDate           = s.proposalDate,
-                competitorCount        = s.competitorCount,
-                summary                = s.visitSummary
-            )
-
-            val saveResult = activityRepo.saveActivityResult(resultToSave)
-            if (saveResult.isFailure) {
-                _uiState.update {
-                    it.copy(isSaving = false, error = "บันทึกผลไม่สำเร็จ: ${saveResult.exceptionOrNull()?.message}")
-                }
-                return@launch
-            }
-
-            // 2. อัปเดต appointment → plan_status = completed + note
-            val actResult = activityRepo.updateActivity(
-                s.activityId!!,
-                mapOf<String, Any>(
-                    "plan_status" to "completed",
-                    "note"        to s.visitSummary
+            try {
+                // 1. บันทึก ActivityResult ลง Local DB + API
+                val resultToSave = ActivityResult(
+                    activityId             = s.activityId!!,
+                    createdBy              = user?.userId,
+                    reportDate             = s.reportDate,
+                    newStatus              = if (s.isStatusUpdateEnabled) STATUS_MAP[s.newStatus] ?: s.newStatus.ifBlank { null } else null,
+                    opportunityScore       = OPPORTUNITY_MAP[s.opportunityScore] ?: s.opportunityScore,
+                    dealPosition           = DEAL_POSITION_MAP[s.dealPosition] ?: s.dealPosition.ifBlank { null },
+                    previousSolution       = SOLUTION_MAP[s.previousSolution] ?: s.previousSolution.ifBlank { null },
+                    counterpartyMultiplier = COUNTERPARTY_MAP[s.counterpartyMultiplier] ?: s.counterpartyMultiplier.ifBlank { null },
+                    responseSpeed          = RESPONSE_SPEED_MAP[s.responseSpeed] ?: s.responseSpeed.ifBlank { null },
+                    isProposalSent         = s.isProposalSent,
+                    proposalDate           = s.proposalDate,
+                    competitorCount        = s.competitorCount,
+                    summary                = s.visitSummary,
+                    photoUrl               = s.photoUrl,
+                    photoTakenAt           = s.photoTakenAt,
+                    photoLat               = s.photoLat,
+                    photoLng               = s.photoLng,
+                    photoDeviceModel       = s.photoDeviceModel
                 )
-            )
-            if (actResult.isFailure) {
-                _uiState.update {
-                    it.copy(isSaving = false, error = "อัปเดตนัดหมายไม่สำเร็จ: ${actResult.exceptionOrNull()?.message}")
-                }
-                return@launch
-            }
 
-            // 3. อัปเดต project status/score (ถ้าเปิด toggle หรือมี score)
-            if (!s.projectId.isNullOrBlank()) {
-                val pUpdates = mutableMapOf<String, String>()
-                if (s.isStatusUpdateEnabled && s.newStatus.isNotBlank()) {
-                    pUpdates["project_status"] = s.newStatus
+                // บันทึก Local และพยายามส่ง API
+                val saveResult = activityRepo.saveActivityResult(resultToSave)
+                if (saveResult.isFailure) {
+                    val msg = saveResult.exceptionOrNull()?.message ?: "Unknown Error"
+                    if (!msg.contains("PGRST204")) {
+                         Log.e("SalesResult", "Sync ActivityResult failed: $msg")
+                    }
                 }
-                s.opportunityScore?.let { pUpdates["opportunity_score"] = it }
 
-                if (pUpdates.isNotEmpty()) {
-                    projectRepo.updateProjectFields(
-                        projectId = s.projectId,
-                        fields    = pUpdates,
-                        updatedBy = userName
+                // 2. อัปเดต appointment → plan_status = completed + note (พยายามทำ แต่อย่าให้ขวางการเซฟ)
+                try {
+                    activityRepo.updateActivity(
+                        s.activityId!!,
+                        mapOf<String, Any>(
+                            "plan_status" to "completed",
+                            "note"        to s.visitSummary
+                        )
                     )
+                } catch (e: Exception) {
+                    Log.e("SalesResult", "Update Activity failed: ${e.message}")
+                }
+
+                // 3. อัปเดต project status/score (พยายามทำ แต่อย่าให้ขวางการเซฟ)
+                if (!s.projectId.isNullOrBlank()) {
+                    try {
+                        val pUpdates = mutableMapOf<String, String>()
+                        if (s.isStatusUpdateEnabled && s.newStatus.isNotBlank()) {
+                            pUpdates["project_status"] = STATUS_MAP[s.newStatus] ?: s.newStatus
+                        }
+                        s.opportunityScore?.let { 
+                            pUpdates["opportunity_score"] = OPPORTUNITY_MAP[it] ?: it
+                        }
+
+                        if (pUpdates.isNotEmpty()) {
+                            projectRepo.updateProjectFields(
+                                projectId = s.projectId,
+                                fields    = pUpdates,
+                                updatedBy = userName
+                            )
+                        }
+                    } catch (e: Exception) {
+                        Log.e("SalesResult", "Update Project failed: ${e.message}")
+                    }
+                }
+
+                // ถ้ามาถึงตรงนี้ ถือว่าบันทึก Local สำเร็จแน่นอนแล้ว
+                _uiState.update { it.copy(isSaving = false, isSaved = true) }
+
+            } catch (e: Exception) {
+                _uiState.update { 
+                    it.copy(isSaving = false, error = "เกิดข้อผิดพลาดในการบันทึก: ${e.message}") 
                 }
             }
+        }
+    }
 
-            _uiState.update { it.copy(isSaving = false, isSaved = true) }
+
+    fun uploadPhoto(context: Context) {
+        val uri = _uiState.value.photoUri ?: return
+        val activityId = _uiState.value.activityId ?: return
+
+        viewModelScope.launch {
+            _uiState.update { it.copy(isUploadingPhoto = true, error = null) }
+            try {
+                val bytes = context.contentResolver
+                    .openInputStream(uri)?.readBytes()
+                    ?: throw Exception("ไม่สามารถอ่านไฟล์รูปได้")
+
+                val result = activityRepo.uploadVisitPhoto(activityId, bytes)
+                result.onSuccess { url ->
+                    _uiState.update { it.copy(photoUrl = url, isUploadingPhoto = false) }
+                    
+                    // --- บันทึกลงฐานข้อมูลทันทีหลังจากอัปโหลดสำเร็จ ---
+                    val s = _uiState.value
+                    val user = authRepo.currentUser()
+                    val resultToUpdate = ActivityResult(
+                        activityId             = s.activityId!!,
+                        createdBy              = user?.userId,
+                        reportDate             = s.reportDate,
+                        newStatus              = if (s.isStatusUpdateEnabled) STATUS_MAP[s.newStatus] ?: s.newStatus.ifBlank { null } else null,
+                        opportunityScore       = OPPORTUNITY_MAP[s.opportunityScore] ?: s.opportunityScore,
+                        dealPosition           = DEAL_POSITION_MAP[s.dealPosition] ?: s.dealPosition.ifBlank { null },
+                        previousSolution       = SOLUTION_MAP[s.previousSolution] ?: s.previousSolution.ifBlank { null },
+                        counterpartyMultiplier = COUNTERPARTY_MAP[s.counterpartyMultiplier] ?: s.counterpartyMultiplier.ifBlank { null },
+                        responseSpeed          = RESPONSE_SPEED_MAP[s.responseSpeed] ?: s.responseSpeed.ifBlank { null },
+                        isProposalSent         = s.isProposalSent,
+                        proposalDate           = s.proposalDate,
+                        competitorCount        = s.competitorCount,
+                        summary                = s.visitSummary,
+                        photoUrl               = url, // ใช้ URL ใหม่ที่ได้จากการอัปโหลด
+                        photoTakenAt           = s.photoTakenAt,
+                        photoLat               = s.photoLat,
+                        photoLng               = s.photoLng,
+                        photoDeviceModel       = s.photoDeviceModel
+                    )
+                    
+                    // เรียก saveActivityResult เพื่อบันทึกลง Local และพยายาม Sync
+                    activityRepo.saveActivityResult(resultToUpdate)
+                    // ----------------------------------------------------
+
+                }.onFailure { e ->
+                    _uiState.update { it.copy(error = "อัปโหลดรูปไม่สำเร็จ: ${e.message}", isUploadingPhoto = false) }
+                }
+            } catch (e: Exception) {
+                _uiState.update { it.copy(error = "อัปโหลดรูปไม่สำเร็จ: ${e.message}", isUploadingPhoto = false) }
+            }
         }
     }
 }

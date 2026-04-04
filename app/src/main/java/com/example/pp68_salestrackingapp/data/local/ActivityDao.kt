@@ -48,4 +48,10 @@ interface ActivityDao {
 
     @Query("DELETE FROM activity_table WHERE appointment_id = :activityId")
     suspend fun deleteActivityById(activityId: String)
+
+    @Query("DELETE FROM activity_table WHERE project_id = :projectId")
+    suspend fun deleteActivitiesByProjectId(projectId: String)
+
+    @Query("DELETE FROM activity_table WHERE cust_id = :customerId")
+    suspend fun deleteActivitiesByCustomerId(customerId: String)
 }

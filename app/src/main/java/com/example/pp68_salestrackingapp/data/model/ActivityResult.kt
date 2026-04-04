@@ -66,5 +66,25 @@ data class ActivityResult(
 
     @ColumnInfo(name = "note_summary")
     @SerializedName("note_summary")
-    val summary: String? = null
+    val summary: String? = null,
+
+    @ColumnInfo(name = "photo_url")
+    @SerializedName("photo_url")
+    val photoUrl: String? = null,
+
+    @ColumnInfo(name = "photo_taken_at")
+    @SerializedName("photo_taken_at")
+    val photoTakenAt: String? = null,
+
+    @ColumnInfo(name = "photo_lat")
+    @SerializedName("photo_lat")
+    val photoLat: Double? = null,
+
+    @ColumnInfo(name = "photo_lng")
+    @SerializedName("photo_lng")
+    val photoLng: Double? = null,
+
+    @ColumnInfo(name = "photo_device_model")
+    @SerializedName("photo_device_model")
+    val photoDeviceModel: String? = null
 )

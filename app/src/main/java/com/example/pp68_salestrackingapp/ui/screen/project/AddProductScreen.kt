@@ -80,7 +80,7 @@ fun AddProductContent(
                 },
                 actions = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.Default.Close, "Close", tint = AppColors.TextSecondary)
+                        Icon(Icons.Default.Close, "ปิด", tint = AppColors.TextSecondary)
                     }
                 },
                 colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = Color.White)
@@ -101,21 +101,21 @@ fun AddProductContent(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Icon(Icons.Default.Inventory, null, tint = AppColors.Primary, modifier = Modifier.size(18.dp))
-                Text("PRODUCT INFO", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = AppColors.TextSecondary)
+                Text("ข้อมูลสินค้า", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = AppColors.TextSecondary)
             }
 
             // Form Fields
             val brands = s.products.map { it.brand }.distinct().filter { it.isNotBlank() }
-            FormField(label = "Product Brand") {
+            FormField(label = "แบรนด์สินค้า") {
                 DropdownField(
                     value = s.selectedBrand,
-                    placeholder = if (s.isLoading) "Loading..." else "เลือกแบรนด์สินค้า",
+                    placeholder = if (s.isLoading) "กำลังโหลด..." else "เลือกแบรนด์สินค้า",
                     options = brands,
                     onSelect = { onBrandSelected(brands[it]) }
                 )
             }
 
-            FormField(label = "Product Name") {
+            FormField(label = "ชื่อสินค้า") {
                 DropdownField(
                     value = s.selectedProductName,
                     placeholder = if (s.selectedBrand.isBlank()) "กรุณาเลือกแบรนด์ก่อน" else "เลือกชื่อสินค้า",
@@ -124,7 +124,7 @@ fun AddProductContent(
                 )
             }
 
-            FormField(label = "Product Group") {
+            FormField(label = "กลุ่มสินค้า") {
                 FormTextField(
                     value = s.selectedGroup,
                     onValueChange = {},
@@ -133,7 +133,7 @@ fun AddProductContent(
                 )
             }
 
-            FormField(label = "Product Subgroup") {
+            FormField(label = "กลุ่มย่อยสินค้า") {
                 FormTextField(
                     value = s.selectedSubgroup,
                     onValueChange = {},
@@ -146,7 +146,7 @@ fun AddProductContent(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                FormField(label = "QTY", modifier = Modifier.weight(1f)) {
+                FormField(label = "จำนวน", modifier = Modifier.weight(1f)) {
                     FormTextField(
                         value = s.quantity,
                         onValueChange = onQuantityChange,
@@ -154,7 +154,7 @@ fun AddProductContent(
                         keyboardType = KeyboardType.Number
                     )
                 }
-                FormField(label = "Unit", modifier = Modifier.weight(1f)) {
+                FormField(label = "หน่วย", modifier = Modifier.weight(1f)) {
                     FormTextField(
                         value = s.unit,
                         onValueChange = {},
@@ -164,10 +164,10 @@ fun AddProductContent(
                 }
             }
 
-            FormField(label = "Customer Wanted Date") {
+            FormField(label = "วันที่ลูกค้าต้องการ") {
                 DatePickerField(
                     selectedDate = s.wantedDate,
-                    placeholder = "Select Delivery Date",
+                    placeholder = "เลือกวันที่ส่งมอบ",
                     onDateSelected = onDateSelected
                 )
             }
@@ -194,7 +194,7 @@ fun AddProductContent(
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         Icon(Icons.Default.CheckCircle, null, modifier = Modifier.size(20.dp))
-                        Text("Save Product", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                        Text("บันทึกสินค้า", fontWeight = FontWeight.Bold, fontSize = 16.sp)
                     }
                 }
             }
@@ -203,7 +203,7 @@ fun AddProductContent(
                 onClick = onBack,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text("Cancel", color = AppColors.TextSecondary, fontWeight = FontWeight.Medium)
+                Text("ยกเลิก", color = AppColors.TextSecondary, fontWeight = FontWeight.Medium)
             }
 
             if (s.error != null) {

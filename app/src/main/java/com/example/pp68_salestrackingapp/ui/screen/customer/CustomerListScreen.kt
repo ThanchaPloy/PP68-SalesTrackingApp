@@ -97,7 +97,7 @@ fun CustomerListContent(
         },
         bottomBar = { BottomNavBar(currentTab = currentTab, onTabChange = onTabChange) },
         floatingActionButton = {
-            AddFloatingActionButton(onClick = onAddClick, contentDescription = "Add Customer")
+            AddFloatingActionButton(onClick = onAddClick, contentDescription = "เพิ่มลูกค้า")
         },
         containerColor = Color(0xFFF5F5F5)
     ) { padding ->
@@ -105,7 +105,7 @@ fun CustomerListContent(
             Spacer(Modifier.height(12.dp))
             OutlinedTextField(
                 value = searchQuery, onValueChange = onSearchChange,
-                placeholder = { Text("Search companies...", color = Color.Gray, fontSize = 14.sp) },
+                placeholder = { Text("ค้นหาบริษัท...", color = Color.Gray, fontSize = 14.sp) },
                 leadingIcon = { Icon(Icons.Default.Search, null, tint = Color.Gray) },
                 trailingIcon = {
                     if (searchQuery.isNotEmpty()) {
@@ -192,7 +192,7 @@ fun CustomerListItem(customer: Customer, onClick: () -> Unit) {
                     )
                     if (!customer.branch.isNullOrBlank()) {
                         Text(
-                            "Branch: ${customer.branch}",
+                            "สาขา: ${customer.branch}",
                             color = Color.Gray,
                             fontSize = 13.sp
                         )

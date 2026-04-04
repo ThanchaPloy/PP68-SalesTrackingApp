@@ -98,7 +98,7 @@ private fun CreateAppointmentContent(
                     Spacer(Modifier.weight(1f))
                     TextButton(onClick = { onEvent(CreateAppointmentEvent.Save) }) {
                         Text("Save", color = RedPrimary,
-                            fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+                            fontWeight = FontWeight.Bold, fontSize = 15.sp)
                     }
                 }
             }
@@ -114,10 +114,10 @@ private fun CreateAppointmentContent(
             verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
 
-            FieldSection("PROJECT SELECTION") {
+            FieldSection("เลือกโครงการ") {
                 AppDropdown(
                     value        = state.selectedProjectName ?: "",
-                    placeholder  = "Select Project",
+                    placeholder  = "เลือกโครงการ",
                     icon         = Icons.Default.Work,
                     options      = state.projectOptions.map { it.name },
                     isLoading    = state.isLoadingProjects,
@@ -134,18 +134,18 @@ private fun CreateAppointmentContent(
                 )
             }
 
-            FieldSection("TITLE TOPIC") {
+            FieldSection("หัวข้อกิจกรรม") {
                 AppTextField(
                     value         = state.titleTopic,
                     onValueChange = { onEvent(CreateAppointmentEvent.TitleChanged(it)) },
-                    placeholder   = "enter title of activity",
+                    placeholder   = "ระบุหัวข้อกิจกรรม",
                     icon          = Icons.AutoMirrored.Filled.Label
                 )
             }
 
-            FieldSection("CONTACT PERSON") {
+            FieldSection("ผู้ติดต่อ") {
                 if (state.selectedProjectId == null) {
-                    AppDropdownDisabled("เลือก Project ก่อน")
+                    AppDropdownDisabled("เลือกโครงการก่อน")
                 } else if (state.isLoadingContacts) {
                     CircularProgressIndicator(color = RedPrimary, modifier = Modifier.size(24.dp))
                 } else if (state.contactOptions.isEmpty()) {
@@ -176,14 +176,14 @@ private fun CreateAppointmentContent(
                 }
             }
 
-            FieldSection("ACTIVITY TYPE") {
+            FieldSection("ประเภทกิจกรรม") {
                 ActivityTypeToggle(
                     selected = state.activityType,
                     onSelect = { onEvent(CreateAppointmentEvent.TypeChanged(it)) }
                 )
             }
 
-            FieldSection("SCHEDULE") {
+            FieldSection("กำหนดการ") {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     DateRow(
                         selectedDate   = state.plannedDate,
@@ -194,13 +194,13 @@ private fun CreateAppointmentContent(
                         horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
                         TimeBox(
-                            label    = "START",
+                            label    = "เริ่ม",
                             time     = state.startTime ?: "09:00 AM",
                             modifier = Modifier.weight(1f),
                             onClick  = { onEvent(CreateAppointmentEvent.ShowStartTimePicker) }
                         )
                         TimeBox(
-                            label    = "END",
+                            label    = "สิ้นสุด",
                             time     = state.endTime ?: "10:30 AM",
                             modifier = Modifier.weight(1f),
                             onClick  = { onEvent(CreateAppointmentEvent.ShowEndTimePicker) }
@@ -210,7 +210,7 @@ private fun CreateAppointmentContent(
             }
 
             FieldSection(
-                label = "OBJECTIVE",
+                label = "วัตถุประสงค์/เป้าหมายกิจกรรม",
                 trailing = {
                     if (state.selectedMasterIds.isNotEmpty()) {
                         Badge(containerColor = RedPrimary) {
@@ -222,7 +222,7 @@ private fun CreateAppointmentContent(
                 when {
                     // ✅ ยังไม่เลือก project
                     state.selectedProjectId == null -> {
-                        AppDropdownDisabled("เลือก Project ก่อน")
+                        AppDropdownDisabled("เลือกโครงการก่อน")
                     }
 
                     // กำลังโหลด
@@ -239,7 +239,7 @@ private fun CreateAppointmentContent(
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
-                                "ไม่มีกิจกรรมในสเตจนี้",
+                                "ไม่มีกิจกรรมในขั้นตอนนี่",
                                 color    = TextGray,
                                 fontSize = 13.sp
                             )
@@ -295,7 +295,7 @@ private fun CreateAppointmentContent(
                 }
             }
 
-            FieldSection("LOCATION") {
+            FieldSection("สถานที่") {
                 GoogleMapPickerField(
                     lat = state.lat ?: 13.7563,
                     lng = state.lng ?: 100.5018,
@@ -323,7 +323,7 @@ private fun CreateAppointmentContent(
                     Icon(if (activityId == null) Icons.Default.Add else Icons.Default.Save, null, tint = White,
                         modifier = Modifier.size(20.dp))
                     Spacer(Modifier.width(8.dp))
-                    Text(if (activityId == null) "Create Appointment" else "Save Changes", fontSize = 16.sp,
+                    Text(if (activityId == null) "สร้างการนัดหมาย" else "บันทึกการแก้ไข", fontSize = 16.sp,
                         fontWeight = FontWeight.SemiBold, color = White)
                 }
             }
@@ -478,9 +478,9 @@ private fun ActivityTypeToggle(
     onSelect: (String) -> Unit
 ) {
     val types = listOf(
-        "onsite" to Pair(Icons.Default.Store,    "Onsite"),
-        "online" to Pair(Icons.Default.Videocam, "Online"),
-        "call"   to Pair(Icons.Default.Call,     "Call")
+        "onsite" to Pair(Icons.Default.Store,    "เข้าพบลูกค้า"),
+        "online" to Pair(Icons.Default.Videocam, "ออนไลน์"),
+        "call"   to Pair(Icons.Default.Call,     "โทรศัพท์")
     )
     Row(
         modifier = Modifier
@@ -523,7 +523,7 @@ private fun ActivityTypeToggle(
                     Icon(icon, null,
                         tint     = if (isSelected) RedPrimary else TextGray,
                         modifier = Modifier.size(16.dp))
-                    Text(label, fontSize = 13.sp,
+                    Text(label, fontSize = 12.sp,
                         fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
                         color      = if (isSelected) TextDark else TextGray)
                 }
@@ -553,7 +553,7 @@ private fun DateRow(selectedDate: String?, onDateSelected: (String) -> Unit) {
             Icon(Icons.Default.CalendarMonth, null,
                 tint = RedPrimary, modifier = Modifier.size(20.dp))
             Text(
-                text     = selectedDate ?: "Select date",
+                text     = selectedDate ?: "เลือกวันที่",
                 color    = if (selectedDate == null) TextGray else TextDark,
                 fontSize = 14.sp, modifier = Modifier.weight(1f)
             )

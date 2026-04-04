@@ -54,8 +54,15 @@ fun CustomerDetailScreen(
     val activeProjects by viewModel.activeProjects.collectAsState()
     val closedProjects by viewModel.closedProjects.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
+    val deleteSuccess by viewModel.deleteSuccess.collectAsState()
 
     LaunchedEffect(custId) { viewModel.load(custId) }
+
+    LaunchedEffect(deleteSuccess) {
+        if (deleteSuccess) {
+            onBack()
+        }
+    }
 
     CustomerDetailScreenContent(
         customer = customer,
@@ -66,6 +73,8 @@ fun CustomerDetailScreen(
         onBack = onBack,
         onEditCustomer = onEditCustomer,
         onEditContact = onEditContact,
+        onDeleteCustomer = { viewModel.deleteCustomer() },
+        onDeleteContact = { viewModel.deleteContact(it) },
         onProjectClick = onProjectClick,
         onNotificationClick = onNotificationClick,
         onSettingsClick = onSettingsClick,
@@ -87,6 +96,8 @@ fun CustomerDetailScreenContent(
     onBack: () -> Unit,
     onEditCustomer: (String) -> Unit = {},
     onEditContact: (String) -> Unit = {},
+    onDeleteCustomer: () -> Unit = {},
+    onDeleteContact: (String) -> Unit = {},
     onProjectClick: (String) -> Unit = {},
     onNotificationClick: () -> Unit = {},
     onSettingsClick: () -> Unit = {},
@@ -104,6 +115,8 @@ fun CustomerDetailScreenContent(
         onBack = onBack,
         onEditCustomer = onEditCustomer,
         onEditContact = onEditContact,
+        onDeleteCustomer = onDeleteCustomer,
+        onDeleteContact = onDeleteContact,
         onProjectClick = onProjectClick,
         onNotificationClick = onNotificationClick,
         onSettingsClick = onSettingsClick,
@@ -130,6 +143,8 @@ fun CustomerDetailContent(
     onBack: () -> Unit,
     onEditCustomer: (String) -> Unit,
     onEditContact: (String) -> Unit,
+    onDeleteCustomer: () -> Unit,
+    onDeleteContact: (String) -> Unit,
     onProjectClick: (String) -> Unit,
     onNotificationClick: () -> Unit,
     onSettingsClick: () -> Unit,
@@ -139,6 +154,31 @@ fun CustomerDetailContent(
 ) {
     var selectedTab by remember { mutableIntStateOf(0) }
     val tabs = listOf("Info", "Contact", "History")
+    var showDeleteCustomerDialog by remember { mutableStateOf(false) }
+
+    if (showDeleteCustomerDialog) {
+        AlertDialog(
+            onDismissRequest = { showDeleteCustomerDialog = false },
+            title = { Text("ลบลูกค้า?", fontWeight = FontWeight.Bold) },
+            text = { Text("คุณต้องการลบลูกค้า ${customer?.companyName} หรือไม่? การลบนี้รวมถึงลบผู้ติดต่อทั้งหมดของลูกค้ารายนี้ด้วย และไม่สามารถย้อนกลับได้") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showDeleteCustomerDialog = false
+                        onDeleteCustomer()
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = RedPrimary)
+                ) {
+                    Text("ลบ", color = White)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteCustomerDialog = false }) {
+                    Text("ยกเลิก", color = TextGray)
+                }
+            }
+        )
+    }
 
     Scaffold(
         topBar = {
@@ -180,11 +220,16 @@ fun CustomerDetailContent(
                     }
                     Spacer(Modifier.width(12.dp))
                     Column(modifier = Modifier.weight(1f)) {
-                        Text(customer?.companyName ?: "Loading...", color = White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                        Text("Branch: ${customer?.branch ?: "-"}", color = White.copy(0.8f), fontSize = 12.sp)
+                        Text(customer?.companyName ?: "กำลังโหลด...", color = White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                        Text("สาขา: ${customer?.branch ?: "-"}", color = White.copy(0.8f), fontSize = 12.sp)
                     }
-                    IconButton(onClick = { customer?.let { onEditCustomer(it.custId) } }) {
-                        Icon(Icons.Default.Edit, "Edit", tint = White)
+                    Row {
+                        IconButton(onClick = { customer?.let { onEditCustomer(it.custId) } }) {
+                            Icon(Icons.Default.Edit, "Edit", tint = White)
+                        }
+                        IconButton(onClick = { showDeleteCustomerDialog = true }) {
+                            Icon(Icons.Default.Delete, "Delete", tint = White)
+                        }
                     }
                 }
             }
@@ -207,7 +252,7 @@ fun CustomerDetailContent(
             } else {
                 when (selectedTab) {
                     0 -> InfoTab(customer, activeProjects, onProjectClick)
-                    1 -> ContactTab(contacts, onContactClick, onEditContact)
+                    1 -> ContactTab(contacts, onContactClick, onEditContact, onDeleteContact)
                     2 -> HistoryTab(closedProjects, onProjectClick)
                 }
             }
@@ -223,15 +268,19 @@ private fun InfoTab(customer: Customer?, projects: List<Project>, onProjectClick
         item {
             Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = White)) {
                 Column(modifier = Modifier.padding(16.dp)) {
-                    Text("Business Type: ${customer?.custType ?: "-"}", fontWeight = FontWeight.Bold)
+                    Text("ประเภทธุรกิจ: ${customer?.custType ?: "-"}", fontWeight = FontWeight.Bold)
                     Spacer(Modifier.height(8.dp))
-                    Text(customer?.companyAddr ?: "No address info")
+                    Text(customer?.companyAddr ?: "ไม่พบข้อมูลที่อยู่")
                 }
             }
         }
-        item { Spacer(Modifier.height(16.dp)); Text("Active Projects", fontWeight = FontWeight.Bold) }
-        items(projects) { project ->
-            ProjectMiniCard(project) { onProjectClick(project.projectId) }
+        item { Spacer(Modifier.height(16.dp)); Text("โครงการปัจจุบัน", fontWeight = FontWeight.Bold) }
+        if (projects.isEmpty()) {
+            item { Text("ไม่พบโครงการปัจจุบัน", color = TextGray, fontSize = 13.sp, modifier = Modifier.padding(vertical = 8.dp)) }
+        } else {
+            items(projects) { project ->
+                ProjectMiniCard(project) { onProjectClick(project.projectId) }
+            }
         }
     }
 }
@@ -255,25 +304,56 @@ private fun ProjectMiniCard(project: Project, onClick: () -> Unit) {
 }
 
 @Composable
-private fun ContactTab(contacts: List<ContactPerson>, onContactClick: (ContactPerson) -> Unit, onEdit: (String) -> Unit) {
-    LazyColumn(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
-    ) {
-        items(contacts, key = { it.contactId }) { contact ->
-            ContactCard(
-                contact = contact,
-                onClick = { onContactClick(contact) },
-                onEdit = { onEdit(contact.contactId) }
-            )
+private fun ContactTab(contacts: List<ContactPerson>, onContactClick: (ContactPerson) -> Unit, onEdit: (String) -> Unit, onDelete: (String) -> Unit) {
+    if (contacts.isEmpty()) {
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("ไม่พบข้อมูลผู้ติดต่อ") }
+    } else {
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            items(contacts, key = { it.contactId }) { contact ->
+                ContactCard(
+                    contact = contact,
+                    onClick = { onContactClick(contact) },
+                    onEdit = { onEdit(contact.contactId) },
+                    onDelete = { onDelete(contact.contactId) }
+                )
+            }
         }
     }
 }
 
 @Composable
-private fun ContactCard(contact: ContactPerson, onClick: () -> Unit, onEdit: () -> Unit) {
+private fun ContactCard(contact: ContactPerson, onClick: () -> Unit, onEdit: () -> Unit, onDelete: () -> Unit) {
+    var showDeleteDialog by remember { mutableStateOf(false) }
+
+    if (showDeleteDialog) {
+        AlertDialog(
+            onDismissRequest = { showDeleteDialog = false },
+            title = { Text("ลบผู้ติดต่อ?", fontWeight = FontWeight.Bold) },
+            text = { Text("คุณต้องการลบผู้ติดต่อ ${contact.fullName} หรือไม่?") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showDeleteDialog = false
+                        onDelete()
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = RedPrimary)
+                ) {
+                    Text("ลบ", color = White)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteDialog = false }) {
+                    Text("ยกเลิก", color = TextGray)
+                }
+            }
+        )
+    }
+
     Card(
         modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
         shape = RoundedCornerShape(12.dp),
@@ -293,10 +373,13 @@ private fun ContactCard(contact: ContactPerson, onClick: () -> Unit, onEdit: () 
                 }
                 Spacer(Modifier.width(12.dp))
                 Column(modifier = Modifier.weight(1f)) {
-                    Text(contact.fullName ?: "Unknown Name", fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                    Text(contact.position ?: "No position", color = TextGray, fontSize = 13.sp)
+                    Text(contact.fullName ?: "ไม่ระบุชื่อ", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                    Text(contact.position ?: "ไม่ระบุตำแหน่ง", color = TextGray, fontSize = 13.sp)
                 }
-                IconButton(onClick = onEdit) { Icon(Icons.Default.Edit, null, modifier = Modifier.size(18.dp), tint = TextGray) }
+                Row {
+                    IconButton(onClick = onEdit) { Icon(Icons.Default.Edit, null, modifier = Modifier.size(18.dp), tint = TextGray) }
+                    IconButton(onClick = { showDeleteDialog = true }) { Icon(Icons.Default.Delete, null, modifier = Modifier.size(18.dp), tint = RedPrimary) }
+                }
             }
             
             Spacer(Modifier.height(12.dp))
@@ -345,27 +428,27 @@ fun ContactDetailOverlay(contact: ContactPerson, onDismiss: () -> Unit) {
                     Text((contact.fullName ?: "?").take(1).uppercase(), color = AccentIndigo, fontWeight = FontWeight.Bold, fontSize = 24.sp)
                 }
                 Spacer(Modifier.height(16.dp))
-                Text(contact.fullName ?: "Unknown Name", fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                Text(contact.fullName ?: "ไม่ระบุชื่อ", fontSize = 20.sp, fontWeight = FontWeight.Bold)
                 Text(contact.position ?: "-", color = TextGray, fontSize = 14.sp)
                 
                 Spacer(Modifier.height(24.dp))
                 
-                DetailRow(Icons.Default.Phone, "Phone", contact.phoneNumber ?: "-") {
+                DetailRow(Icons.Default.Phone, "เบอร์โทรศัพท์", contact.phoneNumber ?: "-") {
                     contact.phoneNumber?.let {
                         clipboardManager?.setText(AnnotatedString(it))
-                        Toast.makeText(context, "Copied Phone Number", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, "คัดลอกเบอร์โทรศัพท์แล้ว", Toast.LENGTH_SHORT).show()
                     }
                 }
-                DetailRow(Icons.Default.Email, "Email", contact.email ?: "-") {
+                DetailRow(Icons.Default.Email, "อีเมล", contact.email ?: "-") {
                     contact.email?.let {
                         clipboardManager?.setText(AnnotatedString(it))
-                        Toast.makeText(context, "Copied Email", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, "คัดลอกอีเมลแล้ว", Toast.LENGTH_SHORT).show()
                     }
                 }
                 DetailRow(Icons.Default.Chat, "Line ID", contact.line ?: "-") {
                     contact.line?.let {
                         clipboardManager?.setText(AnnotatedString(it))
-                        Toast.makeText(context, "Copied Line ID", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, "คัดลอก Line ID แล้ว", Toast.LENGTH_SHORT).show()
                     }
                 }
 
@@ -376,7 +459,7 @@ fun ContactDetailOverlay(contact: ContactPerson, onDismiss: () -> Unit) {
                     shape = RoundedCornerShape(12.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = AccentIndigo)
                 ) {
-                    Text("Close")
+                    Text("ปิด")
                 }
             }
         }
@@ -404,26 +487,9 @@ private fun DetailRow(icon: ImageVector, label: String, value: String, onCopy: (
 }
 
 @Composable
-private fun ProjectStatusBadge(status: String) {
-    Surface(
-        color = White,
-        shape = RoundedCornerShape(16.dp),
-        border = androidx.compose.foundation.BorderStroke(1.dp, Color.LightGray)
-    ) {
-        Text(
-            text = status,
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
-            fontSize = 12.sp,
-            fontWeight = FontWeight.Bold,
-            color = Color(0xFF1976D2)
-        )
-    }
-}
-
-@Composable
 private fun HistoryTab(projects: List<Project>, onProjectClick: (String) -> Unit) {
     if (projects.isEmpty()) {
-        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("No history found") }
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("ไม่พบประวัติโครงการ") }
     } else {
         LazyColumn(modifier = Modifier
             .fillMaxSize()

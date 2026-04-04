@@ -2,6 +2,8 @@ package com.example.pp68_salestrackingapp.data.remote
 
 import com.example.pp68_salestrackingapp.data.model.*
 import com.google.gson.annotations.SerializedName
+import okhttp3.MultipartBody
+import okhttp3.RequestBody
 import retrofit2.Response
 import retrofit2.http.*
 
@@ -45,6 +47,11 @@ interface ApiService {
         @Body members: List<ProjectMemberInsertDto>
     ): Response<List<ProjectMemberInsertDto>>
 
+    @DELETE("project_sales_member")
+    suspend fun deleteProjectMembers(
+        @Query("project_id") projectId: String
+    ): Response<Unit>
+
     // ── Branch ───────────────────────────────────────────────────
     @GET("branch")
     suspend fun getBranches(
@@ -79,6 +86,11 @@ interface ApiService {
     @Headers("Prefer: return=representation")
     suspend fun addCustomer(@Body customer: Customer): Response<List<Customer>>
 
+    @DELETE("customer")
+    suspend fun deleteCustomer(
+        @Query("cust_id") custId: String
+    ): Response<Unit>
+
     // ── Contact Person ───────────────────────────────────────
     @GET("contact_person")
     suspend fun getContactsByCustomerIds(
@@ -89,6 +101,16 @@ interface ApiService {
     @POST("contact_person")
     @Headers("Prefer: return=representation")
     suspend fun addContact(@Body contact: ContactPerson): Response<List<ContactPerson>>
+
+    @DELETE("contact_person")
+    suspend fun deleteContact(
+        @Query("contact_id") contactId: String
+    ): Response<Unit>
+
+    @DELETE("contact_person")
+    suspend fun deleteContactsByCustomer(
+        @Query("cust_id") custId: String
+    ): Response<Unit>
 
     // ── Project ──────────────────────────────────────────────
     @GET("project")
@@ -113,6 +135,16 @@ interface ApiService {
         @Query("project_id") projectId: String,
         @Body updates: Map<String, String>
     ): Response<List<Project>>
+
+    @DELETE("project")
+    suspend fun deleteProject(
+        @Query("project_id") projectId: String
+    ): Response<Unit>
+
+    @DELETE("project")
+    suspend fun deleteProjectsByCustomer(
+        @Query("cust_id") custId: String
+    ): Response<Unit>
 
     // ── Project Contact (Multi-Contact) ──────────────────────────
     @GET("project_contact")
@@ -179,6 +211,16 @@ interface ApiService {
         @Query("appointment_id") appointmentId: String
     ): Response<Unit>
 
+    @DELETE("appointment")
+    suspend fun deleteActivitiesByProject(
+        @Query("project_id") projectId: String
+    ): Response<Unit>
+
+    @DELETE("appointment")
+    suspend fun deleteActivitiesByCustomer(
+        @Query("cust_id") custId: String
+    ): Response<Unit>
+
     // ── Activity Master & Checklist ──────────────────────────
     @GET("activity_master")
     suspend fun getMasterActivities(
@@ -228,11 +270,24 @@ interface ApiService {
         @Body result: ActivityResult
     ): Response<List<ActivityResult>>
 
+    @POST("activity_result")
+    @Headers("Prefer: return=representation")
+    suspend fun insertActivityResultMap(
+        @Body result: @JvmSuppressWildcards Map<String, Any?>
+    ): Response<List<ActivityResult>>
+
     @PATCH("activity_result")
     @Headers("Prefer: return=representation")
     suspend fun updateActivityResult(
         @Query("appointment_id") appointmentId: String,
         @Body result: ActivityResult
+    ): Response<List<ActivityResult>>
+
+    @PATCH("activity_result")
+    @Headers("Prefer: return=representation")
+    suspend fun updateActivityResultMap(
+        @Query("appointment_id") appointmentId: String,
+        @Body updates: @JvmSuppressWildcards Map<String, Any?>
     ): Response<List<ActivityResult>>
 
     @GET("activity_result")
@@ -241,6 +296,7 @@ interface ApiService {
         @Query("limit") limit: Int = 1
     ): Response<List<ActivityResult>>
 }
+
 
 
 // ── DTOs ─────────────────────────────────────────────────────
@@ -257,3 +313,19 @@ data class ProjectContactResponse(
     @SerializedName("contact_id") val contactId: String,
     @SerializedName("contact_person") val contactPerson: ContactPerson? = null
 )
+
+// สำหรับรูป
+interface UploadApiService {
+    @Multipart
+    @POST("upload-visit-photo")
+    suspend fun uploadVisitPhoto(
+        @Part("appointment_id") appointmentId: RequestBody,
+        @Part photo: MultipartBody.Part
+    ): Response<UploadPhotoResponse>
+}
+
+data class UploadPhotoResponse(
+    @SerializedName("photo_url") val photoUrl: String
+)
+
+

@@ -132,6 +132,10 @@ dependencies {
     testImplementation("app.cash.turbine:turbine:1.0.0")
     testImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
     androidTestImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
+
+    //photo
+    implementation("io.coil-kt:coil-compose:2.5.0")
+    implementation("androidx.exifinterface:exifinterface:1.3.7")
 }
 
 tasks.register<JacocoReport>("jacocoTestReport") {

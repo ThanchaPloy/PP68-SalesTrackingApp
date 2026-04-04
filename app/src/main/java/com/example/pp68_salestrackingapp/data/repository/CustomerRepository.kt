@@ -2,6 +2,8 @@ package com.example.pp68_salestrackingapp.data.repository
 
 import com.example.pp68_salestrackingapp.data.local.ContactDao
 import com.example.pp68_salestrackingapp.data.local.CustomerDao
+import com.example.pp68_salestrackingapp.data.local.ProjectDao
+import com.example.pp68_salestrackingapp.data.local.ActivityDao
 import com.example.pp68_salestrackingapp.data.model.ContactPerson
 import com.example.pp68_salestrackingapp.data.model.Customer
 import com.example.pp68_salestrackingapp.data.remote.ApiService
@@ -14,7 +16,9 @@ import javax.inject.Inject
 class CustomerRepository @Inject constructor(
     private val apiService: ApiService,
     private val customerDao: CustomerDao,
-    private val contactDao: ContactDao
+    private val contactDao: ContactDao,
+    private val projectDao: ProjectDao,
+    private val activityDao: ActivityDao
 ) {
     fun getAllCustomersFlow(): Flow<List<Customer>> = customerDao.getAllCustomers()
     fun searchCustomersFlow(query: String): Flow<List<Customer>> = customerDao.searchCustomers("%$query%")
@@ -124,6 +128,42 @@ class CustomerRepository @Inject constructor(
         }
     }
 
+    suspend fun deleteCustomer(custId: String): kotlin.Result<Unit> {
+        return withContext(Dispatchers.IO) {
+            try {
+                // 1. Delete associated data in correct order to avoid FK issues
+                apiService.deleteActivitiesByCustomer("eq.$custId")
+                
+                val projects = projectDao.getProjectsByCustomer(custId).first()
+                projects.forEach { 
+                    apiService.deleteProjectMembers("eq.${it.projectId}")
+                    apiService.deleteProjectContacts("eq.${it.projectId}")
+                }
+                apiService.deleteProjectsByCustomer("eq.$custId")
+                apiService.deleteContactsByCustomer("eq.$custId")
+                
+                // 2. Delete customer from remote
+                val response = apiService.deleteCustomer("eq.$custId")
+                if (response.isSuccessful) {
+                    // 3. Delete from local
+                    customerDao.deleteCustomerById(custId)
+                    contactDao.getContactsByCustomer(custId).first().forEach {
+                        contactDao.deleteContactById(it.contactId)
+                    }
+                    projectDao.getProjectsByCustomer(custId).first().forEach {
+                        projectDao.deleteProjectById(it.projectId)
+                        activityDao.deleteActivitiesByProjectId(it.projectId)
+                    }
+                    kotlin.Result.success(Unit)
+                } else {
+                    kotlin.Result.failure(Exception("HTTP ${response.code()}"))
+                }
+            } catch (e: Exception) {
+                kotlin.Result.failure(e)
+            }
+        }
+    }
+
     suspend fun getContactPersons(customerId: String): kotlin.Result<List<ContactPerson>> {
         return withContext(Dispatchers.IO) {
             try {
@@ -132,6 +172,23 @@ class CustomerRepository @Inject constructor(
                     kotlin.Result.success(response.body()!!)
                 } else {
                     kotlin.Result.failure(Exception("ดึงข้อมูลผู้ติดต่อไม่สำเร็จ"))
+                }
+            } catch (e: Exception) {
+                kotlin.Result.failure(e)
+            }
+        }
+    }
+
+    suspend fun deleteContact(contactId: String): kotlin.Result<Unit> {
+        return withContext(Dispatchers.IO) {
+            try {
+                // Should also handle activities referencing this contact if any
+                val response = apiService.deleteContact("eq.$contactId")
+                if (response.isSuccessful) {
+                    contactDao.deleteContactById(contactId)
+                    kotlin.Result.success(Unit)
+                } else {
+                    kotlin.Result.failure(Exception("HTTP ${response.code()}"))
                 }
             } catch (e: Exception) {
                 kotlin.Result.failure(e)

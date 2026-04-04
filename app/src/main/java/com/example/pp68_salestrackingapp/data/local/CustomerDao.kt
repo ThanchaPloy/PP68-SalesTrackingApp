@@ -28,6 +28,9 @@ interface CustomerDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertCustomer(customer: Customer)
 
+    @Query("DELETE FROM customer WHERE custId = :customerId")
+    suspend fun deleteCustomerById(customerId: String)
+
     @Query("DELETE FROM customer")
     suspend fun deleteAllCustomers()
 

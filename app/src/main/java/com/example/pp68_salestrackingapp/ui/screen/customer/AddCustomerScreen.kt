@@ -30,9 +30,9 @@ private val CUSTOMER_TYPES = listOf(
     "Owner", "Developer", "Main Constructor", "Sub Constructor", "Installer"
 )
 private val CUSTOMER_STATUSES = listOf(
-    "new lead" to "New Lead",
-    "customer" to "Customer",
-    "inactive" to "Inactive"
+    "new lead" to "ลูกค้ามุ่งหวังใหม่",
+    "customer" to "ลูกค้า",
+    "inactive" to "ไม่ใช้งาน"
 )
 private const val DEFAULT_LAT = 13.7563
 private const val DEFAULT_LNG = 100.5018  // Bangkok
@@ -105,11 +105,11 @@ fun AddCustomerContent(
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             // ── Company Name * ────────────────────────────────
-            FormField("Company Name", required = true) {
+            FormField("ชื่อบริษัท", required = true) {
                 FormTextField(
                     value         = uiState.companyName,
                     onValueChange = { onEvent(AddCustomerEvent.CompanyNameChanged(it)) },
-                    placeholder   = "Enter company's full name",
+                    placeholder   = "กรอกชื่อบริษัทเต็ม",
                     isError       = uiState.companyNameError != null,
                     errorMsg      = uiState.companyNameError,
                     leadingIcon   = Icons.Default.Business
@@ -117,21 +117,21 @@ fun AddCustomerContent(
             }
 
             // ── Branch ────────────────────────────────────────
-            FormField("Branch") {
+            FormField("สาขา") {
                 FormTextField(
                     value         = uiState.branch,
                     onValueChange = { onEvent(AddCustomerEvent.BranchChanged(it)) },
-                    placeholder   = "e.g., Head Office, North Branch",
+                    placeholder   = "เช่น สำนักงานใหญ่, สาขาภาคเหนือ",
                     leadingIcon   = Icons.Default.AccountTree
                 )
             }
 
             // ── Address ───────────────────────────────────────
-            FormField("Address") {
+            FormField("ที่อยู่") {
                 FormTextField(
                     value         = uiState.address,
                     onValueChange = { onEvent(AddCustomerEvent.AddressChanged(it)) },
-                    placeholder   = "Enter address",
+                    placeholder   = "กรอกที่อยู่",
                     trailingIcon  = {
                         IconButton(onClick = { onEvent(AddCustomerEvent.UseCurrentLocation) }) {
                             Icon(Icons.Default.LocationOn, null, tint = AppColors.Primary)
@@ -150,10 +150,10 @@ fun AddCustomerContent(
             )
 
             // ── Select Project (Optional) ─────────────────────
-            FormField("Select Project  (Optional)") {
+            FormField("เลือกโครงการ (ไม่บังคับ)") {
                 DropdownField(
                     value       = uiState.selectedProjectName ?: "",
-                    placeholder = "Choose project",
+                    placeholder = "เลือกโครงการ",
                     options     = uiState.projectOptions.map { it.second },
                     onSelect    = { idx ->
                         onEvent(AddCustomerEvent.ProjectSelected(
@@ -165,10 +165,10 @@ fun AddCustomerContent(
             }
 
             // ── Customer Type * ───────────────────────────────
-            FormField("Customer Type", required = true) {
+            FormField("ประเภทลูกค้า", required = true) {
                 DropdownField(
                     value       = uiState.custType ?: "",
-                    placeholder = "Select customer type",
+                    placeholder = "เลือกประเภทลูกค้า",
                     options     = CUSTOMER_TYPES,
                     isError     = uiState.custTypeError != null,
                     errorMsg    = uiState.custTypeError,
@@ -180,7 +180,7 @@ fun AddCustomerContent(
 
             // ── Customer Status (แสดงเฉพาะตอน Edit) ──────────────
             if (uiState.custId != null) {
-                FormField("Customer Status") {
+                FormField("สถานะลูกค้า") {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -219,10 +219,10 @@ fun AddCustomerContent(
             }
 
             // ── First Customer Date (Optional) ───────────────────
-            FormField("วันที่เริ่มเป็นลูกค้า  (Optional)") {
+            FormField("วันที่เริ่มเป็นลูกค้า (ไม่บังคับ)") {
                 DatePickerField(
                     selectedDate  = uiState.firstCustomerDate,
-                    placeholder   = "Pick a date",
+                    placeholder   = "เลือกวันที่",
                     onDateSelected = { onEvent(AddCustomerEvent.FirstCustomerDateChanged(it)) }
                 )
             }
@@ -247,7 +247,7 @@ fun AddCustomerContent(
                         color = Color.White, modifier = Modifier.size(20.dp), strokeWidth = 2.dp
                     )
                 } else {
-                    Text(if (uiState.custId != null) "Update Customer" else "Save Customer", fontSize = 16.sp,
+                    Text(if (uiState.custId != null) "อัปเดตข้อมูลลูกค้า" else "บันทึกข้อมูลลูกค้า", fontSize = 16.sp,
                         fontWeight = FontWeight.SemiBold, color = Color.White)
                 }
             }

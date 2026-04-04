@@ -132,7 +132,7 @@ fun LoginScreenContent(
             OutlinedTextField(
                 value = email,
                 onValueChange = onEmailChange,
-                label = { Text("Email", color = TextGray) },
+                label = { Text("อีเมล", color = TextGray) },
                 leadingIcon = {
                     Icon(Icons.Default.Email, contentDescription = null, tint = BrandRed)
                 },
@@ -165,7 +165,7 @@ fun LoginScreenContent(
             OutlinedTextField(
                 value = password,
                 onValueChange = onPasswordChange,
-                label = { Text("Password", color = TextGray) },
+                label = { Text("รหัสผ่าน", color = TextGray) },
                 leadingIcon = {
                     Icon(Icons.Default.Lock, contentDescription = null, tint = BrandRed)
                 },
@@ -242,7 +242,7 @@ fun LoginScreenContent(
                     )
                 } else {
                     Text(
-                        text       = "Login",
+                        text       = "เข้าสู่ระบบ",
                         fontSize   = 16.sp,
                         fontWeight = FontWeight.SemiBold,
                         color      = Color.White

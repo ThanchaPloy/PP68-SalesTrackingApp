@@ -201,7 +201,7 @@ fun WeeklyReportContent(
                 ) {
                     item {
                         Text(
-                            "Weekly Plan Summary (${state.activities.size} items)",
+                            "สรุปรายงานรายสัปดาห์ (${state.activities.size} items)",
                             fontWeight = FontWeight.SemiBold,
                             fontSize   = 14.sp,
                             color      = Color.Gray,

@@ -147,7 +147,7 @@ fun MonthlyReportContent(
     ) { padding ->
         Column(modifier = Modifier.fillMaxSize().padding(padding)) {
 
-            // ── Top bar ───────────────────────────────────────
+            // ── Top bar (Keep English navigation) ─────────────
             Surface(
                 modifier        = Modifier.fillMaxWidth(),
                 color           = Color.White,
@@ -167,7 +167,7 @@ fun MonthlyReportContent(
                         Text("Back", fontSize = 14.sp, color = Color(0xFF1A1A1A))
                         Spacer(Modifier.weight(1f))
 
-                        // Export buttons — แสดงเมื่อมีข้อมูล
+                        // Export buttons
                         if (uiState.projects.isNotEmpty()) {
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
 
@@ -246,7 +246,7 @@ fun MonthlyReportContent(
                 ) {
                     item {
                         Text(
-                            "Project Summary (${uiState.projects.size} items)",
+                            "สรุปโครงการ (${uiState.projects.size} รายการ)",
                             fontWeight = FontWeight.SemiBold,
                             fontSize   = 14.sp,
                             color      = Color.Gray,
@@ -303,7 +303,7 @@ private fun ExportButton(
     }
 }
 
-// ── Project card (ไม่เปลี่ยน) ─────────────────────────────────
+// ── Project card ─────────────────────────────────────────────
 @Composable
 fun ProjectReportCard(project: ExportProjectItem) {
     Surface(
@@ -347,13 +347,13 @@ fun ProjectReportCard(project: ExportProjectItem) {
             Row(modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween) {
                 Column {
-                    Text("Value", fontSize = 12.sp, color = Color.Gray)
+                    Text("มูลค่า", fontSize = 12.sp, color = Color.Gray)
                     Text("฿${"%,.0f".format(project.value)}",
                         fontWeight = FontWeight.Bold, fontSize = 15.sp,
                         color = Color(0xFFAE2138))
                 }
                 Column(horizontalAlignment = Alignment.End) {
-                    Text("Status", fontSize = 12.sp, color = Color.Gray)
+                    Text("สถานะ", fontSize = 12.sp, color = Color.Gray)
                     Text(project.status, fontWeight = FontWeight.Medium,
                         fontSize = 14.sp, color = Color(0xFF1A1A1A))
                 }
@@ -365,7 +365,7 @@ fun ProjectReportCard(project: ExportProjectItem) {
                     Icon(Icons.Default.EventAvailable, null,
                         modifier = Modifier.size(14.dp), tint = Color.Gray)
                     Spacer(Modifier.width(4.dp))
-                    Text("Expected Close: ${project.closeDate}",
+                    Text("คาดว่าจะปิด: ${project.closeDate}",
                         fontSize = 12.sp, color = Color.Gray)
                 }
             }
@@ -373,7 +373,7 @@ fun ProjectReportCard(project: ExportProjectItem) {
     }
 }
 
-// ── Export functions (เหมือนเดิม) ────────────────────────────
+// ── Export functions (No logic change) ────────────────────────
 fun exportProjectsToCsv(context: Context, fileName: String, projects: List<ExportProjectItem>) {
     val header  = "Project Name,Status,Value,Opportunity,Expected Close\n"
     val content = projects.joinToString("\n") {

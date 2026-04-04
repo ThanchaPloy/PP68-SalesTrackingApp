@@ -198,22 +198,16 @@ fun SettingScreenContent(
                     ProfileSection(user = uiState.user)
                     Spacer(Modifier.height(24.dp))
 
-                    SettingGroup(title = "Account") {
-                        SettingItem(icon = Icons.Default.Person, label = "Edit Profile", onClick = { activeSubScreen = "edit_profile" })
-                        SettingItem(icon = Icons.Default.Lock, label = "Change Password", onClick = { activeSubScreen = "change_password" })
-                        SettingItem(icon = Icons.Default.Notifications, label = "Notification Settings", onClick = { activeSubScreen = "notification_settings" })
+                    SettingGroup(title = "บัญชี") {
+                        SettingItem(icon = Icons.Default.Person, label = "แก้ไขโปรไฟล์", onClick = { activeSubScreen = "edit_profile" })
+                        SettingItem(icon = Icons.Default.Lock, label = "เปลี่ยนรหัสผ่าน", onClick = { activeSubScreen = "change_password" })
+                        SettingItem(icon = Icons.Default.Notifications, label = "ตั้งค่าการแจ้งเตือน", onClick = { activeSubScreen = "notification_settings" })
                     }
 
-//                    SettingGroup(title = "Application") {
-//                        SettingItem(icon = Icons.Default.Language, label = "Language", value = "English", onClick = { showLanguageDialog = true })
-//                        SettingItem(icon = Icons.Default.DarkMode, label = "Dark Mode", hasSwitch = true)
-//                        SettingItem(icon = Icons.Default.CloudUpload, label = "Sync Data")
-//                    }
-
-                    SettingGroup(title = "Support") {
-                        SettingItem(icon = Icons.Default.Help, label = "Help Center", onClick = { activeSubScreen = "help" })
-                        SettingItem(icon = Icons.Default.Info, label = "About App", value = "v1.0.5", onClick = { activeSubScreen = "about" })
-                        SettingItem(icon = Icons.Default.Policy, label = "Privacy Policy", onClick = { activeSubScreen = "privacy" })
+                    SettingGroup(title = "ช่วยเหลือและข้อมูล") {
+                        SettingItem(icon = Icons.Default.Help, label = "ศูนย์ช่วยเหลือ", onClick = { activeSubScreen = "help" })
+                        SettingItem(icon = Icons.Default.Info, label = "เกี่ยวกับแอป", value = "v1.0.5", onClick = { activeSubScreen = "about" })
+                        SettingItem(icon = Icons.Default.Policy, label = "นโยบายความเป็นส่วนตัว", onClick = { activeSubScreen = "privacy" })
                     }
 
                     Spacer(Modifier.height(32.dp))
@@ -384,7 +378,7 @@ private fun LogoutButton(onClick: () -> Unit) {
         ) {
             Icon(Icons.AutoMirrored.Filled.Logout, null, tint = RedPrimary)
             Spacer(Modifier.width(12.dp))
-            Text("Logout", color = RedPrimary, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+            Text("ออกจากระบบ", color = RedPrimary, fontWeight = FontWeight.Bold, fontSize = 16.sp)
         }
     }
 }

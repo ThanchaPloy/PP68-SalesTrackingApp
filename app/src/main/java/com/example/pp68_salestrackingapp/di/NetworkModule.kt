@@ -14,10 +14,12 @@ import javax.inject.Qualifier
 import javax.inject.Singleton
 import com.example.pp68_salestrackingapp.data.remote.ApiService
 import com.example.pp68_salestrackingapp.data.remote.AuthService
+import com.example.pp68_salestrackingapp.data.remote.UploadApiService
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.okhttp.OkHttp
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.serialization.gson.*
+import javax.inject.Named
 
 @Qualifier
 @Retention(AnnotationRetention.BINARY)
@@ -120,4 +122,19 @@ object NetworkModule {
         }
     }
 
+    @Provides
+    @Singleton
+    @Named("upload")
+    fun provideUploadRetrofit(): Retrofit {
+        return Retrofit.Builder()
+            .baseUrl("https://asia-southeast1-algebraic-ratio-490214-r0.cloudfunctions.net/")
+            .addConverterFactory(GsonConverterFactory.create())
+            .build()
+    }
+
+    @Provides
+    @Singleton
+    fun provideUploadApiService(@Named("upload") retrofit: Retrofit): UploadApiService {
+        return retrofit.create(UploadApiService::class.java)
+    }
 }

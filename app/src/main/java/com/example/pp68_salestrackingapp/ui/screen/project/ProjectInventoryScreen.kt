@@ -106,7 +106,7 @@ fun ProjectInventoryContent(
             ) {
                 Icon(Icons.Default.Add, null)
                 Spacer(Modifier.width(8.dp))
-                Text("Add Product", fontWeight = FontWeight.Bold)
+                Text("เพิ่มสินค้า", fontWeight = FontWeight.Bold)
             }
         },
         floatingActionButtonPosition = FabPosition.Center,
@@ -129,7 +129,7 @@ fun ProjectInventoryContent(
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            "Project ${s.project?.projectName ?: ""}",
+                            "โครงการ ${s.project?.projectName ?: ""}",
                             fontWeight = FontWeight.Bold,
                             fontSize = 18.sp,
                             color = TextDark
@@ -142,7 +142,7 @@ fun ProjectInventoryContent(
                             Text(s.companyName, fontSize = 13.sp, color = TextGray)
                         }
                     }
-                    ProjectStatusBadge(s.project?.projectStatus ?: "Active Project")
+                    ProjectStatusBadge(s.project?.projectStatus ?: "กำลังดำเนินการ")
                 }
             }
 
@@ -159,13 +159,13 @@ fun ProjectInventoryContent(
                     item {
                         Column {
                             Text(
-                                "INVENTORY ITEMS",
+                                "รายการสินค้าในโครงการ",
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = TextGray
                             )
                             Text(
-                                "${s.items.size} Products",
+                                "${s.items.size} รายการ",
                                 fontSize = 16.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = TextDark

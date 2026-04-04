@@ -110,7 +110,7 @@ fun ContactListScreenContent(
             )
         },
         bottomBar = { BottomNavBar(currentTab = currentTab, onTabChange = onTabChange) },
-        floatingActionButton = { AddFloatingActionButton(onClick = onAddClick, contentDescription = "Add Contact") },
+        floatingActionButton = { AddFloatingActionButton(onClick = onAddClick, contentDescription = "เพิ่มผู้ติดต่อ") },
         containerColor = BgLight
     ) { padding ->
         Column(modifier = Modifier.fillMaxSize().padding(padding).padding(horizontal = 16.dp)) {
@@ -118,7 +118,7 @@ fun ContactListScreenContent(
             OutlinedTextField(
                 value = searchQuery, onValueChange = onSearchChange,
                 modifier = Modifier.fillMaxWidth(),
-                placeholder = { Text("Search contacts...") },
+                placeholder = { Text("ค้นหาผู้ติดต่อ...") },
                 shape = RoundedCornerShape(24.dp),
                 singleLine = true,
                 leadingIcon = { Icon(Icons.Default.Search, null) }
@@ -164,8 +164,8 @@ private fun ContactCard(contact: ContactPerson, onClick: () -> Unit, onEdit: () 
                 }
                 Spacer(Modifier.width(12.dp))
                 Column(modifier = Modifier.weight(1f)) {
-                    Text(contact.fullName ?: "Unknown Name", fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                    Text(contact.position ?: "No position", color = TextGray, fontSize = 13.sp)
+                    Text(contact.fullName ?: "ไม่ระบุชื่อ", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                    Text(contact.position ?: "ไม่มีตำแหน่ง", color = TextGray, fontSize = 13.sp)
                 }
                 IconButton(onClick = onEdit) { Icon(Icons.Default.Edit, null, modifier = Modifier.size(18.dp), tint = TextGray) }
             }
@@ -216,27 +216,27 @@ fun ContactDetailOverlay(contact: ContactPerson, onDismiss: () -> Unit) {
                     Text((contact.fullName ?: "?").take(1).uppercase(), color = AccentIndigo, fontWeight = FontWeight.Bold, fontSize = 24.sp)
                 }
                 Spacer(Modifier.height(16.dp))
-                Text(contact.fullName ?: "Unknown Name", fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                Text(contact.fullName ?: "ไม่ระบุชื่อ", fontSize = 20.sp, fontWeight = FontWeight.Bold)
                 Text(contact.position ?: "-", color = TextGray, fontSize = 14.sp)
                 
                 Spacer(Modifier.height(24.dp))
                 
-                DetailRow(Icons.Default.Phone, "Phone", contact.phoneNumber ?: "-") {
+                DetailRow(Icons.Default.Phone, "เบอร์โทรศัพท์", contact.phoneNumber ?: "-") {
                     contact.phoneNumber?.let {
                         clipboardManager?.setText(AnnotatedString(it))
-                        Toast.makeText(context, "Copied Phone Number", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, "คัดลอกเบอร์โทรศัพท์แล้ว", Toast.LENGTH_SHORT).show()
                     }
                 }
-                DetailRow(Icons.Default.Email, "Email", contact.email ?: "-") {
+                DetailRow(Icons.Default.Email, "อีเมล", contact.email ?: "-") {
                     contact.email?.let {
                         clipboardManager?.setText(AnnotatedString(it))
-                        Toast.makeText(context, "Copied Email", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, "คัดลอกอีเมลแล้ว", Toast.LENGTH_SHORT).show()
                     }
                 }
                 DetailRow(Icons.Default.Chat, "Line ID", contact.line ?: "-") {
                     contact.line?.let {
                         clipboardManager?.setText(AnnotatedString(it))
-                        Toast.makeText(context, "Copied Line ID", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, "คัดลอก Line ID แล้ว", Toast.LENGTH_SHORT).show()
                     }
                 }
 
@@ -247,7 +247,7 @@ fun ContactDetailOverlay(contact: ContactPerson, onDismiss: () -> Unit) {
                     shape = RoundedCornerShape(12.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = AccentIndigo)
                 ) {
-                    Text("Close")
+                    Text("ปิด")
                 }
             }
         }

@@ -21,9 +21,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.pp68_salestrackingapp.ui.theme.SalesTrackingTheme
-import com.example.pp68_salestrackingapp.ui.viewmodels.activity.ChangePasswordViewModel
-import com.example.pp68_salestrackingapp.ui.viewmodels.activity.EditProfileViewModel
-import com.example.pp68_salestrackingapp.ui.viewmodels.activity.NotificationSettingsViewModel
+import com.example.pp68_salestrackingapp.ui.viewmodels.activity.*
 
 private val White      = Color.White
 private val TextDark   = Color(0xFF1A1A1A)
@@ -32,7 +30,6 @@ private val RedPrimary = Color(0xFFAE2138)
 private val BgLight    = Color(0xFFF5F5F5)
 
 // ── Edit Profile Screen ───────────────────────────────────────
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun EditProfileScreen(
     onBack: () -> Unit,
@@ -46,10 +43,28 @@ fun EditProfileScreen(
         if (s.isSaved) onSave()
     }
 
+    EditProfileContent(
+        s = s,
+        onBack = onBack,
+        onFullNameChange = viewModel::onFullNameChange,
+        onPhoneChange = viewModel::onPhoneChange,
+        onSaveClick = viewModel::save
+    )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun EditProfileContent(
+    s: EditProfileUiState,
+    onBack: () -> Unit,
+    onFullNameChange: (String) -> Unit,
+    onPhoneChange: (String) -> Unit,
+    onSaveClick: () -> Unit
+) {
     Scaffold(
         topBar = {
             CenterAlignedTopAppBar(
-                title = { Text("Edit Profile", fontWeight = FontWeight.Bold) },
+                title = { Text("แก้ไขโปรไฟล์", fontWeight = FontWeight.Bold) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, null)
@@ -86,8 +101,8 @@ fun EditProfileScreen(
             // ✅ Full Name — แก้ได้
             OutlinedTextField(
                 value         = s.fullName,
-                onValueChange = { viewModel.onFullNameChange(it) },
-                label         = { Text("Full Name") },
+                onValueChange = onFullNameChange,
+                label         = { Text("ชื่อ-นามสกุล") },
                 modifier      = Modifier.fillMaxWidth(),
                 shape         = RoundedCornerShape(12.dp)
             )
@@ -96,8 +111,8 @@ fun EditProfileScreen(
             // ✅ Phone — แก้ได้
             OutlinedTextField(
                 value         = s.phoneNumber,
-                onValueChange = { viewModel.onPhoneChange(it) },
-                label         = { Text("Phone Number") },
+                onValueChange = onPhoneChange,
+                label         = { Text("เบอร์โทรศัพท์") },
                 modifier      = Modifier.fillMaxWidth(),
                 shape         = RoundedCornerShape(12.dp)
             )
@@ -107,7 +122,7 @@ fun EditProfileScreen(
             OutlinedTextField(
                 value         = s.branchName,
                 onValueChange = {},
-                label         = { Text("Branch") },
+                label         = { Text("สาขา") },
                 modifier      = Modifier.fillMaxWidth(),
                 shape         = RoundedCornerShape(12.dp),
                 enabled       = false,
@@ -122,7 +137,7 @@ fun EditProfileScreen(
             OutlinedTextField(
                 value         = s.email,
                 onValueChange = {},
-                label         = { Text("Email") },
+                label         = { Text("อีเมล") },
                 modifier      = Modifier.fillMaxWidth(),
                 shape         = RoundedCornerShape(12.dp),
                 enabled       = false,
@@ -140,7 +155,7 @@ fun EditProfileScreen(
             Spacer(Modifier.height(40.dp))
 
             Button(
-                onClick  = { viewModel.save() },
+                onClick  = onSaveClick,
                 enabled  = !s.isLoading,
                 modifier = Modifier.fillMaxWidth().height(50.dp),
                 shape    = RoundedCornerShape(12.dp),
@@ -153,14 +168,14 @@ fun EditProfileScreen(
                         strokeWidth = 2.dp
                     )
                 } else {
-                    Text("Save Changes", fontWeight = FontWeight.Bold)
+                    Text("บันทึกการเปลี่ยนแปลง", fontWeight = FontWeight.Bold)
                 }
             }
         }
     }
 }
+
 // ── Notification Settings Screen ──────────────────────────────
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun NotificationSettingsScreen(
     onBack: () -> Unit,
@@ -168,10 +183,26 @@ fun NotificationSettingsScreen(
 ) {
     val s by viewModel.uiState.collectAsState()
 
+    NotificationSettingsContent(
+        s = s,
+        onBack = onBack,
+        onPushEnabledChange = viewModel::onPushEnabledChange,
+        onVisitReminderChange = viewModel::onVisitReminderChange
+    )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun NotificationSettingsContent(
+    s: NotificationSettingsUiState,
+    onBack: () -> Unit,
+    onPushEnabledChange: (Boolean) -> Unit,
+    onVisitReminderChange: (Boolean) -> Unit
+) {
     Scaffold(
         topBar = {
             CenterAlignedTopAppBar(
-                title = { Text("Notification Settings", fontWeight = FontWeight.Bold) },
+                title = { Text("ตั้งค่าการแจ้งเตือน", fontWeight = FontWeight.Bold) },
                 navigationIcon = {
                     IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, null) }
                 }
@@ -181,7 +212,7 @@ fun NotificationSettingsScreen(
     ) { padding ->
         Column(modifier = Modifier.fillMaxSize().padding(padding)) {
             Text(
-                "GENERAL",
+                "ทั่วไป",
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Bold,
                 color = TextGray,
@@ -190,16 +221,16 @@ fun NotificationSettingsScreen(
             Surface(color = White) {
                 Column {
                     SettingToggleItem(
-                        label     = "Push Notifications",
+                        label     = "เปิดการแจ้งเตือน",
                         isEnabled = s.pushEnabled,
-                        onToggle  = { viewModel.onPushEnabledChange(it) }
+                        onToggle  = onPushEnabledChange
                     )
                     HorizontalDivider(Modifier.padding(horizontal = 24.dp), color = Color(0xFFEEEEEE))
                 }
             }
 
             Text(
-                "ALERTS",
+                "การแจ้งเตือน",
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Bold,
                 color = TextGray,
@@ -208,9 +239,9 @@ fun NotificationSettingsScreen(
             Surface(color = White) {
                 Column {
                     SettingToggleItem(
-                        label     = "Visit Reminders",
+                        label     = "แจ้งเตือนนัดหมายเข้าพบ",
                         isEnabled = s.visitReminder,
-                        onToggle  = { viewModel.onVisitReminderChange(it) }
+                        onToggle  = onVisitReminderChange
                     )
                     HorizontalDivider(Modifier.padding(horizontal = 24.dp), color = Color(0xFFEEEEEE))
                 }
@@ -238,7 +269,6 @@ private fun SettingToggleItem(label: String, isEnabled: Boolean, onToggle: (Bool
 }
 
 // ── Change Password Screen ────────────────────────────────────
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ChangePasswordScreen(
     onBack: () -> Unit,
@@ -251,10 +281,30 @@ fun ChangePasswordScreen(
         if (s.isSuccess) onSave()
     }
 
+    ChangePasswordContent(
+        s = s,
+        onBack = onBack,
+        onOldPasswordChange = viewModel::onOldPasswordChange,
+        onNewPasswordChange = viewModel::onNewPasswordChange,
+        onConfirmPasswordChange = viewModel::onConfirmPasswordChange,
+        onSaveClick = viewModel::save
+    )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun ChangePasswordContent(
+    s: ChangePasswordUiState,
+    onBack: () -> Unit,
+    onOldPasswordChange: (String) -> Unit,
+    onNewPasswordChange: (String) -> Unit,
+    onConfirmPasswordChange: (String) -> Unit,
+    onSaveClick: () -> Unit
+) {
     Scaffold(
         topBar = {
             CenterAlignedTopAppBar(
-                title = { Text("Change Password", fontWeight = FontWeight.Bold) },
+                title = { Text("เปลี่ยนรหัสผ่าน", fontWeight = FontWeight.Bold) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, null)
@@ -279,7 +329,7 @@ fun ChangePasswordScreen(
 
             OutlinedTextField(
                 value         = s.oldPassword,
-                onValueChange = { viewModel.onOldPasswordChange(it) },
+                onValueChange = onOldPasswordChange,
                 label         = { Text("รหัสผ่านเดิม") },
                 modifier      = Modifier.fillMaxWidth(),
                 visualTransformation = PasswordVisualTransformation(),
@@ -289,7 +339,7 @@ fun ChangePasswordScreen(
 
             OutlinedTextField(
                 value         = s.newPassword,
-                onValueChange = { viewModel.onNewPasswordChange(it) },
+                onValueChange = onNewPasswordChange,
                 label         = { Text("รหัสผ่านใหม่") },
                 modifier      = Modifier.fillMaxWidth(),
                 visualTransformation = PasswordVisualTransformation(),
@@ -299,7 +349,7 @@ fun ChangePasswordScreen(
 
             OutlinedTextField(
                 value         = s.confirmPassword,
-                onValueChange = { viewModel.onConfirmPasswordChange(it) },
+                onValueChange = onConfirmPasswordChange,
                 label         = { Text("ยืนยันรหัสผ่านใหม่") },
                 modifier      = Modifier.fillMaxWidth(),
                 visualTransformation = PasswordVisualTransformation(),
@@ -314,7 +364,7 @@ fun ChangePasswordScreen(
             Spacer(Modifier.weight(1f))
 
             Button(
-                onClick  = { viewModel.save() },
+                onClick  = onSaveClick,
                 enabled  = !s.isLoading,
                 modifier = Modifier.fillMaxWidth().height(50.dp),
                 shape    = RoundedCornerShape(12.dp),
@@ -327,7 +377,7 @@ fun ChangePasswordScreen(
                         strokeWidth = 2.dp
                     )
                 } else {
-                    Text("Update Password", fontWeight = FontWeight.Bold)
+                    Text("อัปเดตรหัสผ่าน", fontWeight = FontWeight.Bold)
                 }
             }
         }
@@ -370,7 +420,7 @@ fun SettingDetailScreen(title: String, content: String, onBack: () -> Unit) {
 fun LanguageDialog(onDismiss: () -> Unit, onSelect: (String) -> Unit) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Select Language") },
+        title = { Text("เลือกภาษา") },
         text = {
             Column {
                 val languages = listOf("English", "ไทย (Thai)", "日本語 (Japanese)")
@@ -385,7 +435,7 @@ fun LanguageDialog(onDismiss: () -> Unit, onSelect: (String) -> Unit) {
             }
         },
         confirmButton = {
-            TextButton(onClick = onDismiss) { Text("Cancel") }
+            TextButton(onClick = onDismiss) { Text("ยกเลิก") }
         }
     )
 }
@@ -394,7 +444,18 @@ fun LanguageDialog(onDismiss: () -> Unit, onSelect: (String) -> Unit) {
 @Composable
 fun EditProfileScreenPreview() {
     SalesTrackingTheme {
-        EditProfileScreen(onBack = {}, onSave = {})
+        EditProfileContent(
+            s = EditProfileUiState(
+                fullName = "John Doe",
+                email = "john@example.com",
+                phoneNumber = "0812345678",
+                branchName = "Main Branch"
+            ),
+            onBack = {},
+            onFullNameChange = {},
+            onPhoneChange = {},
+            onSaveClick = {}
+        )
     }
 }
 
@@ -402,7 +463,12 @@ fun EditProfileScreenPreview() {
 @Composable
 fun NotificationSettingsScreenPreview() {
     SalesTrackingTheme {
-        NotificationSettingsScreen(onBack = {})
+        NotificationSettingsContent(
+            s = NotificationSettingsUiState(),
+            onBack = {},
+            onPushEnabledChange = {},
+            onVisitReminderChange = {}
+        )
     }
 }
 
@@ -410,6 +476,13 @@ fun NotificationSettingsScreenPreview() {
 @Composable
 fun ChangePasswordScreenPreview() {
     SalesTrackingTheme {
-        ChangePasswordScreen(onBack = {}, onSave = {})
+        ChangePasswordContent(
+            s = ChangePasswordUiState(),
+            onBack = {},
+            onOldPasswordChange = {},
+            onNewPasswordChange = {},
+            onConfirmPasswordChange = {},
+            onSaveClick = {}
+        )
     }
 }

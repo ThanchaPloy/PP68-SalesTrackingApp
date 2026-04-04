@@ -3,22 +3,26 @@ package com.example.pp68_salestrackingapp.data.repository
 import com.example.pp68_salestrackingapp.data.local.*
 import com.example.pp68_salestrackingapp.data.model.SalesActivity
 import com.example.pp68_salestrackingapp.data.model.ActivityMaster
-import com.example.pp68_salestrackingapp.data.model.ContactPerson
 import com.example.pp68_salestrackingapp.data.model.PlanItemDto
 import com.example.pp68_salestrackingapp.data.model.MasterActDto
 import com.example.pp68_salestrackingapp.data.model.ActivityPlanItem
 import com.example.pp68_salestrackingapp.data.model.ActivityResult
 import com.example.pp68_salestrackingapp.data.model.ChecklistInsertDto
 import com.example.pp68_salestrackingapp.data.remote.ApiService
+import com.example.pp68_salestrackingapp.data.remote.UploadApiService
 import com.example.pp68_salestrackingapp.ui.viewmodels.activity.ActivityCard
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.MultipartBody
+import okhttp3.RequestBody.Companion.toRequestBody
 import javax.inject.Inject
 
 class ActivityRepository @Inject constructor(
     private val apiService: ApiService,
+    private val uploadApiService: UploadApiService,
     private val activityDao: ActivityDao,
     private val projectDao: ProjectDao,
     private val customerDao: CustomerDao,
@@ -376,22 +380,64 @@ class ActivityRepository @Inject constructor(
     suspend fun saveActivityResult(result: ActivityResult): kotlin.Result<Unit> {
         return withContext(Dispatchers.IO) {
             try {
-                // บันทึก local ทันที
                 resultDao.insertResult(result)
 
-                // ตรวจว่ามีอยู่แล้วใน API ไหม → INSERT หรือ PATCH
+                // สร้าง Map เฉพาะ field ที่ไม่ null เพื่อส่ง API
+                val body = mutableMapOf<String, Any?>()
+                body["appointment_id"]   = result.activityId
+                body["created_by"]       = result.createdBy
+                body["report_date"]      = result.reportDate
+                body["new_status"]       = result.newStatus
+                body["opportunity_score"] = result.opportunityScore
+                body["dm_involved"]      = result.dmInvolved
+                body["is_proposal_sent"] = result.isProposalSent
+                body["proposal_date"]    = result.proposalDate
+                body["competitor_count"] = result.competitorCount
+                body["response_speed"]   = result.responseSpeed
+                body["deal_position"]    = result.dealPosition
+                body["current_solution"] = result.previousSolution
+                body["counterparty_type"] = result.counterpartyMultiplier
+                body["note_summary"]     = result.summary
+                body["photo_url"]        = result.photoUrl
+                body["photo_taken_at"]   = result.photoTakenAt
+                body["photo_lat"]        = result.photoLat
+                body["photo_lng"]        = result.photoLng
+                body["photo_device_model"] = result.photoDeviceModel
+
                 val existing = apiService.getActivityResult("eq.${result.activityId}")
                 val apiResp = if (existing.isSuccessful && !existing.body().isNullOrEmpty()) {
-                    apiService.updateActivityResult("eq.${result.activityId}", result)
+                    apiService.updateActivityResultMap("eq.${result.activityId}", body)
                 } else {
-                    apiService.insertActivityResult(result)
+                    apiService.insertActivityResultMap(body)
                 }
 
                 if (apiResp.isSuccessful) kotlin.Result.success(Unit)
                 else kotlin.Result.failure(Exception("HTTP ${apiResp.code()}: ${apiResp.errorBody()?.string()}"))
             } catch (e: Exception) {
-                // offline → local saved แล้ว ถือว่าสำเร็จ
-                kotlin.Result.success(Unit)
+                kotlin.Result.success(Unit) // offline → local saved แล้ว
+            }
+        }
+    }
+
+    suspend fun uploadVisitPhoto(activityId: String, imageBytes: ByteArray): kotlin.Result<String> {
+        return withContext(Dispatchers.IO) {
+            try {
+                val requestBody = imageBytes.toRequestBody("image/jpeg".toMediaType())
+                val photoPart = MultipartBody.Part.createFormData(
+                    name = "photo",
+                    filename = "visit_photo.jpg",
+                    body = requestBody
+                )
+                val appointmentIdPart = activityId.toRequestBody("text/plain".toMediaType())
+
+                val response = uploadApiService.uploadVisitPhoto(appointmentIdPart, photoPart)
+                if (response.isSuccessful && response.body() != null) {
+                    kotlin.Result.success(response.body()!!.photoUrl)
+                } else {
+                    kotlin.Result.failure(Exception("Upload failed: ${response.code()}"))
+                }
+            } catch (e: Exception) {
+                kotlin.Result.failure(e)
             }
         }
     }

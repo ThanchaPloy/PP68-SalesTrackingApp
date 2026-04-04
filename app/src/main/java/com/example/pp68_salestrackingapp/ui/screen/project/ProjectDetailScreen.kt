@@ -73,6 +73,12 @@ fun ProjectDetailScreen(
 ) {
     val s by viewModel.uiState.collectAsState()
 
+    LaunchedEffect(s.deleteSuccess) {
+        if (s.deleteSuccess) {
+            onBack()
+        }
+    }
+
     ProjectDetailContent(
         s = s,
         onBack = onBack,
@@ -83,6 +89,7 @@ fun ProjectDetailScreen(
         onActivityClick = onActivityClick,
         onCheckin = onCheckin,
         onFinish = onFinish,
+        onDeleteProject = { viewModel.deleteProject() },
         onNotificationClick = onNotificationClick,
         onSettingsClick = onSettingsClick,
         onLogoutClick = {
@@ -103,10 +110,37 @@ fun ProjectDetailContent(
     onActivityClick: (String) -> Unit,
     onCheckin: (String) -> Unit = {},
     onFinish: (String) -> Unit = {},
+    onDeleteProject: () -> Unit = {},
     onNotificationClick: () -> Unit = {},
     onSettingsClick: () -> Unit = {},
     onLogoutClick: () -> Unit = {}
 ) {
+    var showDeleteDialog by remember { mutableStateOf(false) }
+
+    if (showDeleteDialog) {
+        AlertDialog(
+            onDismissRequest = { showDeleteDialog = false },
+            title = { Text("ลบโครงการ?", fontWeight = FontWeight.Bold) },
+            text = { Text("คุณต้องการลบโครงการ ${s.project?.projectName} หรือไม่? การลบนี้ไม่สามารถย้อนกลับได้") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showDeleteDialog = false
+                        onDeleteProject()
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = RedPrimary)
+                ) {
+                    Text("ลบ", color = White)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteDialog = false }) {
+                    Text("ยกเลิก", color = TextGray)
+                }
+            }
+        )
+    }
+
     Scaffold(
         topBar = {
             AppTopBar(
@@ -129,7 +163,7 @@ fun ProjectDetailContent(
                     shape          = CircleShape,
                     modifier       = Modifier.size(52.dp)
                 ) {
-                    Icon(Icons.Default.ShoppingCart, "Inventory",
+                    Icon(Icons.Default.ShoppingCart, "สินค้าในโครงการ",
                         modifier = Modifier.size(22.dp))
                 }
                 
@@ -149,7 +183,7 @@ fun ProjectDetailContent(
         containerColor = BgLight
     ) { padding ->
         when {
-            s.isLoading -> Box(
+            s.isLoading || s.isDeleting -> Box(
                 Modifier.fillMaxSize().padding(padding),
                 contentAlignment = Alignment.Center
             ) { CircularProgressIndicator(color = RedPrimary) }
@@ -175,7 +209,7 @@ fun ProjectDetailContent(
                             Icon(Icons.AutoMirrored.Filled.ArrowBack, null, tint = TextDark)
                         }
                         Spacer(Modifier.width(8.dp))
-                        Text("Back", fontSize = 14.sp, color = TextDark)
+                        Text("กลับ", fontSize = 14.sp, color = TextDark)
                     }
                 }
 
@@ -184,7 +218,8 @@ fun ProjectDetailContent(
                     ProjectHeaderCard(
                         project     = s.project,
                         companyName = s.companyName,
-                        onEdit      = { onEditProject(s.project.projectId) }
+                        onEdit      = { onEditProject(s.project.projectId) },
+                        onDelete    = { showDeleteDialog = true }
                     )
                     Spacer(Modifier.height(8.dp))
                 }
@@ -193,14 +228,14 @@ fun ProjectDetailContent(
                 item {
                     SectionHeader(
                         icon  = Icons.AutoMirrored.Filled.Assignment,
-                        title = "Upcoming Tasks",
-                        sub   = "Tasks scheduled for the future"
+                        title = "แผนงานที่กำลังจะมาถึง",
+                        sub   = "กิจกรรมที่วางแผนไว้ในอนาคต"
                     )
                 }
                 
                 if (s.upcomingTasks.isEmpty()) {
                     item {
-                        EmptySection("ไม่มีแผนที่กำลังจะมาถึง",
+                        EmptySection("ไม่มีแผนงานที่กำลังจะมาถึง",
                             modifier = Modifier.padding(horizontal = 16.dp))
                     }
                 } else {
@@ -222,7 +257,7 @@ fun ProjectDetailContent(
                 item {
                     SectionHeader(
                         icon  = Icons.Default.People,
-                        title = "Sales Team",
+                        title = "ทีมขาย",
                         sub   = null
                     )
                     SalesTeamRow(members = s.teamMembers)
@@ -233,8 +268,8 @@ fun ProjectDetailContent(
                 item {
                     SectionHeader(
                         icon  = Icons.Default.History,
-                        title = "History",
-                        sub   = "Completed activities and past events"
+                        title = "ประวัติกิจกรรม",
+                        sub   = "กิจกรรมที่ดำเนินการเสร็จสิ้นแล้ว"
                     )
                 }
                 
@@ -353,7 +388,8 @@ private fun TimelineHistoryRow(
 private fun ProjectHeaderCard(
     project:     Project,
     companyName: String,
-    onEdit:      () -> Unit
+    onEdit:      () -> Unit,
+    onDelete:    () -> Unit
 ) {
     Surface(
         color    = White,
@@ -374,7 +410,7 @@ private fun ProjectHeaderCard(
                         color      = TextDark
                     )
                     Text(
-                        "Ref: ${project.projectNumber}",
+                        "อ้างอิง: ${project.projectNumber}",
                         fontSize = 12.sp,
                         color    = TextGray
                     )
@@ -389,8 +425,13 @@ private fun ProjectHeaderCard(
                         Text(companyName, fontSize = 14.sp, color = TextDark)
                     }
                 }
-                IconButton(onClick = onEdit) {
-                    Icon(Icons.Default.Edit, "Edit", tint = RedPrimary)
+                Row {
+                    IconButton(onClick = onEdit) {
+                        Icon(Icons.Default.Edit, "แก้ไข", tint = RedPrimary)
+                    }
+                    IconButton(onClick = onDelete) {
+                        Icon(Icons.Default.Delete, "ลบ", tint = RedPrimary)
+                    }
                 }
             }
 
@@ -401,11 +442,11 @@ private fun ProjectHeaderCard(
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Column {
-                    Text("Status", fontSize = 12.sp, color = TextGray)
-                    ProjectStatusBadge(status = project.projectStatus ?: "N/A")
+                    Text("สถานะ", fontSize = 12.sp, color = TextGray)
+                    ProjectStatusBadge(status = project.projectStatus ?: "ไม่ระบุ")
                 }
                 Column(horizontalAlignment = Alignment.End) {
-                    Text("Expected Value", fontSize = 12.sp, color = TextGray)
+                    Text("มูลค่าที่คาดหวัง", fontSize = 12.sp, color = TextGray)
                     Text(
                         "฿ ${project.expectedValue ?: 0.0}",
                         fontWeight = FontWeight.Bold,
@@ -421,7 +462,7 @@ private fun ProjectHeaderCard(
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Column {
-                    Text("Start Date", fontSize = 12.sp, color = TextGray)
+                    Text("วันที่เริ่ม", fontSize = 12.sp, color = TextGray)
                     Text(
                         project.startDate ?: "-",
                         fontSize   = 14.sp,
@@ -430,7 +471,7 @@ private fun ProjectHeaderCard(
                     )
                 }
                 Column(horizontalAlignment = Alignment.End) {
-                    Text("Expected Closing Date", fontSize = 12.sp, color = TextGray)
+                    Text("วันที่คาดว่าจะปิด", fontSize = 12.sp, color = TextGray)
                     Text(
                         project.closingDate ?: "-",
                         fontSize   = 14.sp,
@@ -446,7 +487,7 @@ private fun ProjectHeaderCard(
                 HorizontalDivider(color = Color(0xFFFFFFFF).copy(alpha = 0.5f))
                 Spacer(Modifier.height(12.dp))
                 Text(
-                    "Sales Progress",
+                    "ความคืบหน้าการขาย",
                     fontSize = 12.sp,
                     color    = TextGray
                 )
@@ -566,7 +607,7 @@ private fun TaskCard(task: TaskItem, onClick: () -> Unit, onCheckin: () -> Unit,
                 ) {
                     Icon(Icons.Default.LocationOn, null, modifier = Modifier.size(14.dp))
                     Spacer(Modifier.width(4.dp))
-                    Text("Check-in", fontSize = 11.sp)
+                    Text("เช็คอิน", fontSize = 11.sp)
                 }
                 
                 OutlinedButton(
@@ -576,7 +617,7 @@ private fun TaskCard(task: TaskItem, onClick: () -> Unit, onCheckin: () -> Unit,
                     contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
                     modifier = Modifier.height(32.dp)
                 ) {
-                    Text("Finish", fontSize = 11.sp, color = BlueBtn)
+                    Text("เสร็จสิ้น", fontSize = 11.sp, color = BlueBtn)
                 }
             }
         }
@@ -607,7 +648,7 @@ private fun HistoryCard(item: HistoryItem, onClick: () -> Unit, onFinish: () -> 
                     shape = RoundedCornerShape(8.dp)
                 ) {
                     Text(
-                        item.planStatus.uppercase(),
+                        if(item.planStatus.lowercase() == "completed") "เสร็จสิ้น" else item.planStatus.uppercase(),
                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
                         fontSize = 10.sp,
                         fontWeight = FontWeight.Bold,
@@ -642,14 +683,14 @@ private fun HistoryCard(item: HistoryItem, onClick: () -> Unit, onFinish: () -> 
                         shape = RoundedCornerShape(8.dp),
                         modifier = Modifier.height(32.dp)
                     ) {
-                        Text("Complete", fontSize = 11.sp)
+                        Text("เสร็จสมบูรณ์", fontSize = 11.sp)
                     }
                 }
                 
                 TextButton(onClick = onRecordResult) {
                     Icon(Icons.AutoMirrored.Filled.OpenInNew, null, modifier = Modifier.size(14.dp), tint = BlueBtn)
                     Spacer(Modifier.width(4.dp))
-                    Text("View Report", fontSize = 12.sp, color = BlueBtn)
+                    Text("ดูรายงาน", fontSize = 12.sp, color = BlueBtn)
                 }
             }
         }
@@ -694,8 +735,8 @@ private fun SalesTeamRow(members: List<TeamMember>) {
         
         Spacer(Modifier.width(16.dp))
         Column(verticalArrangement = Arrangement.Center, modifier = Modifier.height(40.dp)) {
-            Text("${members.size} Members", fontWeight = FontWeight.Bold, fontSize = 14.sp)
-            Text("Assigned to this project", fontSize = 11.sp, color = TextGray)
+            Text("${members.size} สมาชิก", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+            Text("ได้รับมอบหมายในโครงการนี้", fontSize = 11.sp, color = TextGray)
         }
     }
 }

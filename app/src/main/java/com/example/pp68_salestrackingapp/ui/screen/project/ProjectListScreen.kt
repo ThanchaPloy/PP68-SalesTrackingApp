@@ -29,6 +29,8 @@ import com.example.pp68_salestrackingapp.ui.components.ProjectProgressBar
 import com.example.pp68_salestrackingapp.ui.viewmodels.project.ProjectListViewModel
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.tooling.preview.Preview
+import com.example.pp68_salestrackingapp.ui.theme.SalesTrackingTheme
 
 private val BgLight    = Color(0xFFF5F5F5)
 private val White      = Color.White
@@ -57,16 +59,16 @@ fun ProjectStatusBadge(status: String?) {
         else              -> Color(0xFFF3F4F6) to Color(0xFF6B7280)
     }
     val label = when (status) {
-        "Lead"            -> "Lead-ลูกค้าใหม่"
-        "New Project"     -> "New-โครงการใหม่"
-        "Quotation"       -> "QT-เสนอราคา"
-        "Bidding"         -> "Bid-ประมูล"
-        "Make a Decision" -> "MaD-ตัดสินใจ"
-        "Assured"         -> "Assured-ยืนยัน"
-        "PO"              -> "PO-สั่งซื้อแล้ว"
-        "Completed"       -> "Done-เสร็จสิ้น"
-        "Lost"            -> "Lost-เราไม่ได้งาน"
-        "Failed"          -> "Failed-ล้มเหลว"
+        "Lead"            -> "Lead"
+        "New Project"     -> "New Project"
+        "Quotation"       -> "Quotation"
+        "Bidding"         -> "Bidding"
+        "Make a Decision" -> "Decision"
+        "Assured"         -> "Assured"
+        "PO"              -> "PO"
+        "Completed"       -> "Completed"
+        "Lost"            -> "Lost"
+        "Failed"          -> "Failed"
         else              -> status ?: "-"
     }
     Surface(shape = RoundedCornerShape(20.dp), color = bg) {
@@ -204,7 +206,7 @@ fun ProjectListContent(
         },
         bottomBar = { BottomNavBar(currentTab = currentTab, onTabChange = onTabChange) },
         floatingActionButton = {
-            AddFloatingActionButton(onClick = onAddClick, contentDescription = "Add Project")
+            AddFloatingActionButton(onClick = onAddClick, contentDescription = "เพิ่มโครงการ")
         },
         containerColor = BgLight
     ) { padding ->
@@ -212,7 +214,7 @@ fun ProjectListContent(
             Spacer(Modifier.height(12.dp))
             OutlinedTextField(
                 value = searchQuery, onValueChange = onSearchChange,
-                placeholder = { Text("Search project...", color = TextGray, fontSize = 14.sp) },
+                placeholder = { Text("ค้นหาโครงการ...", color = TextGray, fontSize = 14.sp) },
                 leadingIcon = { Icon(Icons.Default.Search, null, tint = TextGray) },
                 trailingIcon = {
                     if (searchQuery.isNotEmpty())
@@ -416,7 +418,7 @@ fun ProjectListItem(project: Project, onClick: () -> Unit) {
                         overflow = TextOverflow.Ellipsis
                     )
                     Text(
-                        text = "No: ${project.projectNumber ?: "-"}",
+                        text = "เลขที่: ${project.projectNumber ?: "-"}",
                         fontSize = 12.sp,
                         color = TextGray
                     )
@@ -449,5 +451,72 @@ fun ProjectListItem(project: Project, onClick: () -> Unit) {
                 status      = project.projectStatus
             )
         }
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+fun ProjectListScreenPreview() {
+    val sampleProjects = listOf(
+        Project(
+            projectId = "1",
+            custId = "C001",
+            projectNumber = "PJ-001",
+            projectName = "Office Building Renovation",
+            expectedValue = 1500000.0,
+            projectStatus = "New Project",
+            opportunityScore = "HOT",
+            progressPct = 10
+        ),
+        Project(
+            projectId = "2",
+            custId = "C002",
+            projectNumber = "PJ-002",
+            projectName = "New Condominium Project",
+            expectedValue = 5000000.0,
+            projectStatus = "Quotation",
+            opportunityScore = "WARM",
+            progressPct = 35
+        ),
+        Project(
+            projectId = "3",
+            custId = "C003",
+            projectNumber = "PJ-003",
+            projectName = "Small Shop Interior",
+            expectedValue = 250000.0,
+            projectStatus = "Completed",
+            opportunityScore = "COLD",
+            progressPct = 100
+        )
+    )
+    val sampleUser = AuthUser(
+        userId = "U001",
+        email = "test@example.com",
+        role = "Sales",
+        fullName = "John Doe",
+        branchName = "Main Branch"
+    )
+
+    SalesTrackingTheme {
+        ProjectListContent(
+            projects = sampleProjects,
+            isLoading = false,
+            searchQuery = "",
+            selectedTabIndex = 0,
+            error = null,
+            authUser = sampleUser,
+            selectedStatuses = emptySet(),
+            selectedScores = emptySet(),
+            onSearchChange = {},
+            onSelectTab = {},
+            onFilterClick = {},
+            onProjectClick = {},
+            onAddClick = {},
+            onNotificationClick = {},
+            onSettingsClick = {},
+            onLogoutClick = {},
+            currentTab = 3,
+            onTabChange = {}
+        )
     }
 }

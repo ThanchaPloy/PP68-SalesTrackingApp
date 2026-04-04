@@ -22,7 +22,7 @@ import com.example.pp68_salestrackingapp.data.model.ProjectContact
         ActivityResult::class,
         ProjectContact::class
     ],
-    version = 16,
+    version = 17,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {

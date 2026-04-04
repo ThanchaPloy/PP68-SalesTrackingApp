@@ -126,14 +126,14 @@ fun ActivityDetailContent(
                     Spacer(Modifier.weight(1f))
                     if (s.activity?.status != "completed") {
                         IconButton(onClick = onEdit) {
-                            Icon(Icons.Default.Edit, "Edit", tint = RedPrimary)
+                            Icon(Icons.Default.Edit, "แก้ไข", tint = RedPrimary)
                         }
                     }
                 }
                 
                 InfoCard(s)
 
-                Text("ACTIVITY OBJECTIVES", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = TextGray)
+                Text("วัตถุประสงค์/เป้าหมายกิจกรรม", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = TextGray)
                 
                 Column(
                     modifier = Modifier
@@ -144,7 +144,7 @@ fun ActivityDetailContent(
                 ) {
                     if (s.planItems.isEmpty()) {
                         Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {
-                            Text("No objectives planned", color = TextGray, fontSize = 14.sp)
+                            Text("ยังไม่มีการวางแผนเป้าหมาย", color = TextGray, fontSize = 14.sp)
                         }
                     } else {
                         s.planItems.forEach { item ->
@@ -183,7 +183,7 @@ fun ActivityDetailContent(
                                 Spacer(Modifier.width(12.dp))
 
                                 Text(
-                                    item.masterDetails?.actName ?: "Unknown Objective",
+                                    item.masterDetails?.actName ?: "ไม่ระบุเป้าหมาย",
                                     color = when {
                                         isCompleted && item.isDone -> Color(0xFF2E7D32)
                                         canToggle && s.selectedItemIds.contains(item.masterId) -> TextDark
@@ -213,7 +213,7 @@ fun ActivityDetailContent(
                             ) {
                                 Icon(Icons.Default.LocationOn, null, tint = White, modifier = Modifier.size(20.dp))
                                 Spacer(Modifier.width(8.dp))
-                                Text("Check-in", fontWeight = FontWeight.Bold, color = White)
+                                Text("เช็คอิน", fontWeight = FontWeight.Bold, color = White)
                             }
                         } else {
                             Button(
@@ -228,7 +228,7 @@ fun ActivityDetailContent(
                                 } else {
                                     Icon(Icons.Default.CheckCircle, null, tint = White, modifier = Modifier.size(20.dp))
                                     Spacer(Modifier.width(8.dp))
-                                    Text("Finish Activity", fontWeight = FontWeight.Bold, color = White)
+                                    Text("บันทึกผลการนัดหมาย", fontWeight = FontWeight.Bold, color = White)
                                 }
                             }
                         }
@@ -247,7 +247,7 @@ fun ActivityDetailContent(
                             } else {
                                 Icon(Icons.Default.CheckCircle, null, tint = White, modifier = Modifier.size(20.dp))
                                 Spacer(Modifier.width(8.dp))
-                                Text("Finish Activity", fontWeight = FontWeight.Bold, color = White)
+                                Text("บันทึกผลการนัดหมาย", fontWeight = FontWeight.Bold, color = White)
                             }
                         }
                     }
@@ -260,9 +260,9 @@ fun ActivityDetailContent(
 @Composable
 private fun StatusBadge(status: String) {
     val (label, color) = when (status) {
-        "planned" -> "PLANNED" to Color(0xFF1976D2)
-        "checked_in" -> "CHECKED IN" to Color(0xFF2E7D32)
-        "completed" -> "COMPLETED" to Color(0xFF546E7A)
+        "planned" -> "planned" to Color(0xFF1976D2)
+        "checked_in" -> "checked_in" to Color(0xFF2E7D32)
+        "completed" -> "completed" to Color(0xFF546E7A)
         else -> status.uppercase() to TextGray
     }
     Surface(color = color.copy(0.1f), shape = RoundedCornerShape(4.dp)) {
@@ -281,24 +281,24 @@ private fun InfoCard(s: ActivityDetailUiState) {
                 }
                 Spacer(Modifier.width(12.dp))
                 Column {
-                    Text("ACTIVITY TOPIC", fontSize = 10.sp, color = TextGray, fontWeight = FontWeight.Bold)
-                    Text(act.detail ?: "No Topic", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                    Text("หัวข้อกิจกรรม", fontSize = 10.sp, color = TextGray, fontWeight = FontWeight.Bold)
+                    Text(act.detail ?: "ไม่ระบุหัวข้อ", fontWeight = FontWeight.Bold, fontSize = 16.sp)
                 }
             }
             HorizontalDivider(color = Color.LightGray.copy(0.3f))
             
-            DetailRow(Icons.Default.Person, "Contact", act.contactName ?: "N/A")
-            DetailRow(Icons.Default.Business, "Company", act.companyName ?: "N/A")
-            DetailRow(Icons.Default.Work, "Project", act.projectName ?: "N/A")
-            DetailRow(Icons.Default.CalendarToday, "Date", act.activityDate)
+            DetailRow(Icons.Default.Person, "ผู้ติดต่อ", act.contactName ?: "N/A")
+            DetailRow(Icons.Default.Business, "บริษัท", act.companyName ?: "N/A")
+            DetailRow(Icons.Default.Work, "โครงการ", act.projectName ?: "N/A")
+            DetailRow(Icons.Default.CalendarToday, "วันที่", act.activityDate)
             
             val timeRange = if (!act.plannedTime.isNullOrBlank()) {
                 if (!act.plannedEndTime.isNullOrBlank()) "${act.plannedTime} - ${act.plannedEndTime}"
                 else act.plannedTime
             } else "N/A"
-            DetailRow(Icons.Default.AccessTime, "Time", timeRange)
+            DetailRow(Icons.Default.AccessTime, "เวลา", timeRange)
             
-            DetailRow(Icons.Default.Category, "Type", act.activityType)
+            DetailRow(Icons.Default.Category, "ประเภท", act.activityType)
         }
     }
 }

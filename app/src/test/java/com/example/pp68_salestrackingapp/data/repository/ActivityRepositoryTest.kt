@@ -1,17 +1,9 @@
 package com.example.pp68_salestrackingapp.data.repository
 
-import com.example.pp68_salestrackingapp.data.local.ActivityDao
-import com.example.pp68_salestrackingapp.data.local.ActivityPlanItemDao
-import com.example.pp68_salestrackingapp.data.local.ContactDao
-import com.example.pp68_salestrackingapp.data.local.CustomerDao
-import com.example.pp68_salestrackingapp.data.local.ProjectDao
-import com.example.pp68_salestrackingapp.data.model.ActivityMasterDto
-import com.example.pp68_salestrackingapp.data.model.ChecklistItemDto
-import com.example.pp68_salestrackingapp.data.model.SalesActivity
+import com.example.pp68_salestrackingapp.data.local.*
+import com.example.pp68_salestrackingapp.data.model.*
 import com.example.pp68_salestrackingapp.data.remote.ApiService
-import com.example.pp68_salestrackingapp.data.model.ActivityPlanItem
-import com.example.pp68_salestrackingapp.data.model.Customer
-import com.example.pp68_salestrackingapp.data.model.Project
+import com.example.pp68_salestrackingapp.data.remote.UploadApiService
 import io.mockk.*
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.flowOf
@@ -27,11 +19,13 @@ class ActivityRepositoryTest {
 
     private lateinit var repository: ActivityRepository
     private val apiService  = mockk<ApiService>(relaxed = true)
+    private val uploadApiService = mockk<UploadApiService>(relaxed = true)
     private val activityDao = mockk<ActivityDao>(relaxed = true)
     private val projectDao  = mockk<ProjectDao>(relaxed = true)
     private val customerDao = mockk<CustomerDao>(relaxed = true)
     private val contactDao  = mockk<ContactDao>(relaxed = true)
     private val planItemDao = mockk<ActivityPlanItemDao>(relaxed = true)
+    private val resultDao   = mockk<ActivityResultDao>(relaxed = true)
 
     private val sampleActivity = SalesActivity(
         activityId   = "APT-001",
@@ -70,7 +64,7 @@ class ActivityRepositoryTest {
     @Before
     fun setup() {
         repository = ActivityRepository(
-            apiService, activityDao, projectDao, customerDao, contactDao, planItemDao
+            apiService, uploadApiService, activityDao, projectDao, customerDao, contactDao, planItemDao, resultDao
         )
     }
 

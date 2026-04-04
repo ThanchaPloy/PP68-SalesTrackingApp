@@ -301,6 +301,16 @@ fun ActivityCard(
                     card.projectName?.let {
                         InfoRow(Icons.Default.Work, it, fontWeight = FontWeight.SemiBold)
                     }
+                    if (!card.plannedTime.isNullOrBlank()) {
+                        val startTime = card.plannedTime.take(5).replace(":", ".")
+                        val endTime = card.plannedEndTime?.take(5)?.replace(":", ".")
+                        val timeText = if (!endTime.isNullOrBlank()) {
+                            "$startTime - $endTime"
+                        } else {
+                            startTime
+                        }
+                        InfoRow(Icons.Default.AccessTime, timeText, color = BlueBtn, fontWeight = FontWeight.Medium)
+                    }
                     card.companyName?.let { InfoRow(Icons.Default.Business, it) }
                     card.contactName?.let { InfoRow(Icons.Default.Person, it) }
                     card.objective?.let {

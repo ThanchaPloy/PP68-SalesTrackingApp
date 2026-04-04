@@ -118,7 +118,7 @@ fun NotificationContent(
                 val earlierItems = notificationList.filter { !it.isToday }
 
                 if (todayItems.isNotEmpty()) {
-                    item { SectionHeader("TODAY") }
+                    item { SectionHeader("วันนี้") }
                     items(todayItems) { item ->
                         NotificationCard(
                             item = item,
@@ -132,7 +132,7 @@ fun NotificationContent(
                 }
 
                 if (earlierItems.isNotEmpty()) {
-                    item { SectionHeader("EARLIER") }
+                    item { SectionHeader("ก่อนหน้านี้") }
                     items(earlierItems) { item ->
                         NotificationCard(
                             item = item,
@@ -269,10 +269,10 @@ private fun NotificationCard(
                     colors = ButtonDefaults.buttonColors(containerColor = RedPrimary)
                 ) {
                     val btnText = when (item.action) {
-                        NotiAction.CHECK_IN -> "Check-in"
+                        NotiAction.CHECK_IN -> "check-in"
                         NotiAction.REPORT -> "บันทึกผล"
-                        NotiAction.VIEW_WEEKLY -> "Weekly Report"
-                        NotiAction.VIEW_MONTHLY -> "Monthly Report"
+                        NotiAction.VIEW_WEEKLY -> "รายงานรายสัปดาห์"
+                        NotiAction.VIEW_MONTHLY -> "รายงานรายเดือน"
                     }
                     Text(text = btnText, fontSize = 14.sp, fontWeight = FontWeight.Bold)
                 }
@@ -284,7 +284,7 @@ private fun NotificationCard(
                         shape = RoundedCornerShape(8.dp),
                         border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFE0E0E0))
                     ) {
-                        Text("View Details", color = TextDark, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                        Text("ดูรายละเอียด", color = TextDark, fontSize = 14.sp, fontWeight = FontWeight.Bold)
                     }
                 }
             }

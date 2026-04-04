@@ -91,8 +91,7 @@ fun AddProjectContent(
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             // ── Project Number ────────────────────────────────
-            // ✅ แสดง read-only ไม่ให้แก้
-            FormField("Project Number") {
+            FormField("หมายเลขโครงการ") {
                 Surface(
                     modifier = Modifier.fillMaxWidth(),
                     shape    = RoundedCornerShape(10.dp),
@@ -127,22 +126,22 @@ fun AddProjectContent(
             }
 
             // ── Project Name * ────────────────────────────────
-            FormField("Project Name", required = true) {
+            FormField("ชื่อโครงการ", required = true) {
                 FormTextField(
                     value         = uiState.projectName,
                     onValueChange = { onEvent(AddProjectEvent.ProjectNameChanged(it)) },
-                    placeholder   = "project name",
+                    placeholder   = "ระบุชื่อโครงการ",
                     isError       = uiState.projectNameError != null,
                     errorMsg      = uiState.projectNameError
                 )
             }
 
             // ── Customer/Company * ────────────────────────────
-            FormField("Customer/Company", required = true) {
+            FormField("ลูกค้า/บริษัท", required = true) {
                 if (uiState.isLoadingCustomers) LoadingFieldProject()
                 else DropdownField(
                     value       = uiState.selectedCustomerName ?: "",
-                    placeholder = "Select a customer",
+                    placeholder = "เลือกลูกค้า",
                     options     = uiState.customerOptions.map { it.second },
                     isError     = uiState.customerError != null,
                     errorMsg    = uiState.customerError,
@@ -156,7 +155,7 @@ fun AddProjectContent(
             }
 
             // ── Contact Person (กรองตาม customer) ────────────
-            FormField("Contact Person") {
+            FormField("ผู้ติดต่อ") {
                 if (uiState.isLoadingContacts) {
                     LoadingFieldProject()
                 } else if (uiState.contactOptions.isNotEmpty()) {
@@ -176,7 +175,7 @@ fun AddProjectContent(
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
-                            if (uiState.selectedCustomerId == null) "เลือก Customer ก่อน" else "ไม่พบรายชื่อผู้ติดต่อ",
+                            if (uiState.selectedCustomerId == null) "เลือกบริษัทลูกค้าก่อน" else "ไม่พบรายชื่อผู้ติดต่อ",
                             color = AppColors.TextHint, fontSize = 14.sp
                         )
                     }
@@ -216,30 +215,30 @@ fun AddProjectContent(
             }
 
             // ── Expected Value ────────────────────────────────
-            FormField("Expected Value") {
+            FormField("มูลค่าที่คาดหวัง") {
                 FormTextField(
                     value         = uiState.expectedValue,
                     onValueChange = { onEvent(AddProjectEvent.ExpectedValueChanged(it)) },
-                    placeholder   = "e.g., 500,000",
+                    placeholder   = "เช่น 500,000",
                     leadingIcon   = Icons.Default.AttachMoney,
                     keyboardType  = KeyboardType.Number
                 )
             }
 
             // ── Start Date ────────────────────────────────────
-            FormField("Start Date") {
+            FormField("วันที่เริ่มโครงการ") {
                 DatePickerField(
                     selectedDate   = uiState.startDate,
-                    placeholder    = "Pick a date",
+                    placeholder    = "เลือกวันที่",
                     onDateSelected = { onEvent(AddProjectEvent.StartDateChanged(it)) }
                 )
             }
 
             // ── Closing Date ──────────────────────────────────
-            FormField("Closing Date") {
+            FormField("วันที่คาดว่าจะปิด") {
                 DatePickerField(
                     selectedDate   = uiState.closeDate,
-                    placeholder    = "Pick a date",
+                    placeholder    = "เลือกวันที่",
                     onDateSelected = { onEvent(AddProjectEvent.CloseDateChanged(it)) }
                 )
             }
@@ -249,10 +248,10 @@ fun AddProjectContent(
                 "Lead", "New Project", "Quotation", "Bidding",
                 "Make a Decision", "Assured", "PO", "Lost", "Failed"
             )
-            FormField("Project Status", required = true) {
+            FormField("สถานะโครงการ", required = true) {
                 DropdownField(
                     value       = uiState.projectStatus ?: "",
-                    placeholder = "Select a status",
+                    placeholder = "เลือกสถานะ",
                     options     = statusList,
                     isError     = uiState.statusError != null,
                     errorMsg    = uiState.statusError,
@@ -263,7 +262,7 @@ fun AddProjectContent(
             }
 
             // ── Site Location + Google Maps ──────────────────
-            FormField("Site location") {
+            FormField("สถานที่ตั้งโครงการ") {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Box(
                         modifier = Modifier
@@ -279,7 +278,7 @@ fun AddProjectContent(
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
                             Text(
-                                text = uiState.locationText.ifBlank { "Latitude: ${uiState.siteLat ?: "-"}, Longitude: ${uiState.siteLong ?: "-"}" },
+                                text = uiState.locationText.ifBlank { "ละติจูด: ${uiState.siteLat ?: "-"}, ลองจิจูด: ${uiState.siteLong ?: "-"}" },
                                 color = if (uiState.locationText.isBlank() && uiState.siteLat == null) AppColors.TextHint else AppColors.TextPrimary,
                                 fontSize = 14.sp,
                                 modifier = Modifier.weight(1f)
@@ -315,7 +314,7 @@ fun AddProjectContent(
                     CircularProgressIndicator(
                         color = Color.White, modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
                 } else {
-                    Text(if (uiState.projectId != null) "Update Project" else "Create Project", fontSize = 16.sp,
+                    Text(if (uiState.projectId != null) "อัปเดตโครงการ" else "สร้างโครงการ", fontSize = 16.sp,
                         fontWeight = FontWeight.SemiBold, color = Color.White)
                 }
             }
@@ -362,7 +361,7 @@ fun GoogleMapPickerField(
         ) {
             Marker(
                 state = markerState,
-                title = "Site Location",
+                title = "สถานที่ตั้ง",
                 snippet = "Lat: ${markerState.position.latitude.format(4)}, Lng: ${markerState.position.longitude.format(4)}"
             )
         }

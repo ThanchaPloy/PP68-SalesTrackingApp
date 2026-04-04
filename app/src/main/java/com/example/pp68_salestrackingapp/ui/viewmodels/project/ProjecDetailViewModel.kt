@@ -43,12 +43,14 @@ data class HistoryItem(
 // ── 2. UI State สำหรับหน้า Detail ─────────────────────────────────────
 data class ProjectDetailUiState(
     val isLoading: Boolean = false,
+    val isDeleting: Boolean = false,
     val project: Project? = null,
     val companyName: String = "",
     val upcomingTasks: List<TaskItem> = emptyList(),
     val teamMembers: List<TeamMember> = emptyList(),
     val history: List<HistoryItem> = emptyList(),
-    val error: String? = null
+    val error: String? = null,
+    val deleteSuccess: Boolean = false
 )
 
 // ── 3. ViewModel ──────────────────────────────────────────────────────
@@ -111,6 +113,21 @@ class ProjectDetailViewModel @Inject constructor(
                 },
                 onFailure = { error ->
                     _uiState.update { it.copy(isLoading = false, error = error.message) }
+                }
+            )
+        }
+    }
+
+    fun deleteProject() {
+        val id = projectId ?: return
+        viewModelScope.launch {
+            _uiState.update { it.copy(isDeleting = true) }
+            projectRepo.deleteProject(id).fold(
+                onSuccess = {
+                    _uiState.update { it.copy(isDeleting = false, deleteSuccess = true) }
+                },
+                onFailure = { e ->
+                    _uiState.update { it.copy(isDeleting = false, error = e.message) }
                 }
             )
         }

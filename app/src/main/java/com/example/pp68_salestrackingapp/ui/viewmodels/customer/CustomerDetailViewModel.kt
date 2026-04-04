@@ -38,7 +38,13 @@ class CustomerDetailViewModel @Inject constructor(
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
 
+    private val _deleteSuccess = MutableStateFlow(false)
+    val deleteSuccess: StateFlow<Boolean> = _deleteSuccess.asStateFlow()
+
+    private var currentCustId: String? = null
+
     fun load(custId: String) {
+        currentCustId = custId
         viewModelScope.launch {
             _isLoading.value = true
             try {
@@ -48,9 +54,7 @@ class CustomerDetailViewModel @Inject constructor(
                 }
 
                 // 2. ดึง Contact
-                customerRepo.getContactPersons(custId).onSuccess { contacts ->
-                    _contacts.value = contacts
-                }
+                refreshContacts(custId)
 
                 // 3. ดึง Project แยก active/closed
                 val closedStatuses = setOf("Completed", "Lost", "Failed")
@@ -65,6 +69,36 @@ class CustomerDetailViewModel @Inject constructor(
             } finally {
                 _isLoading.value = false
             }
+        }
+    }
+
+    private suspend fun refreshContacts(custId: String) {
+        customerRepo.getContactPersons(custId).onSuccess { contacts ->
+            _contacts.value = contacts
+        }
+    }
+
+    fun deleteContact(contactId: String) {
+        viewModelScope.launch {
+            customerRepo.deleteContact(contactId).onSuccess {
+                currentCustId?.let { refreshContacts(it) }
+            }
+        }
+    }
+
+    fun deleteCustomer() {
+        val custId = currentCustId ?: return
+        viewModelScope.launch {
+            _isLoading.value = true
+            customerRepo.deleteCustomer(custId).fold(
+                onSuccess = {
+                    _deleteSuccess.value = true
+                },
+                onFailure = { e ->
+                    // Handle error
+                }
+            )
+            _isLoading.value = false
         }
     }
 

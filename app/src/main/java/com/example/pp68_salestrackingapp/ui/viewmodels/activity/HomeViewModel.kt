@@ -67,7 +67,7 @@ class HomeViewModel @Inject constructor(
                 val contacts = customerRepo.getAllContactPhoneMap()
                 callLogRepo.syncCallLogs(contacts)
             } catch (e: Exception) {
-                android.util.Log.w("CallLog", "Sync call logs ไม่สำเร็จ: \${e.message}")
+                android.util.Log.w("CallLog", "Sync call logs ไม่สำเร็จ: ${e.message}")
             }
         }
     }
@@ -103,8 +103,9 @@ class HomeViewModel @Inject constructor(
                         }
                     }
 
+                    // Sort by plannedDate ascending, then by plannedTime ascending
                     val grouped = filteredCards
-                        .sortedByDescending { it.plannedDate }
+                        .sortedWith(compareBy({ it.plannedDate }, { it.plannedTime }))
                         .groupBy { card ->
                             card.plannedDate?.let { formatGroupHeader(it) } ?: "ไม่ระบุวันที่"
                         }
@@ -135,7 +136,7 @@ class HomeViewModel @Inject constructor(
                 customerRepo.refreshCustomers(userId)
                 projectRepo.refreshProjects(userId)
             } catch (e: Exception) {
-                android.util.Log.e("HomeVM", "Error refreshing data: \${e.message}")
+                android.util.Log.e("HomeVM", "Error refreshing data: ${e.message}")
             }
 
             loadActivities()

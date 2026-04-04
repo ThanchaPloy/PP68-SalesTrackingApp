@@ -123,7 +123,7 @@ fun DashboardScreenContent(
                 containerColor = RedPrimary,
                 contentColor = White,
                 icon = { Icon(Icons.Default.FileDownload, null) },
-                text = { Text("Export Report") }
+                text = { Text("ส่งออกรายงาน") }
             )
         },
         containerColor = BgLight
@@ -143,22 +143,22 @@ fun DashboardScreenContent(
                 .padding(horizontal = 16.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
-            // ── TOTAL OVERVIEW (New) ──────────────────────────
-            SectionBlock(label = "Total Overview") {
+            // ── ภาพรวมทั้งหมด ──────────────────────────
+            SectionBlock(label = "ภาพรวมทั้งหมด") {
                 StatCard(
                     value    = formatValue(s.totalProjectValue),
-                    label    = "Grand Total Project Value",
+                    label    = "มูลค่าโครงการรวมทั้งหมด",
                     icon     = Icons.Default.Public,
                     modifier = Modifier.fillMaxWidth(),
                     valueFontSize = 32
                 )
             }
 
-            // ── WEEKLY ────────────────────────────────────────
-            SectionBlock(label = "Weekly") {
+            // ── รายสัปดาห์ ────────────────────────────────────────
+            SectionBlock(label = "รายสัปดาห์") {
                 StatCard(
                     value = "${s.weeklyNewLeads}",
-                    label = "New Leads",
+                    label = "ลูกค้ามุ่งหวังใหม่",
                     icon = Icons.Default.PersonAdd,
                     modifier = Modifier.fillMaxWidth().clickable { onWeeklyClick() }
                 )
@@ -167,33 +167,33 @@ fun DashboardScreenContent(
                 VisitCountCard(count = s.weeklyVisitCount)
             }
 
-            // ── MONTHLY ───────────────────────────────────────
-            SectionBlock(label = "Monthly") {
+            // ── รายเดือน ───────────────────────────────────────
+            SectionBlock(label = "รายเดือน") {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     StatCard(
                         value    = formatValue(s.monthlyClosedSales),
-                        label    = "Total Closed Sales",
+                        label    = "ยอดขายที่ปิดได้รวม",
                         icon     = Icons.Default.AttachMoney,
                         modifier = Modifier.weight(1f),
                         valueFontSize = 20
                     )
-                    StatCard("${s.monthlyNewLeads}", "New Leads", Icons.Default.PersonAdd, Modifier.weight(1f))
+                    StatCard("${s.monthlyNewLeads}", "ลูกค้ามุ่งหวังใหม่", Icons.Default.PersonAdd, Modifier.weight(1f))
                 }
                 Spacer(Modifier.height(4.dp))
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    StatCard("${s.activeProjects}",     "Active Projects",          Icons.Default.Pending,    Modifier.weight(1f))
-                    StatCard("${s.closingThisMonth}", "Closing this Month", Icons.Default.Event, Modifier.weight(1f))
+                    StatCard("${s.activeProjects}",     "โครงการที่ดำเนินการอยู่",          Icons.Default.Pending,    Modifier.weight(1f))
+                    StatCard("${s.closingThisMonth}", "คาดว่าจะปิดในเดือนนี้", Icons.Default.Event, Modifier.weight(1f))
                 }
             }
 
-            // ── PROJECT PIPELINE STATUS ───────────────────────
-            SectionCard(title = "Project Pipeline Status") {
+            // ── สถานะ PIPELINE โครงการ ───────────────────────
+            SectionCard(title = "สถานะ Pipeline โครงการ") {
                 val maxCount = s.pipelineStages.maxOfOrNull { it.count }?.takeIf { it > 0 } ?: 1
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     s.pipelineStages.forEach { stage ->
@@ -205,8 +205,8 @@ fun DashboardScreenContent(
                 }
             }
 
-            // ── OPPORTUNITY OVERVIEW ──────────────────────────
-            SectionCard(title = "Opportunity Overview") {
+            // ── ภาพรวมโอกาสการขาย ──────────────────────────
+            SectionCard(title = "ภาพรวมโอกาสการขาย (Opportunity)") {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     s.opportunityGroups.forEach { group ->
                         OpportunityRow(group = group)
@@ -307,7 +307,7 @@ private fun VisitCountCard(count: Int) {
         ) {
             Column {
                 Text("$count", fontWeight = FontWeight.Bold, fontSize = 28.sp, color = TextDark)
-                Text("Visit this week", fontSize = 12.sp, color = TextGray)
+                Text("จำนวนการเข้าพบสัปดาห์นี้", fontSize = 12.sp, color = TextGray)
             }
             Icon(Icons.Default.DirectionsWalk, null,
                 tint = RedPrimary, modifier = Modifier.size(36.dp))
