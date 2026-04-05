@@ -19,6 +19,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 import javax.inject.Inject
+import kotlin.math.*
 
 data class SalesResultUiState(
     val projectId: String? = null,
@@ -36,6 +37,7 @@ data class SalesResultUiState(
     val isProposalSent: Boolean = false,
     val proposalDate: String? = null,
     val competitorCount: Int = 0,
+    val dmInvolved: Boolean = false, // ✅ Added
     val visitSummary: String = "",
     val isLoading: Boolean = false,
     val isSaving: Boolean = false,
@@ -44,6 +46,7 @@ data class SalesResultUiState(
     val photoUri: Uri? = null,
     val photoUrl: String? = null,
     val isUploadingPhoto: Boolean = false,
+    val isPhotoLocationValid: Boolean? = null,
     // EXIF data
     val photoTakenAt: String? = null,
     val photoLat: Double? = null,
@@ -160,7 +163,6 @@ class SalesResultViewModel @Inject constructor(
                 }
             }
 
-            // โหลดผลการขายที่เคยบันทึกไว้ (ถ้ามี)
             val result = activityRepo.getActivityResult(aId)
             if (result != null) {
                 _uiState.update {
@@ -176,6 +178,7 @@ class SalesResultViewModel @Inject constructor(
                         isProposalSent         = result.isProposalSent,
                         proposalDate           = result.proposalDate,
                         competitorCount        = result.competitorCount,
+                        dmInvolved             = result.dmInvolved,
                         visitSummary           = result.summary ?: "",
                         photoUrl               = result.photoUrl,
                         photoTakenAt           = result.photoTakenAt,
@@ -198,9 +201,11 @@ class SalesResultViewModel @Inject constructor(
     fun onCounterpartyMultiplierChanged(v: String){ _uiState.update { it.copy(counterpartyMultiplier = v) } }
     fun onResponseSpeedChanged(value: String)     { _uiState.update { it.copy(responseSpeed = value) } }
     fun onProposalToggle(sent: Boolean)           { _uiState.update { it.copy(isProposalSent = sent) } }
+    fun onDmToggle(involved: Boolean)             { _uiState.update { it.copy(dmInvolved = involved) } }
 
     fun onPhotoPicked(context: Context, uri: Uri) {
         _uiState.update { it.copy(photoUri = uri, photoUrl = null) }
+
         extractExifData(context, uri)
     }
 
@@ -210,18 +215,32 @@ class SalesResultViewModel @Inject constructor(
                 val exif = ExifInterface(inputStream)
                 val dateTaken = exif.getAttribute(ExifInterface.TAG_DATETIME)
                 val deviceModel = exif.getAttribute(ExifInterface.TAG_MODEL)
-                
+
                 val latLong = FloatArray(2)
                 val hasGps = exif.getLatLong(latLong)
                 val lat = if (hasGps) latLong[0].toDouble() else null
                 val lng = if (hasGps) latLong[1].toDouble() else null
 
+                // ✅ เพิ่มตรงนี้ — คำนวณว่าพิกัดรูปตรงกับสถานที่นัดไหม
+                val isLocationValid: Boolean? = if (hasGps) {
+                    val plannedLat = _uiState.value.project?.projectLat?.toDouble()
+                    val plannedLng = _uiState.value.project?.projectLong?.toDouble()
+                    if (plannedLat != null && plannedLng != null) {
+                        val distance = calculateHaversine(
+                            plannedLat, plannedLng,
+                            latLong[0].toDouble(), latLong[1].toDouble()
+                        )
+                        distance <= 500.0
+                    } else null
+                } else null
+
                 _uiState.update {
                     it.copy(
-                        photoTakenAt = dateTaken,
-                        photoLat = lat,
-                        photoLng = lng,
-                        photoDeviceModel = deviceModel
+                        photoTakenAt         = dateTaken,
+                        photoLat             = lat,
+                        photoLng             = lng,
+                        photoDeviceModel     = deviceModel,
+                        isPhotoLocationValid = isLocationValid  // ✅ เพิ่ม
                     )
                 }
             }
@@ -230,19 +249,68 @@ class SalesResultViewModel @Inject constructor(
         }
     }
 
+    private fun calculateHaversine(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
+        val r = 6371e3 // Earth radius in meters
+        val phi1 = lat1 * PI / 180
+        val phi2 = lat2 * PI / 180
+        val deltaPhi = (lat2 - lat1) * PI / 180
+        val deltaLambda = (lon2 - lon1) * PI / 180
+
+        val a = sin(deltaPhi / 2).pow(2) +
+                cos(phi1) * cos(phi2) *
+                sin(deltaLambda / 2).pow(2)
+        val c = 2 * atan2(sqrt(a), sqrt(1 - a))
+
+        return r * c
+    }
+
     fun onProposalDateChanged(date: String)       { _uiState.update { it.copy(proposalDate = date) } }
     fun onCompetitorCountChanged(delta: Int)      {
         _uiState.update { it.copy(competitorCount = (it.competitorCount + delta).coerceAtLeast(0)) }
     }
     fun onSummaryChanged(text: String)            { _uiState.update { it.copy(visitSummary = text) } }
 
+    fun uploadPhoto(context: Context) {
+        val s = _uiState.value
+        val aId = s.activityId
+        val uri = s.photoUri
+        if (uri == null || aId == null) return
+
+        viewModelScope.launch {
+            _uiState.update { it.copy(isUploadingPhoto = true, error = null) }
+            
+            val bytes = try {
+                context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+            } catch (e: Exception) {
+                null
+            }
+
+            if (bytes == null) {
+                _uiState.update { it.copy(error = "ไม่สามารถอ่านไฟล์รูปภาพได้", isUploadingPhoto = false) }
+                return@launch
+            }
+
+            activityRepo.uploadVisitPhoto(aId, bytes).onSuccess { url ->
+                _uiState.update { it.copy(photoUrl = url, isUploadingPhoto = false) }
+            }.onFailure { e ->
+                _uiState.update { it.copy(error = "อัปโหลดรูปไม่สำเร็จ: ${e.message}", isUploadingPhoto = false) }
+            }
+        }
+    }
+
     fun save() {
         val currentState = _uiState.value
+        android.util.Log.d("SalesResult", "=== save() called ===")
+        android.util.Log.d("SalesResult", "activityId: ${currentState.activityId}")
+        android.util.Log.d("SalesResult", "visitSummary: ${currentState.visitSummary}")
+        android.util.Log.d("SalesResult", "photoUrl: ${currentState.photoUrl}")
+        android.util.Log.d("SalesResult", "photoTakenAt: ${currentState.photoTakenAt}")
 
         if (currentState.visitSummary.isBlank()) {
             _uiState.update { it.copy(error = "กรุณากรอกสรุปการเข้าพบ") }
             return
         }
+
         if (currentState.activityId.isNullOrBlank()) {
             _uiState.update { it.copy(error = "ไม่พบรหัสนัดหมาย") }
             return
@@ -261,7 +329,6 @@ class SalesResultViewModel @Inject constructor(
             val userName = user?.fullName ?: user?.userId ?: "Unknown User"
 
             try {
-                // 1. บันทึก ActivityResult ลง Local DB + API
                 val resultToSave = ActivityResult(
                     activityId             = s.activityId!!,
                     createdBy              = user?.userId,
@@ -275,24 +342,20 @@ class SalesResultViewModel @Inject constructor(
                     isProposalSent         = s.isProposalSent,
                     proposalDate           = s.proposalDate,
                     competitorCount        = s.competitorCount,
+                    dmInvolved             = s.dmInvolved, // ✅ Added
                     summary                = s.visitSummary,
-                    photoUrl               = s.photoUrl,
+                    photoUrl               = s.photoUrl,   // ✅ Added
                     photoTakenAt           = s.photoTakenAt,
                     photoLat               = s.photoLat,
                     photoLng               = s.photoLng,
                     photoDeviceModel       = s.photoDeviceModel
                 )
 
-                // บันทึก Local และพยายามส่ง API
+                android.util.Log.d("SalesResult", "=== calling saveActivityResult ===")
+                android.util.Log.d("SalesResult", "resultToSave: $resultToSave")
                 val saveResult = activityRepo.saveActivityResult(resultToSave)
-                if (saveResult.isFailure) {
-                    val msg = saveResult.exceptionOrNull()?.message ?: "Unknown Error"
-                    if (!msg.contains("PGRST204")) {
-                         Log.e("SalesResult", "Sync ActivityResult failed: $msg")
-                    }
-                }
+                android.util.Log.d("SalesResult", "saveResult: $saveResult")
 
-                // 2. อัปเดต appointment → plan_status = completed + note (พยายามทำ แต่อย่าให้ขวางการเซฟ)
                 try {
                     activityRepo.updateActivity(
                         s.activityId!!,
@@ -301,11 +364,8 @@ class SalesResultViewModel @Inject constructor(
                             "note"        to s.visitSummary
                         )
                     )
-                } catch (e: Exception) {
-                    Log.e("SalesResult", "Update Activity failed: ${e.message}")
-                }
+                } catch (e: Exception) { }
 
-                // 3. อัปเดต project status/score (พยายามทำ แต่อย่าให้ขวางการเซฟ)
                 if (!s.projectId.isNullOrBlank()) {
                     try {
                         val pUpdates = mutableMapOf<String, String>()
@@ -323,71 +383,15 @@ class SalesResultViewModel @Inject constructor(
                                 updatedBy = userName
                             )
                         }
-                    } catch (e: Exception) {
-                        Log.e("SalesResult", "Update Project failed: ${e.message}")
-                    }
+                    } catch (e: Exception) { }
                 }
 
-                // ถ้ามาถึงตรงนี้ ถือว่าบันทึก Local สำเร็จแน่นอนแล้ว
                 _uiState.update { it.copy(isSaving = false, isSaved = true) }
 
             } catch (e: Exception) {
                 _uiState.update { 
                     it.copy(isSaving = false, error = "เกิดข้อผิดพลาดในการบันทึก: ${e.message}") 
                 }
-            }
-        }
-    }
-
-
-    fun uploadPhoto(context: Context) {
-        val uri = _uiState.value.photoUri ?: return
-        val activityId = _uiState.value.activityId ?: return
-
-        viewModelScope.launch {
-            _uiState.update { it.copy(isUploadingPhoto = true, error = null) }
-            try {
-                val bytes = context.contentResolver
-                    .openInputStream(uri)?.readBytes()
-                    ?: throw Exception("ไม่สามารถอ่านไฟล์รูปได้")
-
-                val result = activityRepo.uploadVisitPhoto(activityId, bytes)
-                result.onSuccess { url ->
-                    _uiState.update { it.copy(photoUrl = url, isUploadingPhoto = false) }
-                    
-                    // --- บันทึกลงฐานข้อมูลทันทีหลังจากอัปโหลดสำเร็จ ---
-                    val s = _uiState.value
-                    val user = authRepo.currentUser()
-                    val resultToUpdate = ActivityResult(
-                        activityId             = s.activityId!!,
-                        createdBy              = user?.userId,
-                        reportDate             = s.reportDate,
-                        newStatus              = if (s.isStatusUpdateEnabled) STATUS_MAP[s.newStatus] ?: s.newStatus.ifBlank { null } else null,
-                        opportunityScore       = OPPORTUNITY_MAP[s.opportunityScore] ?: s.opportunityScore,
-                        dealPosition           = DEAL_POSITION_MAP[s.dealPosition] ?: s.dealPosition.ifBlank { null },
-                        previousSolution       = SOLUTION_MAP[s.previousSolution] ?: s.previousSolution.ifBlank { null },
-                        counterpartyMultiplier = COUNTERPARTY_MAP[s.counterpartyMultiplier] ?: s.counterpartyMultiplier.ifBlank { null },
-                        responseSpeed          = RESPONSE_SPEED_MAP[s.responseSpeed] ?: s.responseSpeed.ifBlank { null },
-                        isProposalSent         = s.isProposalSent,
-                        proposalDate           = s.proposalDate,
-                        competitorCount        = s.competitorCount,
-                        summary                = s.visitSummary,
-                        photoUrl               = url, // ใช้ URL ใหม่ที่ได้จากการอัปโหลด
-                        photoTakenAt           = s.photoTakenAt,
-                        photoLat               = s.photoLat,
-                        photoLng               = s.photoLng,
-                        photoDeviceModel       = s.photoDeviceModel
-                    )
-                    
-                    // เรียก saveActivityResult เพื่อบันทึกลง Local และพยายาม Sync
-                    activityRepo.saveActivityResult(resultToUpdate)
-                    // ----------------------------------------------------
-
-                }.onFailure { e ->
-                    _uiState.update { it.copy(error = "อัปโหลดรูปไม่สำเร็จ: ${e.message}", isUploadingPhoto = false) }
-                }
-            } catch (e: Exception) {
-                _uiState.update { it.copy(error = "อัปโหลดรูปไม่สำเร็จ: ${e.message}", isUploadingPhoto = false) }
             }
         }
     }

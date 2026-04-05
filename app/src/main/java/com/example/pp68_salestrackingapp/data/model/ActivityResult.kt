@@ -32,10 +32,6 @@ data class ActivityResult(
     @SerializedName("dm_involved")
     val dmInvolved: Boolean = false,
 
-    @ColumnInfo(name = "dm_contact_id")
-    @SerializedName("dm_contact_id")
-    val dmContactId: String? = null,
-
     @ColumnInfo(name = "is_proposal_sent")
     @SerializedName("is_proposal_sent")
     val isProposalSent: Boolean = false,

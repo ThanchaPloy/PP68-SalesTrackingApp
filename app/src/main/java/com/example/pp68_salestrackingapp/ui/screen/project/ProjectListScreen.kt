@@ -190,8 +190,8 @@ fun ProjectListContent(
     onFilterClick: () -> Unit,
     onProjectClick: (String) -> Unit, onAddClick: () -> Unit,
     onNotificationClick: () -> Unit,
-    onSettingsClick: () -> Unit,
-    onLogoutClick: () -> Unit,
+    onSettingsClick:     () -> Unit,
+    onLogoutClick:       () -> Unit,
     currentTab: Int, onTabChange: (Int) -> Unit
 ) {
     Scaffold(
@@ -317,9 +317,8 @@ fun FilterModal(
             Text("Project Status", fontWeight = FontWeight.SemiBold, fontSize = 15.sp, color = TextDark)
             Spacer(Modifier.height(12.dp))
             val statuses = listOf(
-                "New Project", "Quotation", "Bidding", 
-                "Make a Decision", "Assured", "Product Processing", 
-                "Working", "Quality Issue", "Completed", "Lost", "Failed"
+                "Lead", "New Project", "Quotation", "Bidding", 
+                "Make a Decision", "Assured", "PO","Lost", "Failed"
             )
             FlowRow(mainAxisSpacing = 8.dp, crossAxisSpacing = 8.dp) {
                 statuses.forEach { s ->

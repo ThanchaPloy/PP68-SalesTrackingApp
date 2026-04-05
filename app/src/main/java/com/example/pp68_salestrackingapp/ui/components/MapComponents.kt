@@ -26,6 +26,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.pp68_salestrackingapp.BuildConfig
 import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.LatLng
@@ -75,8 +76,8 @@ fun GoogleMapPickerField(
     val placesClient = remember {
         if (isPreview) null else {
             if (!Places.isInitialized()) {
-                // ✅ ใส่ API key ตรงๆ
-                Places.initialize(context, "AIzaSyAM5_FQ66C5ALdPA2XM1rtHwE8VW3eAkOs")
+                // ✅ Use key from BuildConfig instead of hardcoded string
+                Places.initialize(context, BuildConfig.MAPS_API_KEY)
             }
             Places.createClient(context)
         }
@@ -283,7 +284,7 @@ fun GoogleMapPickerField(
                     modifier            = Modifier.fillMaxSize(),
                     cameraPositionState = cameraPositionState,
                     onMapClick          = { latLng ->
-                        // แตะแผนที่เพื่อปักหมุด
+                        // แแตะแผนที่เพื่อปักหมุด
                         markerPosition.value = latLng
                         markerState.position = latLng
                         onLocationPicked(latLng.latitude, latLng.longitude)

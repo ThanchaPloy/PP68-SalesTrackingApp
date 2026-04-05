@@ -1,5 +1,6 @@
 package com.example.pp68_salestrackingapp.ui.screen.activity
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -193,7 +194,7 @@ fun ActivityCard(
     val statusConf = statusConfigs[card.planStatus]
         ?: StatusConfig(card.planStatus, TextGray, BgLight, null)
 
-    val hasNote    = !card.weeklyNote.isNullOrBlank()
+    val hasNote    = !card.weeklyNote.isNullOrBlank() || card.hasResult
     val canDelete  = card.planStatus == "planned"
 
     var showDeleteDialog by remember { mutableStateOf(false) }
@@ -337,6 +338,7 @@ fun ActivityCard(
                     onClick  = onReport,
                     modifier = Modifier.fillMaxWidth().height(40.dp),
                     shape    = RoundedCornerShape(8.dp),
+                    border   = if (hasNote) BorderStroke(1.dp, RedPrimary) else null,
                     colors   = if (hasNote)
                         ButtonDefaults.outlinedButtonColors(contentColor = RedPrimary)
                     else
@@ -426,7 +428,7 @@ private fun HomeTopBar(
             user = authUser
         )
         Box(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
-            Surface(shape = RoundedCornerShape(8.dp), border = androidx.compose.foundation.BorderStroke(1.dp, BorderGray), color = White, onClick = { showMonthPicker = !showMonthPicker }, modifier = Modifier.fillMaxWidth()) {
+            Surface(shape = RoundedCornerShape(8.dp), border = BorderStroke(1.dp, BorderGray), color = White, onClick = { showMonthPicker = !showMonthPicker }, modifier = Modifier.fillMaxWidth()) {
                 Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
                     Text(selectedMonth.format(formatter).replaceFirstChar { it.uppercase() }, fontSize = 15.sp, fontWeight = FontWeight.Medium)
                     Icon(if (showMonthPicker) Icons.Default.ExpandLess else Icons.Default.ExpandMore, null, tint = TextGray)
@@ -446,7 +448,7 @@ private fun MonthPicker(current: YearMonth, onSelect: (YearMonth) -> Unit) {
     
     Surface(
         color = White,
-        border = androidx.compose.foundation.BorderStroke(1.dp, BorderGray),
+        border = BorderStroke(1.dp, BorderGray),
         shape = RoundedCornerShape(bottomStart = 12.dp, bottomEnd = 12.dp),
         modifier = Modifier
             .fillMaxWidth()

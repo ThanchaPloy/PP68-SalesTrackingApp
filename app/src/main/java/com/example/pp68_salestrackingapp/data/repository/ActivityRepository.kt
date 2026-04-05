@@ -1,5 +1,6 @@
 package com.example.pp68_salestrackingapp.data.repository
 
+import android.util.Log
 import com.example.pp68_salestrackingapp.data.local.*
 import com.example.pp68_salestrackingapp.data.model.SalesActivity
 import com.example.pp68_salestrackingapp.data.model.ActivityMaster
@@ -34,6 +35,8 @@ class ActivityRepository @Inject constructor(
 
     fun getActivitiesByProjectFlow(projectId: String): Flow<List<SalesActivity>> =
         activityDao.getActivitiesByProject(projectId)
+
+    fun getAllResultIdsFlow(): Flow<List<String>> = resultDao.getAllResultIdsFlow()
 
     suspend fun refreshActivities(userId: String): kotlin.Result<Unit> {
         return withContext(Dispatchers.IO) {
@@ -379,31 +382,45 @@ class ActivityRepository @Inject constructor(
 
     suspend fun saveActivityResult(result: ActivityResult): kotlin.Result<Unit> {
         return withContext(Dispatchers.IO) {
+            Log.d("ActivityRepository", "=== saveActivityResult called ===")
+            Log.d("ActivityRepository", "activityId: ${result.activityId}")
+            Log.d("ActivityRepository", "body will contain: photo_url=${result.photoUrl}")
+
             try {
+                // 1. บันทึกลง Local DB เสมอ
                 resultDao.insertResult(result)
 
-                // สร้าง Map เฉพาะ field ที่ไม่ null เพื่อส่ง API
+                // 2. เตรียมข้อมูลสำหรับ API (ส่งเฉพาะฟิลด์ที่ไม่เป็น Null เพื่อป้องกันการทับข้อมูลเดิม)
                 val body = mutableMapOf<String, Any?>()
                 body["appointment_id"]   = result.activityId
-                body["created_by"]       = result.createdBy
-                body["report_date"]      = result.reportDate
-                body["new_status"]       = result.newStatus
-                body["opportunity_score"] = result.opportunityScore
-                body["dm_involved"]      = result.dmInvolved
+                
+                result.createdBy?.let { body["created_by"] = it }
+                result.reportDate?.let { body["report_date"] = it }
+                result.newStatus?.let { body["new_status"] = it }
+                result.opportunityScore?.let { body["opportunity_score"] = it }
+                body["dm_involved"] = result.dmInvolved
                 body["is_proposal_sent"] = result.isProposalSent
-                body["proposal_date"]    = result.proposalDate
+                result.proposalDate?.let { body["proposal_date"] = it }
                 body["competitor_count"] = result.competitorCount
-                body["response_speed"]   = result.responseSpeed
-                body["deal_position"]    = result.dealPosition
-                body["current_solution"] = result.previousSolution
-                body["counterparty_type"] = result.counterpartyMultiplier
-                body["note_summary"]     = result.summary
-                body["photo_url"]        = result.photoUrl
-                body["photo_taken_at"]   = result.photoTakenAt
-                body["photo_lat"]        = result.photoLat
-                body["photo_lng"]        = result.photoLng
-                body["photo_device_model"] = result.photoDeviceModel
+                result.responseSpeed?.let { body["response_speed"] = it }
+                result.dealPosition?.let { body["deal_position"] = it }
+                result.previousSolution?.let { body["current_solution"] = it }
+                result.counterpartyMultiplier?.let { body["counterparty_type"] = it }
+                result.summary?.let { body["note_summary"] = it }
+                
+                // ฟิลด์เกี่ยวกับรูปภาพ
+                if (!result.photoUrl.isNullOrBlank())         body["photo_url"]          = result.photoUrl
+                if (!result.photoTakenAt.isNullOrBlank())     body["photo_taken_at"]     = result.photoTakenAt
+                if (result.photoLat != null)                  body["photo_lat"]          = result.photoLat
+                if (result.photoLng != null)                  body["photo_lng"]          = result.photoLng
+                if (!result.photoDeviceModel.isNullOrBlank()) body["photo_device_model"] = result.photoDeviceModel
 
+                Log.d("ActivityRepository", "=== body to send ===")
+                Log.d("ActivityRepository", "photo_url: ${body["photo_url"]}")
+                Log.d("ActivityRepository", "photo_taken_at: ${body["photo_taken_at"]}")
+                Log.d("ActivityRepository", "full body: $body")
+
+                // 3. ซิงค์กับ API
                 val existing = apiService.getActivityResult("eq.${result.activityId}")
                 val apiResp = if (existing.isSuccessful && !existing.body().isNullOrEmpty()) {
                     apiService.updateActivityResultMap("eq.${result.activityId}", body)
@@ -411,10 +428,16 @@ class ActivityRepository @Inject constructor(
                     apiService.insertActivityResultMap(body)
                 }
 
-                if (apiResp.isSuccessful) kotlin.Result.success(Unit)
-                else kotlin.Result.failure(Exception("HTTP ${apiResp.code()}: ${apiResp.errorBody()?.string()}"))
+                if (apiResp.isSuccessful) {
+                    kotlin.Result.success(Unit)
+                } else {
+                    val errorMsg = apiResp.errorBody()?.string() ?: "Unknown error"
+                    Log.e("ActivityRepository", "Sync failed: ${apiResp.code()} - $errorMsg")
+                    kotlin.Result.failure(Exception("HTTP ${apiResp.code()}: $errorMsg"))
+                }
             } catch (e: Exception) {
-                kotlin.Result.success(Unit) // offline → local saved แล้ว
+                Log.e("ActivityRepository", "Exception in saveActivityResult: ${e.message}")
+                kotlin.Result.success(Unit)
             }
         }
     }

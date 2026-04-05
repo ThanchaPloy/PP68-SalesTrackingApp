@@ -28,7 +28,8 @@ data class ActivityCard(
     val plannedTime:   String?,
     val plannedEndTime:String?,
     val weeklyNote:    String? = null,
-    val customerId: String? = null
+    val customerId:    String? = null,
+    val hasResult:     Boolean = false
 )
 
 data class HomeUiState(
@@ -78,8 +79,9 @@ class HomeViewModel @Inject constructor(
             combine(
                 activityRepo.getAllActivitiesFlow(),
                 customerRepo.getAllCustomersFlow(),
-                projectRepo.getAllProjectsFlow()
-            ) { _, _, _ -> 
+                projectRepo.getAllProjectsFlow(),
+                activityRepo.getAllResultIdsFlow()
+            ) { _, _, _, _ -> 
                 loadActivities()
             }.collect()
         }
@@ -89,9 +91,13 @@ class HomeViewModel @Inject constructor(
         viewModelScope.launch {
             val currentMonth = _uiState.value.selectedMonth
 
+            val resultIds = activityRepo.getAllResultIdsFlow().first().toSet()
+
             activityRepo.getMyActivitiesWithDetails().fold(
                 onSuccess = { cards ->
-                    val filteredCards = cards.filter { card ->
+                    val filteredCards = cards.map { card ->
+                        card.copy(hasResult = card.activityId in resultIds)
+                    }.filter { card ->
                         try {
                             if (card.plannedDate.isNullOrBlank()) false
                             else {

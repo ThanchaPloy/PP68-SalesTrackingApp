@@ -271,20 +271,16 @@ interface ApiService {
     ): Response<List<ActivityResult>>
 
     @POST("activity_result")
-    @Headers("Prefer: return=representation")
+    @Headers("Prefer: return=representation",
+        "Content-Profile: public")
     suspend fun insertActivityResultMap(
         @Body result: @JvmSuppressWildcards Map<String, Any?>
     ): Response<List<ActivityResult>>
 
-    @PATCH("activity_result")
-    @Headers("Prefer: return=representation")
-    suspend fun updateActivityResult(
-        @Query("appointment_id") appointmentId: String,
-        @Body result: ActivityResult
-    ): Response<List<ActivityResult>>
 
     @PATCH("activity_result")
-    @Headers("Prefer: return=representation")
+    @Headers("Prefer: return=representation",
+        "Content-Profile: public")
     suspend fun updateActivityResultMap(
         @Query("appointment_id") appointmentId: String,
         @Body updates: @JvmSuppressWildcards Map<String, Any?>

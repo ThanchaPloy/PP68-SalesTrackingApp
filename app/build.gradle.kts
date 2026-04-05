@@ -1,3 +1,6 @@
+import java.util.Properties
+import java.io.FileInputStream
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -11,6 +14,15 @@ plugins {
 android {
     namespace = "com.example.pp68_salestrackingapp"
     compileSdk = 35
+
+    // Load local.properties
+    val localProperties = Properties()
+    val localPropertiesFile = rootProject.file("local.properties")
+    if (localPropertiesFile.exists()) {
+        localProperties.load(FileInputStream(localPropertiesFile))
+    }
+
+    val mapsApiKey: String = localProperties.getProperty("MAPS_API_KEY") ?: ""
 
     defaultConfig {
         applicationId = "com.example.pp68_salestrackingapp"
@@ -26,6 +38,9 @@ android {
         buildConfigField("String", "POSTGREST_URL", "\"$postgrestUrl\"")
         buildConfigField("String", "JWT_SECRET",    "\"$jwtSecret\"")
         buildConfigField("String", "GCP_ENDPOINT", "\"https://postgrest-451670558907.asia-southeast1.run.app\"")
+        
+        buildConfigField("String", "MAPS_API_KEY", "\"$mapsApiKey\"")
+        manifestPlaceholders["MAPS_API_KEY"] = mapsApiKey
     }
 
     buildTypes {

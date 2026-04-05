@@ -22,7 +22,7 @@ import com.example.pp68_salestrackingapp.data.model.ProjectContact
         ActivityResult::class,
         ProjectContact::class
     ],
-    version = 17,
+    version = 22, // ✅ เพิ่ม Version เป็น 20 เพื่อแก้ปัญหา Schema mismatch
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {

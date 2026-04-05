@@ -77,6 +77,7 @@ fun SalesResultScreen(
         onProposalToggle                = viewModel::onProposalToggle,
         onProposalDateChanged           = viewModel::onProposalDateChanged,
         onCompetitorCountChanged        = viewModel::onCompetitorCountChanged,
+        onDmToggle                      = viewModel::onDmToggle,
         onSummaryChanged                = viewModel::onSummaryChanged,
         onPhotoPicked                   = { uri -> viewModel.onPhotoPicked(context, uri) },
         onUploadPhoto                   = { viewModel.uploadPhoto(context) },
@@ -101,6 +102,7 @@ private fun SalesResultContent(
     onProposalToggle: (Boolean) -> Unit,
     onProposalDateChanged: (String) -> Unit,
     onCompetitorCountChanged: (Int) -> Unit,
+    onDmToggle: (Boolean) -> Unit,
     onSummaryChanged: (String) -> Unit,
     onPhotoPicked: (Uri) -> Unit,
     onUploadPhoto: () -> Unit,
@@ -215,6 +217,22 @@ private fun SalesResultContent(
                     )
                 }
 
+                // DM Involved Toggle
+                SectionCard(title = "ผู้มีอำนาจตัดสินใจ (DM)", icon = Icons.Default.Person) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("ได้พบ/ดีลกับ DM โดยตรง", fontSize = 15.sp)
+                        Switch(
+                            checked = s.dmInvolved,
+                            onCheckedChange = onDmToggle,
+                            colors = SwitchDefaults.colors(checkedThumbColor = White, checkedTrackColor = RedPrimary)
+                        )
+                    }
+                }
+
                 // 4. ตำแหน่งของดีล (Deal Position)
                 SectionCard(title = "4. ตำแหน่งของดีล (Deal Position)", icon = Icons.Default.Place) {
                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -314,6 +332,11 @@ private fun SalesResultContent(
                         photoUri = s.photoUri,
                         photoUrl = s.photoUrl,
                         isUploading = s.isUploadingPhoto,
+                        photoTakenAt         = s.photoTakenAt,
+                        photoLat             = s.photoLat,
+                        photoLng             = s.photoLng,
+                        photoDeviceModel     = s.photoDeviceModel,
+                        isPhotoLocationValid = s.isPhotoLocationValid,
                         onPhotoPicked = onPhotoPicked,
                         onUpload = onUploadPhoto
                     )
@@ -419,17 +442,25 @@ private fun PhotoUploadSection(
     photoUri: Uri?,
     photoUrl: String?,
     isUploading: Boolean,
+    // ✅ เพิ่ม EXIF parameters
+    photoTakenAt: String?,
+    photoLat: Double?,
+    photoLng: Double?,
+    photoDeviceModel: String?,
+    isPhotoLocationValid: Boolean?,
     onPhotoPicked: (Uri) -> Unit,
     onUpload: () -> Unit
 ) {
     val launcher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
-    ) { uri: Uri? ->
-        uri?.let { onPhotoPicked(it) }
-    }
+    ) { uri: Uri? -> uri?.let { onPhotoPicked(it) } }
 
-    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
-        if (photoUrl != null || photoUri != null) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        // แสดงรูป
+        if (photoUrl != null || photoUri != null ) {
             AsyncImage(
                 model = photoUrl ?: photoUri,
                 contentDescription = null,
@@ -441,24 +472,105 @@ private fun PhotoUploadSection(
                 contentScale = ContentScale.Crop
             )
             Spacer(Modifier.height(12.dp))
+
+            // ✅ แสดง EXIF Info
+            if (photoTakenAt != null || photoLat != null || photoDeviceModel != null) {
+                Surface(
+                    color    = Color(0xFFF5F5F5),
+                    shape    = RoundedCornerShape(8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(
+                        modifier = Modifier.padding(10.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        // เวลาถ่ายรูป
+                        photoTakenAt?.let {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Icon(Icons.Default.AccessTime, null,
+                                    modifier = Modifier.size(14.dp), tint = TextGray)
+                                Text("ถ่ายเมื่อ: $it",
+                                    fontSize = 12.sp, color = TextGray)
+                            }
+                        }
+
+                        // พิกัดและสถานะ
+                        if (photoLat != null && photoLng != null) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                val iconTint = when (isPhotoLocationValid) {
+                                    true  -> Color(0xFF2E7D32)
+                                    false -> Color(0xFFC62828)
+                                    null  -> TextGray
+                                }
+                                Icon(Icons.Default.LocationOn, null,
+                                    modifier = Modifier.size(14.dp), tint = iconTint)
+                                Text(
+                                    text = when (isPhotoLocationValid) {
+                                        true  -> "พิกัดตรงกับสถานที่นัด ✅"
+                                        false -> "พิกัดไม่ตรงกับสถานที่นัด ⚠️"
+                                        null  -> "พิกัด: %.4f, %.4f".format(photoLat, photoLng)
+                                    },
+                                    fontSize = 12.sp,
+                                    color = when (isPhotoLocationValid) {
+                                        true  -> Color(0xFF2E7D32)
+                                        false -> Color(0xFFC62828)
+                                        null  -> TextGray
+                                    }
+                                )
+                            }
+                        } else {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Icon(Icons.Default.LocationOff, null,
+                                    modifier = Modifier.size(14.dp), tint = TextGray)
+                                Text("ไม่พบพิกัดในรูป",
+                                    fontSize = 12.sp, color = TextGray)
+                            }
+                        }
+
+                        // รุ่นมือถือ
+                        photoDeviceModel?.let {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Icon(Icons.Default.PhoneAndroid, null,
+                                    modifier = Modifier.size(14.dp), tint = TextGray)
+                                Text("อุปกรณ์: $it",
+                                    fontSize = 12.sp, color = TextGray)
+                            }
+                        }
+                    }
+                }
+                Spacer(Modifier.height(12.dp))
+            }
         }
 
+        // ปุ่มเลือกรูปและอัปโหลด (เหมือนเดิม)
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             OutlinedButton(
                 onClick = { launcher.launch("image/*") },
-                shape = RoundedCornerShape(8.dp)
+                shape   = RoundedCornerShape(8.dp)
             ) {
                 Icon(Icons.Default.PhotoLibrary, null, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(8.dp))
                 Text("เลือกรูป")
             }
 
-            if (photoUri != null && photoUrl == null) {
+            if ((photoUri != null) && photoUrl == null) {
                 Button(
-                    onClick = onUpload,
-                    shape = RoundedCornerShape(8.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50)),
-                    enabled = !isUploading
+                    onClick  = onUpload,
+                    shape    = RoundedCornerShape(8.dp),
+                    colors   = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50)),
+                    enabled  = !isUploading
                 ) {
                     if (isUploading) {
                         CircularProgressIndicator(color = White, modifier = Modifier.size(18.dp))
