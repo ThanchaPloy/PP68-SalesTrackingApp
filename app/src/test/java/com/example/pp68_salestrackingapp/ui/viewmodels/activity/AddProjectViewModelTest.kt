@@ -117,7 +117,7 @@ class AddProjectViewModelTest {
     }
 
     @Test
-    fun `init non PJ with single region branch should auto select that branch`() = runTest {
+    fun `init non PJ with one branch in user region should auto select that branch`() = runTest {
         every { authRepo.currentUser() } returns AuthUser("U1", "u@test.com", "sale", "TS-001")
         coEvery { branchRepo.observeBranches() } returns listOf(
             Branch("TS-001", "North A", "North"),
