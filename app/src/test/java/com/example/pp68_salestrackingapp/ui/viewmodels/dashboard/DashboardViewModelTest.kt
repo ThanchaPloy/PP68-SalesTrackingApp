@@ -83,4 +83,18 @@ class DashboardViewModelTest {
         assertEquals(2, vm.summary.value.activeProjects)
         assertEquals(1, vm.summary.value.completedActivities)
     }
+
+    @Test
+    fun `refreshAllData when called directly should refresh repos for current user`() = runTest {
+        every { authRepo.currentUser() } returns AuthUser(userId = "USR-009", email = "u@test.com", role = "sale")
+        val vm = DashboardViewModel(dashboardRepository, customerRepo, projectRepo, activityRepo, authRepo)
+        advanceUntilIdle()
+
+        vm.refreshAllData()
+        advanceUntilIdle()
+
+        coVerify(exactly = 2) { customerRepo.refreshCustomers("USR-009") } // init + explicit call
+        coVerify(exactly = 2) { projectRepo.refreshProjects("USR-009") }
+        coVerify(exactly = 2) { activityRepo.refreshActivities("USR-009") }
+    }
 }
