@@ -6,6 +6,7 @@ import com.example.pp68_salestrackingapp.data.model.LoginResponse
 import com.example.pp68_salestrackingapp.data.repository.AuthRepository
 import com.example.pp68_salestrackingapp.data.repository.BranchRepository
 import io.mockk.coEvery
+import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.mockkStatic
@@ -310,5 +311,150 @@ class RegisterViewModelTest {
         assertFalse(viewModel.uiState.value.isSuccess)
         assertEquals("อีเมลนี้ถูกใช้งานแล้ว", viewModel.uiState.value.error)
         assertFalse(viewModel.uiState.value.isLoading)
+    }
+
+    // TC-UNIT-VM-REG-17
+    @Test
+    fun `loadBranches should toggle loading then set branches without error`() = runTest {
+        coEvery { branchRepository.syncFromRemote() } coAnswers {
+            kotlinx.coroutines.delay(200)
+            Result.success(Unit)
+        }
+        coEvery { branchRepository.observeBranches() } returns sampleBranches
+        createViewModel()
+
+        testDispatcher.scheduler.advanceTimeBy(100)
+        assertTrue(viewModel.uiState.value.isLoading)
+        assertTrue(viewModel.uiState.value.branches.isEmpty())
+        assertNull(viewModel.uiState.value.error)
+
+        testDispatcher.scheduler.advanceUntilIdle()
+        val state = viewModel.uiState.value
+        assertFalse(state.isLoading)
+        assertEquals(sampleBranches, state.branches)
+        assertNull(state.error)
+    }
+
+    // TC-UNIT-VM-REG-18
+    @Test
+    fun `loadBranches failure should clear loading and keep branches empty`() = runTest {
+        coEvery { branchRepository.syncFromRemote() } throws Exception("sync failed")
+        createViewModel()
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertFalse(state.isLoading)
+        assertTrue(state.branches.isEmpty())
+        assertEquals("sync failed", state.error)
+    }
+
+    // TC-UNIT-VM-REG-19
+    @Test
+    fun `register validation failure should not call auth repository`() = runTest {
+        setupEmailPatternMock(matches = true)
+        coEvery { branchRepository.syncFromRemote() } returns Result.success(Unit)
+        coEvery { branchRepository.observeBranches() } returns sampleBranches
+        createViewModel()
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        viewModel.onFullNameChange("John")
+        viewModel.onEmailChange("")
+        viewModel.onPasswordChange("secure123")
+        viewModel.onBranchSelected(0)
+        viewModel.register()
+
+        coVerify(exactly = 0) { authRepository.register(any(), any(), any(), any()) }
+    }
+
+    // TC-UNIT-VM-REG-20
+    @Test
+    fun `register should call auth repository with exact state payload`() = runTest {
+        setupEmailPatternMock(matches = true)
+        coEvery { branchRepository.syncFromRemote() } returns Result.success(Unit)
+        coEvery { branchRepository.observeBranches() } returns sampleBranches
+        coEvery { authRepository.register(any(), any(), any(), any()) } returns
+            Result.success(LoginResponse(token = "tok123", userId = "U01", role = "sale"))
+        createViewModel()
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        viewModel.onFullNameChange("John Doe")
+        viewModel.onEmailChange("john@example.com")
+        viewModel.onPasswordChange("secure123")
+        viewModel.onBranchSelected(1)
+        viewModel.register()
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        coVerify(exactly = 1) {
+            authRepository.register(
+                email = "john@example.com",
+                password = "secure123",
+                fullName = "John Doe",
+                branchId = "B02"
+            )
+        }
+        val state = viewModel.uiState.value
+        assertFalse(state.isLoading)
+        assertTrue(state.isSuccess)
+        assertNull(state.error)
+        assertEquals("B02", state.selectedBranchId)
+        assertEquals("สาขาเชียงใหม่", state.selectedBranchName)
+    }
+
+    // TC-UNIT-VM-REG-21
+    @Test
+    fun `register should clear stale error when request starts and keep form fields intact`() = runTest {
+        setupEmailPatternMock(matches = true)
+        coEvery { branchRepository.syncFromRemote() } returns Result.success(Unit)
+        coEvery { branchRepository.observeBranches() } returns sampleBranches
+        coEvery { authRepository.register(any(), any(), any(), any()) } coAnswers {
+            kotlinx.coroutines.delay(200)
+            Result.success(LoginResponse(token = "tok", userId = "U", role = "sale"))
+        }
+        createViewModel()
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        viewModel.onFullNameChange("John Doe")
+        viewModel.onEmailChange("john@example.com")
+        viewModel.onPasswordChange("secure123")
+        viewModel.register()
+        assertEquals("กรุณากรอกข้อมูลให้ครบถ้วน", viewModel.uiState.value.error)
+
+        viewModel.onBranchSelected(0)
+        viewModel.register()
+        testDispatcher.scheduler.advanceTimeBy(50)
+
+        val loadingState = viewModel.uiState.value
+        assertTrue(loadingState.isLoading)
+        assertNull(loadingState.error)
+        assertEquals("John Doe", loadingState.fullName)
+        assertEquals("john@example.com", loadingState.email)
+        assertEquals("secure123", loadingState.password)
+        assertEquals("B01", loadingState.selectedBranchId)
+
+        testDispatcher.scheduler.advanceUntilIdle()
+        assertTrue(viewModel.uiState.value.isSuccess)
+    }
+
+    // TC-UNIT-VM-REG-22
+    @Test
+    fun `register failure with null exception message should keep null error`() = runTest {
+        setupEmailPatternMock(matches = true)
+        coEvery { branchRepository.syncFromRemote() } returns Result.success(Unit)
+        coEvery { branchRepository.observeBranches() } returns sampleBranches
+        coEvery { authRepository.register(any(), any(), any(), any()) } returns
+            Result.failure(Exception())
+        createViewModel()
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        viewModel.onFullNameChange("John Doe")
+        viewModel.onEmailChange("john@example.com")
+        viewModel.onPasswordChange("secure123")
+        viewModel.onBranchSelected(0)
+        viewModel.register()
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        assertFalse(viewModel.uiState.value.isSuccess)
+        assertFalse(viewModel.uiState.value.isLoading)
+        assertNull(viewModel.uiState.value.error)
     }
 }

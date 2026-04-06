@@ -5,6 +5,7 @@ import com.example.pp68_salestrackingapp.data.repository.ActivityRepository
 import com.example.pp68_salestrackingapp.ui.screen.activity.NotiAction
 import com.example.pp68_salestrackingapp.ui.viewmodels.activity.ActivityCard
 import io.mockk.coEvery
+import io.mockk.coVerify
 import io.mockk.mockk
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -16,6 +17,7 @@ import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
@@ -85,7 +87,7 @@ class NotificationViewModelTest {
 
     @Test
     fun `loadNotifications failure should set error`() = runTest {
-        coEvery { activityRepo.getMyActivitiesWithDetails() } returns Result.failure(Exception("fetch fail"))
+        coEvery { activityRepo.getMyActivitiesWithDetails() } throws Exception("fetch fail")
 
         val vm = NotificationViewModel(activityRepo)
         advanceUntilIdle()
@@ -179,7 +181,7 @@ class NotificationViewModelTest {
 
     @Test
     fun `loadNotifications should keep previous error when subsequent load succeeds`() = runTest {
-        coEvery { activityRepo.getMyActivitiesWithDetails() } returns Result.failure(Exception("first fail"))
+        coEvery { activityRepo.getMyActivitiesWithDetails() } throws Exception("first fail")
         val vm = NotificationViewModel(activityRepo)
         advanceUntilIdle()
         assertEquals("first fail", vm.uiState.value.error)
@@ -219,5 +221,73 @@ class NotificationViewModelTest {
         assertFalse(vm.uiState.value.isLoading)
         assertTrue(vm.uiState.value.notifications.any { it.id == "weekly_report" })
         assertTrue(vm.uiState.value.notifications.all { it.id == "weekly_report" })
+    }
+
+    @Test
+    fun `initial uiState should start empty then go loading while fetch is running`() = runTest {
+        coEvery { activityRepo.getMyActivitiesWithDetails() } coAnswers {
+            kotlinx.coroutines.delay(200)
+            Result.success(emptyList())
+        }
+
+        val vm = NotificationViewModel(activityRepo)
+        assertTrue(vm.uiState.value.notifications.isEmpty())
+        assertNull(vm.uiState.value.error)
+
+        dispatcher.scheduler.runCurrent()
+        assertTrue(vm.uiState.value.isLoading)
+
+        advanceUntilIdle()
+        assertFalse(vm.uiState.value.isLoading)
+    }
+
+    @Test
+    fun `loadNotifications with Result failure should not set error and should complete gracefully`() = runTest {
+        coEvery { activityRepo.getMyActivitiesWithDetails() } returns Result.failure(Exception("api fail"))
+
+        val vm = NotificationViewModel(activityRepo)
+        advanceUntilIdle()
+
+        assertFalse(vm.uiState.value.isLoading)
+        assertEquals(null, vm.uiState.value.error)
+        assertTrue(vm.uiState.value.notifications.none { it.id == "api-fail-card" })
+    }
+
+    @Test
+    fun `loadNotifications should exclude cards not in today and tomorrow`() = runTest {
+        val twoDaysLater = LocalDate.now().plusDays(2).toString()
+        coEvery { activityRepo.getMyActivitiesWithDetails() } returns Result.success(
+            listOf(
+                ActivityCard(
+                    activityId = "A-FUTURE",
+                    activityType = "Visit",
+                    projectName = "Project",
+                    companyName = "Company",
+                    contactName = null,
+                    objective = "Future",
+                    planStatus = "planned",
+                    plannedDate = twoDaysLater,
+                    plannedTime = "09:00",
+                    plannedEndTime = null
+                )
+            )
+        )
+
+        val vm = NotificationViewModel(activityRepo)
+        advanceUntilIdle()
+
+        assertTrue(vm.uiState.value.notifications.none { it.id == "A-FUTURE" })
+    }
+
+    @Test
+    fun `calling loadNotifications manually should trigger repository again`() = runTest {
+        coEvery { activityRepo.getMyActivitiesWithDetails() } returns Result.success(emptyList())
+
+        val vm = NotificationViewModel(activityRepo)
+        advanceUntilIdle()
+        vm.loadNotifications()
+        advanceUntilIdle()
+
+        coVerify(exactly = 2) { activityRepo.getMyActivitiesWithDetails() }
     }
 }
