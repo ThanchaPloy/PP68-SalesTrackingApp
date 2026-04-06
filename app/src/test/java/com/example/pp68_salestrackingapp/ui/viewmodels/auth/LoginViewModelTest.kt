@@ -4,6 +4,7 @@ import androidx.arch.core.executor.testing.InstantTaskExecutorRule
 import com.example.pp68_salestrackingapp.data.model.LoginResponse
 import com.example.pp68_salestrackingapp.data.repository.AuthRepository
 import io.mockk.coEvery
+import io.mockk.coVerify
 import io.mockk.mockk
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -214,5 +215,70 @@ class LoginViewModelTest {
             "เกิดข้อผิดพลาดในการเข้าสู่ระบบ",
             (state as LoginUiState.Error).message
         )
+    }
+
+    // TC-UNIT-VM-LOGIN-13
+    @Test
+    fun `login with invalid email format should emit Error and skip repository call`() {
+        viewModel.onEmailChange("invalid-email")
+        viewModel.onPasswordChange("password123")
+
+        viewModel.login()
+
+        val state = viewModel.uiState.value
+        assertTrue(state is LoginUiState.Error)
+        assertEquals("รูปแบบอีเมลไม่ถูกต้อง", (state as LoginUiState.Error).message)
+        coVerify(exactly = 0) { authRepository.login(any(), any()) }
+    }
+
+    // TC-UNIT-VM-LOGIN-14
+    @Test
+    fun `login should trim email before repository call and success user payload`() = runTest {
+        val loginResponse = LoginResponse(
+            token = "token_x",
+            userId = "USR-TRIM",
+            role = "sale"
+        )
+        coEvery { authRepository.login("trim@example.com", "password123") } returns
+            Result.success(loginResponse)
+
+        viewModel.onEmailChange("  trim@example.com  ")
+        viewModel.onPasswordChange("password123")
+        viewModel.login()
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertTrue(state is LoginUiState.Success)
+        assertEquals("trim@example.com", (state as LoginUiState.Success).user.email)
+        coVerify(exactly = 1) { authRepository.login("trim@example.com", "password123") }
+    }
+
+    // TC-UNIT-VM-LOGIN-15
+    @Test
+    fun `onPasswordChange after Error should clear error state to Idle`() {
+        viewModel.onEmailChange("invalid-email")
+        viewModel.onPasswordChange("password123")
+        viewModel.login()
+        assertTrue(viewModel.uiState.value is LoginUiState.Error)
+
+        viewModel.onPasswordChange("new-password")
+
+        assertTrue(viewModel.uiState.value is LoginUiState.Idle)
+    }
+
+    // TC-UNIT-VM-LOGIN-16
+    @Test
+    fun `login with network error should emit Error state with message`() = runTest {
+        coEvery { authRepository.login(any(), any()) } returns
+            Result.failure(Exception("Network error"))
+
+        viewModel.onEmailChange("test@example.com")
+        viewModel.onPasswordChange("password123")
+        viewModel.login()
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertTrue(state is LoginUiState.Error)
+        assertEquals("Network error", (state as LoginUiState.Error).message)
     }
 }
