@@ -90,6 +90,32 @@ class ExportViewModelTest {
     }
 
     @Test
+    fun `loadWeeklyData should drop blank and invalid dates`() = runTest {
+        val valid = ActivityCard(
+            activityId = "A1",
+            activityType = "visit",
+            projectName = "P1",
+            companyName = "C1",
+            contactName = null,
+            objective = "Discuss",
+            planStatus = "completed",
+            plannedDate = "2026-04-08",
+            plannedTime = null,
+            plannedEndTime = null
+        )
+        val blank = valid.copy(activityId = "A2", plannedDate = "")
+        val invalid = valid.copy(activityId = "A3", plannedDate = "bad-date")
+        coEvery { activityRepo.getMyActivitiesWithDetails() } returns Result.success(listOf(blank, invalid, valid))
+
+        viewModel.loadWeeklyData(LocalDate.parse("2026-04-08"))
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertEquals(1, state.activities.size)
+        assertEquals("2026-04-08", state.activities.first().date)
+    }
+
+    @Test
     fun `loadMonthlyData should include matching month and active non final projects`() = runTest {
         val ym = YearMonth.of(2026, 4)
         val pStarted = Project("P1", "C1", projectName = "Alpha", startDate = "2026-04-01", projectStatus = "Lead", expectedValue = 100.0)
@@ -106,6 +132,37 @@ class ExportViewModelTest {
         assertTrue(names.contains("Beta"))
         assertTrue(names.contains("Gamma"))
         assertFalse(names.contains("Delta"))
+    }
+
+    @Test
+    fun `loadMonthlyData invalid date should still include project by fallback`() = runTest {
+        every { projectRepo.getAllProjectsFlow() } returns flowOf(
+            listOf(
+                Project(
+                    projectId = "P1",
+                    custId = "C1",
+                    projectName = "InvalidDateProject",
+                    startDate = "not-a-date",
+                    projectStatus = "Completed"
+                )
+            )
+        )
+
+        viewModel.loadMonthlyData(YearMonth.of(2026, 4))
+        advanceUntilIdle()
+
+        assertEquals(listOf("InvalidDateProject"), viewModel.uiState.value.projects.map { it.projectName })
+    }
+
+    @Test
+    fun `loadMonthlyData exception should set error`() = runTest {
+        every { projectRepo.getAllProjectsFlow() } throws RuntimeException("repo down")
+
+        viewModel.loadMonthlyData(YearMonth.of(2026, 4))
+        advanceUntilIdle()
+
+        assertEquals("repo down", viewModel.uiState.value.error)
+        assertFalse(viewModel.uiState.value.isLoading)
     }
 
     @Test
@@ -157,5 +214,14 @@ class ExportViewModelTest {
         val csv = viewModel.generateProjectCsvString()
         assertTrue(csv.startsWith("Project Name,Expected Value,Status,Score,Close Date"))
         assertTrue(csv.contains("\"Name \"\"X\"\"\",50.0,Lead,HOT,2026-04-09"))
+    }
+
+    @Test
+    fun `generate csv functions should return header only when empty`() = runTest {
+        val activityCsv = viewModel.generateActivityCsvString()
+        val projectCsv = viewModel.generateProjectCsvString()
+
+        assertEquals("Date,Project Name,Company Name,Topic,Note,Status\n", activityCsv)
+        assertEquals("Project Name,Expected Value,Status,Score,Close Date\n", projectCsv)
     }
 }
