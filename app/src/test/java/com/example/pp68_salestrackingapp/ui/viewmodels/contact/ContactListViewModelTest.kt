@@ -140,7 +140,7 @@ class ContactListViewModelTest {
         testDispatcher.scheduler.advanceUntilIdle()
 
         viewModel.onSearchChange("Alice")
-        testDispatcher.scheduler.advanceTimeBy(400) // Wait for debounce (300ms)
+        testDispatcher.scheduler.advanceTimeBy(400) // Wait past debounce threshold (300ms)
         testDispatcher.scheduler.advanceUntilIdle()
 
         assertEquals(searchResult, viewModel.uiState.value.contacts)
