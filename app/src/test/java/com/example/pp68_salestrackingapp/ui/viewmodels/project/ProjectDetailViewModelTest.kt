@@ -13,10 +13,12 @@ import com.example.pp68_salestrackingapp.data.repository.ProjectRepository
 import com.example.pp68_salestrackingapp.ui.viewmodels.ProjectDetailViewModel
 import io.mockk.coEvery
 import io.mockk.coVerify
+import io.mockk.clearAllMocks
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -26,6 +28,7 @@ import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
@@ -50,6 +53,7 @@ class ProjectDetailViewModelTest {
 
     @After
     fun tearDown() {
+        clearAllMocks()
         Dispatchers.resetMain()
     }
 
@@ -181,5 +185,84 @@ class ProjectDetailViewModelTest {
 
         assertFalse(vm.uiState.value.isDeleting)
         assertEquals("delete failed", vm.uiState.value.error)
+    }
+
+    @Test
+    fun `init without projectId should not load detail or activities`() = runTest {
+        val vm = ProjectDetailViewModel(
+            projectRepo, authRepo, activityRepo, customerRepo,
+            SavedStateHandle()
+        )
+        advanceUntilIdle()
+
+        assertNull(vm.uiState.value.project)
+        assertFalse(vm.uiState.value.isLoading)
+        assertTrue(vm.uiState.value.upcomingTasks.isEmpty())
+        assertTrue(vm.uiState.value.history.isEmpty())
+        coVerify(exactly = 0) { projectRepo.getProjectById(any()) }
+    }
+
+    @Test
+    fun `loadProjectDetail success when customer lookup fails should fallback companyName empty`() = runTest {
+        coEvery { projectRepo.getProjectById("PRJ-2") } returns Result.success(
+            Project(projectId = "PRJ-2", custId = "C2", projectName = "Project B")
+        )
+        coEvery { customerRepo.getCustomerById("C2") } returns Result.failure(Exception("missing customer"))
+        every { activityRepo.getActivitiesByProjectFlow("PRJ-2") } returns MutableStateFlow(emptyList())
+
+        val vm = ProjectDetailViewModel(
+            projectRepo, authRepo, activityRepo, customerRepo,
+            SavedStateHandle(mapOf("projectId" to "PRJ-2"))
+        )
+        advanceUntilIdle()
+
+        assertEquals("Project B", vm.uiState.value.project?.projectName)
+        assertEquals("", vm.uiState.value.companyName)
+        assertFalse(vm.uiState.value.isLoading)
+    }
+
+    @Test
+    fun `observeActivities should treat completed status case-insensitively`() = runTest {
+        coEvery { projectRepo.getProjectById("PRJ-3") } returns Result.success(
+            Project(projectId = "PRJ-3", custId = "C3", projectName = "Project C")
+        )
+        coEvery { customerRepo.getCustomerById("C3") } returns Result.success(
+            Customer("C3", "Company C", null, null, null, null, null, null, null)
+        )
+        every { activityRepo.getActivitiesByProjectFlow("PRJ-3") } returns flowOf(
+            listOf(
+                SalesActivity(
+                    activityId = "A1",
+                    userId = "U1",
+                    customerId = "C3",
+                    projectId = "PRJ-3",
+                    activityType = "Visit",
+                    activityDate = "2026-04-03",
+                    status = "Completed",
+                    detail = "Done"
+                ),
+                SalesActivity(
+                    activityId = "A2",
+                    userId = "U1",
+                    customerId = "C3",
+                    projectId = "PRJ-3",
+                    activityType = "Call",
+                    activityDate = "2026-04-04",
+                    status = "PLANNED",
+                    detail = "Todo"
+                )
+            )
+        )
+
+        val vm = ProjectDetailViewModel(
+            projectRepo, authRepo, activityRepo, customerRepo,
+            SavedStateHandle(mapOf("projectId" to "PRJ-3"))
+        )
+        advanceUntilIdle()
+
+        assertEquals(1, vm.uiState.value.history.size)
+        assertEquals("A1", vm.uiState.value.history.first().activityId)
+        assertEquals(1, vm.uiState.value.upcomingTasks.size)
+        assertEquals("A2", vm.uiState.value.upcomingTasks.first().activityId)
     }
 }
