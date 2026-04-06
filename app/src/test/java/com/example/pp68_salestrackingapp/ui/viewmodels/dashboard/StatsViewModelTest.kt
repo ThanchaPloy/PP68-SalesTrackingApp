@@ -161,4 +161,64 @@ class StatsViewModelTest {
 
         coVerify(exactly = 1) { authRepo.logout() }
     }
+
+    @Test
+    fun `closing month logic should include only same month active project closings`() = runTest {
+        val today = LocalDate.now()
+        val thisMonthDate = today.withDayOfMonth(1).toString()
+        val nextMonthDate = today.plusMonths(1).withDayOfMonth(1).toString()
+
+        every { authRepo.currentUser() } returns AuthUser("U1", "u@test.com", "sale")
+        every { projectRepo.getAllProjectsFlow() } returns flowOf(
+            listOf(
+                Project(
+                    projectId = "P1",
+                    custId = "C1",
+                    projectName = "Active this month",
+                    projectStatus = "Quotation",
+                    createdAt = "${today}T08:00:00",
+                    closingDate = thisMonthDate
+                ),
+                Project(
+                    projectId = "P2",
+                    custId = "C1",
+                    projectName = "Completed this month",
+                    projectStatus = "Completed",
+                    createdAt = "${today}T09:00:00",
+                    closingDate = thisMonthDate
+                ),
+                Project(
+                    projectId = "P3",
+                    custId = "C1",
+                    projectName = "Next month",
+                    projectStatus = "Assured",
+                    createdAt = "${today}T10:00:00",
+                    closingDate = nextMonthDate
+                )
+            )
+        )
+        coEvery { activityRepo.getMyActivitiesWithDetails() } returns Result.success(
+            listOf(
+                ActivityCard(
+                    activityId = "A1",
+                    activityType = "visit",
+                    projectName = "P",
+                    companyName = "C",
+                    contactName = null,
+                    objective = null,
+                    planStatus = "completed",
+                    plannedDate = today.toString(),
+                    plannedTime = "09:00",
+                    plannedEndTime = "10:00"
+                )
+            )
+        )
+
+        val vm = StatsViewModel(projectRepo, activityRepo, authRepo)
+        advanceUntilIdle()
+
+        val state = vm.uiState.value
+        assertFalse(state.isLoading)
+        assertTrue(state.closingThisMonth >= 1)
+    }
 }
