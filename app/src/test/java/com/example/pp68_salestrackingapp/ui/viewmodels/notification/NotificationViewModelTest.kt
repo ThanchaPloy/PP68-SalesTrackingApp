@@ -148,7 +148,7 @@ class NotificationViewModelTest {
     }
 
     @Test
-    fun `loadNotifications should map objective fallback and default 09 colon 00 parsing`() = runTest {
+    fun `loadNotifications should map objective fallback when time string is unparseable`() = runTest {
         val today = LocalDate.now().toString()
         coEvery { activityRepo.getMyActivitiesWithDetails() } returns Result.success(
             listOf(

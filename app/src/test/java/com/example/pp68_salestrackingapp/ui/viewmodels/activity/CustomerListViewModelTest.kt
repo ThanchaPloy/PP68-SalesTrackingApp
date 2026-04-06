@@ -23,7 +23,6 @@ class CustomerListViewModelTest {
     private val customerRepo = mockk<CustomerRepository>(relaxed = true)
     private val authRepo = mockk<AuthRepository>(relaxed = true)
     private lateinit var viewModel: CustomerListViewModel
-    private val debounceDelayMs = 350L
 
     @Before
     fun setup() {
@@ -54,7 +53,7 @@ class CustomerListViewModelTest {
         viewModel.customers.test {
             awaitItem()
             viewModel.onSearchChange(query)
-            advanceTimeBy(debounceDelayMs)
+            advanceUntilIdle()
             assertEquals(result, awaitItem())
             cancelAndIgnoreRemainingEvents()
         }
