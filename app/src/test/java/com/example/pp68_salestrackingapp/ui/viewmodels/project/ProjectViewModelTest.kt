@@ -82,4 +82,50 @@ class ProjectViewModelTest {
         assertTrue(vm.projects.value.all { it.projectStatus == "Quotation" })
         assertTrue(vm.projects.value.all { it.opportunityScore == "HOT" })
     }
+
+    @Test
+    fun `tab filtering should classify closed and inactive projects`() = runTest {
+        val today = LocalDate.now().toString()
+        every { authRepo.currentUser() } returns AuthUser("U1", "u@test.com", "sale")
+        coEvery { projectRepo.refreshProjects("U1") } returns Result.success(Unit)
+        every { projectRepo.getAllProjectsFlow() } returns flowOf(
+            listOf(
+                Project("P1", "C1", projectName = "Completed", projectStatus = "Completed"),
+                Project("P2", "C1", projectName = "PO Closed", projectStatus = "PO", closingDate = today),
+                Project("P3", "C1", projectName = "Lost", projectStatus = "Lost"),
+                Project("P4", "C1", projectName = "Active", projectStatus = "Lead")
+            )
+        )
+        every { projectRepo.searchProjectsFlow(any()) } returns flowOf(emptyList())
+
+        val vm = ProjectListViewModel(projectRepo, authRepo)
+        advanceUntilIdle()
+
+        vm.onSelectTab(1)
+        advanceTimeBy(350)
+        advanceUntilIdle()
+        assertTrue(vm.projects.value.all { it.projectStatus == "Completed" || it.projectStatus == "PO" })
+
+        vm.onSelectTab(2)
+        advanceTimeBy(350)
+        advanceUntilIdle()
+        assertTrue(vm.projects.value.all { it.projectStatus == "Lost" || it.projectStatus == "Failed" })
+    }
+
+    @Test
+    fun `resetFilters and clearError should reset states`() = runTest {
+        every { authRepo.currentUser() } returns null
+        every { projectRepo.getAllProjectsFlow() } returns flowOf(emptyList())
+        val vm = ProjectListViewModel(projectRepo, authRepo)
+        advanceUntilIdle()
+
+        vm.toggleStatusFilter("Lead")
+        vm.toggleScoreFilter("hot")
+        vm.resetFilters()
+        vm.clearError()
+
+        assertTrue(vm.selectedStatuses.value.isEmpty())
+        assertTrue(vm.selectedScores.value.isEmpty())
+        assertEquals(null, vm.error.value)
+    }
 }

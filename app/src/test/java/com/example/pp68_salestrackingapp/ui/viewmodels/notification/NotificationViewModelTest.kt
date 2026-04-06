@@ -91,4 +91,58 @@ class NotificationViewModelTest {
         assertFalse(vm.uiState.value.isLoading)
         assertTrue(vm.uiState.value.error == "fetch fail")
     }
+
+    @Test
+    fun `loadNotifications should ignore invalid date and map checked in to report action`() = runTest {
+        val today = LocalDate.now().toString()
+        coEvery { activityRepo.getMyActivitiesWithDetails() } returns Result.success(
+            listOf(
+                ActivityCard(
+                    activityId = "A1",
+                    activityType = "Visit",
+                    projectName = "Project A",
+                    companyName = "Company A",
+                    contactName = null,
+                    objective = "Obj A",
+                    planStatus = "planned",
+                    plannedDate = "invalid-date",
+                    plannedTime = "xx:yy",
+                    plannedEndTime = null
+                ),
+                ActivityCard(
+                    activityId = "A2",
+                    activityType = "Call",
+                    projectName = "Project B",
+                    companyName = "Company B",
+                    contactName = null,
+                    objective = "Obj B",
+                    planStatus = "checked_in",
+                    plannedDate = today,
+                    plannedTime = "09:61",
+                    plannedEndTime = null
+                ),
+                ActivityCard(
+                    activityId = "A3",
+                    activityType = "Visit",
+                    projectName = "Project C",
+                    companyName = "Company C",
+                    contactName = null,
+                    objective = "Obj C",
+                    planStatus = "completed",
+                    plannedDate = today,
+                    plannedTime = "09:00",
+                    plannedEndTime = null
+                )
+            )
+        )
+
+        val vm = NotificationViewModel(activityRepo)
+        advanceUntilIdle()
+
+        val notis = vm.uiState.value.notifications
+        assertFalse(vm.uiState.value.isLoading)
+        assertTrue(notis.none { it.id == "A1" })
+        assertTrue(notis.any { it.id == "A2" && it.action.name == "REPORT" })
+        assertTrue(notis.none { it.id == "A3" })
+    }
 }
