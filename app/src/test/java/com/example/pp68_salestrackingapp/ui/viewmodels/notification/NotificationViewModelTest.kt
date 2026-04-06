@@ -242,7 +242,7 @@ class NotificationViewModelTest {
     }
 
     @Test
-    fun `loadNotifications with Result failure should not set error and should complete gracefully`() = runTest {
+    fun `loadNotifications with Result failure should handle gracefully without throwing`() = runTest {
         coEvery { activityRepo.getMyActivitiesWithDetails() } returns Result.failure(Exception("api fail"))
 
         val vm = NotificationViewModel(activityRepo)

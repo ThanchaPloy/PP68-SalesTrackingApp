@@ -250,6 +250,7 @@ class LoginViewModelTest {
         val state = viewModel.uiState.value
         assertTrue(state is LoginUiState.Success)
         assertEquals("trim@example.com", (state as LoginUiState.Success).user.email)
+        assertEquals("  trim@example.com  ", viewModel.email.value)
         coVerify(exactly = 1) { authRepository.login("trim@example.com", "password123") }
     }
 
