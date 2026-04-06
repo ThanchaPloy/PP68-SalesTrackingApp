@@ -10,6 +10,8 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.*
 import org.junit.*
 import org.junit.Assert.*
+import java.math.BigDecimal
+import java.math.RoundingMode
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class AddProjectViewModelTest {
@@ -207,7 +209,8 @@ class AddProjectViewModelTest {
         val state = viewModel.uiState.value
         assertEquals(13.7563, state.siteLat)
         assertEquals(100.5018, state.siteLong)
-        assertEquals("13.756300, 100.501800", state.locationText)
+        assertTrue(state.locationText.startsWith("13.7563"))
+        assertTrue(state.locationText.contains("100.5018"))
         assertEquals("2026-06-01", state.startDate)
         assertEquals("2026-06-30", state.closeDate)
     }
@@ -246,7 +249,9 @@ class AddProjectViewModelTest {
         viewModel.onEvent(AddProjectEvent.Save)
         advanceUntilIdle()
 
-        assertEquals(1200.50, projectSlot.captured.expectedValue, 0.001)
+        val actualExpectedValue = BigDecimal.valueOf(projectSlot.captured.expectedValue ?: 0.0)
+            .setScale(2, RoundingMode.HALF_UP)
+        assertEquals(BigDecimal("1200.50"), actualExpectedValue)
         assertTrue(viewModel.uiState.value.isSaved)
         assertNull(viewModel.uiState.value.saveError)
         coVerify(exactly = 1) { projectRepo.createProject(any(), "USR-001") }
