@@ -255,7 +255,7 @@ class NotificationViewModelTest {
 
     @Test
     fun `loadNotifications should exclude cards not in today and tomorrow`() = runTest {
-        val twoDaysLater = LocalDate.now().plusDays(2).toString()
+        val futureDateString = LocalDate.now().plusDays(2).toString()
         coEvery { activityRepo.getMyActivitiesWithDetails() } returns Result.success(
             listOf(
                 ActivityCard(
@@ -266,7 +266,7 @@ class NotificationViewModelTest {
                     contactName = null,
                     objective = "Future",
                     planStatus = "planned",
-                    plannedDate = twoDaysLater,
+                    plannedDate = futureDateString,
                     plannedTime = "09:00",
                     plannedEndTime = null
                 )
