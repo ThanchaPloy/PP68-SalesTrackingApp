@@ -209,13 +209,14 @@ class NotificationViewModelTest {
     }
 
     @Test
-    fun `loadNotifications with no cards should still finish loading and keep list empty or weekly only`() = runTest {
+    fun `loadNotifications with no cards should still finish loading and contain only weekly report`() = runTest {
         coEvery { activityRepo.getMyActivitiesWithDetails() } returns Result.success(emptyList())
 
         val vm = NotificationViewModel(activityRepo)
         advanceUntilIdle()
 
         assertFalse(vm.uiState.value.isLoading)
-        assertTrue(vm.uiState.value.notifications.all { it.id == "weekly_report" } || vm.uiState.value.notifications.isEmpty())
+        assertTrue(vm.uiState.value.notifications.any { it.id == "weekly_report" })
+        assertTrue(vm.uiState.value.notifications.all { it.id == "weekly_report" })
     }
 }
