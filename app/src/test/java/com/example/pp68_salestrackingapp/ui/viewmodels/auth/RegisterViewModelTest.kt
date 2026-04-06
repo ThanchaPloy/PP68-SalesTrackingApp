@@ -437,7 +437,7 @@ class RegisterViewModelTest {
 
     // TC-UNIT-VM-REG-22
     @Test
-    fun `register failure with null exception message should keep null error`() = runTest {
+    fun `register failure with null exception message should result in null error state`() = runTest {
         setupEmailPatternMock(matches = true)
         coEvery { branchRepository.syncFromRemote() } returns Result.success(Unit)
         coEvery { branchRepository.observeBranches() } returns sampleBranches

@@ -86,7 +86,7 @@ class NotificationViewModelTest {
     }
 
     @Test
-    fun `loadNotifications failure should set error`() = runTest {
+    fun `loadNotifications when repository throws should set error`() = runTest {
         coEvery { activityRepo.getMyActivitiesWithDetails() } throws Exception("fetch fail")
 
         val vm = NotificationViewModel(activityRepo)
@@ -180,7 +180,7 @@ class NotificationViewModelTest {
     }
 
     @Test
-    fun `loadNotifications should keep previous error when subsequent load succeeds`() = runTest {
+    fun `loadNotifications should keep previous error after throw then subsequent success`() = runTest {
         coEvery { activityRepo.getMyActivitiesWithDetails() } throws Exception("first fail")
         val vm = NotificationViewModel(activityRepo)
         advanceUntilIdle()
@@ -249,8 +249,8 @@ class NotificationViewModelTest {
         advanceUntilIdle()
 
         assertFalse(vm.uiState.value.isLoading)
-        assertEquals(null, vm.uiState.value.error)
-        assertTrue(vm.uiState.value.notifications.none { it.id == "api-fail-card" })
+        assertNull(vm.uiState.value.error)
+        assertTrue(vm.uiState.value.notifications.all { it.id == "weekly_report" })
     }
 
     @Test
