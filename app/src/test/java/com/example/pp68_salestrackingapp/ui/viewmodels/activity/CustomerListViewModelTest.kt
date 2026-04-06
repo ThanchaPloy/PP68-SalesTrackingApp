@@ -101,4 +101,29 @@ class CustomerListViewModelTest {
 
         coVerify(exactly = 1) { authRepo.logout() }
     }
+
+    @Test
+    fun `blank search should use all customers flow`() = runTest {
+        val all = listOf(Customer("C1", "Alpha Co", null, null, null, null, null, null, null))
+        every { customerRepo.getAllCustomersFlow() } returns flowOf(all)
+
+        viewModel = CustomerListViewModel(customerRepo, authRepo)
+        advanceUntilIdle()
+
+        viewModel.customers.test {
+            assertEquals(all, awaitItem())
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `refresh should return early when current user is null`() = runTest {
+        every { authRepo.currentUser() } returns null
+
+        viewModel = CustomerListViewModel(customerRepo, authRepo)
+        advanceUntilIdle()
+
+        coVerify(exactly = 0) { customerRepo.refreshCustomers(any()) }
+        assertFalse(viewModel.isLoading.value)
+    }
 }
