@@ -105,7 +105,7 @@ class AddProjectViewModelTest {
     }
 
     @Test
-    fun `init non PJ when sync fails should stop loading teams gracefully`() = runTest {
+    fun `init non project-team user when sync fails should stop loading teams gracefully`() = runTest {
         every { authRepo.currentUser() } returns AuthUser("U1", "u@test.com", "sale", "TS-001")
         coEvery { branchRepo.syncFromRemote() } throws IllegalStateException("sync failed")
 
@@ -117,7 +117,7 @@ class AddProjectViewModelTest {
     }
 
     @Test
-    fun `init non PJ with one branch in user region should auto select that branch`() = runTest {
+    fun `init non project-team user with one branch in user region should auto select that branch`() = runTest {
         every { authRepo.currentUser() } returns AuthUser("U1", "u@test.com", "sale", "TS-001")
         coEvery { branchRepo.observeBranches() } returns listOf(
             Branch("TS-001", "North A", "North"),
