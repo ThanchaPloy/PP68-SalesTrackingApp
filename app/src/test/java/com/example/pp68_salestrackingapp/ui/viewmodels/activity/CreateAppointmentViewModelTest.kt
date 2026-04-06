@@ -350,7 +350,8 @@ class CreateAppointmentViewModelTest {
                     projectId = "PRJ-1",
                     activityType = "onsite",
                     detail = "old",
-                    activityDate = "2026-04-06"
+                    activityDate = "2026-04-06",
+                    status = "planned"
                 )
             )
         )
