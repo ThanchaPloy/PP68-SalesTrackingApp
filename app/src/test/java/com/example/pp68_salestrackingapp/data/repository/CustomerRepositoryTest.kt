@@ -2,6 +2,8 @@ package com.example.pp68_salestrackingapp.data.repository
 
 import com.example.pp68_salestrackingapp.data.local.ContactDao
 import com.example.pp68_salestrackingapp.data.local.CustomerDao
+import com.example.pp68_salestrackingapp.data.local.ProjectDao
+import com.example.pp68_salestrackingapp.data.local.ActivityDao
 import com.example.pp68_salestrackingapp.data.model.ContactPerson
 import com.example.pp68_salestrackingapp.data.model.Customer
 import com.example.pp68_salestrackingapp.data.model.ProjectMemberDto
@@ -28,6 +30,8 @@ class CustomerRepositoryExtendedTest {
     private val apiService  = mockk<ApiService>(relaxed = true)
     private val customerDao = mockk<CustomerDao>(relaxed = true)
     private val contactDao  = mockk<ContactDao>(relaxed = true)
+    private val projectDao  = mockk<ProjectDao>(relaxed = true)
+    private val activityDao = mockk<ActivityDao>(relaxed = true)
 
     private val sampleCustomer = Customer(
         custId = "CST-001", companyName = "บริษัท แสนสิริ", branch = null,
@@ -51,7 +55,7 @@ class CustomerRepositoryExtendedTest {
 
     @Before
     fun setup() {
-        repository = CustomerRepository(apiService, customerDao, contactDao)
+        repository = CustomerRepository(apiService, customerDao, contactDao, projectDao, activityDao)
     }
 
     // TC-UNIT-CUST-EXT-01

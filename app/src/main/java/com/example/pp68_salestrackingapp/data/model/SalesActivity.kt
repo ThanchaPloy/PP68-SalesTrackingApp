@@ -7,28 +7,25 @@ import com.google.gson.annotations.SerializedName
 
 @Entity(tableName = "activity_table")
 data class SalesActivity(
-    // ── Primary Key ──────────────────────────────────────────
     @PrimaryKey
     @ColumnInfo(name = "appointment_id")
     @SerializedName("appointment_id")
     val activityId: String,
 
-    // ── FK ───────────────────────────────────────────────────
     @ColumnInfo(name = "user_id")
     @SerializedName("user_id")
     val userId: String,
 
     @ColumnInfo(name = "cust_id")
-    @SerializedName("cust_id")           // ✅ DB ใช้ cust_id ไม่ใช่ customer_id
+    @SerializedName("cust_id")
     val customerId: String,
 
     @ColumnInfo(name = "project_id")
     @SerializedName("project_id")
     val projectId: String? = null,
 
-    // ── Appointment fields ───────────────────────────────────
     @ColumnInfo(name = "type")
-    @SerializedName("type")              // ✅ DB ใช้ type ไม่ใช่ activity_type
+    @SerializedName("type")
     val activityType: String,
 
     @ColumnInfo(name = "is_appointment")
@@ -36,11 +33,11 @@ data class SalesActivity(
     val isAppointment: Boolean = false,
 
     @ColumnInfo(name = "topic")
-    @SerializedName("topic")             // ✅ DB ใช้ topic ไม่ใช่ detail
+    @SerializedName("topic")
     val detail: String? = null,
 
     @ColumnInfo(name = "planned_date")
-    @SerializedName("planned_date")      // ✅ DB ใช้ planned_date ไม่ใช่ activity_date
+    @SerializedName("planned_date")
     val activityDate: String,
 
     @ColumnInfo(name = "planned_time")
@@ -59,7 +56,6 @@ data class SalesActivity(
     @SerializedName("planned_long")
     val plannedLong: Double? = null,
 
-    // ── Check-in fields ──────────────────────────────────────
     @ColumnInfo(name = "check_in_time")
     @SerializedName("check_in_time")
     val checkInTime: String? = null,
@@ -80,22 +76,21 @@ data class SalesActivity(
     @SerializedName("is_location_verified")
     val isLocationVerified: Boolean = false,
 
-    // ── Status & Note ────────────────────────────────────────
     @ColumnInfo(name = "plan_status")
-    @SerializedName("plan_status")       // ✅ DB ใช้ plan_status ไม่ใช่ status
+    @SerializedName("plan_status")
     val status: String,
 
     @ColumnInfo(name = "note")
     @SerializedName("note")
     val note: String? = null,
 
-    // ── Local-only fields (ไม่ส่งขึ้น API) ──────────────────
-    @ColumnInfo(name = "projectName")
+    // Local-only fields ไม่ส่งขึ้น API
+    @ColumnInfo(name = "project_name")
     val projectName: String? = null,
-    @ColumnInfo(name = "companyName")
+    @ColumnInfo(name = "company_name")
     val companyName: String? = null,
-    @ColumnInfo(name = "contactName")
+    @ColumnInfo(name = "contact_name")
     val contactName: String? = null,
-    @ColumnInfo(name = "weeklyNote")
+    @ColumnInfo(name = "weekly_note")
     val weeklyNote: String? = null
 )

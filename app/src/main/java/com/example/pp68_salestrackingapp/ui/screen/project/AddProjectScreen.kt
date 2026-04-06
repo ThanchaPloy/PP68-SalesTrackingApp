@@ -25,11 +25,6 @@ import com.example.pp68_salestrackingapp.ui.components.*
 import com.example.pp68_salestrackingapp.ui.theme.AppColors
 import com.example.pp68_salestrackingapp.ui.theme.SalesTrackingTheme
 
-// นำเข้า Google Maps Compose
-import com.google.android.gms.maps.model.CameraPosition
-import com.google.android.gms.maps.model.LatLng
-import com.google.maps.android.compose.*
-
 // ═══════════════════════════════════════════════════════════════
 @Composable
 fun AddProjectScreen(
@@ -105,10 +100,10 @@ fun AddProjectContent(
                     ) {
                         Icon(Icons.Default.Tag, null, tint = AppColors.Primary, modifier = Modifier.size(18.dp))
                         Text(
-                            text = uiState.generatedProjectNumber.ifBlank { "กำลังสร้างหมายเลข..." },
+                            text = uiState.generatedProjectNumber,
                             fontSize   = 15.sp,
                             fontWeight = FontWeight.SemiBold,
-                            color      = if (uiState.generatedProjectNumber.isBlank())
+                            color      = if (uiState.generatedProjectNumber.contains("รอกด"))
                                 AppColors.TextSecondary else AppColors.TextPrimary
                         )
                         Spacer(Modifier.weight(1f))
@@ -264,31 +259,7 @@ fun AddProjectContent(
             // ── Site Location + Google Maps ──────────────────
             FormField("สถานที่ตั้งโครงการ") {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(10.dp))
-                            .border(1.dp, AppColors.Border, RoundedCornerShape(10.dp))
-                            .background(Color.White)
-                            .padding(horizontal = 16.dp, vertical = 14.dp)
-                    ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Text(
-                                text = uiState.locationText.ifBlank { "ละติจูด: ${uiState.siteLat ?: "-"}, ลองจิจูด: ${uiState.siteLong ?: "-"}" },
-                                color = if (uiState.locationText.isBlank() && uiState.siteLat == null) AppColors.TextHint else AppColors.TextPrimary,
-                                fontSize = 14.sp,
-                                modifier = Modifier.weight(1f)
-                            )
-                            Icon(Icons.Default.LocationOn, null,
-                                tint = AppColors.Primary, modifier = Modifier.size(20.dp))
-                        }
-                    }
-
-                    // 💡 ใช้ GoogleMapPickerField
+                    // ใช้ GoogleMapPickerField จาก MapComponents.kt ที่มีระบบค้นหา
                     GoogleMapPickerField(
                         lat = uiState.siteLat ?: 13.7563,
                         lng = uiState.siteLong ?: 100.5018,
@@ -322,66 +293,6 @@ fun AddProjectContent(
         }
     }
 }
-
-// ── Google Maps Component ─────────────────────────────────────
-@Composable
-fun GoogleMapPickerField(
-    lat: Double,
-    lng: Double,
-    onLocationPicked: (Double, Double) -> Unit
-) {
-    val cameraPositionState = rememberCameraPositionState {
-        position = CameraPosition.fromLatLngZoom(LatLng(lat, lng), 15f)
-    }
-
-    // 💡 แก้ไข Error: ใช้ rememberMarkerState แทนการสร้าง MarkerState() โดยตรงใน composition
-    val markerState = rememberMarkerState(position = LatLng(lat, lng))
-
-    // Sync state หากค่า lat/lng เปลี่ยนจากภายนอก
-    LaunchedEffect(lat, lng) {
-        val newPos = LatLng(lat, lng)
-        cameraPositionState.position = CameraPosition.fromLatLngZoom(newPos, 15f)
-        markerState.position = newPos
-    }
-
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(250.dp)
-            .clip(RoundedCornerShape(10.dp))
-            .border(1.dp, AppColors.Border, RoundedCornerShape(10.dp))
-    ) {
-        GoogleMap(
-            modifier = Modifier.fillMaxSize(),
-            cameraPositionState = cameraPositionState,
-            onMapClick = { latLng ->
-                markerState.position = latLng
-                onLocationPicked(latLng.latitude, latLng.longitude)
-            }
-        ) {
-            Marker(
-                state = markerState,
-                title = "สถานที่ตั้ง",
-                snippet = "Lat: ${markerState.position.latitude.format(4)}, Lng: ${markerState.position.longitude.format(4)}"
-            )
-        }
-
-        Surface(
-            modifier = Modifier.align(Alignment.TopCenter).padding(8.dp),
-            shape = RoundedCornerShape(16.dp),
-            color = Color.White.copy(alpha = 0.8f),
-            shadowElevation = 2.dp
-        ) {
-            Text(
-                "แตะบนแผนที่เพื่อเลือกตำแหน่ง",
-                fontSize = 12.sp,
-                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
-            )
-        }
-    }
-}
-
-private fun Double.format(digits: Int) = "%.${digits}f".format(this)
 
 // ── Member chip grid ────────────────────────────────────────
 @Composable

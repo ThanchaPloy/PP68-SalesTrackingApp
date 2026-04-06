@@ -3,6 +3,7 @@ package com.example.pp68_salestrackingapp.ui.screen.activity
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -11,9 +12,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.Notes
-import androidx.compose.material.icons.automirrored.filled.TrendingUp
+import androidx.compose.material.icons.automirrored.filled.*
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -108,6 +107,11 @@ private fun SalesResultContent(
     onUploadPhoto: () -> Unit,
     onSave: () -> Unit
 ) {
+    // แยกสถานะการเปิด-ปิดของแต่ละแท็บย่อย
+    var expandSolution by remember { mutableStateOf(false) }
+    var expandContract by remember { mutableStateOf(false) }
+    var expandProposal by remember { mutableStateOf(false) }
+
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
@@ -198,9 +202,9 @@ private fun SalesResultContent(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        OpportunityButton("สูง (HOT) 🔥",  s.opportunityScore == "สูง (HOT)",  Modifier.weight(1f)) { onOpportunitySelected("สูง (HOT)") }
-                        OpportunityButton("กลาง (WARM) ☀️", s.opportunityScore == "กลาง (WARM)", Modifier.weight(1f)) { onOpportunitySelected("กลาง (WARM)") }
-                        OpportunityButton("ต่ำ (COLD) ❄️", s.opportunityScore == "ต่ำ (COLD)", Modifier.weight(1f)) { onOpportunitySelected("ต่ำ (COLD)") }
+                        OpportunityButton("HOT🔥",  s.opportunityScore == "สูง (HOT)",  Modifier.weight(1f)) { onOpportunitySelected("สูง (HOT)") }
+                        OpportunityButton("WARM☀️", s.opportunityScore == "กลาง (WARM)", Modifier.weight(1f)) { onOpportunitySelected("กลาง (WARM)") }
+                        OpportunityButton("COLD❄️", s.opportunityScore == "ต่ำ (COLD)", Modifier.weight(1f)) { onOpportunitySelected("ต่ำ (COLD)") }
                     }
                 }
 
@@ -217,7 +221,23 @@ private fun SalesResultContent(
                     )
                 }
 
-                // DM Involved Toggle
+                // ✅ รูปยืนยันการเข้าพบ (ย้ายมาหลังข้อ 3)
+                SectionCard(title = "รูปภาพยืนยันการเข้าพบ", icon = Icons.Default.PhotoCamera) {
+                    PhotoUploadSection(
+                        photoUri = s.photoUri,
+                        photoUrl = s.photoUrl,
+                        isUploading = s.isUploadingPhoto,
+                        photoTakenAt         = s.photoTakenAt,
+                        photoLat             = s.photoLat,
+                        photoLng             = s.photoLng,
+                        photoDeviceModel     = s.photoDeviceModel,
+                        isPhotoLocationValid = s.isPhotoLocationValid,
+                        onPhotoPicked = onPhotoPicked,
+                        onUpload = onUploadPhoto
+                    )
+                }
+
+                // ✅ ผู้มีอำนาจตัดสินใจ (DM) - ย้ายมาหลังรูป
                 SectionCard(title = "ผู้มีอำนาจตัดสินใจ (DM)", icon = Icons.Default.Person) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -233,113 +253,122 @@ private fun SalesResultContent(
                     }
                 }
 
-                // 4. ตำแหน่งของดีล (Deal Position)
-                SectionCard(title = "4. ตำแหน่งของดีล (Deal Position)", icon = Icons.Default.Place) {
-                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        listOf(
-                            "ลูกค้าใช้เราอยู่แล้ว การต่อสัญญามีโอกาสสูงมาก",
-                            "ลูกค้าเลือกเราเป็นตัวหลัก คู่แข่งอื่นเป็นแค่ backup",
-                            "ถูกเชิญมาเพื่อ benchmark ราคา โอกาสต่ำ"
-                        ).forEach { opt ->
-                            SelectOption(opt, s.dealPosition == opt) { onDealPositionChanged(opt) }
-                        }
-                    }
-                }
+                Spacer(Modifier.height(8.dp))
+                HorizontalDivider(color = BorderGray)
+                Text("วิเคราะห์ข้อมูลเพิ่มเติม(ถ้ามี)", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = RedPrimary)
 
-                // 5. Solution เดิมของลูกค้า
-                SectionCard(title = "5. Solution เดิมของลูกค้า", icon = Icons.Default.History) {
-                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        listOf(
-                            "ไม่มี Solution เดิม",
-                            "มีระบบเดิมที่ไม่ใช่คู่แข่ง",
-                            "ใช้คู่แข่งอยู่และไม่มีปัญหา"
-                        ).forEach { opt ->
-                            SelectOption(opt, s.previousSolution == opt) { onPreviousSolutionChanged(opt) }
-                        }
-                    }
-                }
-
-                // 6. ประเภทคู่สัญญา (Counterparty Type)
-                SectionCard(title = "6. ประเภทคู่สัญญา (Counterparty Type)", icon = Icons.Default.Groups) {
-                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        listOf(
-                            "ดีลกับ Main Contractor โดยตรง",
-                            "ดีลผ่าน Installer — Main Contractor ได้งานแล้ว",
-                            "ดีลผ่าน Installer — Main Contractor ยังไม่ได้งาน"
-                        ).forEach { opt ->
-                            SelectOption(opt, s.counterpartyMultiplier == opt) { onCounterpartyMultiplierChanged(opt) }
-                        }
-                    }
-                }
-
-                // 7. ความรวดเร็วในการตอบรับ
-                SectionCard(title = "7. ความรวดเร็วในการตอบรับ", icon = Icons.Default.Speed) {
-                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        listOf("เร็ว", "ปกติ", "ช้าหรือเงียบ").forEach { opt ->
-                            SelectOption(opt, s.responseSpeed == opt) { onResponseSpeedChanged(opt) }
-                        }
-                    }
-                }
-
-                // 8. การส่งใบเสนอราคา (Proposal)
-                SectionCard(title = "8. การส่งใบเสนอราคา (Proposal)", icon = Icons.Default.Description) {
-                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text("ส่งใบเสนอราคาแล้ว", fontSize = 15.sp, fontWeight = FontWeight.Medium)
-                            Switch(
-                                checked = s.isProposalSent,
-                                onCheckedChange = onProposalToggle,
-                                colors = SwitchDefaults.colors(checkedThumbColor = White, checkedTrackColor = RedPrimary)
-                            )
-                        }
-                        if (s.isProposalSent) {
-                            DatePickerField(
-                                selectedDate  = s.proposalDate ?: "",
-                                placeholder   = "ระบุวันที่ส่งใบเสนอราคา",
-                                onDateSelected = onProposalDateChanged
-                            )
-                        }
-                    }
-                }
-
-                // 9. จำนวนคู่แข่ง
-                SectionCard(title = "9. จำนวนคู่แข่ง", icon = Icons.Default.CompareArrows) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text("จำนวนคู่แข่งที่ทราบ", fontSize = 15.sp)
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                            IconButton(onClick = { onCompetitorCountChanged(-1) }) {
-                                Icon(Icons.Default.RemoveCircleOutline, null, tint = RedPrimary)
+                // 📂 แท็บย่อย 1: Solution (ข้อ 4-5)
+                CollapsibleSection(
+                    title = "แท็บ Solution & ตำแหน่งดีล",
+                    icon = Icons.Default.SettingsSuggest,
+                    isExpanded = expandSolution,
+                    onToggle = { expandSolution = !expandSolution }
+                ) {
+                    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                        SectionCard(title = "4. ตำแหน่งของดีล", icon = Icons.Default.Place) {
+                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                listOf(
+                                    "ลูกค้าใช้เราอยู่แล้ว การต่อสัญญามีโอกาสสูงมาก",
+                                    "ลูกค้าเลือกเราเป็นตัวหลัก คู่แข่งอื่นเป็นแค่ backup",
+                                    "ถูกเชิญมาเพื่อ benchmark ราคา โอกาสต่ำ"
+                                ).forEach { opt ->
+                                    SelectOption(opt, s.dealPosition == opt) { onDealPositionChanged(opt) }
+                                }
                             }
-                            Text("${s.competitorCount}", fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                            IconButton(onClick = { onCompetitorCountChanged(1) }) {
-                                Icon(Icons.Default.AddCircleOutline, null, tint = RedPrimary)
+                        }
+                        SectionCard(title = "5. Solution เดิมของลูกค้า", icon = Icons.Default.History) {
+                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                listOf(
+                                    "ไม่มี Solution เดิม",
+                                    "มีระบบเดิมที่ไม่ใช่คู่แข่ง",
+                                    "ใช้คู่แข่งอยู่และไม่มีปัญหา"
+                                ).forEach { opt ->
+                                    SelectOption(opt, s.previousSolution == opt) { onPreviousSolutionChanged(opt) }
+                                }
                             }
                         }
                     }
                 }
 
-                // ส่วนอัปโหลดรูป
-                SectionCard(title = "10. แนบรูปภาพหลักฐาน", icon = Icons.Default.PhotoCamera) {
-                    PhotoUploadSection(
-                        photoUri = s.photoUri,
-                        photoUrl = s.photoUrl,
-                        isUploading = s.isUploadingPhoto,
-                        photoTakenAt         = s.photoTakenAt,
-                        photoLat             = s.photoLat,
-                        photoLng             = s.photoLng,
-                        photoDeviceModel     = s.photoDeviceModel,
-                        isPhotoLocationValid = s.isPhotoLocationValid,
-                        onPhotoPicked = onPhotoPicked,
-                        onUpload = onUploadPhoto
-                    )
+                // 📂 แท็บย่อย 2: สัญญาและการตอบรับ (ข้อ 6-7)
+                CollapsibleSection(
+                    title = "แท็บ สัญญา & การตอบรับ",
+                    icon = Icons.Default.Handshake,
+                    isExpanded = expandContract,
+                    onToggle = { expandContract = !expandContract }
+                ) {
+                    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                        SectionCard(title = "6. ประเภทคู่สัญญา", icon = Icons.Default.Groups) {
+                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                listOf(
+                                    "ดีลกับ Main Contractor โดยตรง",
+                                    "ดีลผ่าน Installer — Main Contractor ได้งานแล้ว",
+                                    "ดีลผ่าน Installer — Main Contractor ยังไม่ได้งาน"
+                                ).forEach { opt ->
+                                    SelectOption(opt, s.counterpartyMultiplier == opt) { onCounterpartyMultiplierChanged(opt) }
+                                }
+                            }
+                        }
+                        SectionCard(title = "7. ความรวดเร็วในการตอบรับ", icon = Icons.Default.Speed) {
+                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                listOf("เร็ว", "ปกติ", "ช้าหรือเงียบ").forEach { opt ->
+                                    SelectOption(opt, s.responseSpeed == opt) { onResponseSpeedChanged(opt) }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // 📂 แท็บย่อย 3: ใบเสนอราคาและคู่แข่ง (ข้อ 8-9)
+                CollapsibleSection(
+                    title = "แท็บ ใบเสนอราคา & คู่แข่ง",
+                    icon = Icons.Default.Description,
+                    isExpanded = expandProposal,
+                    onToggle = { expandProposal = !expandProposal }
+                ) {
+                    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                        SectionCard(title = "8. การส่งใบเสนอราคา", icon = Icons.Default.Description) {
+                            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text("ส่งใบเสนอราคาแล้ว", fontSize = 15.sp, fontWeight = FontWeight.Medium)
+                                    Switch(
+                                        checked = s.isProposalSent,
+                                        onCheckedChange = onProposalToggle,
+                                        colors = SwitchDefaults.colors(checkedThumbColor = White, checkedTrackColor = RedPrimary)
+                                    )
+                                }
+                                if (s.isProposalSent) {
+                                    DatePickerField(
+                                        selectedDate  = s.proposalDate ?: "",
+                                        placeholder   = "ระบุวันที่ส่งใบเสนอราคา",
+                                        onDateSelected = onProposalDateChanged
+                                    )
+                                }
+                            }
+                        }
+                        SectionCard(title = "9. จำนวนคู่แข่ง", icon = Icons.AutoMirrored.Filled.CompareArrows) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text("จำนวนคู่แข่งที่ทราบ", fontSize = 15.sp)
+                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                    IconButton(onClick = { onCompetitorCountChanged(-1) }) {
+                                        Icon(Icons.Default.RemoveCircleOutline, null, tint = RedPrimary)
+                                    }
+                                    Text("${s.competitorCount}", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                                    IconButton(onClick = { onCompetitorCountChanged(1) }) {
+                                        Icon(Icons.Default.AddCircleOutline, null, tint = RedPrimary)
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
 
                 Spacer(Modifier.height(16.dp))
@@ -385,6 +414,43 @@ private fun SectionCard(
                 Text(title, fontWeight = FontWeight.Bold, fontSize = 15.sp, color = TextDark)
             }
             content()
+        }
+    }
+}
+
+@Composable
+private fun CollapsibleSection(
+    title: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    isExpanded: Boolean,
+    onToggle: () -> Unit,
+    content: @Composable () -> Unit
+) {
+    Column {
+        Surface(
+            onClick = onToggle,
+            color = Color(0xFFF0F0F0),
+            shape = RoundedCornerShape(12.dp),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Row(
+                modifier = Modifier.padding(16.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(icon, null, tint = RedPrimary, modifier = Modifier.size(20.dp))
+                Spacer(Modifier.width(12.dp))
+                Text(title, fontWeight = FontWeight.Bold, fontSize = 14.sp, color = TextDark, modifier = Modifier.weight(1f))
+                Icon(
+                    imageVector = if (isExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                    contentDescription = null,
+                    tint = TextGray
+                )
+            }
+        }
+        AnimatedVisibility(visible = isExpanded) {
+            Column(modifier = Modifier.padding(top = 12.dp)) {
+                content()
+            }
         }
     }
 }
@@ -582,5 +648,42 @@ private fun PhotoUploadSection(
                 }
             }
         }
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun SalesResultScreenPreview() {
+    SalesTrackingTheme {
+        SalesResultContent(
+            s = SalesResultUiState(
+                currentStatus = "Lead",
+                reportDate = "2023-11-01",
+                isStatusUpdateEnabled = true,
+                newStatus = "Quotation",
+                opportunityScore = "สูง (HOT)",
+                visitSummary = "ลูกค้าสนใจสินค้ามาก ต้องการใบเสนอราคาด่วน",
+                competitorCount = 2,
+                dmInvolved = true
+            ),
+            snackbarHostState = remember { SnackbarHostState() },
+            onBack = {},
+            onReportDateChanged = {},
+            onStatusToggle = {},
+            onNewStatusSelected = {},
+            onOpportunitySelected = {},
+            onDealPositionChanged = {},
+            onPreviousSolutionChanged = {},
+            onCounterpartyMultiplierChanged = {},
+            onResponseSpeedChanged = {},
+            onProposalToggle = {},
+            onProposalDateChanged = {},
+            onCompetitorCountChanged = {},
+            onDmToggle = {},
+            onSummaryChanged = {},
+            onPhotoPicked = {},
+            onUploadPhoto = {},
+            onSave = {}
+        )
     }
 }

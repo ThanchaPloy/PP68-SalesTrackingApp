@@ -1,5 +1,6 @@
 package com.example.pp68_salestrackingapp.ui.viewmodels.auth
 
+import android.util.Patterns
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.pp68_salestrackingapp.data.model.Branch
@@ -70,11 +71,20 @@ class RegisterViewModel @Inject constructor(
         }
     }
 
+    private fun isValidEmail(email: String): Boolean {
+        return Patterns.EMAIL_ADDRESS.matcher(email).matches()
+    }
+
     fun register() {
         val s = _uiState.value
         if (s.fullName.isBlank() || s.email.isBlank() ||
             s.password.isBlank() || s.selectedBranchId.isBlank()) {
             _uiState.update { it.copy(error = "กรุณากรอกข้อมูลให้ครบถ้วน") }
+            return
+        }
+
+        if (!isValidEmail(s.email)) {
+            _uiState.update { it.copy(error = "รูปแบบอีเมลไม่ถูกต้อง") }
             return
         }
 

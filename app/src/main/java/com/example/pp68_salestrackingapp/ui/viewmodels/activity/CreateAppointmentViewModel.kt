@@ -36,6 +36,8 @@ data class CreateAppointmentUiState(
 
     val selectedContactIds:  Set<String>          = emptySet(),
     val selectedMasterIds:   Set<Int>             = emptySet(),
+    val isOtherSelected:     Boolean              = false,
+    val otherObjectiveText:  String               = "",
 
     val projectOptions:  List<ProjectOption>   = emptyList(),
     val contactOptions:  List<ContactOption>   = emptyList(),
@@ -68,6 +70,8 @@ sealed class CreateAppointmentEvent {
     data class TypeChanged(val value: String)               : CreateAppointmentEvent()
     data class ContactToggled(val id: String)               : CreateAppointmentEvent()
     data class MasterToggled(val id: Int)                   : CreateAppointmentEvent()
+    object OtherToggled                                     : CreateAppointmentEvent()
+    data class OtherObjectiveTextChanged(val value: String) : CreateAppointmentEvent()
     data class DateChanged(val value: String)               : CreateAppointmentEvent()
     data class StartTimeSelected(val value: String)         : CreateAppointmentEvent()
     data class EndTimeSelected(val value: String)           : CreateAppointmentEvent()
@@ -167,7 +171,7 @@ class CreateAppointmentViewModel @Inject constructor(
         }
     }
 
-    private fun loadContactsForProject(projectId: String) {
+    private fun loadContactsForProject(projectId: String, selectedContactIds: Set<String> = emptySet()) {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoadingContacts = true, contactOptions = emptyList()) }
             try {
@@ -197,6 +201,7 @@ class CreateAppointmentViewModel @Inject constructor(
                                         c.fullName ?: c.nickname ?: c.contactId
                                     )
                                 },
+                            selectedContactIds = if (selectedContactIds.isNotEmpty()) selectedContactIds else it.selectedContactIds,
                             isLoadingContacts = false
                         )
                     }
@@ -216,25 +221,33 @@ class CreateAppointmentViewModel @Inject constructor(
                 val activity = list.firstOrNull() ?: return@onSuccess
 
                 val savedItems = activityRepo.getPlanItems(id).getOrDefault(emptyList())
-                val selectedIds = savedItems.map { it.masterId }.toSet()
+                val selectedMasterIds = savedItems.filter { it.masterId != 999 }.map { it.masterId }.toSet()
+                val otherItem = savedItems.find { it.masterId == 999 }
+                
+                val selectedContactIds = activityRepo.getAppointmentContacts(id).toSet()
 
                 _uiState.update {
                     it.copy(
                         activityId        = activity.activityId,
                         selectedProjectId = activity.projectId,
-                        titleTopic        = activity.detail ?: "",        // ✅ detail → @SerializedName("topic")
-                        activityType      = activity.activityType,         // ✅ activityType → @SerializedName("type")
-                        plannedDate       = formatDateForUI(activity.activityDate), // ✅ activityDate → @SerializedName("planned_date")
-                        startTime         = activity.plannedTime,          // ✅ plannedTime → @SerializedName("planned_time")
-                        endTime           = activity.plannedEndTime,       // ✅ plannedEndTime → @SerializedName("planned_end_time")
+                        selectedCustomerId = activity.customerId,
+                        titleTopic        = activity.detail ?: "",
+                        activityType      = activity.activityType,
+                        plannedDate       = formatDateForUI(activity.activityDate),
+                        startTime         = activity.plannedTime,
+                        endTime           = activity.plannedEndTime,
                         lat               = activity.plannedLat,
                         lng               = activity.plannedLong,
-                        selectedMasterIds = selectedIds,
+                        selectedMasterIds = selectedMasterIds,
+                        selectedContactIds = selectedContactIds,
+                        isOtherSelected   = otherItem != null,
+                        otherObjectiveText = otherItem?.masterDetails?.actName ?: "",
                         isLoading         = false
                     )
                 }
 
                 activity.projectId?.let { pid ->
+                    loadContactsForProject(pid, selectedContactIds)
                     projectRepo.getProjectById(pid).onSuccess { p ->
                         _uiState.update { it.copy(selectedProjectName = p.projectName) }
                     }
@@ -300,6 +313,7 @@ class CreateAppointmentViewModel @Inject constructor(
                     )
                 }
                 loadContactsForProject(event.id)
+                filterMastersByProjectStatus(event.status)
             }
 
             is CreateAppointmentEvent.TitleChanged ->
@@ -318,6 +332,14 @@ class CreateAppointmentViewModel @Inject constructor(
                 val current = _uiState.value.selectedMasterIds.toMutableSet()
                 if (event.id in current) current.remove(event.id) else current.add(event.id)
                 _uiState.update { it.copy(selectedMasterIds = current, masterError = null) }
+            }
+
+            CreateAppointmentEvent.OtherToggled -> {
+                _uiState.update { it.copy(isOtherSelected = !it.isOtherSelected) }
+            }
+
+            is CreateAppointmentEvent.OtherObjectiveTextChanged -> {
+                _uiState.update { it.copy(otherObjectiveText = event.value) }
             }
 
             is CreateAppointmentEvent.DateChanged ->
@@ -396,21 +418,21 @@ class CreateAppointmentViewModel @Inject constructor(
                 userId         = userId,
                 customerId     = customerId,
                 projectId      = s.selectedProjectId,
-                activityType   = s.activityType,          // map → @SerializedName("type")
+                activityType   = s.activityType,
                 isAppointment  = true,
-                detail         = s.titleTopic,            // map → @SerializedName("topic")
+                detail         = s.titleTopic,
                 activityDate   = s.plannedDate?.let { parseToIsoDate(it) }
-                    ?: LocalDate.now().toString(), // map → @SerializedName("planned_date")
-                plannedTime    = s.startTime,             // map → @SerializedName("planned_time")
-                plannedEndTime = s.endTime,               // map → @SerializedName("planned_end_time")
+                    ?: LocalDate.now().toString(),
+                plannedTime    = s.startTime,
+                plannedEndTime = s.endTime,
                 plannedLat     = s.lat,
                 plannedLong    = s.lng,
-                status         = "planned"                // map → @SerializedName("plan_status")
+                status         = "planned",
+                contactName    = selectedContactNames
             )
 
 
             val result = if (isEditMode) {
-                // สำหรับโหมดแก้ไข ส่งข้อมูลที่จะอัปเดต (PATCH)
                 val updates = mutableMapOf<String, Any>(
                     "type" to s.activityType,
                     "planned_date" to isoDate,
@@ -421,13 +443,10 @@ class CreateAppointmentViewModel @Inject constructor(
                     "planned_long" to (s.lng ?: 0.0),
                     "is_appointment" to s.selectedContactIds.isNotEmpty()
                 )
-                // อัปเดตผ่าน API และ Local
                 activityRepo.updateActivity(appointmentId, updates).onSuccess {
-                    // อัปเดตข้อมูลเต็มลง Local DB ด้วย
                     activityRepo.addActivity(activity)
                 }
             } else {
-                // สำหรับของใหม่ (POST)
                 activityRepo.addActivity(activity)
             }
 
@@ -441,15 +460,37 @@ class CreateAppointmentViewModel @Inject constructor(
                 return@launch
             }
 
-            if (s.selectedMasterIds.isNotEmpty()) {
-                val planItems = s.selectedMasterIds.map { mid ->
+            // Save selected contacts
+            activityRepo.saveAppointmentContacts(appointmentId, s.selectedContactIds.toList())
+
+            // Checklist items
+            val planItems = mutableListOf<ActivityPlanItem>()
+            
+            // Standard masters
+            s.selectedMasterIds.forEach { mid ->
+                planItems.add(
                     ActivityPlanItem(
                         appointmentId = appointmentId,
                         masterId      = mid,
                         isDone        = false,
                         actName       = s.masterOptions.find { it.masterId == mid }?.actName
                     )
-                }
+                )
+            }
+            
+            // "Other" objective
+            if (s.isOtherSelected && s.otherObjectiveText.isNotBlank()) {
+                planItems.add(
+                    ActivityPlanItem(
+                        appointmentId = appointmentId,
+                        masterId      = 999, // Reserved for Other
+                        isDone        = false,
+                        actName       = s.otherObjectiveText
+                    )
+                )
+            }
+
+            if (planItems.isNotEmpty()) {
                 activityRepo.savePlanItems(appointmentId, planItems)
             }
 

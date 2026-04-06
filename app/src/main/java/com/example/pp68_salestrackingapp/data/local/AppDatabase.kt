@@ -2,14 +2,8 @@ package com.example.pp68_salestrackingapp.data.local
 
 import androidx.room.Database
 import androidx.room.RoomDatabase
-import com.example.pp68_salestrackingapp.data.model.Customer
-import com.example.pp68_salestrackingapp.data.model.Project
-import com.example.pp68_salestrackingapp.data.model.SalesActivity
-import com.example.pp68_salestrackingapp.data.model.ContactPerson
-import com.example.pp68_salestrackingapp.data.model.Branch
-import com.example.pp68_salestrackingapp.data.model.ActivityPlanItem
-import com.example.pp68_salestrackingapp.data.model.ActivityResult
-import com.example.pp68_salestrackingapp.data.model.ProjectContact
+import com.example.pp68_salestrackingapp.data.model.*
+import kotlinx.coroutines.flow.Flow
 
 @Database(
     entities = [
@@ -20,9 +14,10 @@ import com.example.pp68_salestrackingapp.data.model.ProjectContact
         Branch::class,
         ActivityPlanItem::class,
         ActivityResult::class,
-        ProjectContact::class
+        ProjectContact::class,
+        AppointmentContact::class
     ],
-    version = 22, // ✅ เพิ่ม Version เป็น 20 เพื่อแก้ปัญหา Schema mismatch
+    version = 25,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -34,6 +29,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun branchDao(): BranchDao
     abstract fun activityPlanItemDao(): ActivityPlanItemDao
     abstract fun activityResultDao(): ActivityResultDao
+    abstract fun appointmentContactDao(): AppointmentContactDao
 
     fun clearAllData() {
         this.clearAllTables()

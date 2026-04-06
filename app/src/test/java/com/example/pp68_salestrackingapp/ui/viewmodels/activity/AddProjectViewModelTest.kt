@@ -57,7 +57,8 @@ class AddProjectViewModelTest {
     @Test
     fun `Save success should update isSaved to true`() = runTest {
         // Arrange
-        coEvery { projectRepo.createProject(any(), any()) } coAnswers { Result.success(Unit) }
+        val sampleProject = Project(projectId = "P1", custId = "C1", projectName = "New Project Alpha")
+        coEvery { projectRepo.createProject(any(), any()) } coAnswers { Result.success(sampleProject) }
         coEvery { projectRepo.addProjectMembers(any(), any(), any(), any()) } coAnswers { Result.success(Unit) }
 
         // Act

@@ -2,13 +2,7 @@ package com.example.pp68_salestrackingapp.data.repository
 
 import android.util.Log
 import com.example.pp68_salestrackingapp.data.local.*
-import com.example.pp68_salestrackingapp.data.model.SalesActivity
-import com.example.pp68_salestrackingapp.data.model.ActivityMaster
-import com.example.pp68_salestrackingapp.data.model.PlanItemDto
-import com.example.pp68_salestrackingapp.data.model.MasterActDto
-import com.example.pp68_salestrackingapp.data.model.ActivityPlanItem
-import com.example.pp68_salestrackingapp.data.model.ActivityResult
-import com.example.pp68_salestrackingapp.data.model.ChecklistInsertDto
+import com.example.pp68_salestrackingapp.data.model.*
 import com.example.pp68_salestrackingapp.data.remote.ApiService
 import com.example.pp68_salestrackingapp.data.remote.UploadApiService
 import com.example.pp68_salestrackingapp.ui.viewmodels.activity.ActivityCard
@@ -29,7 +23,8 @@ class ActivityRepository @Inject constructor(
     private val customerDao: CustomerDao,
     private val contactDao: ContactDao,
     private val planItemDao: ActivityPlanItemDao,
-    private val resultDao: ActivityResultDao
+    private val resultDao: ActivityResultDao,
+    private val appointmentContactDao: AppointmentContactDao
 ) {
     fun getAllActivitiesFlow(): Flow<List<SalesActivity>> = activityDao.getAllActivities()
 
@@ -209,7 +204,10 @@ class ActivityRepository @Inject constructor(
         return withContext(Dispatchers.IO) {
             try {
                 val local = activityDao.getActivityById(id)
-                if (local != null) return@withContext kotlin.Result.success(listOf(local))
+                // ✅ ถ้ามีข้อมูลในเครื่องและมีเวลาครบถ้วน ให้ใช้ข้อมูลในเครื่อง
+                if (local != null && !local.plannedTime.isNullOrBlank()) {
+                    return@withContext kotlin.Result.success(listOf(local))
+                }
 
                 val resp = apiService.getAppointmentById("eq.$id")
                 if (resp.isSuccessful && resp.body() != null) {
@@ -217,7 +215,8 @@ class ActivityRepository @Inject constructor(
                     if (data.isNotEmpty()) activityDao.insertActivities(data)
                     kotlin.Result.success(data)
                 } else {
-                    kotlin.Result.success(emptyList())
+                    if (local != null) kotlin.Result.success(listOf(local))
+                    else kotlin.Result.success(emptyList())
                 }
             } catch (e: Exception) {
                 val local = activityDao.getActivityById(id)
@@ -462,6 +461,48 @@ class ActivityRepository @Inject constructor(
             } catch (e: Exception) {
                 kotlin.Result.failure(e)
             }
+        }
+    }
+
+    suspend fun enrichActivity(activity: SalesActivity): SalesActivity {
+        return withContext(Dispatchers.IO) {
+            try {
+                // 1. ดึง customer
+                val customerList: List<Customer> = customerDao.getAllCustomers().first()
+                val customer: Customer? = customerList.find { it.custId == activity.customerId }
+
+                // 2. ดึง project
+                val projectList: List<Project> = projectDao.getAllProjects().first()
+                val project: Project? = activity.projectId?.let { pid: String ->
+                    projectList.find { it.projectId == pid }
+                }
+
+                // 3. ดึง contact — พยายามหาคนที่มีชื่อ หรือคนแรก
+                val contacts: List<ContactPerson> = contactDao.getContactsByCustomerId(activity.customerId)
+                val contact: ContactPerson? = contacts.firstOrNull()
+
+                activity.copy(
+                    companyName = customer?.companyName ?: activity.companyName,
+                    projectName = project?.projectName ?: activity.projectName,
+                    contactName = contact?.fullName ?: contact?.nickname ?: activity.contactName
+                )
+            } catch (e: Exception) {
+                activity
+            }
+        }
+    }
+
+    suspend fun saveAppointmentContacts(appointmentId: String, contactIds: List<String>) {
+        withContext(Dispatchers.IO) {
+            appointmentContactDao.deleteContactsByAppointmentId(appointmentId)
+            val items = contactIds.map { AppointmentContact(appointmentId, it) }
+            appointmentContactDao.insertAppointmentContacts(items)
+        }
+    }
+
+    suspend fun getAppointmentContacts(appointmentId: String): List<String> {
+        return withContext(Dispatchers.IO) {
+            appointmentContactDao.getContactsByAppointmentId(appointmentId).map { it.contactId }
         }
     }
 }

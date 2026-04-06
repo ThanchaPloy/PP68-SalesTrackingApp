@@ -1,5 +1,6 @@
 package com.example.pp68_salestrackingapp.ui.viewmodels.auth
 
+import android.util.Patterns
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.pp68_salestrackingapp.data.model.AuthUser
@@ -36,14 +37,6 @@ class LoginViewModel @Inject constructor(
 
     init {
         // เช็คว่าเคยล็อกอินไว้แล้วหรือยัง
-        // หมายเหตุ: ตรงนี้ต้องมั่นใจว่า AuthRepository สามารถดึงข้อมูล User ปัจจุบันมาให้เราได้
-        if (authRepository.isUserLoggedIn()) {
-            // สมมติว่ามีฟังก์ชัน getCurrentUser()
-            // val currentUser = authRepository.getCurrentUser()
-            // if (currentUser != null) {
-            //    _uiState.value = LoginUiState.Success(currentUser)
-            // }
-        }
     }
 
     // 3. ฟังก์ชันอัปเดตช่องกรอกข้อมูล
@@ -57,9 +50,13 @@ class LoginViewModel @Inject constructor(
         clearError()
     }
 
+    private fun isValidEmail(email: String): Boolean {
+        return Patterns.EMAIL_ADDRESS.matcher(email).matches()
+    }
+
     // 4. ฟังก์ชัน login ดึงค่าจาก StateFlow โดยตรง (หน้าจอจะได้ไม่ต้องส่ง Parameter มา)
     fun login() {
-        val currentEmail = _email.value
+        val currentEmail = _email.value.trim()
         val currentPassword = _password.value
 
         if (currentEmail.isBlank() || currentPassword.isBlank()) {
@@ -67,11 +64,16 @@ class LoginViewModel @Inject constructor(
             return
         }
 
+        if (!isValidEmail(currentEmail)) {
+            _uiState.value = LoginUiState.Error("รูปแบบอีเมลไม่ถูกต้อง")
+            return
+        }
+
         viewModelScope.launch {
             _uiState.value = LoginUiState.Loading
 
             // ส่งข้อมูลไปที่ Repository
-            val result = authRepository.login(currentEmail.trim(), currentPassword.trim())
+            val result = authRepository.login(currentEmail, currentPassword)
 
             result.onSuccess { response ->
                 // สร้าง AuthUser จากข้อมูลที่ได้จาก API และ Email ที่ผู้ใช้กรอก

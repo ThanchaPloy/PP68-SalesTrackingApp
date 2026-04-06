@@ -11,6 +11,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 import javax.inject.Inject
 import kotlin.math.*
 
@@ -44,23 +47,75 @@ class ActivityDetailViewModel @Inject constructor(
     fun loadActivity(id: String) {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, error = null) }
-            val actResult = repo.getActivityById(id)
+
+            val actResult  = repo.getActivityById(id)
             val itemsResult = repo.getPlanItems(id)
-            
-            _uiState.update { 
+
+            val rawActivity = actResult.getOrNull()?.firstOrNull()
+
+            // ✅ Join ข้อมูล customer, project, contact จาก local DB
+            val enrichedActivity = if (rawActivity != null) {
+                repo.enrichActivity(rawActivity)
+            } else null
+
+            // ✅ จัดรูปแบบวันที่และเวลาให้สวยงามก่อนแสดงผล
+            val finalActivity = enrichedActivity?.let { act ->
+                act.copy(
+                    activityDate = formatDateForUI(act.activityDate) ?: act.activityDate,
+                    plannedTime = formatTimeForUI(act.plannedTime),
+                    plannedEndTime = formatTimeForUI(act.plannedEndTime)
+                )
+            }
+
+            _uiState.update {
                 it.copy(
-                    isLoading = false,
-                    activity = actResult.getOrNull()?.firstOrNull(),
-                    planItems = itemsResult.getOrDefault(emptyList()),
+                    isLoading  = false,
+                    activity   = finalActivity ?: enrichedActivity ?: rawActivity,
+                    planItems  = itemsResult.getOrDefault(emptyList()),
                     selectedItemIds = itemsResult.getOrDefault(emptyList())
                         .filter { item -> item.isDone }
                         .map { item -> item.masterId }
                         .toSet()
                 )
             }
+
             if (actResult.isFailure) {
-                _uiState.update { it.copy(error = "ไม่สามารถโหลดข้อมูลได้: ${actResult.exceptionOrNull()?.message}") }
+                _uiState.update {
+                    it.copy(error = "ไม่สามารถโหลดข้อมูลได้: ${actResult.exceptionOrNull()?.message}")
+                }
             }
+        }
+    }
+
+    private fun formatDateForUI(isoDate: String?): String? {
+        if (isoDate == null) return null
+        return try {
+            val date = LocalDate.parse(isoDate.take(10))
+            date.format(DateTimeFormatter.ofPattern("MMM dd, yyyy", Locale.ENGLISH))
+        } catch (e: Exception) { isoDate }
+    }
+
+    private fun formatTimeForUI(timeStr: String?): String? {
+        if (timeStr.isNullOrBlank()) return null
+        return try {
+            val cleanTime = timeStr.trim()
+            // รองรับทั้ง HH:mm:ss และ hh:mm a
+            val inputFormats = listOf("HH:mm:ss", "HH:mm", "hh:mm:ss a", "hh:mm a")
+            var parsedDate: java.util.Date? = null
+
+            for (format in inputFormats) {
+                try {
+                    val sdf = java.text.SimpleDateFormat(format, java.util.Locale.ENGLISH)
+                    parsedDate = sdf.parse(cleanTime)
+                    if (parsedDate != null) break
+                } catch (e: Exception) { continue }
+            }
+
+            if (parsedDate == null) return timeStr
+            val outputFormat = java.text.SimpleDateFormat("hh:mm a", java.util.Locale.ENGLISH)
+            outputFormat.format(parsedDate)
+        } catch (e: Exception) {
+            timeStr
         }
     }
 

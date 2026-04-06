@@ -11,16 +11,16 @@ import kotlinx.coroutines.flow.Flow
 @Dao
 interface ActivityDao {
     @Query("SELECT * FROM activity_table ORDER BY planned_date DESC")
-    fun getAllActivities(): Flow<List<SalesActivity>>
+    fun getAllActivities(): Flow<List<@JvmSuppressWildcards SalesActivity>>
 
     @Query("SELECT * FROM activity_table WHERE planned_date >= :startDate AND planned_date <= :endDate")
-    fun getActivitiesByDateRange(startDate: String, endDate: String): Flow<List<SalesActivity>>
+    fun getActivitiesByDateRange(startDate: String, endDate: String): Flow<List<@JvmSuppressWildcards SalesActivity>>
 
     @Query("SELECT * FROM activity_table WHERE project_id = :projectId")
-    fun getActivitiesByProject(projectId: String): Flow<List<SalesActivity>>
+    fun getActivitiesByProject(projectId: String): Flow<List<@JvmSuppressWildcards SalesActivity>>
 
     @Query("SELECT * FROM activity_table WHERE cust_id = :customerId")
-    fun getActivitiesByCustomer(customerId: String): Flow<List<SalesActivity>>
+    fun getActivitiesByCustomer(customerId: String): Flow<List<@JvmSuppressWildcards SalesActivity>>
 
     @Query("SELECT * FROM activity_table WHERE appointment_id = :id LIMIT 1")
     suspend fun getActivityById(id: String): SalesActivity?

@@ -10,6 +10,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
+import java.time.LocalDate
 import javax.inject.Inject
 
 class ProjectRepository @Inject constructor(
@@ -75,24 +76,28 @@ class ProjectRepository @Inject constructor(
         }
     }
 
-    suspend fun createProject(project: Project, userId: String): Result<Unit> {
+    suspend fun createProject(project: Project, userId: String): Result<Project> {
         return withContext(Dispatchers.IO) {
             try {
-                // 1. สร้าง Project (โดยไม่ส่ง project_number ไปที่ตาราง project)
-                val response = apiService.addProject(project.copy(projectNumber = null))
+                // 1. Generate Project Number (รูปแบบ: XX-YY-MM-ZZZ)
+                val generatedNumber = generateNewProjectNumber(project.branchId ?: "")
+                val projectWithNumber = project.copy(projectNumber = generatedNumber)
+
+                // 2. สร้าง Project (โดยไม่ส่ง project_number ไปที่ตาราง project หลักตามโครงสร้างเดิม)
+                val response = apiService.addProject(projectWithNumber.copy(projectNumber = null))
                 if (response.isSuccessful) {
-                    // 2. Insert ลงตาราง project_sales_member พร้อม project_number
+                    // 3. Insert ลงตาราง project_sales_member พร้อม project_number
                     val member = ProjectMemberInsertDto(
-                        projectId = project.projectId,
+                        projectId = projectWithNumber.projectId,
                         userId = userId,
                         saleRole = "owner",
-                        projectNumber = project.projectNumber
+                        projectNumber = generatedNumber
                     )
                     val memberResp = apiService.addProjectMembers(listOf(member))
                     
                     if (memberResp.isSuccessful) {
-                        projectDao.insertProject(project)
-                        Result.success(Unit)
+                        projectDao.insertProject(projectWithNumber)
+                        Result.success(projectWithNumber)
                     } else {
                         Result.failure(Exception("สร้าง Member ไม่สำเร็จ: ${memberResp.code()}"))
                     }
@@ -102,6 +107,29 @@ class ProjectRepository @Inject constructor(
             } catch (e: Exception) {
                 Result.failure(e)
             }
+        }
+    }
+
+    private suspend fun generateNewProjectNumber(branchId: String): String {
+        return try {
+            // 1. Prefix: 2 ตัวแรกของ branch_id ตามโจทย์ต้องการ (เช่น PJ-001 -> PJ)
+            val prefix = branchId.take(2).uppercase().ifBlank { "PJ" }
+
+            // 2. ปี พ.ศ. (2 หลักท้าย)
+            val now = LocalDate.now()
+            val beYear = (now.year + 543) % 100
+            val yearStr = "%02d".format(beYear)
+
+            // 3. เดือน (2 หลัก)
+            val monthStr = "%02d".format(now.monthValue)
+
+            // 4. ลำดับในสาขา (3 หลัก)
+            val count = projectDao.getProjectCountByBranch(branchId)
+            val seqStr = "%03d".format(count + 1)
+
+            "$prefix-$yearStr-$monthStr-$seqStr"
+        } catch (e: Exception) {
+            "PJ-" + System.currentTimeMillis().toString().takeLast(7)
         }
     }
 
@@ -205,12 +233,12 @@ class ProjectRepository @Inject constructor(
         }
     }
 
-    suspend fun getBranches(): Result<List<Pair<String, String>>> {
+    suspend fun getBranches(): Result<List<com.example.pp68_salestrackingapp.data.model.Branch>> {
         return withContext(Dispatchers.IO) {
             try {
                 val response = apiService.getBranches()
                 if (response.isSuccessful && response.body() != null) {
-                    Result.success(response.body()!!.map { it.branchId to it.branchName })
+                    Result.success(response.body()!!)
                 } else Result.success(emptyList())
             } catch (e: Exception) {
                 Result.failure(e)

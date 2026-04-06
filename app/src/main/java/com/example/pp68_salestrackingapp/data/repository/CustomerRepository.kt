@@ -169,7 +169,10 @@ class CustomerRepository @Inject constructor(
             try {
                 val response = apiService.getContactsByCustomerIds("eq.$customerId")
                 if (response.isSuccessful && response.body() != null) {
-                    kotlin.Result.success(response.body()!!)
+                    val contacts = response.body()!!
+                    // ✅ บันทึกลง Local DB เพื่อป้องกัน FOREIGN KEY constraint failed ในตารางอื่น
+                    contactDao.insertContacts(contacts)
+                    kotlin.Result.success(contacts)
                 } else {
                     kotlin.Result.failure(Exception("ดึงข้อมูลผู้ติดต่อไม่สำเร็จ"))
                 }

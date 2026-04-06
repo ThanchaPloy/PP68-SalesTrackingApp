@@ -6,6 +6,7 @@ import com.example.pp68_salestrackingapp.data.local.ActivityDao
 import com.example.pp68_salestrackingapp.data.local.ActivityPlanItemDao
 import com.example.pp68_salestrackingapp.data.local.ActivityResultDao
 import com.example.pp68_salestrackingapp.data.local.AppDatabase
+import com.example.pp68_salestrackingapp.data.local.AppointmentContactDao
 import com.example.pp68_salestrackingapp.data.local.BranchDao
 import com.example.pp68_salestrackingapp.data.local.CustomerDao
 import com.example.pp68_salestrackingapp.data.local.ProjectDao
@@ -72,4 +73,8 @@ object DatabaseModule {
     @Provides
     @Singleton
     fun provideActivityResultDao(db: AppDatabase): ActivityResultDao = db.activityResultDao()
+
+    @Provides
+    @Singleton
+    fun provideAppointmentContactDao(db: AppDatabase): AppointmentContactDao = db.appointmentContactDao()
 }

@@ -41,13 +41,18 @@ interface ContactDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAll(contact: List<ContactPerson>)
 
+    @Query("SELECT * FROM contact_person WHERE custId = :custId")
+    suspend fun getContactsByCustomerId(custId: String): List<ContactPerson>
+
 
     @Query("DELETE FROM contact_person")
     suspend fun deleteAll()
+
 
     @Transaction
     suspend fun clearAndInsert(contacts: List<ContactPerson>) {
         deleteAll()
         insertAll(contacts)
     }
+
 }
