@@ -17,16 +17,20 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.ResponseBody.Companion.toResponseBody
 import retrofit2.Response
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -51,7 +55,7 @@ class ProjectInventoryViewModelTest {
     }
 
     @Test
-    fun `init load should populate project company and mapped items`() = runTest {
+    fun givenInit_whenLoadSuccess_thenPopulatesProjectCompanyAndMappedItems() = runTest {
         coEvery { projectRepo.getProjectById("PRJ-1") } returns Result.success(
             Project(projectId = "PRJ-1", custId = "C1", projectName = "Project A")
         )
@@ -80,6 +84,8 @@ class ProjectInventoryViewModelTest {
             customerRepo,
             apiService
         )
+        runCurrent()
+        assertTrue(vm.uiState.value.isLoading)
         advanceUntilIdle()
 
         assertFalse(vm.uiState.value.isLoading)
@@ -90,7 +96,7 @@ class ProjectInventoryViewModelTest {
     }
 
     @Test
-    fun `init load should handle empty project products`() = runTest {
+    fun givenProjectProductsEmpty_whenLoad_thenItemsRemainEmpty() = runTest {
         coEvery { projectRepo.getProjectById("PRJ-1") } returns Result.success(
             Project(projectId = "PRJ-1", custId = "C1", projectName = "Project A")
         )
@@ -112,7 +118,7 @@ class ProjectInventoryViewModelTest {
     }
 
     @Test
-    fun `load should not run when projectId is missing`() = runTest {
+    fun givenMissingProjectId_whenInitThenLoad_thenNoRepositoryCallsAndDefaultState() = runTest {
         val vm = ProjectInventoryViewModel(
             SavedStateHandle(),
             projectRepo,
@@ -123,10 +129,15 @@ class ProjectInventoryViewModelTest {
 
         assertEquals(null, vm.uiState.value.project)
         assertTrue(vm.uiState.value.items.isEmpty())
+        assertFalse(vm.uiState.value.isLoading)
+        assertNull(vm.uiState.value.error)
+        coVerify(exactly = 0) { projectRepo.getProjectById(any()) }
+        coVerify(exactly = 0) { customerRepo.getCustomerById(any()) }
+        coVerify(exactly = 0) { apiService.getProjectProducts(any()) }
     }
 
     @Test
-    fun `load failure should expose error and stop loading`() = runTest {
+    fun givenProjectRepositoryThrows_whenLoad_thenSetsErrorAndStopsLoading() = runTest {
         coEvery { projectRepo.getProjectById("PRJ-1") } throws RuntimeException("boom")
 
         val vm = ProjectInventoryViewModel(
@@ -142,7 +153,28 @@ class ProjectInventoryViewModelTest {
     }
 
     @Test
-    fun `load should set empty company name when customer lookup fails`() = runTest {
+    fun givenProjectLookupFailureResult_whenLoad_thenProjectAndCompanyDefaultAndNoError() = runTest {
+        coEvery { projectRepo.getProjectById("PRJ-1") } returns Result.failure(Exception("project missing"))
+        coEvery { apiService.getProjectProducts("eq.PRJ-1") } returns Response.success(emptyList())
+
+        val vm = ProjectInventoryViewModel(
+            SavedStateHandle(mapOf("projectId" to "PRJ-1")),
+            projectRepo,
+            customerRepo,
+            apiService
+        )
+        advanceUntilIdle()
+
+        assertNull(vm.uiState.value.project)
+        assertEquals("", vm.uiState.value.companyName)
+        assertTrue(vm.uiState.value.items.isEmpty())
+        assertFalse(vm.uiState.value.isLoading)
+        assertNull(vm.uiState.value.error)
+        coVerify(exactly = 0) { customerRepo.getCustomerById(any()) }
+    }
+
+    @Test
+    fun givenCustomerLookupFailure_whenLoad_thenCompanyNameDefaultsToBlank() = runTest {
         coEvery { projectRepo.getProjectById("PRJ-1") } returns Result.success(
             Project(projectId = "PRJ-1", custId = "C404", projectName = "Project A")
         )
@@ -162,7 +194,7 @@ class ProjectInventoryViewModelTest {
     }
 
     @Test
-    fun `fetch project products should return empty when project products API unsuccessful`() = runTest {
+    fun givenProjectProductsApiUnsuccessful_whenLoad_thenReturnsEmptyItems() = runTest {
         coEvery { projectRepo.getProjectById("PRJ-1") } returns Result.success(
             Project(projectId = "PRJ-1", custId = "C1", projectName = "Project A")
         )
@@ -171,7 +203,7 @@ class ProjectInventoryViewModelTest {
         )
         coEvery { apiService.getProjectProducts("eq.PRJ-1") } returns Response.error(
             500,
-            okhttp3.ResponseBody.create(null, "err")
+            "err".toResponseBody("text/plain".toMediaType())
         )
 
         val vm = ProjectInventoryViewModel(
@@ -187,7 +219,7 @@ class ProjectInventoryViewModelTest {
     }
 
     @Test
-    fun `fetch project products should ignore missing product master and apply defaults`() = runTest {
+    fun givenProductMasterMissingAndNullFields_whenLoad_thenIgnoresUnknownAndAppliesDefaults() = runTest {
         coEvery { projectRepo.getProjectById("PRJ-1") } returns Result.success(
             Project(projectId = "PRJ-1", custId = "C1", projectName = "Project A")
         )
@@ -221,7 +253,55 @@ class ProjectInventoryViewModelTest {
     }
 
     @Test
-    fun `load can be called repeatedly and clear previous error`() = runTest {
+    fun givenGetProductMasterResponseBodyNull_whenLoad_thenMapsToEmptyItems() = runTest {
+        coEvery { projectRepo.getProjectById("PRJ-1") } returns Result.success(
+            Project(projectId = "PRJ-1", custId = "C1", projectName = "Project A")
+        )
+        coEvery { customerRepo.getCustomerById("C1") } returns Result.success(
+            Customer("C1", "Company A", null, null, null, null, null, null, null)
+        )
+        coEvery { apiService.getProjectProducts("eq.PRJ-1") } returns Response.success(
+            listOf(ProjectProductDto("PRJ-1", "P1", 1.0, null))
+        )
+        coEvery { apiService.getProductMaster() } returns Response.success(null)
+
+        val vm = ProjectInventoryViewModel(
+            SavedStateHandle(mapOf("projectId" to "PRJ-1")),
+            projectRepo,
+            customerRepo,
+            apiService
+        )
+        advanceUntilIdle()
+
+        assertTrue(vm.uiState.value.items.isEmpty())
+        assertFalse(vm.uiState.value.isLoading)
+    }
+
+    @Test
+    fun givenFetchProjectProductsThrows_whenLoad_thenReturnsEmptyItemsWithoutCrash() = runTest {
+        coEvery { projectRepo.getProjectById("PRJ-1") } returns Result.success(
+            Project(projectId = "PRJ-1", custId = "C1", projectName = "Project A")
+        )
+        coEvery { customerRepo.getCustomerById("C1") } returns Result.success(
+            Customer("C1", "Company A", null, null, null, null, null, null, null)
+        )
+        coEvery { apiService.getProjectProducts("eq.PRJ-1") } throws RuntimeException("network down")
+
+        val vm = ProjectInventoryViewModel(
+            SavedStateHandle(mapOf("projectId" to "PRJ-1")),
+            projectRepo,
+            customerRepo,
+            apiService
+        )
+        advanceUntilIdle()
+
+        assertTrue(vm.uiState.value.items.isEmpty())
+        assertFalse(vm.uiState.value.isLoading)
+        assertNull(vm.uiState.value.error)
+    }
+
+    @Test
+    fun givenRetryAfterInitialFailure_whenLoadAgain_thenClearsErrorAndLoadsData() = runTest {
         coEvery { projectRepo.getProjectById("PRJ-1") } throws RuntimeException("first boom") andThen Result.success(
             Project(projectId = "PRJ-1", custId = "C1", projectName = "Project A")
         )
@@ -242,7 +322,7 @@ class ProjectInventoryViewModelTest {
         vm.load()
         advanceUntilIdle()
 
-        assertEquals(null, vm.uiState.value.error)
+        assertNull(vm.uiState.value.error)
         assertEquals("Project A", vm.uiState.value.project?.projectName)
         coVerify(atLeast = 2) { projectRepo.getProjectById("PRJ-1") }
     }
