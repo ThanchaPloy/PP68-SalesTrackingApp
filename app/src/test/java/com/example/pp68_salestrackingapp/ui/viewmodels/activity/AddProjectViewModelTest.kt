@@ -246,7 +246,7 @@ class AddProjectViewModelTest {
         viewModel.onEvent(AddProjectEvent.Save)
         advanceUntilIdle()
 
-        assertEquals(1200.50, projectSlot.captured.expectedValue, 0.01)
+        assertEquals(1200.50, projectSlot.captured.expectedValue, 0.001)
         assertTrue(viewModel.uiState.value.isSaved)
         assertNull(viewModel.uiState.value.saveError)
         coVerify(exactly = 1) { projectRepo.createProject(any(), "USR-001") }
