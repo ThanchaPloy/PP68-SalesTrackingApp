@@ -161,7 +161,7 @@ class NotificationViewModelTest {
                     objective = null,
                     planStatus = "planned",
                     plannedDate = today,
-                    plannedTime = "bad-time",
+                    plannedTime = "invalid-time-format",
                     plannedEndTime = null
                 )
             )
