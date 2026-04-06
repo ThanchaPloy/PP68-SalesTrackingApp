@@ -5,7 +5,6 @@ import com.example.pp68_salestrackingapp.data.model.AuthUser
 import com.example.pp68_salestrackingapp.data.model.Project
 import com.example.pp68_salestrackingapp.data.repository.AuthRepository
 import com.example.pp68_salestrackingapp.data.repository.ProjectRepository
-import com.example.pp68_salestrackingapp.ui.screen.project.ProjectListViewModel
 import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
