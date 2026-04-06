@@ -5,6 +5,7 @@ import com.example.pp68_salestrackingapp.data.model.Customer
 import com.example.pp68_salestrackingapp.data.model.Project
 import com.example.pp68_salestrackingapp.data.repository.CustomerRepository
 import com.example.pp68_salestrackingapp.data.repository.ProjectRepository
+import io.mockk.clearAllMocks
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
@@ -47,6 +48,7 @@ class AddCustomerViewModelTest {
 
     @After
     fun tearDown() {
+        clearAllMocks()
         Dispatchers.resetMain()
     }
 
