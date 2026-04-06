@@ -62,7 +62,11 @@ class CustomerListViewModel @Inject constructor(
     fun refreshDataFromApi() {
         viewModelScope.launch {
             _isLoading.value = true
-            val userId = authRepo.currentUser()?.userId ?: return@launch
+            val userId = authRepo.currentUser()?.userId
+            if (userId == null) {
+                _isLoading.value = false
+                return@launch
+            }
             val result = repo.refreshCustomers(userId)  // ✅ ส่ง userId
             result.onFailure { _error.value = it.message }
             _isLoading.value = false

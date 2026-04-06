@@ -124,6 +124,6 @@ class CustomerListViewModelTest {
         advanceUntilIdle()
 
         coVerify(exactly = 0) { customerRepo.refreshCustomers(any()) }
-        assertTrue(viewModel.isLoading.value)
+        assertFalse(viewModel.isLoading.value)
     }
 }
