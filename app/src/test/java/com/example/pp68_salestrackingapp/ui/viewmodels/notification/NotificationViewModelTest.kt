@@ -2,6 +2,7 @@ package com.example.pp68_salestrackingapp.ui.viewmodels.notification
 
 import androidx.arch.core.executor.testing.InstantTaskExecutorRule
 import com.example.pp68_salestrackingapp.data.repository.ActivityRepository
+import com.example.pp68_salestrackingapp.ui.screen.activity.NotiAction
 import com.example.pp68_salestrackingapp.ui.viewmodels.activity.ActivityCard
 import io.mockk.coEvery
 import io.mockk.mockk
@@ -13,6 +14,7 @@ import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.After
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -142,7 +144,80 @@ class NotificationViewModelTest {
         val notis = vm.uiState.value.notifications
         assertFalse(vm.uiState.value.isLoading)
         assertTrue(notis.none { it.id == "A1" })
-        assertTrue(notis.any { it.id == "A2" && it.action.name == "REPORT" })
+        assertTrue(notis.any { it.id == "A2" && it.action == NotiAction.REPORT })
         assertTrue(notis.none { it.id == "A3" })
+    }
+
+    @Test
+    fun `loadNotifications should map objective fallback when time string is unparsable`() = runTest {
+        val today = LocalDate.now().toString()
+        coEvery { activityRepo.getMyActivitiesWithDetails() } returns Result.success(
+            listOf(
+                ActivityCard(
+                    activityId = "A10",
+                    activityType = "VisitType",
+                    projectName = null,
+                    companyName = "Comp",
+                    contactName = null,
+                    objective = null,
+                    planStatus = "planned",
+                    plannedDate = today,
+                    plannedTime = "unparsable-time-string",
+                    plannedEndTime = null
+                )
+            )
+        )
+
+        val vm = NotificationViewModel(activityRepo)
+        advanceUntilIdle()
+
+        val noti = vm.uiState.value.notifications.first { it.id == "A10" }
+        assertEquals("VisitType", noti.title)
+        assertEquals("Comp", noti.subtitle)
+        assertTrue(noti.timeLabel.isNotBlank())
+    }
+
+    @Test
+    fun `loadNotifications should keep previous error when subsequent load succeeds`() = runTest {
+        coEvery { activityRepo.getMyActivitiesWithDetails() } returns Result.failure(Exception("first fail"))
+        val vm = NotificationViewModel(activityRepo)
+        advanceUntilIdle()
+        assertEquals("first fail", vm.uiState.value.error)
+
+        val today = LocalDate.now().toString()
+        coEvery { activityRepo.getMyActivitiesWithDetails() } returns Result.success(
+            listOf(
+                ActivityCard(
+                    activityId = "A11",
+                    activityType = "Visit",
+                    projectName = "P",
+                    companyName = "C",
+                    contactName = null,
+                    objective = "Obj",
+                    planStatus = "planned",
+                    plannedDate = today,
+                    plannedTime = "09:00",
+                    plannedEndTime = null
+                )
+            )
+        )
+        vm.loadNotifications()
+        advanceUntilIdle()
+
+        assertFalse(vm.uiState.value.isLoading)
+        assertTrue(vm.uiState.value.notifications.any { it.id == "A11" })
+        assertEquals("first fail", vm.uiState.value.error)
+    }
+
+    @Test
+    fun `loadNotifications with no cards should still finish loading and contain only weekly report`() = runTest {
+        coEvery { activityRepo.getMyActivitiesWithDetails() } returns Result.success(emptyList())
+
+        val vm = NotificationViewModel(activityRepo)
+        advanceUntilIdle()
+
+        assertFalse(vm.uiState.value.isLoading)
+        assertTrue(vm.uiState.value.notifications.any { it.id == "weekly_report" })
+        assertTrue(vm.uiState.value.notifications.all { it.id == "weekly_report" })
     }
 }
