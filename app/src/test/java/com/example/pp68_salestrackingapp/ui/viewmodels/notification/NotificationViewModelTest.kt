@@ -148,7 +148,7 @@ class NotificationViewModelTest {
     }
 
     @Test
-    fun `loadNotifications should map objective fallback when time string is unparseable`() = runTest {
+    fun `loadNotifications should map objective fallback when time string is unparsable`() = runTest {
         val today = LocalDate.now().toString()
         coEvery { activityRepo.getMyActivitiesWithDetails() } returns Result.success(
             listOf(
@@ -161,7 +161,7 @@ class NotificationViewModelTest {
                     objective = null,
                     planStatus = "planned",
                     plannedDate = today,
-                    plannedTime = "unparseable-time-string",
+                    plannedTime = "unparsable-time-string",
                     plannedEndTime = null
                 )
             )
