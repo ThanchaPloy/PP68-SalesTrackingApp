@@ -4,6 +4,7 @@ import com.example.pp68_salestrackingapp.data.model.AuthUser
 import com.example.pp68_salestrackingapp.data.repository.AuthRepository
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.verify
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
@@ -20,6 +21,7 @@ class AppTopBarViewModelTest {
         val viewModel = AppTopBarViewModel(authRepository)
 
         assertEquals(user, viewModel.user.value)
+        verify(exactly = 1) { authRepository.currentUser() }
     }
 
     @Test
@@ -32,6 +34,7 @@ class AppTopBarViewModelTest {
         viewModel.refreshUser()
 
         assertEquals(newUser, viewModel.user.value)
+        verify(exactly = 2) { authRepository.currentUser() }
     }
 
     @Test
@@ -43,5 +46,19 @@ class AppTopBarViewModelTest {
         viewModel.refreshUser()
 
         assertNull(viewModel.user.value)
+        verify(exactly = 2) { authRepository.currentUser() }
+    }
+
+    @Test
+    fun `refreshUser should update from null to user`() {
+        val newUser = AuthUser(userId = "U9", email = "u9@test.com", role = "manager")
+        every { authRepository.currentUser() } returnsMany listOf(null, newUser)
+
+        val viewModel = AppTopBarViewModel(authRepository)
+        assertNull(viewModel.user.value)
+
+        viewModel.refreshUser()
+        assertEquals(newUser, viewModel.user.value)
+        verify(exactly = 2) { authRepository.currentUser() }
     }
 }
