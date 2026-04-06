@@ -24,6 +24,7 @@ import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.After
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -191,5 +192,102 @@ class HomeViewModelTest {
         advanceUntilIdle()
 
         coVerify(exactly = 1) { authRepo.logout() }
+    }
+
+    @Test
+    fun `loadActivities should filter by month and map hasResult correctly`() = runTest {
+        val nowMonth = YearMonth.now()
+        val currentDate = "${nowMonth}-10"
+        val outMonthDate = "${nowMonth.minusMonths(1)}-20"
+
+        every { authRepo.currentUser() } returns null
+        every { activityRepo.getAllActivitiesFlow() } returns flowOf(emptyList())
+        every { customerRepo.getAllCustomersFlow() } returns flowOf(emptyList())
+        every { projectRepo.getAllProjectsFlow() } returns flowOf(emptyList())
+        every { activityRepo.getAllResultIdsFlow() } returns flowOf(listOf("A1"))
+        coEvery { activityRepo.getMyActivitiesWithDetails() } returns Result.success(
+            listOf(
+                ActivityCard("A1", "Visit", "P", "C", "N", null, "planned", currentDate, "10:00", "11:00"),
+                ActivityCard("A2", "Visit", "P", "C", "N", null, "planned", outMonthDate, "09:00", "10:00"),
+                ActivityCard("A3", "Visit", "P", "C", "N", null, "planned", null, "09:00", "10:00"),
+                ActivityCard("A4", "Visit", "P", "C", "N", null, "planned", "bad-date", "09:00", "10:00")
+            )
+        )
+
+        val vm = HomeViewModel(activityRepo, authRepo, customerRepo, projectRepo, callLogRepo)
+        advanceUntilIdle()
+
+        val cards = vm.uiState.value.groupedCards.values.flatten()
+        assertEquals(1, cards.size)
+        assertEquals("A1", cards.first().activityId)
+        assertTrue(cards.first().hasResult)
+    }
+
+    @Test
+    fun `loadActivities should sort cards by date then time`() = runTest {
+        val nowMonth = YearMonth.now()
+        val d1 = "${nowMonth}-05"
+        val d2 = "${nowMonth}-06"
+
+        every { authRepo.currentUser() } returns null
+        every { activityRepo.getAllActivitiesFlow() } returns flowOf(emptyList())
+        every { customerRepo.getAllCustomersFlow() } returns flowOf(emptyList())
+        every { projectRepo.getAllProjectsFlow() } returns flowOf(emptyList())
+        every { activityRepo.getAllResultIdsFlow() } returns flowOf(emptyList())
+        coEvery { activityRepo.getMyActivitiesWithDetails() } returns Result.success(
+            listOf(
+                ActivityCard("A3", "Visit", "P", "C", "N", null, "planned", d2, "08:00", "09:00"),
+                ActivityCard("A2", "Visit", "P", "C", "N", null, "planned", d1, "10:00", "11:00"),
+                ActivityCard("A1", "Visit", "P", "C", "N", null, "planned", d1, "09:00", "10:00")
+            )
+        )
+
+        val vm = HomeViewModel(activityRepo, authRepo, customerRepo, projectRepo, callLogRepo)
+        advanceUntilIdle()
+
+        val idsInOrder = vm.uiState.value.groupedCards.values.flatten().map { it.activityId }
+        assertEquals(listOf("A1", "A2", "A3"), idsInOrder)
+    }
+
+    @Test
+    fun `refreshData with no current user should stop loading and skip remote refresh`() = runTest {
+        every { authRepo.currentUser() } returns null
+        every { activityRepo.getAllActivitiesFlow() } returns flowOf(emptyList())
+        every { customerRepo.getAllCustomersFlow() } returns flowOf(emptyList())
+        every { projectRepo.getAllProjectsFlow() } returns flowOf(emptyList())
+        every { activityRepo.getAllResultIdsFlow() } returns flowOf(emptyList())
+        coEvery { activityRepo.getMyActivitiesWithDetails() } returns Result.success(emptyList())
+
+        val vm = HomeViewModel(activityRepo, authRepo, customerRepo, projectRepo, callLogRepo)
+        advanceUntilIdle()
+
+        vm.refreshData()
+        advanceUntilIdle()
+
+        assertFalse(vm.uiState.value.isLoading)
+        coVerify(exactly = 0) { activityRepo.refreshActivities(any()) }
+        coVerify(exactly = 0) { customerRepo.refreshCustomers(any()) }
+        coVerify(exactly = 0) { projectRepo.refreshProjects(any()) }
+    }
+
+    @Test
+    fun `init should continue when contact phone map sync throws`() = runTest {
+        every { authRepo.currentUser() } returns AuthUser("U1", "u@test.com", "sale")
+        coEvery { customerRepo.getAllContactPhoneMap() } throws RuntimeException("no permission")
+        coEvery { activityRepo.refreshActivities("U1") } returns Result.success(Unit)
+        coEvery { customerRepo.refreshCustomers("U1") } returns Result.success(Unit)
+        coEvery { projectRepo.refreshProjects("U1") } returns Result.success(Unit)
+        every { activityRepo.getAllActivitiesFlow() } returns flowOf(emptyList())
+        every { customerRepo.getAllCustomersFlow() } returns flowOf(emptyList())
+        every { projectRepo.getAllProjectsFlow() } returns flowOf(emptyList())
+        every { activityRepo.getAllResultIdsFlow() } returns flowOf(emptyList())
+        coEvery { activityRepo.getMyActivitiesWithDetails() } returns Result.success(emptyList())
+
+        val vm = HomeViewModel(activityRepo, authRepo, customerRepo, projectRepo, callLogRepo)
+        advanceUntilIdle()
+
+        assertFalse(vm.uiState.value.isLoading)
+        coVerify(exactly = 0) { callLogRepo.syncCallLogs(any()) }
+        coVerify(exactly = 1) { activityRepo.refreshActivities("U1") }
     }
 }
