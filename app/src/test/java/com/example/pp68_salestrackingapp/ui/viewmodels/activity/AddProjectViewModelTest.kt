@@ -105,6 +105,36 @@ class AddProjectViewModelTest {
     }
 
     @Test
+    fun `init non PJ when sync fails should stop loading teams gracefully`() = runTest {
+        every { authRepo.currentUser() } returns AuthUser("U1", "u@test.com", "sale", "TS-001")
+        coEvery { branchRepo.syncFromRemote() } throws IllegalStateException("sync failed")
+
+        initViewModel()
+        advanceUntilIdle()
+
+        assertFalse(viewModel.uiState.value.isLoadingTeams)
+        assertTrue(viewModel.uiState.value.teamOptions.isEmpty())
+    }
+
+    @Test
+    fun `init non PJ with single region branch should auto select that branch`() = runTest {
+        every { authRepo.currentUser() } returns AuthUser("U1", "u@test.com", "sale", "TS-001")
+        coEvery { branchRepo.observeBranches() } returns listOf(
+            Branch("TS-001", "North A", "North"),
+            Branch("TS-003", "South A", "South")
+        )
+        coEvery { projectRepo.getMembersByBranch("TS-001") } returns Result.success(listOf("U1" to "Owner"))
+
+        initViewModel()
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertEquals("TS-001", state.selectedTeamId)
+        assertEquals("North A", state.selectedTeamName)
+        assertEquals(listOf("U1" to "Owner"), state.teamMemberOptions)
+    }
+
+    @Test
     fun `loadProject success should populate project and related fields`() = runTest {
         val project = Project(
             projectId = "P123",
@@ -177,6 +207,21 @@ class AddProjectViewModelTest {
         assertEquals(listOf("CT-1" to "John", "CT-2" to "Jane"), state.contactOptions)
         assertTrue(state.selectedContactIds.isEmpty())
         assertNull(state.customerError)
+    }
+
+    @Test
+    fun `customerSelected when contacts fail should keep options empty and stop loading`() = runTest {
+        coEvery { customerRepo.getContactPersons("C1") } returns Result.failure(Exception("contact load failed"))
+        initViewModel()
+        advanceUntilIdle()
+
+        viewModel.onEvent(AddProjectEvent.CustomerSelected("C1", "Client A"))
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertEquals("C1", state.selectedCustomerId)
+        assertTrue(state.contactOptions.isEmpty())
+        assertFalse(state.isLoadingContacts)
     }
 
     @Test
@@ -288,6 +333,44 @@ class AddProjectViewModelTest {
         coVerify(exactly = 1) { projectRepo.updateProject(match { it.projectId == "P123" && it.projectName == "Updated Name" }, any()) }
         coVerify(exactly = 0) { projectRepo.createProject(any(), any()) }
         assertTrue(viewModel.uiState.value.isSaved)
+    }
+
+    @Test
+    fun `save success when member list selected should save selected members`() = runTest {
+        initViewModel()
+        advanceUntilIdle()
+
+        viewModel.onEvent(AddProjectEvent.ProjectNameChanged("Proj A"))
+        viewModel.onEvent(AddProjectEvent.CustomerSelected("C1", "Client A"))
+        viewModel.onEvent(AddProjectEvent.StatusChanged("Quotation"))
+        viewModel.onEvent(AddProjectEvent.TeamSelected("TS-001", "North A"))
+        viewModel.onEvent(AddProjectEvent.MemberToggled("U9"))
+        viewModel.onEvent(AddProjectEvent.MemberToggled("U8"))
+        viewModel.onEvent(AddProjectEvent.Save)
+        advanceUntilIdle()
+
+        coVerify(exactly = 1) {
+            projectRepo.addProjectMembers(any(), match { it.toSet() == setOf("U9", "U8") }, "owner", any())
+        }
+        assertTrue(viewModel.uiState.value.isSaved)
+    }
+
+    @Test
+    fun `save when post save call throws should expose error`() = runTest {
+        coEvery { projectRepo.addProjectMembers(any(), any(), any(), any()) } throws IllegalStateException("member add failed")
+        initViewModel()
+        advanceUntilIdle()
+
+        viewModel.onEvent(AddProjectEvent.ProjectNameChanged("Proj A"))
+        viewModel.onEvent(AddProjectEvent.CustomerSelected("C1", "Client A"))
+        viewModel.onEvent(AddProjectEvent.StatusChanged("Quotation"))
+        viewModel.onEvent(AddProjectEvent.TeamSelected("TS-001", "North A"))
+        viewModel.onEvent(AddProjectEvent.Save)
+        advanceUntilIdle()
+
+        assertFalse(viewModel.uiState.value.isSaved)
+        assertEquals("member add failed", viewModel.uiState.value.saveError)
+        assertFalse(viewModel.uiState.value.isLoading)
     }
 
     @Test
