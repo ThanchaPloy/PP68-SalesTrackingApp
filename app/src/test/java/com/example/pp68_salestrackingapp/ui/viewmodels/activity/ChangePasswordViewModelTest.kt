@@ -132,7 +132,7 @@ class ChangePasswordViewModelTest {
     // TC-UNIT-VM-CHPWD-10
     @Test
     fun `save success should set isSuccess to true and clear loading`() = runTest {
-        coEvery { authRepository.changePassword(any(), any()) } returns Result.success(Unit)
+        coEvery { authRepository.changePassword(any(), any()) } returns Result.success("Success")
 
         viewModel.onOldPasswordChange("oldPass")
         viewModel.onNewPasswordChange("newPass123")
@@ -165,7 +165,7 @@ class ChangePasswordViewModelTest {
     // TC-UNIT-VM-CHPWD-12
     @Test
     fun `save should call authRepository changePassword with correct parameters`() = runTest {
-        coEvery { authRepository.changePassword(any(), any()) } returns Result.success(Unit)
+        coEvery { authRepository.changePassword(any(), any()) } returns Result.success("Success")
 
         viewModel.onOldPasswordChange("myOldPass")
         viewModel.onNewPasswordChange("myNewPass123")
@@ -181,7 +181,7 @@ class ChangePasswordViewModelTest {
     fun `save should emit Loading state before repository call completes`() = runTest {
         coEvery { authRepository.changePassword(any(), any()) } coAnswers {
             kotlinx.coroutines.delay(500)
-            Result.success(Unit)
+            Result.success("Success")
         }
 
         viewModel.onOldPasswordChange("oldPass")
