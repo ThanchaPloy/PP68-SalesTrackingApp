@@ -173,4 +173,78 @@ class SalesResultViewModelTest {
         assertFalse(vm.uiState.value.isSaving)
         coVerify(exactly = 1) { activityRepo.saveActivityResult(any()) }
     }
+
+    @Test
+    fun `save should validate missing activity id`() = runTest {
+        coEvery { projectRepo.getProjectById("PRJ-1") } returns Result.success(
+            Project(projectId = "PRJ-1", custId = "C1", projectName = "Project A")
+        )
+
+        val vm = SalesResultViewModel(
+            SavedStateHandle(mapOf("projectId" to "PRJ-1")),
+            projectRepo,
+            activityRepo,
+            authRepo
+        )
+        advanceUntilIdle()
+        vm.onSummaryChanged("summary")
+
+        vm.save()
+
+        assertEquals("ไม่พบรหัสนัดหมาย", vm.uiState.value.error)
+    }
+
+    @Test
+    fun `save should validate missing customer`() = runTest {
+        val vm = SalesResultViewModel(
+            SavedStateHandle(mapOf("activityId" to "A1")),
+            projectRepo,
+            activityRepo,
+            authRepo
+        )
+        advanceUntilIdle()
+        vm.onSummaryChanged("summary")
+
+        vm.save()
+
+        assertEquals("ไม่พบข้อมูลลูกค้า", vm.uiState.value.error)
+    }
+
+    @Test
+    fun `save exception should set wrapped error`() = runTest {
+        coEvery { activityRepo.getActivityById("A1") } returns Result.success(
+            listOf(
+                SalesActivity(
+                    activityId = "A1",
+                    userId = "U1",
+                    customerId = "C1",
+                    projectId = "PRJ-1",
+                    activityType = "Visit",
+                    activityDate = "2026-04-01",
+                    status = "planned"
+                )
+            )
+        )
+        coEvery { projectRepo.getProjectById("PRJ-1") } returns Result.success(
+            Project(projectId = "PRJ-1", custId = "C1", projectName = "Project A", projectStatus = "Lead")
+        )
+        coEvery { activityRepo.getActivityResult("A1") } returns null
+        every { authRepo.currentUser() } returns AuthUser("U1", "u@test.com", "sale")
+        coEvery { activityRepo.saveActivityResult(any()) } throws RuntimeException("db down")
+
+        val vm = SalesResultViewModel(
+            SavedStateHandle(mapOf("activityId" to "A1")),
+            projectRepo,
+            activityRepo,
+            authRepo
+        )
+        advanceUntilIdle()
+        vm.onSummaryChanged("summary")
+
+        vm.save()
+        advanceUntilIdle()
+
+        assertFalse(vm.uiState.value.isSaving)
+        assertTrue(vm.uiState.value.error?.contains("db down") == true)
+    }
 }

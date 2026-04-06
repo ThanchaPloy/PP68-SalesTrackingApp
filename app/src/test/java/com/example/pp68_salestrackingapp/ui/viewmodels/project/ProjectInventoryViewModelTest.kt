@@ -123,4 +123,20 @@ class ProjectInventoryViewModelTest {
         assertEquals(null, vm.uiState.value.project)
         assertTrue(vm.uiState.value.items.isEmpty())
     }
+
+    @Test
+    fun `load failure should expose error and stop loading`() = runTest {
+        coEvery { projectRepo.getProjectById("PRJ-1") } throws RuntimeException("boom")
+
+        val vm = ProjectInventoryViewModel(
+            SavedStateHandle(mapOf("projectId" to "PRJ-1")),
+            projectRepo,
+            customerRepo,
+            apiService
+        )
+        advanceUntilIdle()
+
+        assertFalse(vm.uiState.value.isLoading)
+        assertEquals("boom", vm.uiState.value.error)
+    }
 }
