@@ -80,6 +80,7 @@ class NotificationViewModelTest {
         assertFalse(vm.uiState.value.isLoading)
         assertTrue(vm.uiState.value.notifications.isNotEmpty())
         assertTrue(vm.uiState.value.notifications.any { it.id == "A1" || it.id == "A2" })
+        assertTrue(vm.uiState.value.notifications.any { it.id == "weekly_report" })
     }
 
     @Test
