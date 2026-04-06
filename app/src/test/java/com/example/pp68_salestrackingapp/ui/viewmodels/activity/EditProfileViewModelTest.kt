@@ -205,7 +205,7 @@ class EditProfileViewModelTest {
         advanceUntilIdle()
 
         coVerify(exactly = 0) { apiService.updateUserProfile(any(), any()) }
-        assertTrue(vm.uiState.value.isLoading)
+        assertFalse(vm.uiState.value.isLoading)
         assertNull(vm.uiState.value.error)
     }
 }

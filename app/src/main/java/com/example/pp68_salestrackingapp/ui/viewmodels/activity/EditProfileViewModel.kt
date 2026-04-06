@@ -61,7 +61,11 @@ class EditProfileViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, error = null) }
             try {
-                val user   = authRepo.currentUser() ?: return@launch
+                val user = authRepo.currentUser()
+                if (user == null) {
+                    _uiState.update { it.copy(isLoading = false) }
+                    return@launch
+                }
                 val userId = user.userId
 
                 val updates = mutableMapOf<String, String>(
