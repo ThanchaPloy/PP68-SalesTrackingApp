@@ -18,8 +18,7 @@ class CustomerListViewModelTest {
 
     @get:Rule val instantTaskExecutorRule = InstantTaskExecutorRule()
 
-    // ✅ เปลี่ยนเป็น UnconfinedTestDispatcher() ทำให้ StateFlow ปล่อยค่าออกทันทีไม่ต้องรอคิว
-    private val testDispatcher = UnconfinedTestDispatcher()
+    private val testDispatcher = StandardTestDispatcher()
 
     private val customerRepo = mockk<CustomerRepository>(relaxed = true)
     private val authRepo = mockk<AuthRepository>(relaxed = true)
@@ -31,6 +30,7 @@ class CustomerListViewModelTest {
 
         every { authRepo.currentUser() } returns AuthUser("U1", "t@t.com", "sale", "T1")
         every { customerRepo.getAllCustomersFlow() } returns flowOf(emptyList())
+        every { customerRepo.searchCustomersFlow(any()) } returns flowOf(emptyList())
         coEvery { customerRepo.refreshCustomers(any()) } returns Result.success(Unit)
     }
 
@@ -48,21 +48,57 @@ class CustomerListViewModelTest {
         every { customerRepo.searchCustomersFlow(query) } returns flowOf(result)
 
         viewModel = CustomerListViewModel(customerRepo, authRepo)
+        advanceUntilIdle()
 
         viewModel.customers.test {
-            // 1. รับค่าเริ่มต้น (Initial State) ที่เป็น EmptyList หรือค่าเก่าออกไปก่อน
             awaitItem()
-
-            // 2. จำลองการพิมพ์ข้อความค้นหา
             viewModel.onSearchChange(query)
-
-            // ✅ 3. ใช้ advanceUntilIdle() เพื่อวาร์ปเวลาข้าม Debounce แบบอัตโนมัติไม่ต้องเดาตัวเลข
-            advanceUntilIdle()
-
-            // 4. ตรวจสอบข้อมูลที่ได้รับ
+            advanceTimeBy(350)
             assertEquals(result, awaitItem())
-
             cancelAndIgnoreRemainingEvents()
         }
+    }
+
+    @Test
+    fun `init should refresh by current user and clear loading`() = runTest {
+        coEvery { customerRepo.refreshCustomers("U1") } returns Result.success(Unit)
+        viewModel = CustomerListViewModel(customerRepo, authRepo)
+        advanceUntilIdle()
+
+        assertFalse(viewModel.isLoading.value)
+        assertNull(viewModel.error.value)
+        coVerify(exactly = 1) { customerRepo.refreshCustomers("U1") }
+    }
+
+    @Test
+    fun `refresh failure should set error`() = runTest {
+        coEvery { customerRepo.refreshCustomers("U1") } returns Result.failure(Exception("network down"))
+        viewModel = CustomerListViewModel(customerRepo, authRepo)
+        advanceUntilIdle()
+
+        assertEquals("network down", viewModel.error.value)
+        assertFalse(viewModel.isLoading.value)
+    }
+
+    @Test
+    fun `clearError should set error to null`() = runTest {
+        coEvery { customerRepo.refreshCustomers("U1") } returns Result.failure(Exception("boom"))
+        viewModel = CustomerListViewModel(customerRepo, authRepo)
+        advanceUntilIdle()
+        assertEquals("boom", viewModel.error.value)
+
+        viewModel.clearError()
+        assertNull(viewModel.error.value)
+    }
+
+    @Test
+    fun `logout should call auth repository logout`() = runTest {
+        viewModel = CustomerListViewModel(customerRepo, authRepo)
+        advanceUntilIdle()
+
+        viewModel.logout()
+        advanceUntilIdle()
+
+        coVerify(exactly = 1) { authRepo.logout() }
     }
 }
