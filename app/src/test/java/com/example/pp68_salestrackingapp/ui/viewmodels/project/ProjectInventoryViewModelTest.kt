@@ -10,6 +10,7 @@ import com.example.pp68_salestrackingapp.data.remote.ProductMasterDto
 import com.example.pp68_salestrackingapp.data.repository.CustomerRepository
 import com.example.pp68_salestrackingapp.data.repository.ProjectRepository
 import io.mockk.coEvery
+import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.Dispatchers
@@ -138,5 +139,111 @@ class ProjectInventoryViewModelTest {
 
         assertFalse(vm.uiState.value.isLoading)
         assertEquals("boom", vm.uiState.value.error)
+    }
+
+    @Test
+    fun `load should set empty company name when customer lookup fails`() = runTest {
+        coEvery { projectRepo.getProjectById("PRJ-1") } returns Result.success(
+            Project(projectId = "PRJ-1", custId = "C404", projectName = "Project A")
+        )
+        coEvery { customerRepo.getCustomerById("C404") } returns Result.failure(Exception("not found"))
+        coEvery { apiService.getProjectProducts("eq.PRJ-1") } returns Response.success(emptyList())
+
+        val vm = ProjectInventoryViewModel(
+            SavedStateHandle(mapOf("projectId" to "PRJ-1")),
+            projectRepo,
+            customerRepo,
+            apiService
+        )
+        advanceUntilIdle()
+
+        assertEquals("", vm.uiState.value.companyName)
+        assertFalse(vm.uiState.value.isLoading)
+    }
+
+    @Test
+    fun `fetch project products should return empty when project products API unsuccessful`() = runTest {
+        coEvery { projectRepo.getProjectById("PRJ-1") } returns Result.success(
+            Project(projectId = "PRJ-1", custId = "C1", projectName = "Project A")
+        )
+        coEvery { customerRepo.getCustomerById("C1") } returns Result.success(
+            Customer("C1", "Company A", null, null, null, null, null, null, null)
+        )
+        coEvery { apiService.getProjectProducts("eq.PRJ-1") } returns Response.error(
+            500,
+            okhttp3.ResponseBody.create(null, "err")
+        )
+
+        val vm = ProjectInventoryViewModel(
+            SavedStateHandle(mapOf("projectId" to "PRJ-1")),
+            projectRepo,
+            customerRepo,
+            apiService
+        )
+        advanceUntilIdle()
+
+        assertTrue(vm.uiState.value.items.isEmpty())
+        assertFalse(vm.uiState.value.isLoading)
+    }
+
+    @Test
+    fun `fetch project products should ignore missing product master and apply defaults`() = runTest {
+        coEvery { projectRepo.getProjectById("PRJ-1") } returns Result.success(
+            Project(projectId = "PRJ-1", custId = "C1", projectName = "Project A")
+        )
+        coEvery { customerRepo.getCustomerById("C1") } returns Result.success(
+            Customer("C1", "Company A", null, null, null, null, null, null, null)
+        )
+        coEvery { apiService.getProjectProducts("eq.PRJ-1") } returns Response.success(
+            listOf(
+                ProjectProductDto("PRJ-1", "P1", null, null),
+                ProjectProductDto("PRJ-1", "UNKNOWN", 5.0, null)
+            )
+        )
+        coEvery { apiService.getProductMaster() } returns Response.success(
+            listOf(ProductMasterDto("P1", null, null, null, null, null))
+        )
+
+        val vm = ProjectInventoryViewModel(
+            SavedStateHandle(mapOf("projectId" to "PRJ-1")),
+            projectRepo,
+            customerRepo,
+            apiService
+        )
+        advanceUntilIdle()
+
+        val items = vm.uiState.value.items
+        assertEquals(1, items.size)
+        assertEquals("P1", items.first().productName)
+        assertEquals("ทั่วไป", items.first().category)
+        assertEquals(0.0, items.first().quantity, 0.0)
+        assertEquals("ชิ้น", items.first().unit)
+    }
+
+    @Test
+    fun `load can be called repeatedly and clear previous error`() = runTest {
+        coEvery { projectRepo.getProjectById("PRJ-1") } throws RuntimeException("first boom") andThen Result.success(
+            Project(projectId = "PRJ-1", custId = "C1", projectName = "Project A")
+        )
+        coEvery { customerRepo.getCustomerById("C1") } returns Result.success(
+            Customer("C1", "Company A", null, null, null, null, null, null, null)
+        )
+        coEvery { apiService.getProjectProducts("eq.PRJ-1") } returns Response.success(emptyList())
+
+        val vm = ProjectInventoryViewModel(
+            SavedStateHandle(mapOf("projectId" to "PRJ-1")),
+            projectRepo,
+            customerRepo,
+            apiService
+        )
+        advanceUntilIdle()
+        assertEquals("first boom", vm.uiState.value.error)
+
+        vm.load()
+        advanceUntilIdle()
+
+        assertEquals(null, vm.uiState.value.error)
+        assertEquals("Project A", vm.uiState.value.project?.projectName)
+        coVerify(atLeast = 2) { projectRepo.getProjectById("PRJ-1") }
     }
 }

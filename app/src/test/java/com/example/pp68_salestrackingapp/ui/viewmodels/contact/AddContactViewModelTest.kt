@@ -8,6 +8,7 @@ import com.example.pp68_salestrackingapp.data.repository.ContactRepository
 import com.example.pp68_salestrackingapp.data.repository.CustomerRepository
 import com.example.pp68_salestrackingapp.data.repository.ProjectRepository
 import io.mockk.coEvery
+import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.Dispatchers
@@ -293,5 +294,102 @@ class AddContactViewModelTest {
         viewModel.onEvent(AddContactEvent.ProjectSelected("P01", "Alpha Project"))
         assertEquals("P01", viewModel.uiState.value.selectedProjectId)
         assertEquals("Alpha Project", viewModel.uiState.value.selectedProjectName)
+    }
+
+    @Test
+    fun `init when loading companies fails should clear loading flag`() = runTest {
+        coEvery { customerRepository.getCustomers() } returns Result.failure(Exception("load fail"))
+        createViewModel()
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        assertFalse(viewModel.uiState.value.isLoadingCompanies)
+        assertTrue(viewModel.uiState.value.companyOptions.isEmpty())
+    }
+
+    @Test
+    fun `company selected when loading projects throws should clear loading and keep project options empty`() = runTest {
+        coEvery { customerRepository.getCustomers() } returns Result.success(mockCustomers)
+        every { projectRepository.getAllProjectsFlow() } throws IllegalStateException("flow fail")
+        createViewModel()
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        viewModel.onEvent(AddContactEvent.CompanySelected("CUST-01", "Acme Corp"))
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        val s = viewModel.uiState.value
+        assertEquals("CUST-01", s.selectedCompanyId)
+        assertFalse(s.isLoadingProjects)
+        assertTrue(s.projectOptions.isEmpty())
+    }
+
+    @Test
+    fun `load contact with existing id should populate fields and related company projects`() = runTest {
+        val contact = ContactPerson(
+            contactId = "CNT-1",
+            custId = "CUST-01",
+            fullName = "John Doe",
+            nickname = "John",
+            position = "Manager",
+            phoneNumber = "0812345678",
+            email = "john@example.com",
+            line = "john_line",
+            isActive = false,
+            isDmConfirmed = true
+        )
+        coEvery { customerRepository.getCustomers() } returns Result.success(mockCustomers)
+        every { contactRepository.getAllContactsFlow() } returns flowOf(listOf(contact))
+        coEvery { customerRepository.getCustomerById("CUST-01") } returns Result.success(
+            Customer("CUST-01", "Acme Corp", null, null, null, null, null, null, null)
+        )
+        every { projectRepository.getAllProjectsFlow() } returns flowOf(mockProjects)
+        createViewModel()
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        viewModel.onEvent(AddContactEvent.LoadContact("CNT-1"))
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        val s = viewModel.uiState.value
+        assertEquals("CNT-1", s.contactId)
+        assertEquals("John Doe", s.fullName)
+        assertEquals("John", s.nickname)
+        assertEquals("Manager", s.position)
+        assertEquals("0812345678", s.phoneNum)
+        assertEquals("john@example.com", s.email)
+        assertEquals("john_line", s.lineId)
+        assertFalse(s.isActive)
+        assertTrue(s.isDecisionMaker)
+        assertEquals("CUST-01", s.selectedCompanyId)
+        assertEquals("Acme Corp", s.selectedCompanyName)
+        assertEquals(listOf("P01" to "Alpha"), s.projectOptions)
+    }
+
+    @Test
+    fun `load contact when id not found should set save error`() = runTest {
+        coEvery { customerRepository.getCustomers() } returns Result.success(mockCustomers)
+        every { contactRepository.getAllContactsFlow() } returns flowOf(emptyList())
+        createViewModel()
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        viewModel.onEvent(AddContactEvent.LoadContact("MISSING"))
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        assertEquals("ไม่พบข้อมูลผู้ติดต่อ", viewModel.uiState.value.saveError)
+        assertFalse(viewModel.uiState.value.isLoading)
+    }
+
+    @Test
+    fun `save with invalid email should show email error and skip repository call`() = runTest {
+        coEvery { customerRepository.getCustomers() } returns Result.success(emptyList())
+        createViewModel()
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        viewModel.onEvent(AddContactEvent.CompanySelected("CUST-01", "Acme Corp"))
+        viewModel.onEvent(AddContactEvent.FullNameChanged("Jane Doe"))
+        viewModel.onEvent(AddContactEvent.EmailChanged("invalid-email"))
+        viewModel.onEvent(AddContactEvent.Save)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        assertEquals("รูปแบบ Email ไม่ถูกต้อง", viewModel.uiState.value.emailError)
+        coVerify(exactly = 0) { contactRepository.addContact(any()) }
     }
 }
