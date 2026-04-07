@@ -5,8 +5,10 @@ import com.example.pp68_salestrackingapp.data.model.ContactPerson
 import com.example.pp68_salestrackingapp.data.remote.ApiService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
+import java.io.IOException
 
 class ContactRepository @Inject constructor(
     private val apiService: ApiService,
@@ -36,7 +38,7 @@ class ContactRepository @Inject constructor(
 
                 val contactResp = apiService.getContactsByCustomerIds(custIds = custIdsParam)
                 if (contactResp.isSuccessful && contactResp.body() != null) {
-                    contactDao.clearAndInsert(contactResp.body()!!) // ✅ clear ก่อน insert
+                    contactDao.clearAndInsert(contactResp.body()!!)
                     kotlin.Result.success(Unit)
                 } else {
                     kotlin.Result.failure(Exception("โหลด Contact ไม่สำเร็จ: HTTP ${contactResp.code()}"))
@@ -49,13 +51,21 @@ class ContactRepository @Inject constructor(
 
     suspend fun addContact(contact: ContactPerson): kotlin.Result<Unit> {
         return withContext(Dispatchers.IO) {
+            // 1. บันทึกลงเครื่องทันที
+            contactDao.insertAll(listOf(contact))
             try {
+                // 2. พยายามส่งขึ้น Server
                 val response = apiService.addContact(contact)
-                contactDao.insertAll(listOf(contact))
-                if (response.isSuccessful) kotlin.Result.success(Unit)
-                else kotlin.Result.failure(Exception("HTTP ${response.code()}: ${response.errorBody()?.string()}"))
+                if (response.isSuccessful) {
+                    kotlin.Result.success(Unit)
+                } else {
+                    val errBody = response.errorBody()?.string() ?: ""
+                    kotlin.Result.failure(Exception("Server Rejected: $errBody"))
+                }
             } catch (e: Exception) {
-                kotlin.Result.failure(e)
+                // 3. ถ้า Error เพราะ Network (Timeout/Offline) ให้ผ่าน
+                if (e is IOException) kotlin.Result.success(Unit)
+                else kotlin.Result.failure(e)
             }
         }
     }
