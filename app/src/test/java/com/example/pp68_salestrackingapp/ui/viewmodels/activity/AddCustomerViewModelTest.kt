@@ -91,7 +91,7 @@ class AddCustomerViewModelTest {
             assertEquals(13.5, selectedLat)
             assertEquals(100.5, selectedLng)
             assertEquals("owner", custType)
-            assertEquals("new lead", companyStatus)
+            assertEquals("prospect", companyStatus)
             assertEquals("2026-01-01", firstCustomerDate)
             assertFalse(isLoading)
         }

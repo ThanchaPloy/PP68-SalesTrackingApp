@@ -23,7 +23,7 @@ data class AddCustomerUiState(
     val selectedLat:         Double? = null,
     val selectedLng:         Double? = null,
     val custType:            String? = null,
-    val companyStatus:       String  = "new lead", // Default status
+    val companyStatus:       String  = "prospect", // Default status
     val selectedProjectId:   String? = null,
     val selectedProjectName: String? = null,
     val firstCustomerDate:   String? = null,
@@ -96,7 +96,7 @@ class AddCustomerViewModel @Inject constructor(
                             selectedLat = customer.companyLat,
                             selectedLng = customer.companyLong,
                             custType = customer.custType,
-                            companyStatus = customer.companyStatus ?: "new lead",
+                            companyStatus = customer.companyStatus ?: "prospect",
                             firstCustomerDate = customer.firstCustomerDate,
                             isLoading = false
                         )

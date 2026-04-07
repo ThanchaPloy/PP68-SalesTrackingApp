@@ -30,7 +30,7 @@ private val CUSTOMER_TYPES = listOf(
     "Owner", "Developer", "Main Constructor", "Sub Constructor", "Installer"
 )
 private val CUSTOMER_STATUSES = listOf(
-    "new lead" to "ลูกค้ามุ่งหวังใหม่",
+    "prospect" to "ลูกค้ามุ่งหวัง",
     "customer" to "ลูกค้า",
     "inactive" to "ไม่ใช้งาน"
 )
@@ -185,9 +185,8 @@ fun AddCustomerContent(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        // กรองแสดงเฉพาะ customer และ inactive ในหน้า Edit
-                        val editStatuses = CUSTOMER_STATUSES.filter { it.first != "new lead" }
-                        editStatuses.forEach { (value, label) ->
+                        // แสดงสถานะทั้งหมดในหน้า Edit
+                        CUSTOMER_STATUSES.forEach { (value, label) ->
                             val isSelected = uiState.companyStatus == value
                             FilterChip(
                                 selected = isSelected,

@@ -34,9 +34,10 @@ internal fun avatarColorFor(name: String): Color =
 @Composable
 fun StatusBadgeLight(status: String?) {
     val (label, bg) = when (status) {
-        "new lead" -> "New Lead" to Color(0xFF22C55E)
-        "customer" -> "Customer" to Color(0xFF374151)
-        "inactive" -> "Inactive" to Color(0xFF9CA3AF)
+        "prospect" -> "Prospect"  to Color(0xFF22C55E)
+        "new lead" -> "New Lead"  to Color(0xFF22C55E)
+        "customer" -> "Customer"  to Color(0xFF374151)
+        "inactive" -> "Inactive"  to Color(0xFF9CA3AF)
         else       -> (status ?: "-") to Color(0xFF9CA3AF)
     }
     Surface(shape = RoundedCornerShape(20.dp), color = bg) {
