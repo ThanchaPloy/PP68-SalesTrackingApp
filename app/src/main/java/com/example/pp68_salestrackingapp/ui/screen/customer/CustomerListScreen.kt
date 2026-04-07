@@ -235,7 +235,7 @@ fun CustomerListScreenPreview() {
             companyAddr = null,
             companyLat = 0.0,
             companyLong = 0.0,
-            companyStatus = "new lead",
+            companyStatus = "prospect",
             firstCustomerDate = null
         )
     )
