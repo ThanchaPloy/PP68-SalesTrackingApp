@@ -10,6 +10,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
+import java.io.IOException
 import java.time.LocalDate
 import javax.inject.Inject
 
@@ -25,7 +26,6 @@ class ProjectRepository @Inject constructor(
     suspend fun refreshProjects(userId: String): Result<Unit> {
         return withContext(Dispatchers.IO) {
             try {
-                // 1. ดึง project_id และ project_number ของ User จาก project_sales_member
                 val memberResp = apiService.getMyProjectIds(userId = "eq.$userId")
                 if (!memberResp.isSuccessful || memberResp.body().isNullOrEmpty()) {
                     projectDao.clearAndInsert(emptyList())
@@ -35,13 +35,11 @@ class ProjectRepository @Inject constructor(
                 val memberData = memberResp.body()!!
                 val projectIds = memberData.map { it.projectId }
                 
-                // 2. ดึงรายละเอียด Project ทั้งหมด
                 val idsParam   = "in.(${projectIds.joinToString(",")})"
                 val projectResp = apiService.getProjectsByIds(projectIds = idsParam)
                 
                 if (projectResp.isSuccessful && projectResp.body() != null) {
                     val projects = projectResp.body()!!.map { project ->
-                        // 3. Mapping project_number จาก memberData กลับเข้า Object Project
                         val myNumber = memberData.find { it.projectId == project.projectId }?.projectNumber
                         project.copy(projectNumber = myNumber)
                     }
@@ -78,55 +76,44 @@ class ProjectRepository @Inject constructor(
 
     suspend fun createProject(project: Project, userId: String): Result<Project> {
         return withContext(Dispatchers.IO) {
-            try {
-                // 1. Generate Project Number (รูปแบบ: XX-YY-MM-ZZZ)
-                val generatedNumber = generateNewProjectNumber(project.branchId ?: "")
-                val projectWithNumber = project.copy(projectNumber = generatedNumber)
+            // 1. บันทึกลง Local ทันที
+            val generatedNumber = generateNewProjectNumber(project.branchId ?: "")
+            val projectWithNumber = project.copy(projectNumber = generatedNumber)
+            projectDao.insertProject(projectWithNumber)
 
-                // 2. สร้าง Project (โดยไม่ส่ง project_number ไปที่ตาราง project หลักตามโครงสร้างเดิม)
+            try {
+                // 2. พยายามส่งขึ้น Server
                 val response = apiService.addProject(projectWithNumber.copy(projectNumber = null))
                 if (response.isSuccessful) {
-                    // 3. Insert ลงตาราง project_sales_member พร้อม project_number
                     val member = ProjectMemberInsertDto(
                         projectId = projectWithNumber.projectId,
                         userId = userId,
                         saleRole = "owner",
                         projectNumber = generatedNumber
                     )
-                    val memberResp = apiService.addProjectMembers(listOf(member))
-                    
-                    if (memberResp.isSuccessful) {
-                        projectDao.insertProject(projectWithNumber)
-                        Result.success(projectWithNumber)
-                    } else {
-                        Result.failure(Exception("สร้าง Member ไม่สำเร็จ: ${memberResp.code()}"))
-                    }
+                    apiService.addProjectMembers(listOf(member))
+                    Result.success(projectWithNumber)
                 } else {
-                    Result.failure(Exception("HTTP ${response.code()}: ${response.errorBody()?.string()}"))
+                    val errBody = response.errorBody()?.string() ?: ""
+                    Result.failure(Exception("Server Rejected: $errBody"))
                 }
             } catch (e: Exception) {
-                Result.failure(e)
+                // 3. ถ้า Error เพราะ Network (Timeout/Offline) ให้ผ่าน
+                if (e is IOException) Result.success(projectWithNumber)
+                else Result.failure(e)
             }
         }
     }
 
     private suspend fun generateNewProjectNumber(branchId: String): String {
         return try {
-            // 1. Prefix: 2 ตัวแรกของ branch_id ตามโจทย์ต้องการ (เช่น PJ-001 -> PJ)
             val prefix = branchId.take(2).uppercase().ifBlank { "PJ" }
-
-            // 2. ปี พ.ศ. (2 หลักท้าย)
             val now = LocalDate.now()
             val beYear = (now.year + 543) % 100
             val yearStr = "%02d".format(beYear)
-
-            // 3. เดือน (2 หลัก)
             val monthStr = "%02d".format(now.monthValue)
-
-            // 4. ลำดับในสาขา (3 หลัก)
             val count = projectDao.getProjectCountByBranch(branchId)
             val seqStr = "%03d".format(count + 1)
-
             "$prefix-$yearStr-$monthStr-$seqStr"
         } catch (e: Exception) {
             "PJ-" + System.currentTimeMillis().toString().takeLast(7)
@@ -154,9 +141,11 @@ class ProjectRepository @Inject constructor(
                     "branch_id"      to (project.branchId ?: ""),
                     "progress_pct"   to progressPct.toString()
                 )
-                val response = apiService.updateProject("eq.${project.projectId}", updates)
+                
+                // บันทึกลง Local
                 projectDao.insertProject(project.copy(progressPct = progressPct))
-
+                
+                val response = apiService.updateProject("eq.${project.projectId}", updates)
                 if (response.isSuccessful) {
                     firebaseService.updateProjectStatus(
                         projectId   = project.projectId,
@@ -166,10 +155,12 @@ class ProjectRepository @Inject constructor(
                     )
                     kotlin.Result.success(Unit)
                 } else {
-                    kotlin.Result.failure(Exception("HTTP ${response.code()}"))
+                    val errBody = response.errorBody()?.string() ?: ""
+                    kotlin.Result.failure(Exception("Server Rejected: $errBody"))
                 }
             } catch (e: Exception) {
-                kotlin.Result.failure(e)
+                if (e is IOException) kotlin.Result.success(Unit)
+                else kotlin.Result.failure(e)
             }
         }
     }
@@ -177,14 +168,10 @@ class ProjectRepository @Inject constructor(
     suspend fun deleteProject(projectId: String): Result<Unit> {
         return withContext(Dispatchers.IO) {
             try {
-                // 1. Delete relations first
                 apiService.deleteProjectMembers("eq.$projectId")
                 apiService.deleteProjectContacts("eq.$projectId")
-                
-                // 2. Delete project from remote
                 val response = apiService.deleteProject("eq.$projectId")
                 if (response.isSuccessful) {
-                    // 3. Delete from local
                     projectDao.deleteProjectById(projectId)
                     Result.success(Unit)
                 } else {
@@ -207,14 +194,12 @@ class ProjectRepository @Inject constructor(
                 if (response.isSuccessful) {
                     fields["project_status"]?.let { newStatus ->
                         val project = projectDao.getProjectById(projectId)
-                        // 1. อัปเดตสถานะล่าสุดในโหนดหลัก
                         firebaseService.updateProjectStatus(
                             projectId   = projectId,
                             newStatus   = newStatus,
                             projectName = project?.projectName ?: projectId,
                             updatedBy   = updatedBy
                         )
-                        // 2. เพิ่ม log การเปลี่ยนแปลงสถานะเพื่อให้ Dashboard แสดง Feed ได้
                         firebaseService.pushStatusChangeEvent(
                             projectId   = projectId,
                             projectName = project?.projectName ?: projectId,
@@ -225,7 +210,7 @@ class ProjectRepository @Inject constructor(
                     }
                     Result.success(Unit)
                 } else {
-                    Result.failure(Exception("อัปเดต Project ไม่สำเร็จ: HTTP ${response.code()}"))
+                    Result.failure(Exception("HTTP ${response.code()}"))
                 }
             } catch (e: Exception) {
                 Result.failure(e)
@@ -240,9 +225,7 @@ class ProjectRepository @Inject constructor(
                 if (response.isSuccessful && response.body() != null) {
                     Result.success(response.body()!!)
                 } else Result.success(emptyList())
-            } catch (e: Exception) {
-                Result.failure(e)
-            }
+            } catch (e: Exception) { Result.failure(e) }
         }
     }
 
@@ -255,9 +238,7 @@ class ProjectRepository @Inject constructor(
                         response.body()!!.map { it.userId to (it.fullName ?: it.userId) }
                     )
                 } else Result.success(emptyList())
-            } catch (e: Exception) {
-                Result.success(emptyList())
-            }
+            } catch (e: Exception) { Result.success(emptyList()) }
         }
     }
 
@@ -280,39 +261,21 @@ class ProjectRepository @Inject constructor(
                 val response = apiService.addProjectMembers(members)
                 if (response.isSuccessful) Result.success(Unit)
                 else Result.failure(Exception("HTTP ${response.code()}"))
-            } catch (e: Exception) {
-                Result.failure(e)
-            }
-        }
-    }
-
-    suspend fun countProjectsByPrefix(prefix: String): Int {
-        return withContext(Dispatchers.IO) {
-            try {
-                projectDao.getAllProjects().first()
-                    .count { it.projectNumber?.startsWith(prefix) == true }
-            } catch (e: Exception) { 0 }
+            } catch (e: Exception) { Result.failure(e) }
         }
     }
 
     suspend fun saveProjectContacts(projectId: String, contactIds: List<String>): Result<Unit> {
         return withContext(Dispatchers.IO) {
             try {
-                // 1. Delete old contacts
                 apiService.deleteProjectContacts("eq.$projectId")
-                
-                // 2. Add new contacts
                 if (contactIds.isNotEmpty()) {
                     val contacts = contactIds.map { ProjectContact(projectId, it) }
                     val response = apiService.addProjectContacts(contacts)
                     if (response.isSuccessful) Result.success(Unit)
                     else Result.failure(Exception("HTTP ${response.code()}"))
-                } else {
-                    Result.success(Unit)
-                }
-            } catch (e: Exception) {
-                Result.failure(e)
-            }
+                } else Result.success(Unit)
+            } catch (e: Exception) { Result.failure(e) }
         }
     }
 
@@ -323,9 +286,7 @@ class ProjectRepository @Inject constructor(
                 if (response.isSuccessful && response.body() != null) {
                     Result.success(response.body()!!.mapNotNull { it.contactPerson })
                 } else Result.success(emptyList())
-            } catch (e: Exception) {
-                Result.failure(e)
-            }
+            } catch (e: Exception) { Result.failure(e) }
         }
     }
 }

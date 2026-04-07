@@ -40,13 +40,6 @@ interface ApiService {
         @Body updates: Map<String, String>
     ): Response<List<UserDto>>
 
-    // ── Project Sales Member ──────────────────────────────────────
-    @POST("project_sales_member")
-    @Headers("Prefer: return=representation")
-    suspend fun addProjectMembers(
-        @Body members: List<ProjectMemberInsertDto>
-    ): Response<List<ProjectMemberInsertDto>>
-
     @DELETE("project_sales_member")
     suspend fun deleteProjectMembers(
         @Query("project_id") projectId: String
@@ -82,10 +75,6 @@ interface ApiService {
         @Query("limit") limit: Int = 1
     ): Response<List<Customer>>
 
-    @POST("customer")
-    @Headers("Prefer: return=representation")
-    suspend fun addCustomer(@Body customer: Customer): Response<List<Customer>>
-
     @DELETE("customer")
     suspend fun deleteCustomer(
         @Query("cust_id") custId: String
@@ -97,10 +86,6 @@ interface ApiService {
         @Query("cust_id") custIds: String,
         @Query("limit") limit: Int = 1000
     ): Response<List<ContactPerson>>
-
-    @POST("contact_person")
-    @Headers("Prefer: return=representation")
-    suspend fun addContact(@Body contact: ContactPerson): Response<List<ContactPerson>>
 
     @DELETE("contact_person")
     suspend fun deleteContact(
@@ -123,17 +108,6 @@ interface ApiService {
     suspend fun getProjectById(
         @Query("project_id") projectId: String,
         @Query("limit") limit: Int = 1
-    ): Response<List<Project>>
-
-    @POST("project")
-    @Headers("Prefer: return=representation")
-    suspend fun addProject(@Body project: Project): Response<List<Project>>
-
-    @PATCH("project")
-    @Headers("Prefer: return=representation")
-    suspend fun updateProject(
-        @Query("project_id") projectId: String,
-        @Body updates: Map<String, String>
     ): Response<List<Project>>
 
     @DELETE("project")
@@ -193,17 +167,6 @@ interface ApiService {
     suspend fun getAppointmentById(
         @Query("appointment_id") appointmentId: String,
         @Query("limit") limit: Int = 1
-    ): Response<List<SalesActivity>>
-
-    @POST("appointment")
-    @Headers("Prefer: return=representation")
-    suspend fun addActivity(@Body activity: SalesActivity): Response<List<SalesActivity>>
-
-    @PATCH("appointment")
-    @Headers("Prefer: return=representation")
-    suspend fun updateActivity(
-        @Query("appointment_id") appointmentId: String,
-        @Body updates: @JvmSuppressWildcards Map<String, Any>
     ): Response<List<SalesActivity>>
 
     @DELETE("appointment")
@@ -291,6 +254,68 @@ interface ApiService {
         @Query("appointment_id") appointmentId: String,
         @Query("limit") limit: Int = 1
     ): Response<List<ActivityResult>>
+
+    // ── Customer ─────────────────────────────────────────────────
+    @POST("customer")
+    @Headers(
+        "Prefer: return=representation",
+        "Content-Profile: public"
+    )
+    suspend fun addCustomer(@Body customer: Customer): Response<List<Customer>>
+
+    // ── Contact Person ────────────────────────────────────────────
+    @POST("contact_person")
+    @Headers(
+        "Prefer: return=representation",
+        "Content-Profile: public"
+    )
+    suspend fun addContact(@Body contact: ContactPerson): Response<List<ContactPerson>>
+
+    // ── Project ───────────────────────────────────────────────────
+    @POST("project")
+    @Headers(
+        "Prefer: return=representation",
+        "Content-Profile: public"
+    )
+    suspend fun addProject(@Body project: Project): Response<List<Project>>
+
+    @PATCH("project")
+    @Headers(
+        "Prefer: return=representation",
+        "Content-Profile: public"
+    )
+    suspend fun updateProject(
+        @Query("project_id") projectId: String,
+        @Body updates: Map<String, String>
+    ): Response<List<Project>>
+
+    // ── Appointment ───────────────────────────────────────────────
+    @POST("appointment")
+    @Headers(
+        "Prefer: return=representation",
+        "Content-Profile: public"
+    )
+    suspend fun addActivity(@Body activity: SalesActivity): Response<List<SalesActivity>>
+
+    @PATCH("appointment")
+    @Headers(
+        "Prefer: return=representation",
+        "Content-Profile: public"
+    )
+    suspend fun updateActivity(
+        @Query("appointment_id") appointmentId: String,
+        @Body updates: @JvmSuppressWildcards Map<String, Any>
+    ): Response<List<SalesActivity>>
+
+    // ── Project Members ───────────────────────────────────────────
+    @POST("project_sales_member")
+    @Headers(
+        "Prefer: return=representation",
+        "Content-Profile: public"
+    )
+    suspend fun addProjectMembers(
+        @Body members: List<ProjectMemberInsertDto>
+    ): Response<List<ProjectMemberInsertDto>>
 }
 
 
