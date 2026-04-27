@@ -2,15 +2,31 @@ package com.example.pp68_salestrackingapp.data.model
 
 import androidx.room.ColumnInfo
 import androidx.room.Entity
+import androidx.room.Index
 import androidx.room.PrimaryKey
 import com.google.gson.annotations.SerializedName
 
-@Entity(tableName = "activity_result")
+@Entity(
+    tableName = "activity_result",
+    // ✅ เปลี่ยน index ให้ query ได้ทั้งสองแบบ
+    indices = [
+        Index("appointment_id"),
+        Index("project_id")
+    ]
+)
 data class ActivityResult(
     @PrimaryKey
+    @ColumnInfo(name = "result_id")
+    @SerializedName("result_id")
+    val resultId: String,  // ✅ UUID ใหม่ — ไม่ผูกกับ appointment
+
     @ColumnInfo(name = "appointment_id")
     @SerializedName("appointment_id")
-    val activityId: String,
+    val activityId: String? = null,  // ✅ nullable แล้ว
+
+    @ColumnInfo(name = "project_id")
+    @SerializedName("project_id")
+    val projectId: String? = null,   // ✅ เพิ่มใหม่ — ผูกตรงกับ project
 
     @ColumnInfo(name = "created_by")
     @SerializedName("created_by")
@@ -82,5 +98,9 @@ data class ActivityResult(
 
     @ColumnInfo(name = "photo_device_model")
     @SerializedName("photo_device_model")
-    val photoDeviceModel: String? = null
+    val photoDeviceModel: String? = null,
+
+    @ColumnInfo(name = "loss_reason")
+    @SerializedName("loss_reason")
+    val lossReason: String? = null
 )

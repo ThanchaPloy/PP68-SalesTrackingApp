@@ -442,6 +442,31 @@ fun ProjectListItem(project: Project, onClick: () -> Unit) {
                 HotColdBadge(score = project.opportunityScore)
             }
 
+            // ── แสดง Loss Reason ถ้าสถานะเป็น Lost หรือ Failed ──
+            if ((project.projectStatus == "Lost" || project.projectStatus == "Failed") && !project.lossReason.isNullOrBlank()) {
+                Spacer(Modifier.height(8.dp))
+                Surface(
+                    color = Color(0xFFFEE2E2).copy(alpha = 0.5f),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Icon(Icons.Default.Info, null, tint = Color(0xFF991B1B), modifier = Modifier.size(14.dp))
+                        Text(
+                            text = "สาเหตุ: ${project.lossReason}",
+                            fontSize = 11.sp,
+                            color = Color(0xFF991B1B),
+                            fontWeight = FontWeight.Medium,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
+            }
+
             Spacer(Modifier.height(12.dp))
 
             // ── Row 3: Progress ──────────────────────────────

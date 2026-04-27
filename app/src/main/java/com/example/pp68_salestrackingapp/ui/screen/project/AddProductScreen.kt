@@ -19,6 +19,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.example.pp68_salestrackingapp.data.repository.ProductSimpleDto
 import com.example.pp68_salestrackingapp.ui.components.DatePickerField
 import com.example.pp68_salestrackingapp.ui.components.DropdownField
 import com.example.pp68_salestrackingapp.ui.components.FormTextField
@@ -47,6 +48,7 @@ fun AddProductScreen(
         onNameSelected = { viewModel.onNameSelected(it) },
         onQuantityChange = { viewModel.onQuantityChange(it) },
         onDateSelected = { viewModel.onDateSelected(it) },
+        onShippingBranchSelected = { id, name -> viewModel.onShippingBranchSelected(id, name) },
         onSave = { viewModel.save() }
     )
 }
@@ -60,6 +62,7 @@ fun AddProductContent(
     onNameSelected: (String) -> Unit,
     onQuantityChange: (String) -> Unit,
     onDateSelected: (String) -> Unit,
+    onShippingBranchSelected: (String, String) -> Unit,
     onSave: () -> Unit
 ) {
     Scaffold(
@@ -146,6 +149,58 @@ fun AddProductContent(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
+                FormField(label = "สี", modifier = Modifier.weight(1f)) {
+                    FormTextField(
+                        value = s.color ?: "-",
+                        onValueChange = {},
+                        placeholder = "สี",
+                        readOnly = true
+                    )
+                }
+                FormField(label = "ความหนา", modifier = Modifier.weight(1f)) {
+                    FormTextField(
+                        value = s.thickness ?: "-",
+                        onValueChange = {},
+                        placeholder = "หนา",
+                        readOnly = true
+                    )
+                }
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                FormField(label = "กว้าง", modifier = Modifier.weight(1f)) {
+                    FormTextField(
+                        value = s.width ?: "-",
+                        onValueChange = {},
+                        placeholder = "กว้าง",
+                        readOnly = true
+                    )
+                }
+                FormField(label = "ยาว", modifier = Modifier.weight(1f)) {
+                    FormTextField(
+                        value = s.length ?: "-",
+                        onValueChange = {},
+                        placeholder = "ยาว",
+                        readOnly = true
+                    )
+                }
+                FormField(label = "หน่วยวัด", modifier = Modifier.weight(1f)) {
+                    FormTextField(
+                        value = s.dimensionUnit ?: "-",
+                        onValueChange = {},
+                        placeholder = "หน่วย",
+                        readOnly = true
+                    )
+                }
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
                 FormField(label = "จำนวน", modifier = Modifier.weight(1f)) {
                     FormTextField(
                         value = s.quantity,
@@ -154,7 +209,7 @@ fun AddProductContent(
                         keyboardType = KeyboardType.Number
                     )
                 }
-                FormField(label = "หน่วย", modifier = Modifier.weight(1f)) {
+                FormField(label = "หน่วยนับ", modifier = Modifier.weight(1f)) {
                     FormTextField(
                         value = s.unit,
                         onValueChange = {},
@@ -172,6 +227,18 @@ fun AddProductContent(
                 )
             }
 
+            FormField(label = "สาขาที่ออกของ") {
+                DropdownField(
+                    value = s.selectedShippingBranchName ?: "",
+                    placeholder = if (s.isLoadingBranches) "กำลังโหลด..." else "เลือกสาขาที่ออกของ",
+                    options = s.shippingBranchOptions.map { it.second },
+                    onSelect = { idx ->
+                        val item = s.shippingBranchOptions[idx]
+                        onShippingBranchSelected(item.first, item.second)
+                    }
+                )
+            }
+
             Spacer(Modifier.height(20.dp))
 
             // Action Buttons
@@ -180,7 +247,7 @@ fun AddProductContent(
                 modifier = Modifier.fillMaxWidth().height(52.dp),
                 shape = RoundedCornerShape(12.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = AppColors.Primary),
-                enabled = !s.isSaving && s.selectedProductName.isNotBlank() && s.quantity.isNotBlank()
+                enabled = !s.isSaving && s.selectedProductName.isNotBlank() && s.quantity.isNotBlank() && s.selectedShippingBranchId != null
             ) {
                 if (s.isSaving) {
                     CircularProgressIndicator(
@@ -227,5 +294,53 @@ private fun FormField(
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(label, fontSize = 14.sp, fontWeight = FontWeight.Bold, color = AppColors.TextPrimary)
         content()
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+fun AddProductScreenPreview() {
+    SalesTrackingTheme {
+        AddProductContent(
+            s = AddProductUiState(
+                products = listOf(
+                    ProductSimpleDto(
+                        productId = "1",
+                        productName = "Product A",
+                        brand = "Brand X",
+                        category = "Category 1",
+                        subCategory = "Subcategory 1",
+                        unit = "ชิ้น",
+                        color = "Red",
+                        thickness = "10mm",
+                        width = "100cm",
+                        length = "200cm",
+                        dimensionUnit = "cm"
+                    )
+                ),
+                selectedBrand = "Brand X",
+                selectedProductName = "Product A",
+                selectedGroup = "Category 1",
+                selectedSubgroup = "Subcategory 1",
+                color = "Red",
+                thickness = "10mm",
+                width = "100cm",
+                length = "200cm",
+                dimensionUnit = "cm",
+                quantity = "5",
+                unit = "ชิ้น",
+                filteredNames = listOf("Product A"),
+                shippingBranchOptions = listOf("B1" to "Bangkok Branch"),
+                selectedShippingBranchId = "B1",
+                selectedShippingBranchName = "Bangkok Branch"
+            ),
+            onBack = {},
+            onBrandSelected = {},
+            onNameSelected = {},
+            onQuantityChange = {},
+            onDateSelected = {},
+            onShippingBranchSelected = { _, _ -> },
+            onSave = {}
+        )
     }
 }

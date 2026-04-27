@@ -27,7 +27,8 @@ import com.example.pp68_salestrackingapp.ui.viewmodels.customer.AddCustomerViewM
 
 // ─── Constants ────────────────────────────────────────────────
 private val CUSTOMER_TYPES = listOf(
-    "Owner", "Developer", "Main Constructor", "Sub Constructor", "Installer"
+    "Owner", "Developer", "Main Constructor", "Sub Constructor", "Installer",
+    "Architect", "Interior Designer", "Consultant", "Industrial", "Wholesale", "Factory"
 )
 private val CUSTOMER_STATUSES = listOf(
     "new lead" to "ลูกค้ามุ่งหวังใหม่",

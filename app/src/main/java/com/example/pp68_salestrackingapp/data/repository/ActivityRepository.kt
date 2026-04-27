@@ -24,7 +24,8 @@ class ActivityRepository @Inject constructor(
     private val contactDao: ContactDao,
     private val planItemDao: ActivityPlanItemDao,
     private val resultDao: ActivityResultDao,
-    private val appointmentContactDao: AppointmentContactDao
+    private val appointmentContactDao: AppointmentContactDao,
+    private val projectRepo: ProjectRepository // ✅ ฉีด ProjectRepository เข้ามาเพื่อใช้อัปเดตสถานะ
 ) {
     fun getAllActivitiesFlow(): Flow<List<SalesActivity>> = activityDao.getAllActivities()
 
@@ -32,6 +33,8 @@ class ActivityRepository @Inject constructor(
         activityDao.getActivitiesByProject(projectId)
 
     fun getAllResultIdsFlow(): Flow<List<String>> = resultDao.getAllResultIdsFlow()
+
+    fun getAllResultsFlow(): Flow<List<ActivityResult>> = resultDao.getAllResultsFlow()
 
     suspend fun refreshActivities(userId: String): kotlin.Result<Unit> {
         return withContext(Dispatchers.IO) {
@@ -317,6 +320,7 @@ class ActivityRepository @Inject constructor(
                         plannedDate = activity.activityDate,
                         plannedTime = activity.plannedTime,
                         plannedEndTime = activity.plannedEndTime,
+                        weeklyNote = activity.weeklyNote,
                         customerId = activity.customerId
                     )
                 }
@@ -362,83 +366,133 @@ class ActivityRepository @Inject constructor(
     suspend fun getActivityResult(activityId: String): ActivityResult? {
         return withContext(Dispatchers.IO) {
             try {
-                // ดึง local ก่อน
-                val local = resultDao.getResultByActivityId(activityId)
-                if (local != null) return@withContext local
-
-                // fallback API
+                // ✅ ดึงจาก API ก่อนเสมอ เพื่อให้ได้ข้อมูลล่าสุดจากทุกอุปกรณ์
                 val resp = apiService.getActivityResult("eq.$activityId")
                 if (resp.isSuccessful && !resp.body().isNullOrEmpty()) {
                     val result = resp.body()!!.first()
-                    resultDao.insertResult(result)
-                    result
-                } else null
+                    resultDao.insertResult(result)  // อัปเดต local
+                    return@withContext result
+                }
+                // fallback local ถ้า API ไม่ตอบ
+                resultDao.getResultByActivityId(activityId)
             } catch (e: Exception) {
+                // offline fallback
                 resultDao.getResultByActivityId(activityId)
             }
         }
     }
 
+    // ✅ Mode 1: บันทึกหลัง appointment
     suspend fun saveActivityResult(result: ActivityResult): kotlin.Result<Unit> {
         return withContext(Dispatchers.IO) {
-            Log.d("ActivityRepository", "=== saveActivityResult called ===")
-            Log.d("ActivityRepository", "activityId: ${result.activityId}")
-            Log.d("ActivityRepository", "body will contain: photo_url=${result.photoUrl}")
-
+            Log.d("ActivityRepository", "=== saveActivityResult: ${result.activityId} ===")
             try {
-                // 1. บันทึกลง Local DB เสมอ
+                // 1. บันทึก Local เสมอ
                 resultDao.insertResult(result)
 
-                // 2. เตรียมข้อมูลสำหรับ API (ส่งเฉพาะฟิลด์ที่ไม่เป็น Null เพื่อป้องกันการทับข้อมูลเดิม)
-                val body = mutableMapOf<String, Any?>()
-                body["appointment_id"]   = result.activityId
-                
-                result.createdBy?.let { body["created_by"] = it }
-                result.reportDate?.let { body["report_date"] = it }
-                result.newStatus?.let { body["new_status"] = it }
-                result.opportunityScore?.let { body["opportunity_score"] = it }
-                body["dm_involved"] = result.dmInvolved
-                body["is_proposal_sent"] = result.isProposalSent
-                result.proposalDate?.let { body["proposal_date"] = it }
-                body["competitor_count"] = result.competitorCount
-                result.responseSpeed?.let { body["response_speed"] = it }
-                result.dealPosition?.let { body["deal_position"] = it }
-                result.previousSolution?.let { body["current_solution"] = it }
-                result.counterpartyMultiplier?.let { body["counterparty_type"] = it }
-                result.summary?.let { body["note_summary"] = it }
-                
-                // ฟิลด์เกี่ยวกับรูปภาพ
-                if (!result.photoUrl.isNullOrBlank())         body["photo_url"]          = result.photoUrl
-                if (!result.photoTakenAt.isNullOrBlank())     body["photo_taken_at"]     = result.photoTakenAt
-                if (result.photoLat != null)                  body["photo_lat"]          = result.photoLat
-                if (result.photoLng != null)                  body["photo_lng"]          = result.photoLng
-                if (!result.photoDeviceModel.isNullOrBlank()) body["photo_device_model"] = result.photoDeviceModel
+                // 2. Build body
+                val body = buildResultBody(result)
+                Log.d("ActivityRepository", "body: $body")
 
-                Log.d("ActivityRepository", "=== body to send ===")
-                Log.d("ActivityRepository", "photo_url: ${body["photo_url"]}")
-                Log.d("ActivityRepository", "photo_taken_at: ${body["photo_taken_at"]}")
-                Log.d("ActivityRepository", "full body: $body")
-
-                // 3. ซิงค์กับ API
-                val existing = apiService.getActivityResult("eq.${result.activityId}")
-                val apiResp = if (existing.isSuccessful && !existing.body().isNullOrEmpty()) {
-                    apiService.updateActivityResultMap("eq.${result.activityId}", body)
-                } else {
-                    apiService.insertActivityResultMap(body)
-                }
+                // 3. ✅ ใช้ Upsert ด้วย on_conflict แทน GET→POST/PATCH
+                //    PostgREST รองรับ: Header "Prefer: resolution=merge-duplicates"
+                val apiResp = apiService.upsertActivityResult(result = body)
 
                 if (apiResp.isSuccessful) {
+                    // ✅ ถ้า sync สำเร็จ ให้เช็คว่าต้องอัปเดตสถานะ Project หรือไม่
+                    syncProjectStatus(result)
+                    Log.d("ActivityRepository", "Sync SUCCESS")
                     kotlin.Result.success(Unit)
                 } else {
-                    val errorMsg = apiResp.errorBody()?.string() ?: "Unknown error"
-                    Log.e("ActivityRepository", "Sync failed: ${apiResp.code()} - $errorMsg")
-                    kotlin.Result.failure(Exception("HTTP ${apiResp.code()}: $errorMsg"))
+                    val err = apiResp.errorBody()?.string() ?: "Unknown"
+                    Log.e("ActivityRepository", "Sync FAILED: ${apiResp.code()} - $err")
+                    kotlin.Result.failure(Exception("HTTP ${apiResp.code()}: $err"))
                 }
             } catch (e: Exception) {
-                Log.e("ActivityRepository", "Exception in saveActivityResult: ${e.message}")
-                kotlin.Result.success(Unit)
+                Log.e("ActivityRepository", "Exception: ${e.message}")
+                kotlin.Result.failure(Exception("Sync ไม่สำเร็จ: ${e.message}"))
             }
         }
+    }
+
+    // ✅ Mode 2: บันทึกอิสระจาก project โดยตรง
+    suspend fun saveStandaloneResult(
+        projectId: String,
+        result: ActivityResult
+    ): kotlin.Result<Unit> {
+        return withContext(Dispatchers.IO) {
+            try {
+                val resultWithProject = result.copy(
+                    resultId   = "RES-" + java.util.UUID.randomUUID().toString().take(8).uppercase(),
+                    projectId  = projectId,
+                    activityId = null  // ✅ ไม่มี appointment
+                )
+
+                // บันทึก Local
+                resultDao.insertResult(resultWithProject)
+
+                // POST ขึ้น API
+                val body = buildResultBody(resultWithProject)
+                val apiResp = apiService.insertActivityResultMap(body)
+
+                if (apiResp.isSuccessful) {
+                    // ✅ อัปเดตสถานะ Project
+                    syncProjectStatus(resultWithProject)
+                    kotlin.Result.success(Unit)
+                } else {
+                    val err = apiResp.errorBody()?.string() ?: "Unknown"
+                    kotlin.Result.failure(Exception("HTTP ${apiResp.code()}: $err"))
+                }
+            } catch (e: Exception) {
+                kotlin.Result.failure(e)
+            }
+        }
+    }
+
+    // ✅ ฟังก์ชันช่วยอัปเดตสถานะ Project ตามผลที่ระบุในบันทึก
+    private suspend fun syncProjectStatus(result: ActivityResult) {
+        val pid = result.projectId ?: result.activityId?.let { 
+            activityDao.getActivityById(it)?.projectId 
+        } ?: return
+        
+        val newStatus = result.newStatus ?: return
+        
+        try {
+            val project = projectDao.getProjectById(pid)
+            if (project != null && project.projectStatus != newStatus) {
+                val updated = project.copy(projectStatus = newStatus)
+                // เรียกใช้ updateProject ของ Repo เพื่อส่งขึ้น Server และ Firebase
+                projectRepo.updateProject(updated, result.createdBy ?: "")
+            }
+        } catch (e: Exception) {
+            Log.e("ActivityRepository", "Update Project Status Failed: ${e.message}")
+        }
+    }
+
+    // ✅ Extract body building ออกมาเป็น private fun เพื่อใช้ร่วมกัน
+    private fun buildResultBody(result: ActivityResult): MutableMap<String, Any?> {
+        val body = mutableMapOf<String, Any?>()
+        body["appointment_id"]   = result.activityId
+        result.projectId?.let    { body["project_id"]       = it } // ✅ เพิ่ม projectId เข้าไปใน body ด้วย
+        result.createdBy?.let    { body["created_by"]       = it }
+        result.reportDate?.let   { body["report_date"]      = it }
+        result.newStatus?.let    { body["new_status"]        = it }
+        result.opportunityScore?.let { body["opportunity_score"] = it }
+        body["dm_involved"]      = result.dmInvolved
+        body["is_proposal_sent"] = result.isProposalSent
+        result.proposalDate?.let { body["proposal_date"]    = it }
+        body["competitor_count"] = result.competitorCount
+        result.responseSpeed?.let    { body["response_speed"]    = it }
+        result.dealPosition?.let     { body["deal_position"]     = it }
+        result.previousSolution?.let { body["current_solution"]  = it }
+        result.counterpartyMultiplier?.let { body["counterparty_type"] = it }
+        result.summary?.let          { body["note_summary"]      = it }
+        if (!result.photoUrl.isNullOrBlank())         body["photo_url"]          = result.photoUrl
+        if (!result.photoTakenAt.isNullOrBlank())     body["photo_taken_at"]     = result.photoTakenAt
+        if (result.photoLat != null)                  body["photo_lat"]          = result.photoLat
+        if (result.photoLng != null)                  body["photo_lng"]          = result.photoLng
+        if (!result.photoDeviceModel.isNullOrBlank()) body["photo_device_model"] = result.photoDeviceModel
+        return body
     }
 
     suspend fun uploadVisitPhoto(activityId: String, imageBytes: ByteArray): kotlin.Result<String> {
@@ -477,14 +531,22 @@ class ActivityRepository @Inject constructor(
                     projectList.find { it.projectId == pid }
                 }
 
-                // 3. ดึง contact — พยายามหาคนที่มีชื่อ หรือคนแรก
-                val contacts: List<ContactPerson> = contactDao.getContactsByCustomerId(activity.customerId)
-                val contact: ContactPerson? = contacts.firstOrNull()
+                // 3. ดึงชื่อผู้ติดต่อหลายคนจาก AppointmentContact
+                val contactIds = appointmentContactDao.getContactsByAppointmentId(activity.activityId).map { it.contactId }
+                val allContacts = contactDao.getContactsByCustomerId(activity.customerId)
+                val selectedContacts = allContacts.filter { it.contactId in contactIds }
+                
+                val namesString = if (selectedContacts.isNotEmpty()) {
+                    selectedContacts.joinToString(", ") { it.fullName ?: it.nickname ?: "Unknown" }
+                } else {
+                    // Fallback หาคนแรกถ้าไม่มีข้อมูลในตารางความสัมพันธ์
+                    allContacts.firstOrNull()?.let { it.fullName ?: it.nickname }
+                }
 
                 activity.copy(
                     companyName = customer?.companyName ?: activity.companyName,
                     projectName = project?.projectName ?: activity.projectName,
-                    contactName = contact?.fullName ?: contact?.nickname ?: activity.contactName
+                    contactName = namesString ?: activity.contactName
                 )
             } catch (e: Exception) {
                 activity

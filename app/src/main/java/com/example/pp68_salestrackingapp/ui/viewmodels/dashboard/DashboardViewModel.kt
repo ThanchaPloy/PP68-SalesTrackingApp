@@ -38,10 +38,19 @@ class DashboardViewModel @Inject constructor(
 
     // ฟังก์ชันสำหรับหน้า Dashboard ให้ดึงข้อมูลล่าสุดจาก API ทุกตาราง
     fun refreshAllData() {
-        val userId = authRepo.currentUser()?.userId ?: return
+        val user = authRepo.currentUser() ?: return
+        val userId = user.userId
+        val branchId = user.teamId
+
         viewModelScope.launch {
             // โหลดขนานกันแบบ Asynchronous เพื่อความรวดเร็ว
-            launch { customerRepo.refreshCustomers(userId) }
+            // ✅ สำหรับ Customer ให้ส่ง branchId เพื่อดึงข้อมูลลูกค้าระดับสาขา
+            if (branchId != null) {
+                launch { customerRepo.refreshCustomers(branchId) }
+            } else {
+                launch { customerRepo.refreshCustomers("") }
+            }
+
             launch { projectRepo.refreshProjects(userId) }
             launch { activityRepo.refreshActivities(userId) }
         }
