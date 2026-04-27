@@ -41,13 +41,19 @@ data class AddProjectUiState(
     val teamMemberOptions:      List<Pair<String, String>> = emptyList(),
     val selectedMemberIds:      Set<String> = emptySet(),
     val isLoadingMembers:       Boolean = false,
+    val selectedBillingBranchId:   String? = null,
+    val selectedBillingBranchName: String? = null,
     val projectNameError:       String? = null,
     val customerError:          String? = null,
     val statusError:            String? = null,
+    val billingBranchError:     String? = null,
     val isLoading:              Boolean = false,
     val isSaved:                Boolean = false,
     val saveError:              String? = null,
-    val projectNumber:          String  = ""
+    val projectNumber:          String  = "",
+    val lossReason:             String  = "",
+    val otherLossReason:        String  = "",
+    val lossReasonError:        String? = null
 )
 
 sealed class AddProjectEvent {
@@ -61,8 +67,11 @@ sealed class AddProjectEvent {
     data class CloseDateChanged(val value: String)                : AddProjectEvent()
     data class StatusChanged(val value: String)                   : AddProjectEvent()
     data class TeamSelected(val id: String, val name: String)     : AddProjectEvent()
+    data class BillingBranchSelected(val id: String, val name: String) : AddProjectEvent()
     data class MemberToggled(val userId: String)                  : AddProjectEvent()
     data class LocationPicked(val lat: Double, val lng: Double)   : AddProjectEvent()
+    data class LossReasonChanged(val value: String)               : AddProjectEvent()
+    data class OtherLossReasonChanged(val value: String)          : AddProjectEvent()
     object Save                                                   : AddProjectEvent()
 }
 
@@ -76,6 +85,13 @@ class AddProjectViewModel @Inject constructor(
 
     private val _uiState = MutableStateFlow(AddProjectUiState())
     val uiState: StateFlow<AddProjectUiState> = _uiState
+
+    val lossReasonOptions = listOf(
+        "ผลิตไม่ได้/ผลิตไม่ทัน",
+        "เทคโนโลยีไม่ผ่าน",
+        "สู้ราคาไม่ไหว",
+        "อื่น ๆ"
+    )
 
     init {
         loadCustomers()
@@ -141,6 +157,15 @@ class AddProjectViewModel @Inject constructor(
             _uiState.update { it.copy(isLoading = true) }
             projectRepo.getProjectById(id).fold(
                 onSuccess = { project ->
+                    val existingReason = project.lossReason ?: ""
+                    val (reason, other) = if (existingReason in lossReasonOptions) {
+                        existingReason to ""
+                    } else if (existingReason.isNotBlank()) {
+                        "อื่น ๆ" to existingReason
+                    } else {
+                        "" to ""
+                    }
+
                     _uiState.update {
                         it.copy(
                             projectId             = project.projectId,
@@ -154,6 +179,9 @@ class AddProjectViewModel @Inject constructor(
                             siteLong              = project.projectLong,
                             selectedCustomerId    = project.custId,
                             selectedTeamId        = project.branchId,
+                            selectedBillingBranchId = project.billingBranchId,
+                            lossReason            = reason,
+                            otherLossReason       = other,
                             isLoading             = false
                         )
                     }
@@ -170,6 +198,12 @@ class AddProjectViewModel @Inject constructor(
                     project.branchId?.let { bid ->
                         branchRepo.observeBranches().find { it.branchId == bid }?.let { b ->
                             _uiState.update { it.copy(selectedTeamName = b.branchName) }
+                        }
+                    }
+
+                    project.billingBranchId?.let { bid ->
+                        branchRepo.observeBranches().find { it.branchId == bid }?.let { b ->
+                            _uiState.update { it.copy(selectedBillingBranchName = b.branchName) }
                         }
                     }
                 },
@@ -272,6 +306,15 @@ class AddProjectViewModel @Inject constructor(
                 }
                 loadMembersForTeam(event.id)
             }
+            is AddProjectEvent.BillingBranchSelected -> {
+                _uiState.update {
+                    it.copy(
+                        selectedBillingBranchId = event.id,
+                        selectedBillingBranchName = event.name,
+                        billingBranchError = null
+                    )
+                }
+            }
             is AddProjectEvent.MemberToggled      -> {
                 val current = _uiState.value.selectedMemberIds.toMutableSet()
                 if (event.userId in current) current.remove(event.userId)
@@ -286,6 +329,10 @@ class AddProjectViewModel @Inject constructor(
                         locationText = "${"%.6f".format(event.lat)}, ${"%.6f".format(event.lng)}"
                     )
                 }
+            is AddProjectEvent.LossReasonChanged ->
+                _uiState.update { it.copy(lossReason = event.value, lossReasonError = null) }
+            is AddProjectEvent.OtherLossReasonChanged ->
+                _uiState.update { it.copy(otherLossReason = event.value, lossReasonError = null) }
             is AddProjectEvent.Save -> save()
         }
     }
@@ -304,9 +351,21 @@ class AddProjectViewModel @Inject constructor(
         if (s.projectStatus.isNullOrBlank()) {
             _uiState.update { it.copy(statusError = "กรุณาเลือกสถานะ") }
             valid = false
+        } else if (s.projectStatus == "Lost" || s.projectStatus == "Failed") {
+            if (s.lossReason.isBlank()) {
+                _uiState.update { it.copy(lossReasonError = "กรุณาเลือกหรือระบุเหตุผลที่ไม่ได้งาน") }
+                valid = false
+            } else if (s.lossReason == "อื่น ๆ" && s.otherLossReason.isBlank()) {
+                _uiState.update { it.copy(lossReasonError = "กรุณาระบุเหตุผลอื่น ๆ") }
+                valid = false
+            }
         }
         if (s.selectedTeamId.isNullOrBlank()) {
             valid = false // ต้องเลือกสาขา
+        }
+        if (s.selectedBillingBranchId.isNullOrBlank()) {
+            _uiState.update { it.copy(billingBranchError = "กรุณาเลือกสาขาที่เปิดบิล") }
+            valid = false
         }
         return valid
     }
@@ -321,10 +380,15 @@ class AddProjectViewModel @Inject constructor(
                 val branchId = s.selectedTeamId ?: authRepo.currentUser()?.teamId ?: "XX-0001"
                 val projectId = s.projectId ?: ("PJ-" + UUID.randomUUID().toString().take(8).uppercase())
 
+                val finalLossReason = if (s.projectStatus == "Lost" || s.projectStatus == "Failed") {
+                    if (s.lossReason == "อื่น ๆ") s.otherLossReason else s.lossReason
+                } else null
+
                 val projectToSave = Project(
                     projectId             = projectId,
                     custId                = s.selectedCustomerId ?: "",
                     branchId              = branchId,
+                    billingBranchId       = s.selectedBillingBranchId,
                     projectNumber         = if (s.projectId != null) s.generatedProjectNumber else null,
                     projectName           = s.projectName,
                     expectedValue         = s.expectedValue.replace(",", "").toDoubleOrNull(),
@@ -334,7 +398,8 @@ class AddProjectViewModel @Inject constructor(
                     desiredCompletionDate = null,
                     projectLat            = s.siteLat,
                     projectLong           = s.siteLong,
-                    opportunityScore      = null
+                    opportunityScore      = null,
+                    lossReason            = finalLossReason
                 )
 
                 val result = if (s.projectId != null) projectRepo.updateProject(projectToSave)

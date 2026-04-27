@@ -13,7 +13,12 @@ data class ProductSimpleDto(
     val brand: String,
     val category: String?,
     val subCategory: String?,
-    val unit: String?
+    val unit: String?,
+    val color: String? = null,
+    val thickness: String? = null,
+    val width: String? = null,
+    val length: String? = null,
+    val dimensionUnit: String? = null
 )
 
 @Singleton
@@ -21,7 +26,7 @@ class ProductRepository @Inject constructor(
     private val apiService: ApiService
 ) {
 
-    suspend fun getAllProducts(): kotlin.Result<List<ProductSimpleDto>> {
+    suspend fun getAllProducts(): Result<List<ProductSimpleDto>> {
         return withContext(Dispatchers.IO) {
             try {
                 val response = apiService.getProductMaster()
@@ -33,16 +38,21 @@ class ProductRepository @Inject constructor(
                             brand       = it.brand?.trim()?.ifBlank { "ไม่ระบุแบรนด์" } ?: "ไม่ระบุแบรนด์",
                             category    = it.productType ?: "ทั่วไป",
                             subCategory = it.productSubgroup ?: "",
-                            unit        = it.unit ?: "ชิ้น"
+                            unit        = it.unit ?: "ชิ้น",
+                            color       = it.color,
+                            thickness   = it.thickness,
+                            width       = it.width,
+                            length      = it.length,
+                            dimensionUnit = it.dimensionUnit
                         )
                     }
-                    kotlin.Result.success(list)
+                    Result.success(list)
                 } else {
                     val errorBody = response.errorBody()?.string() ?: ""
-                    kotlin.Result.failure(Exception("HTTP ${response.code()}: $errorBody"))
+                    Result.failure(Exception("HTTP ${response.code()}: $errorBody"))
                 }
             } catch (e: Exception) {
-                kotlin.Result.failure(e)
+                Result.failure(e)
             }
         }
     }
@@ -51,25 +61,27 @@ class ProductRepository @Inject constructor(
         projectId: String,
         productId: String,
         quantity: Double,
-        wantedDate: String?
-    ): kotlin.Result<Unit> {
+        wantedDate: String?,
+        shippingBranchId: String?
+    ): Result<Unit> {
         return withContext(Dispatchers.IO) {
             try {
                 val body = ProjectProductInsertDto(
                     projectId = projectId,
                     productId = productId,
                     quantity  = quantity,
-                    desiredDate = wantedDate?.ifBlank { null }
+                    desiredDate = wantedDate?.ifBlank { null },
+                    shippingBranchId = shippingBranchId
                 )
                 val response = apiService.addProductToProject(body)
                 if (response.isSuccessful) {
-                    kotlin.Result.success(Unit)
+                    Result.success(Unit)
                 } else {
                     val errorBody = response.errorBody()?.string() ?: ""
-                    kotlin.Result.failure(Exception("HTTP ${response.code()}: $errorBody"))
+                    Result.failure(Exception("HTTP ${response.code()}: $errorBody"))
                 }
             } catch (e: Exception) {
-                kotlin.Result.failure(e)
+                Result.failure(e)
             }
         }
     }

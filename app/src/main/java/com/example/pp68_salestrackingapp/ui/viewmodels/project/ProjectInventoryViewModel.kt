@@ -8,6 +8,7 @@ import com.example.pp68_salestrackingapp.data.repository.CustomerRepository
 import com.example.pp68_salestrackingapp.data.repository.ProjectRepository
 import com.example.pp68_salestrackingapp.data.model.Project
 import com.example.pp68_salestrackingapp.data.remote.ApiService
+import com.example.pp68_salestrackingapp.data.repository.BranchRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -20,7 +21,9 @@ data class InventoryItem(
     val productName: String,
     val category: String,
     val quantity: Double,
-    val unit: String
+    val unit: String,
+    val desiredDate: String? = null,
+    val shippingBranchName: String? = null
 )
 
 data class ProjectInventoryUiState(
@@ -36,6 +39,7 @@ class ProjectInventoryViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val projectRepo: ProjectRepository,
     private val customerRepo: CustomerRepository,
+    private val branchRepo: BranchRepository,
     private val apiService: ApiService
 ) : ViewModel() {
 
@@ -91,6 +95,10 @@ class ProjectInventoryViewModel @Inject constructor(
             val productsMap  = productsResp.body()
                 ?.associateBy { it.productId }
                 ?: emptyMap()
+            
+            // ✅ ดึงสาขาทั้งหมด
+            branchRepo.syncFromRemote()
+            val branchesMap = branchRepo.observeBranches().associateBy { it.branchId }
 
             // ✅ Map รวมกัน
             projectProducts.mapNotNull { pp ->
@@ -100,7 +108,9 @@ class ProjectInventoryViewModel @Inject constructor(
                     productName = product.productGroup ?: pp.productId,
                     category    = product.productType ?: "ทั่วไป",
                     quantity    = pp.quantity ?: 0.0,
-                    unit        = product.unit ?: "ชิ้น"
+                    unit        = product.unit ?: "ชิ้น",
+                    desiredDate = pp.desiredDate,
+                    shippingBranchName = branchesMap[pp.shippingBranchId]?.branchName
                 )
             }
         } catch (e: Exception) {

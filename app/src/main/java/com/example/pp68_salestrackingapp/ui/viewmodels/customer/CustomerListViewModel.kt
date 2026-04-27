@@ -62,12 +62,15 @@ class CustomerListViewModel @Inject constructor(
     fun refreshDataFromApi() {
         viewModelScope.launch {
             _isLoading.value = true
-            val userId = authRepo.currentUser()?.userId
-            if (userId == null) {
+            val user = authRepo.currentUser()
+            val branchId = user?.teamId // ✅ ใช้ teamId จาก AuthUser
+            if (branchId == null) {
                 _isLoading.value = false
+                _error.value = "ไม่พบรหัสสาขาของผู้ใช้"
                 return@launch
             }
-            val result = repo.refreshCustomers(userId)  // ✅ ส่ง userId
+            // ✅ แก้ไขให้ส่ง branchId แทน userId เพื่อให้ดึงข้อมูลลูกค้าในระดับสาขา
+            val result = repo.refreshCustomers(branchId)
             result.onFailure { _error.value = it.message }
             _isLoading.value = false
         }

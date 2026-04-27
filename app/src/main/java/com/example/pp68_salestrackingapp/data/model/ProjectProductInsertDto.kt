@@ -7,5 +7,6 @@ data class ProjectProductInsertDto(
     @SerializedName("product_id")   val productId:  String,
     @SerializedName("quantity")     val quantity:   Double,
     // ✅ เปลี่ยนจาก wanted_date เป็น desired_date ให้ตรงกับฐานข้อมูลตามที่ API ระบุ
-    @SerializedName("desired_date") val desiredDate: String?
+    @SerializedName("desired_date") val desiredDate: String?,
+    @SerializedName("shipping_branch_id") val shippingBranchId: String?
 )

@@ -13,7 +13,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
-import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -70,8 +70,34 @@ class ProjectDetailViewModel @Inject constructor(
 
     init {
         projectId?.let { id ->
-            loadProjectDetail(id)
+            observeProject(id)
             observeActivities(id)
+        }
+    }
+
+    private fun observeProject(id: String) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoading = true) }
+            // ✅ เปลี่ยนมาใช้ Flow เพื่อให้ UI อัปเดตทันทีเมื่อฐานข้อมูล Local เปลี่ยนแปลง
+            projectRepo.getProjectByIdFlow(id).collectLatest { project ->
+                if (project != null) {
+                    val company = customerRepo.getCustomerById(project.custId).getOrNull()?.companyName ?: ""
+                    _uiState.update { state ->
+                        state.copy(
+                            isLoading = false,
+                            project = project,
+                            companyName = company,
+                            teamMembers = listOf(
+                                TeamMember("U01", "สมชาย ใจดี"),
+                                TeamMember("U02", "สมหญิง รักงาน")
+                            )
+                        )
+                    }
+                } else {
+                    // ถ้าใน Flow ไม่มี (เช่น พึ่งสร้างเสร็จหมาดๆ หรือข้อมูลยังไม่ sync) ให้ลองดึงผ่าน API
+                    projectRepo.getProjectById(id)
+                }
+            }
         }
     }
 
@@ -92,29 +118,9 @@ class ProjectDetailViewModel @Inject constructor(
     }
 
     fun loadProjectDetail(projectId: String) {
+        // Method นี้อาจไม่จำเป็นต้องใช้แล้วถ้าใช้ observeProject(id) ใน init
         viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true, error = null) }
-
-            projectRepo.getProjectById(projectId).fold(
-                onSuccess = { project ->
-                    val company = customerRepo.getCustomerById(project.custId).getOrNull()?.companyName ?: ""
-                    
-                    _uiState.update { state ->
-                        state.copy(
-                            isLoading = false,
-                            project = project,
-                            companyName = company,
-                            teamMembers = listOf(
-                                TeamMember("U01", "สมชาย ใจดี"),
-                                TeamMember("U02", "สมหญิง รักงาน")
-                            )
-                        )
-                    }
-                },
-                onFailure = { error ->
-                    _uiState.update { it.copy(isLoading = false, error = error.message) }
-                }
-            )
+            projectRepo.getProjectById(projectId)
         }
     }
 

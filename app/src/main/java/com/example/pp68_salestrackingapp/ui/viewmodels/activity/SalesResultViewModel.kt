@@ -22,6 +22,7 @@ import javax.inject.Inject
 import kotlin.math.*
 
 data class SalesResultUiState(
+    val mode: ResultMode = ResultMode.FROM_APPOINTMENT,
     val projectId: String? = null,
     val activityId: String? = null,
     val project: Project? = null,
@@ -51,8 +52,16 @@ data class SalesResultUiState(
     val photoTakenAt: String? = null,
     val photoLat: Double? = null,
     val photoLng: Double? = null,
-    val photoDeviceModel: String? = null
+    val photoDeviceModel: String? = null,
+    val lossReason: String = "",
+    val otherLossReason: String = "",
+    val lossReasonError: String? = null
 )
+
+enum class ResultMode {
+    FROM_APPOINTMENT,  // มาจาก check-in/finish
+    STANDALONE         // สร้างอิสระจาก ProjectDetail
+}
 
 @HiltViewModel
 class SalesResultViewModel @Inject constructor(
@@ -67,15 +76,25 @@ class SalesResultViewModel @Inject constructor(
 
     private var custId: String = ""
 
+    val lossReasonOptions = listOf(
+        "ผลิตไม่ได้/ผลิตไม่ทัน",
+        "เทคโนโลยีไม่ผ่าน",
+        "สู้ราคาไม่ไหว",
+        "อื่น ๆ"
+    )
+
     init {
         val pId = savedStateHandle.get<String>("projectId")
         val aId = savedStateHandle.get<String>("activityId")
-        _uiState.update { it.copy(projectId = pId, activityId = aId) }
 
-        if (!aId.isNullOrBlank()) {
-            loadActivityData(aId)
-        } else if (!pId.isNullOrBlank()) {
-            loadProjectData(pId)
+        // ✅ ตัดสิน mode จาก activityId
+        val mode = if (aId.isNullOrBlank()) ResultMode.STANDALONE else ResultMode.FROM_APPOINTMENT
+
+        _uiState.update { it.copy(projectId = pId, activityId = aId, mode = mode) }
+
+        when (mode) {
+            ResultMode.STANDALONE        -> pId?.let { loadProjectData(it) }
+            ResultMode.FROM_APPOINTMENT  -> aId?.let { loadActivityData(it) }
         }
     }
 
@@ -165,6 +184,15 @@ class SalesResultViewModel @Inject constructor(
 
             val result = activityRepo.getActivityResult(aId)
             if (result != null) {
+                val existingReason = result.lossReason ?: ""
+                val (reason, other) = if (existingReason in lossReasonOptions) {
+                    existingReason to ""
+                } else if (existingReason.isNotBlank()) {
+                    "อื่น ๆ" to existingReason
+                } else {
+                    "" to ""
+                }
+
                 _uiState.update {
                     it.copy(
                         reportDate             = result.reportDate ?: it.reportDate,
@@ -184,7 +212,9 @@ class SalesResultViewModel @Inject constructor(
                         photoTakenAt           = result.photoTakenAt,
                         photoLat               = result.photoLat,
                         photoLng               = result.photoLng,
-                        photoDeviceModel       = result.photoDeviceModel
+                        photoDeviceModel       = result.photoDeviceModel,
+                        lossReason             = reason,
+                        otherLossReason        = other
                     )
                 }
             }
@@ -194,7 +224,7 @@ class SalesResultViewModel @Inject constructor(
 
     fun onReportDateChanged(date: String)         { _uiState.update { it.copy(reportDate = date) } }
     fun onStatusToggle(enabled: Boolean)          { _uiState.update { it.copy(isStatusUpdateEnabled = enabled) } }
-    fun onNewStatusSelected(status: String)       { _uiState.update { it.copy(newStatus = status) } }
+    fun onNewStatusSelected(status: String)       { _uiState.update { it.copy(newStatus = status, lossReasonError = null) } }
     fun onOpportunitySelected(score: String)      { _uiState.update { it.copy(opportunityScore = score) } }
     fun onDealPositionChanged(value: String)      { _uiState.update { it.copy(dealPosition = value) } }
     fun onPreviousSolutionChanged(value: String)  { _uiState.update { it.copy(previousSolution = value) } }
@@ -202,6 +232,8 @@ class SalesResultViewModel @Inject constructor(
     fun onResponseSpeedChanged(value: String)     { _uiState.update { it.copy(responseSpeed = value) } }
     fun onProposalToggle(sent: Boolean)           { _uiState.update { it.copy(isProposalSent = sent) } }
     fun onDmToggle(involved: Boolean)             { _uiState.update { it.copy(dmInvolved = involved) } }
+    fun onLossReasonChanged(value: String)        { _uiState.update { it.copy(lossReason = value, lossReasonError = null) } }
+    fun onOtherLossReasonChanged(value: String)   { _uiState.update { it.copy(otherLossReason = value, lossReasonError = null) } }
 
     fun onPhotoPicked(context: Context, uri: Uri) {
         _uiState.update { it.copy(photoUri = uri, photoUrl = null) }
@@ -299,41 +331,41 @@ class SalesResultViewModel @Inject constructor(
     }
 
     fun save() {
-        val currentState = _uiState.value
-        android.util.Log.d("SalesResult", "=== save() called ===")
-        android.util.Log.d("SalesResult", "activityId: ${currentState.activityId}")
-        android.util.Log.d("SalesResult", "visitSummary: ${currentState.visitSummary}")
-        android.util.Log.d("SalesResult", "photoUrl: ${currentState.photoUrl}")
-        android.util.Log.d("SalesResult", "photoTakenAt: ${currentState.photoTakenAt}")
+        val s = _uiState.value
 
-        if (currentState.visitSummary.isBlank()) {
+        if (s.visitSummary.isBlank()) {
             _uiState.update { it.copy(error = "กรุณากรอกสรุปการเข้าพบ") }
             return
         }
 
-        if (currentState.activityId.isNullOrBlank()) {
-            _uiState.update { it.copy(error = "ไม่พบรหัสนัดหมาย") }
-            return
-        }
-
-        val finalCustId = if (custId.isNotBlank()) custId else currentState.project?.custId ?: ""
-        if (finalCustId.isBlank()) {
-            _uiState.update { it.copy(error = "ไม่พบข้อมูลลูกค้า") }
-            return
+        // Validate Loss Reason if status is Lost or Failed
+        if (s.isStatusUpdateEnabled && (s.newStatus == "Lost" || s.newStatus == "Failed")) {
+            if (s.lossReason.isBlank()) {
+                _uiState.update { it.copy(lossReasonError = "กรุณาเลือกหรือระบุเหตุผลที่ไม่ได้งาน", error = "กรุณาระบุเหตุผลที่ไม่ได้งาน") }
+                return
+            } else if (s.lossReason == "อื่น ๆ" && s.otherLossReason.isBlank()) {
+                _uiState.update { it.copy(lossReasonError = "กรุณาระบุเหตุผลอื่น ๆ", error = "กรุณาระบุเหตุผลอื่น ๆ") }
+                return
+            }
         }
 
         viewModelScope.launch {
             _uiState.update { it.copy(isSaving = true, error = null) }
-            val s = _uiState.value
+
             val user = authRepo.currentUser()
-            val userName = user?.fullName ?: user?.userId ?: "Unknown User"
 
             try {
+                val finalLossReason = if (s.isStatusUpdateEnabled && (s.newStatus == "Lost" || s.newStatus == "Failed")) {
+                    if (s.lossReason == "อื่น ๆ") s.otherLossReason else s.lossReason
+                } else null
+
                 val resultToSave = ActivityResult(
-                    activityId             = s.activityId!!,
+                    resultId               = "RES-" + java.util.UUID.randomUUID().toString().take(8).uppercase(),
+                    activityId             = if (s.mode == ResultMode.FROM_APPOINTMENT) s.activityId else null,
+                    projectId              = s.projectId,
                     createdBy              = user?.userId,
                     reportDate             = s.reportDate,
-                    newStatus              = if (s.isStatusUpdateEnabled) STATUS_MAP[s.newStatus] ?: s.newStatus.ifBlank { null } else null,
+                    newStatus              = if (s.isStatusUpdateEnabled) STATUS_MAP[s.newStatus] else null,
                     opportunityScore       = OPPORTUNITY_MAP[s.opportunityScore] ?: s.opportunityScore,
                     dealPosition           = DEAL_POSITION_MAP[s.dealPosition] ?: s.dealPosition.ifBlank { null },
                     previousSolution       = SOLUTION_MAP[s.previousSolution] ?: s.previousSolution.ifBlank { null },
@@ -348,50 +380,36 @@ class SalesResultViewModel @Inject constructor(
                     photoTakenAt           = s.photoTakenAt,
                     photoLat               = s.photoLat,
                     photoLng               = s.photoLng,
-                    photoDeviceModel       = s.photoDeviceModel
+                    photoDeviceModel       = s.photoDeviceModel,
+                    lossReason             = finalLossReason
                 )
-
-                android.util.Log.d("SalesResult", "=== calling saveActivityResult ===")
-                android.util.Log.d("SalesResult", "resultToSave: $resultToSave")
-                val saveResult = activityRepo.saveActivityResult(resultToSave)
-                android.util.Log.d("SalesResult", "saveResult: $saveResult")
-
-                try {
-                    activityRepo.updateActivity(
-                        s.activityId!!,
-                        mapOf<String, Any>(
-                            "plan_status" to "completed",
-                            "note"        to s.visitSummary
-                        )
-                    )
-                } catch (e: Exception) { }
-
-                if (!s.projectId.isNullOrBlank()) {
-                    try {
-                        val pUpdates = mutableMapOf<String, String>()
-                        if (s.isStatusUpdateEnabled && s.newStatus.isNotBlank()) {
-                            pUpdates["project_status"] = STATUS_MAP[s.newStatus] ?: s.newStatus
+                
+                val saveResult = when (s.mode) {
+                    ResultMode.FROM_APPOINTMENT -> {
+                        if (s.activityId.isNullOrBlank()) {
+                            _uiState.update { it.copy(isSaving = false, error = "ไม่พบรหัสนัดหมาย") }
+                            return@launch
                         }
-                        s.opportunityScore?.let { 
-                            pUpdates["opportunity_score"] = OPPORTUNITY_MAP[it] ?: it
+                        activityRepo.saveActivityResult(resultToSave)
+                    }
+                    ResultMode.STANDALONE -> {
+                        if (s.projectId.isNullOrBlank()) {
+                            _uiState.update { it.copy(isSaving = false, error = "ไม่พบรหัสโครงการ") }
+                            return@launch
                         }
-
-                        if (pUpdates.isNotEmpty()) {
-                            projectRepo.updateProjectFields(
-                                projectId = s.projectId,
-                                fields    = pUpdates,
-                                updatedBy = userName
-                            )
-                        }
-                    } catch (e: Exception) { }
+                        activityRepo.saveStandaloneResult(s.projectId!!, resultToSave)
+                    }
                 }
 
-                _uiState.update { it.copy(isSaving = false, isSaved = true) }
-
+                if (saveResult.isSuccess) {
+                    _uiState.update { it.copy(isSaving = false, isSaved = true) }
+                } else {
+                    _uiState.update {
+                        it.copy(isSaving = false, error = saveResult.exceptionOrNull()?.message)
+                    }
+                }
             } catch (e: Exception) {
-                _uiState.update { 
-                    it.copy(isSaving = false, error = "เกิดข้อผิดพลาดในการบันทึก: ${e.message}") 
-                }
+                _uiState.update { it.copy(isSaving = false, error = e.message) }
             }
         }
     }

@@ -27,18 +27,33 @@ interface ApiService {
     ): Response<List<UserDto>>
 
     @PATCH("user")
-    @Headers("Prefer: return=representation")
+    @Headers(
+        "Prefer: return=representation",
+        "Content-Profile: public"
+    )
     suspend fun updateFcmToken(
         @Query("user_id") userId: String,
         @Body updates: Map<String, String>
     ): Response<List<UserDto>>
 
     @PATCH("user")
-    @Headers("Prefer: return=representation")
+    @Headers(
+        "Prefer: return=representation",
+        "Content-Profile: public"
+    )
     suspend fun updateUserProfile(
         @Query("user_id") userId: String,
         @Body updates: Map<String, String>
     ): Response<List<UserDto>>
+
+    @POST("project_sales_member")
+    @Headers(
+        "Prefer: return=representation",
+        "Content-Profile: public"
+    )
+    suspend fun addProjectMembers(
+        @Body members: List<ProjectMemberInsertDto>
+    ): Response<List<ProjectMemberInsertDto>>
 
     @DELETE("project_sales_member")
     suspend fun deleteProjectMembers(
@@ -70,10 +85,23 @@ interface ApiService {
     ): Response<List<Customer>>
 
     @GET("customer")
+    suspend fun getCustomersByBranch(
+        @Query("branch_id") branchId: String,
+        @Query("limit") limit: Int = 1000
+    ): Response<List<Customer>>
+
+    @GET("customer")
     suspend fun getCustomerById(
         @Query("cust_id") custId: String,
         @Query("limit") limit: Int = 1
     ): Response<List<Customer>>
+
+    @POST("customer")
+    @Headers(
+        "Prefer: return=representation",
+        "Content-Profile: public"
+    )
+    suspend fun addCustomer(@Body customer: Customer): Response<List<Customer>>
 
     @DELETE("customer")
     suspend fun deleteCustomer(
@@ -86,6 +114,13 @@ interface ApiService {
         @Query("cust_id") custIds: String,
         @Query("limit") limit: Int = 1000
     ): Response<List<ContactPerson>>
+
+    @POST("contact_person")
+    @Headers(
+        "Prefer: return=representation",
+        "Content-Profile: public"
+    )
+    suspend fun addContact(@Body contact: ContactPerson): Response<List<ContactPerson>>
 
     @DELETE("contact_person")
     suspend fun deleteContact(
@@ -110,6 +145,23 @@ interface ApiService {
         @Query("limit") limit: Int = 1
     ): Response<List<Project>>
 
+    @POST("project")
+    @Headers(
+        "Prefer: return=representation",
+        "Content-Profile: public"
+    )
+    suspend fun addProject(@Body project: Project): Response<List<Project>>
+
+    @PATCH("project")
+    @Headers(
+        "Prefer: return=representation",
+        "Content-Profile: public"
+    )
+    suspend fun updateProject(
+        @Query("project_id") projectId: String,
+        @Body updates: @JvmSuppressWildcards Map<String, Any?>
+    ): Response<List<Project>>
+
     @DELETE("project")
     suspend fun deleteProject(
         @Query("project_id") projectId: String
@@ -128,6 +180,9 @@ interface ApiService {
     ): Response<List<ProjectContactResponse>>
 
     @POST("project_contact")
+    @Headers(
+        "Content-Profile: public"
+    )
     suspend fun addProjectContacts(
         @Body contacts: List<ProjectContact>
     ): Response<Unit>
@@ -150,7 +205,10 @@ interface ApiService {
     ): Response<List<ProjectProductDto>>
 
     @POST("project_product")
-    @Headers("Prefer: return=representation")
+    @Headers(
+        "Prefer: return=representation",
+        "Content-Profile: public"
+    )
     suspend fun addProductToProject(
         @Body item: ProjectProductInsertDto
     ): Response<List<ProjectProductInsertDto>>
@@ -167,6 +225,23 @@ interface ApiService {
     suspend fun getAppointmentById(
         @Query("appointment_id") appointmentId: String,
         @Query("limit") limit: Int = 1
+    ): Response<List<SalesActivity>>
+
+    @POST("appointment")
+    @Headers(
+        "Prefer: return=representation",
+        "Content-Profile: public"
+    )
+    suspend fun addActivity(@Body activity: SalesActivity): Response<List<SalesActivity>>
+
+    @PATCH("appointment")
+    @Headers(
+        "Prefer: return=representation",
+        "Content-Profile: public"
+    )
+    suspend fun updateActivity(
+        @Query("appointment_id") appointmentId: String,
+        @Body updates: @JvmSuppressWildcards Map<String, Any>
     ): Response<List<SalesActivity>>
 
     @DELETE("appointment")
@@ -199,13 +274,19 @@ interface ApiService {
     ): Response<List<ChecklistItemDto>>
 
     @POST("activity_checklist")
-    @Headers("Prefer: return=representation")
+    @Headers(
+        "Prefer: return=representation",
+        "Content-Profile: public"
+    )
     suspend fun insertChecklist(
         @Body items: List<ChecklistInsertDto>
     ): Response<List<ChecklistInsertDto>>
 
     @PATCH("activity_checklist")
-    @Headers("Prefer: return=representation")
+    @Headers(
+        "Prefer: return=representation",
+        "Content-Profile: public"
+    )
     suspend fun updateChecklist(
         @Query("appointment_id") appointmentId: String,
         @Query("master_id")      masterId:      String,
@@ -221,29 +302,39 @@ interface ApiService {
 
     // ── Call Logs ─────────────────────────────────────────────────
     @POST("call_logs")
-    @Headers("Prefer: return=representation")
+    @Headers(
+        "Prefer: return=representation",
+        "Content-Profile: public"
+    )
     suspend fun insertCallLog(
         @Body log: Map<String, String>
     ): Response<List<Map<String, String>>>
 
     // ── Activity Result ───────────────────────────────────────────
     @POST("activity_result")
-    @Headers("Prefer: return=representation")
+    @Headers(
+        "Prefer: return=representation",
+        "Content-Profile: public"
+    )
     suspend fun insertActivityResult(
         @Body result: ActivityResult
     ): Response<List<ActivityResult>>
 
     @POST("activity_result")
-    @Headers("Prefer: return=representation",
-        "Content-Profile: public")
+    @Headers(
+        "Prefer: return=representation",
+        "Content-Profile: public"
+    )
     suspend fun insertActivityResultMap(
         @Body result: @JvmSuppressWildcards Map<String, Any?>
     ): Response<List<ActivityResult>>
 
 
     @PATCH("activity_result")
-    @Headers("Prefer: return=representation",
-        "Content-Profile: public")
+    @Headers(
+        "Prefer: return=representation",
+        "Content-Profile: public"
+    )
     suspend fun updateActivityResultMap(
         @Query("appointment_id") appointmentId: String,
         @Body updates: @JvmSuppressWildcards Map<String, Any?>
@@ -255,70 +346,17 @@ interface ApiService {
         @Query("limit") limit: Int = 1
     ): Response<List<ActivityResult>>
 
-    // ── Customer ─────────────────────────────────────────────────
-    @POST("customer")
+    // ✅ ปรับปรุง upsert ให้รองรับ on_conflict ผ่าน Query Param
+    @POST("activity_result")
     @Headers(
-        "Prefer: return=representation",
+        "Prefer: return=representation,resolution=merge-duplicates",
         "Content-Profile: public"
     )
-    suspend fun addCustomer(@Body customer: Customer): Response<List<Customer>>
-
-    // ── Contact Person ────────────────────────────────────────────
-    @POST("contact_person")
-    @Headers(
-        "Prefer: return=representation",
-        "Content-Profile: public"
-    )
-    suspend fun addContact(@Body contact: ContactPerson): Response<List<ContactPerson>>
-
-    // ── Project ───────────────────────────────────────────────────
-    @POST("project")
-    @Headers(
-        "Prefer: return=representation",
-        "Content-Profile: public"
-    )
-    suspend fun addProject(@Body project: Project): Response<List<Project>>
-
-    @PATCH("project")
-    @Headers(
-        "Prefer: return=representation",
-        "Content-Profile: public"
-    )
-    suspend fun updateProject(
-        @Query("project_id") projectId: String,
-        @Body updates: Map<String, String>
-    ): Response<List<Project>>
-
-    // ── Appointment ───────────────────────────────────────────────
-    @POST("appointment")
-    @Headers(
-        "Prefer: return=representation",
-        "Content-Profile: public"
-    )
-    suspend fun addActivity(@Body activity: SalesActivity): Response<List<SalesActivity>>
-
-    @PATCH("appointment")
-    @Headers(
-        "Prefer: return=representation",
-        "Content-Profile: public"
-    )
-    suspend fun updateActivity(
-        @Query("appointment_id") appointmentId: String,
-        @Body updates: @JvmSuppressWildcards Map<String, Any>
-    ): Response<List<SalesActivity>>
-
-    // ── Project Members ───────────────────────────────────────────
-    @POST("project_sales_member")
-    @Headers(
-        "Prefer: return=representation",
-        "Content-Profile: public"
-    )
-    suspend fun addProjectMembers(
-        @Body members: List<ProjectMemberInsertDto>
-    ): Response<List<ProjectMemberInsertDto>>
+    suspend fun upsertActivityResult(
+        @Query("on_conflict") onConflict: String = "appointment_id",
+        @Body result: @JvmSuppressWildcards Map<String, Any?>
+    ): Response<List<ActivityResult>>
 }
-
-
 
 // ── DTOs ─────────────────────────────────────────────────────
 data class ProductMasterDto(
@@ -327,7 +365,12 @@ data class ProductMasterDto(
     @SerializedName("product_type")     val productType:     String?,
     @SerializedName("product_subgroup") val productSubgroup: String?,
     @SerializedName("product_brand")    val brand:           String?,
-    @SerializedName("unit")             val unit:            String?
+    @SerializedName("unit")             val unit:            String?,
+    @SerializedName("color")            val color:           String?,
+    @SerializedName("thickness")        val thickness:       String?,
+    @SerializedName("width")            val width:           String?,
+    @SerializedName("length")           val length:          String?,
+    @SerializedName("dimension_unit")   val dimensionUnit:   String?
 )
 
 data class ProjectContactResponse(
@@ -348,5 +391,3 @@ interface UploadApiService {
 data class UploadPhotoResponse(
     @SerializedName("photo_url") val photoUrl: String
 )
-
-

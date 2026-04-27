@@ -94,7 +94,7 @@ class ProductRepositoryTest {
     fun `addProductToProject success should return success`() = runTest {
         coEvery { apiService.addProductToProject(any()) } returns Response.success(emptyList())
 
-        val result = repository.addProductToProject("PJ-001", "PRD-001", 10.0, "2026-04-01")
+        val result = repository.addProductToProject("PJ-001", "PRD-001", 10.0, "2026-04-01", "BR-001")
 
         assertTrue(result.isSuccess)
     }
@@ -104,7 +104,7 @@ class ProductRepositoryTest {
     fun `addProductToProject API error should return failure`() = runTest {
         coEvery { apiService.addProductToProject(any()) } returns Response.error(400, "error".toResponseBody())
 
-        val result = repository.addProductToProject("PJ-001", "PRD-001", 10.0, null)
+        val result = repository.addProductToProject("PJ-001", "PRD-001", 10.0, null, "BR-001")
 
         assertTrue(result.isFailure)
     }
@@ -114,7 +114,7 @@ class ProductRepositoryTest {
     fun `addProductToProject null wantedDate should still call API`() = runTest {
         coEvery { apiService.addProductToProject(any()) } returns Response.success(emptyList())
 
-        val result = repository.addProductToProject("PJ-001", "PRD-001", 5.0, null)
+        val result = repository.addProductToProject("PJ-001", "PRD-001", 5.0, null, "BR-001")
 
         assertTrue(result.isSuccess)
         coVerify { apiService.addProductToProject(any()) }
@@ -125,7 +125,7 @@ class ProductRepositoryTest {
     fun `addProductToProject blank wantedDate should treat as null`() = runTest {
         coEvery { apiService.addProductToProject(any()) } returns Response.success(emptyList())
 
-        val result = repository.addProductToProject("PJ-001", "PRD-001", 5.0, "")
+        val result = repository.addProductToProject("PJ-001", "PRD-001", 5.0, "", "BR-001")
 
         assertTrue(result.isSuccess)
     }

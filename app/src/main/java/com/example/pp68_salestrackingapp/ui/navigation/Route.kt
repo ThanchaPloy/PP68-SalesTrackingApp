@@ -53,4 +53,8 @@ sealed class Route(val path: String) {
     object EditContact : Route("edit_contact/{contactId}") {
         fun createRoute(contactId: String) = "edit_contact/$contactId"
     }
+    // ✅ เพิ่ม route ใหม่ที่รับ projectId แทน activityId
+    object StandaloneSalesResult : Route("standalone_sales_result/{projectId}") {
+        fun createRoute(projectId: String) = "standalone_sales_result/$projectId"
+    }
 }

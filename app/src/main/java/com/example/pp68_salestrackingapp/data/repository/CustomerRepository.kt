@@ -24,6 +24,8 @@ class CustomerRepository @Inject constructor(
     fun getAllCustomersFlow(): Flow<List<Customer>> = customerDao.getAllCustomers()
     fun searchCustomersFlow(query: String): Flow<List<Customer>> = customerDao.searchCustomers("%$query%")
 
+    fun getAllContacts(): Flow<List<ContactPerson>> = contactDao.getAllContacts()
+
     suspend fun getLocalCustomers(): kotlin.Result<List<Customer>> {
         return withContext(Dispatchers.IO) {
             try {
@@ -36,28 +38,13 @@ class CustomerRepository @Inject constructor(
         }
     }
 
-    suspend fun refreshCustomers(userId: String): kotlin.Result<Unit> {
+    /**
+     * ดึงข้อมูลลูกค้าในระดับสาขา (Branch) เพื่อให้เซลล์ในสาขาเดียวกันเห็นบริษัทร่วมกัน
+     */
+    suspend fun refreshCustomers(branchId: String): kotlin.Result<Unit> {
         return withContext(Dispatchers.IO) {
             try {
-                val memberResp = apiService.getMyProjectIds(userId = "eq.$userId")
-                if (!memberResp.isSuccessful || memberResp.body().isNullOrEmpty()) {
-                    customerDao.clearAndInsert(emptyList())
-                    return@withContext kotlin.Result.success(Unit)
-                }
-
-                val projectIds = memberResp.body()!!.map { it.projectId }
-                val idsParam = "in.(${projectIds.joinToString(",")})"
-
-                val projectResp = apiService.getProjectsByIds(projectIds = idsParam)
-                if (!projectResp.isSuccessful || projectResp.body().isNullOrEmpty()) {
-                    customerDao.clearAndInsert(emptyList())
-                    return@withContext kotlin.Result.success(Unit)
-                }
-
-                val custIds = projectResp.body()!!.map { it.custId }.distinct()
-                val custIdsParam = "in.(${custIds.joinToString(",")})"
-
-                val custResp = apiService.getCustomersByIds(custIds = custIdsParam)
+                val custResp = apiService.getCustomersByBranch(branchId = "eq.$branchId")
                 if (custResp.isSuccessful && custResp.body() != null) {
                     customerDao.clearAndInsert(custResp.body()!!)
                     kotlin.Result.success(Unit)

@@ -41,9 +41,11 @@ data class CreateAppointmentUiState(
 
     val projectOptions:  List<ProjectOption>   = emptyList(),
     val contactOptions:  List<ContactOption>   = emptyList(),
+    val allContactOptions: List<ContactOption> = emptyList(), // สำหรับค้นหาทั้งหมด
     val masterOptions:   List<ActivityMaster>  = emptyList(),
     val allMasterOptions:  List<ActivityMaster> = emptyList(),
 
+    val contactSearchQuery: String = "",
 
     val isLoading:         Boolean = false,
     val isLoadingProjects: Boolean = false,
@@ -60,15 +62,16 @@ data class CreateAppointmentUiState(
 )
 
 data class ProjectOption(val id: String, val name: String, val status: String)
-data class ContactOption(val id: String, val name: String)
+data class ContactOption(val id: String, val name: String, val companyName: String? = null)
 
 sealed class CreateAppointmentEvent {
     data class LoadActivity(val activityId: String)         : CreateAppointmentEvent()
     data class LoadInitialProject(val projectId: String)    : CreateAppointmentEvent()
-    data class ProjectSelected(val id: String, val name: String, val status: String) : CreateAppointmentEvent()
+    data class ProjectSelected(val id: String?, val name: String?, val status: String?) : CreateAppointmentEvent()
     data class TitleChanged(val value: String)              : CreateAppointmentEvent()
     data class TypeChanged(val value: String)               : CreateAppointmentEvent()
     data class ContactToggled(val id: String)               : CreateAppointmentEvent()
+    data class ContactSearchQueryChanged(val value: String) : CreateAppointmentEvent()
     data class MasterToggled(val id: Int)                   : CreateAppointmentEvent()
     object OtherToggled                                     : CreateAppointmentEvent()
     data class OtherObjectiveTextChanged(val value: String) : CreateAppointmentEvent()
@@ -96,6 +99,16 @@ class CreateAppointmentViewModel @Inject constructor(
     init {
         loadProjects()
         loadMasterObjectives()
+        loadAllContacts()
+    }
+
+    private fun loadAllContacts() {
+        viewModelScope.launch {
+            customerRepo.getAllContacts().collect { list ->
+                val options = list.map { ContactOption(it.contactId, it.fullName ?: it.nickname ?: it.contactId) }
+                _uiState.update { it.copy(allContactOptions = options) }
+            }
+        }
     }
 
     private fun loadMasterObjectives() {
@@ -107,7 +120,7 @@ class CreateAppointmentViewModel @Inject constructor(
                 _uiState.update {
                     it.copy(
                         allMasterOptions = all,
-                        masterOptions    = emptyList(),
+                        masterOptions    = all, // Default show all if no project
                         isLoadingMasters = false
                     )
                 }
@@ -116,7 +129,7 @@ class CreateAppointmentViewModel @Inject constructor(
                 _uiState.update {
                     it.copy(
                         allMasterOptions = all,
-                        masterOptions    = emptyList(),
+                        masterOptions    = all,
                         isLoadingMasters = false
                     )
                 }
@@ -246,10 +259,18 @@ class CreateAppointmentViewModel @Inject constructor(
                     )
                 }
 
-                activity.projectId?.let { pid ->
-                    loadContactsForProject(pid, selectedContactIds)
-                    projectRepo.getProjectById(pid).onSuccess { p ->
+                if (activity.projectId != null) {
+                    loadContactsForProject(activity.projectId, selectedContactIds)
+                    projectRepo.getProjectById(activity.projectId).onSuccess { p ->
                         _uiState.update { it.copy(selectedProjectName = p.projectName) }
+                    }
+                } else {
+                    // ถ้าไม่มี Project ให้ใช้ allContactOptions
+                    _uiState.update { state ->
+                        state.copy(
+                            contactOptions = state.allContactOptions,
+                            masterOptions = state.allMasterOptions
+                        )
                     }
                 }
             }
@@ -302,18 +323,31 @@ class CreateAppointmentViewModel @Inject constructor(
                 loadInitialProject(event.projectId)
 
             is CreateAppointmentEvent.ProjectSelected -> {
-                _uiState.update {
-                    it.copy(
-                        selectedProjectId   = event.id,
-                        selectedProjectName = event.name,
-                        projectError        = null,
-                        selectedContactIds  = emptySet(),
-                        selectedMasterIds   = if (it.activityId == null) emptySet() else it.selectedMasterIds,
-                        contactOptions      = emptyList()
-                    )
+                if (event.id == null) {
+                   _uiState.update {
+                       it.copy(
+                           selectedProjectId = null,
+                           selectedProjectName = "ไม่ระบุโครงการ",
+                           projectError = null,
+                           contactOptions = it.allContactOptions,
+                           masterOptions = it.allMasterOptions,
+                           selectedContactIds = emptySet()
+                       )
+                   }
+                } else {
+                    _uiState.update {
+                        it.copy(
+                            selectedProjectId   = event.id,
+                            selectedProjectName = event.name,
+                            projectError        = null,
+                            selectedContactIds  = emptySet(),
+                            selectedMasterIds   = if (it.activityId == null) emptySet() else it.selectedMasterIds,
+                            contactOptions      = emptyList()
+                        )
+                    }
+                    loadContactsForProject(event.id)
+                    filterMastersByProjectStatus(event.status ?: "")
                 }
-                loadContactsForProject(event.id)
-                filterMastersByProjectStatus(event.status)
             }
 
             is CreateAppointmentEvent.TitleChanged ->
@@ -326,6 +360,10 @@ class CreateAppointmentViewModel @Inject constructor(
                 val current = _uiState.value.selectedContactIds.toMutableSet()
                 if (event.id in current) current.remove(event.id) else current.add(event.id)
                 _uiState.update { it.copy(selectedContactIds = current) }
+            }
+
+            is CreateAppointmentEvent.ContactSearchQueryChanged -> {
+                _uiState.update { it.copy(contactSearchQuery = event.value) }
             }
 
             is CreateAppointmentEvent.MasterToggled -> {
@@ -382,11 +420,6 @@ class CreateAppointmentViewModel @Inject constructor(
     private fun save() {
         val s = _uiState.value
 
-        if (s.selectedProjectId == null) {
-            _uiState.update { it.copy(projectError = "กรุณาเลือกโครงการ") }
-            return
-        }
-
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, saveError = null) }
 
@@ -395,11 +428,22 @@ class CreateAppointmentViewModel @Inject constructor(
                 return@launch
             }
 
-            val customerId = s.selectedCustomerId ?: run {
+            var customerId = s.selectedCustomerId
+            if (customerId == null && s.selectedProjectId != null) {
                 val project = projectRepo.getProjectById(s.selectedProjectId).getOrNull()
-                project?.custId
-            } ?: run {
-                _uiState.update { it.copy(isLoading = false, saveError = "ไม่พบข้อมูลลูกค้าของโครงการนี้") }
+                customerId = project?.custId
+            }
+            
+            // ถ้ายังไม่มี customerId (กรณีไม่เลือกโปรเจกต์) ให้พยายามหาจากผู้ติดต่อที่เลือก
+            if (customerId == null && s.selectedContactIds.isNotEmpty()) {
+                val contactId = s.selectedContactIds.first()
+                customerRepo.getAllContacts().first().find { it.contactId == contactId }?.let {
+                    customerId = it.custId
+                }
+            }
+
+            if (customerId == null && s.selectedProjectId != null) {
+                _uiState.update { it.copy(isLoading = false, saveError = "ไม่พบข้อมูลลูกค้า") }
                 return@launch
             }
 
@@ -409,14 +453,14 @@ class CreateAppointmentViewModel @Inject constructor(
 
             val isoDate = s.plannedDate?.let { parseToIsoDate(it) } ?: LocalDate.now().toString()
 
-            val selectedContactNames = s.contactOptions
+            val selectedContactNames = s.allContactOptions
                 .filter { it.id in s.selectedContactIds }
                 .joinToString(", ") { it.name }
 
             val activity = SalesActivity(
                 activityId     = appointmentId,
                 userId         = userId,
-                customerId     = customerId,
+                customerId     = customerId ?: "CST-UNKNOWN",
                 projectId      = s.selectedProjectId,
                 activityType   = s.activityType,
                 isAppointment  = true,
@@ -473,7 +517,7 @@ class CreateAppointmentViewModel @Inject constructor(
                         appointmentId = appointmentId,
                         masterId      = mid,
                         isDone        = false,
-                        actName       = s.masterOptions.find { it.masterId == mid }?.actName
+                        actName       = s.allMasterOptions.find { it.masterId == mid }?.actName
                     )
                 )
             }

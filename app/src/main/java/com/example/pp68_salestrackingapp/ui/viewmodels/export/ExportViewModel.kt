@@ -29,7 +29,8 @@ data class ExportActivityItem(
     val companyName: String?,
     val topic: String?,
     val note: String?,
-    val status: String
+    val status: String,
+    val results: List<String> = emptyList() // เพิ่มผลหลังการขายเป็นรายการย่อย
 )
 
 data class ExportProjectItem(
@@ -57,33 +58,80 @@ class ExportViewModel @Inject constructor(
 
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, error = null) }
-            activityRepo.getMyActivitiesWithDetails().fold(
-                onSuccess = { all ->
-                    val filtered = all.filter { card ->
-                        try {
-                            if (card.plannedDate.isNullOrBlank()) false else {
-                                val d = LocalDate.parse(card.plannedDate.take(10))
-                                !d.isBefore(startOfWeek) && !d.isAfter(endOfWeek)
-                            }
-                        } catch (e: Exception) { false }
-                    }.map {
-                        ExportActivityItem(
-                            date = it.plannedDate ?: "",
-                            projectName = it.projectName,
-                            companyName = it.companyName,
-                            topic = it.objective,
-                            // ActivityCard ไม่มี weeklyNote เลยใส่ค่าว่างไปก่อนครับ
-                            note = "",
-                            status = it.planStatus
-                        )
-                    }.sortedBy { it.date }
+            
+            try {
+                // 1. ดึง Appointments
+                val activitiesResult = activityRepo.getMyActivitiesWithDetails()
+                val allActivities = activitiesResult.getOrDefault(emptyList())
+                
+                // 2. ดึง Results ทั้งหมด (จาก Local)
+                val allResults = activityRepo.getAllResultsFlow().first()
 
-                    _uiState.update { it.copy(isLoading = false, activities = filtered, projects = emptyList()) }
-                },
-                onFailure = { e ->
-                    _uiState.update { it.copy(isLoading = false, error = e.message) }
+                // กรอง Appointments ในสัปดาห์นี้
+                val filteredActivities = allActivities.filter { card ->
+                    try {
+                        if (card.plannedDate.isNullOrBlank()) false else {
+                            val d = LocalDate.parse(card.plannedDate.take(10))
+                            !d.isBefore(startOfWeek) && !d.isAfter(endOfWeek)
+                        }
+                    } catch (e: Exception) { false }
                 }
-            )
+
+                // กรอง Results ในสัปดาห์นี้ (กรณี standalone)
+                val filteredResults = allResults.filter { res ->
+                    try {
+                        if (res.reportDate.isNullOrBlank()) false else {
+                            val d = LocalDate.parse(res.reportDate.take(10))
+                            !d.isBefore(startOfWeek) && !d.isAfter(endOfWeek)
+                        }
+                    } catch (e: Exception) { false }
+                }
+
+                // ดึงข้อมูล Project สำหรับ standalone results
+                val projectsMap = projectRepo.getAllProjectsFlow().first().associateBy { it.projectId }
+
+                // รวมข้อมูล
+                val exportItems = mutableListOf<ExportActivityItem>()
+
+                // เพิ่ม Appointment พร้อม Result ที่ผูกไว้
+                filteredActivities.forEach { act ->
+                    val relatedResults = allResults.filter { it.activityId == act.activityId }
+                    exportItems.add(
+                        ExportActivityItem(
+                            date = act.plannedDate ?: "",
+                            projectName = act.projectName,
+                            companyName = act.companyName,
+                            topic = act.objective,
+                            note = act.weeklyNote ?: "", 
+                            status = act.planStatus,
+                            results = relatedResults.mapNotNull { it.summary }
+                        )
+                    )
+                }
+
+                // เพิ่ม Standalone Results (ที่ไม่มี appointmentId ในสัปดาห์นี้)
+                val appIdsInWeek = filteredActivities.map { it.activityId }.toSet()
+                filteredResults.filter { it.activityId == null || it.activityId !in appIdsInWeek }.forEach { res ->
+                    val project = projectsMap[res.projectId]
+                    exportItems.add(
+                        ExportActivityItem(
+                            date = res.reportDate ?: "",
+                            projectName = project?.projectName ?: "N/A",
+                            companyName = null, 
+                            topic = "บันทึกผลการทำงาน (ไม่มีแผนนัดหมาย)",
+                            note = "",
+                            status = "completed",
+                            results = listOfNotNull(res.summary)
+                        )
+                    )
+                }
+
+                val sorted = exportItems.sortedWith(compareBy({ it.date }, { it.projectName }))
+                _uiState.update { it.copy(isLoading = false, activities = sorted, projects = emptyList()) }
+
+            } catch (e: Exception) {
+                _uiState.update { it.copy(isLoading = false, error = e.message) }
+            }
         }
     }
 
@@ -94,12 +142,10 @@ class ExportViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, error = null) }
             try {
-                // แก้ให้ใช้ getAllProjectsFlow().first() แทน getAllProjects() ที่ไม่มีอยู่จริง
                 val all = projectRepo.getAllProjectsFlow().first()
 
                 val filtered = all.filter { p ->
                     try {
-                        // เปลี่ยนจาก closeDate เป็น closingDate ตาม Project Model
                         val startD = p.startDate?.let { LocalDate.parse(it.take(10)) }
                         val closeD = p.closingDate?.let { LocalDate.parse(it.take(10)) }
 
@@ -111,11 +157,11 @@ class ExportViewModel @Inject constructor(
                 }.map {
                     ExportProjectItem(
                         projectName = it.projectName,
-                        companyName = null, // ต้องการข้อมูล Customer เพิ่มเติมถ้าจะเอาชื่อบริษัท
+                        companyName = null, 
                         value = it.expectedValue ?: 0.0,
                         status = it.projectStatus ?: "",
                         score = it.opportunityScore,
-                        closeDate = it.closingDate // เปลี่ยนจาก closeDate เป็น closingDate
+                        closeDate = it.closingDate
                     )
                 }
                 _uiState.update { it.copy(isLoading = false, projects = filtered, activities = emptyList()) }
@@ -130,17 +176,16 @@ class ExportViewModel @Inject constructor(
         val activities = _uiState.value.activities
         val builder = StringBuilder()
 
-        // สร้าง Header
-        builder.append("Date,Project Name,Company Name,Topic,Note,Status\n")
+        builder.append("Date,Project Name,Company Name,Topic,Note,Status,Results\n")
 
-        // วนลูปสร้าง Data
         activities.forEach {
             val safeProject = it.projectName?.replace("\"", "\"\"") ?: ""
             val safeCompany = it.companyName?.replace("\"", "\"\"") ?: ""
             val safeTopic = it.topic?.replace("\"", "\"\"") ?: ""
             val safeNote = it.note?.replace("\"", "\"\"") ?: ""
+            val safeResults = it.results.joinToString("; ").replace("\"", "\"\"")
 
-            builder.append("${it.date},\"$safeProject\",\"$safeCompany\",\"$safeTopic\",\"$safeNote\",${it.status}\n")
+            builder.append("${it.date},\"$safeProject\",\"$safeCompany\",\"$safeTopic\",\"$safeNote\",${it.status},\"$safeResults\"\n")
         }
         return builder.toString()
     }

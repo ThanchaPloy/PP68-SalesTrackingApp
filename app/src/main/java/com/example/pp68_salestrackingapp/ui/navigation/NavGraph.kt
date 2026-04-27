@@ -246,12 +246,13 @@ fun SalesTrackingApp() {
                 onBack = { navController.popBackStack() },
                 onEditProject = { id -> navController.navigate(Route.EditProject.createRoute(id)) },
                 onCreateActivity = { id -> navController.navigate(Route.CreateActivityWithProject.createRoute(id)) },
+                onSalesResultClick = { navController.navigate(Route.StandaloneSalesResult.createRoute(it)) },
                 onInventoryClick = { id -> navController.navigate(Route.ProjectInventory.createRoute(id)) },
-                onRecordResult = { projectId, activityId -> 
+                onRecordResult = { pId, activityId -> 
                     if (activityId != null) {
                         navController.navigate(Route.SalesResult.createRoute(activityId))
-                    } else if (projectId != null) {
-                        navController.navigate(Route.CreateActivityWithProject.createRoute(projectId))
+                    } else if (pId != null) {
+                        navController.navigate(Route.CreateActivityWithProject.createRoute(pId))
                     }
                 },
                 onActivityClick = { id -> navController.navigate(Route.ActivityDetail.createRoute(id)) },
@@ -260,6 +261,17 @@ fun SalesTrackingApp() {
                 onNotificationClick = { navController.navigate(Route.Notification.path) },
                 onSettingsClick = { navController.navigate(Route.Settings.path) },
                 onLogoutClick = onLogout
+            )
+        }
+
+        //สำหรับบบันทึกผลการขาย
+        composable(
+            route = Route.StandaloneSalesResult.path,
+            arguments = listOf(navArgument("projectId") { type = NavType.StringType })
+        ) {
+            SalesResultScreen(
+                onBack     = { navController.popBackStack() },
+                onSaved    = { navController.popBackStack() }
             )
         }
 

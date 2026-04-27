@@ -61,6 +61,7 @@ fun ProjectDetailScreen(
     onBack:              () -> Unit,
     onEditProject:       (String) -> Unit = {},
     onCreateActivity:    (String) -> Unit = {},
+    onSalesResultClick: (String) -> Unit,
     onInventoryClick:    (String) -> Unit = {},
     onRecordResult:      (projectId: String?, activityId: String?) -> Unit = { _, _ -> },
     onActivityClick:     (String) -> Unit = {},
@@ -85,6 +86,7 @@ fun ProjectDetailScreen(
         onEditProject = onEditProject,
         onCreateActivity = onCreateActivity,
         onInventoryClick = onInventoryClick,
+        onSalesResultClick = onSalesResultClick,
         onRecordResult = onRecordResult,
         onActivityClick = onActivityClick,
         onCheckin = onCheckin,
@@ -106,14 +108,15 @@ fun ProjectDetailContent(
     onEditProject: (String) -> Unit,
     onCreateActivity: (String) -> Unit,
     onInventoryClick: (String) -> Unit,
+    onSalesResultClick: (String) -> Unit,
     onRecordResult: (String?, String?) -> Unit,
     onActivityClick: (String) -> Unit,
     onCheckin: (String) -> Unit = {},
     onFinish: (String) -> Unit = {},
     onDeleteProject: () -> Unit = {},
     onNotificationClick: () -> Unit = {},
-    onSettingsClick: () -> Unit = {},
-    onLogoutClick: () -> Unit = {}
+    onSettingsClick:     () -> Unit = {},
+    onLogoutClick:       () -> Unit = {}
 ) {
     var showDeleteDialog by remember { mutableStateOf(false) }
 
@@ -176,6 +179,18 @@ fun ProjectDetailContent(
                     modifier       = Modifier.size(52.dp)
                 ) {
                     Icon(Icons.Default.AddHome, "สร้างกิจกรรม",
+                        modifier = Modifier.size(22.dp))
+                }
+
+                // FAB 3 — บันทึกผลการขาย (สมุดโน้ต)
+                FloatingActionButton(
+                    onClick        = { s.project?.let { onSalesResultClick(it.projectId) } },
+                    containerColor = RedDark,
+                    contentColor   = White,
+                    shape          = CircleShape,
+                    modifier       = Modifier.size(52.dp)
+                ) {
+                    Icon(Icons.Default.Assignment, "บันทึกผลการขาย",
                         modifier = Modifier.size(22.dp))
                 }
             }
@@ -481,7 +496,7 @@ private fun ProjectHeaderCard(
                 }
             }
 
-            // ✅ เพิ่ม Progress Bar
+            // ✅ เพิ่ม Progress Bar หรือ Loss Reason
             if (project.projectStatus !in listOf("Lost", "Failed")) {
                 Spacer(Modifier.height(16.dp))
                 HorizontalDivider(color = Color(0xFFFFFFFF).copy(alpha = 0.5f))
@@ -503,25 +518,50 @@ private fun ProjectHeaderCard(
                     color = Color(0xFFFEE2E2),
                     shape = RoundedCornerShape(8.dp)
                 ) {
-                    Row(
+                    Column(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(horizontal = 12.dp, vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
-                        Icon(
-                            Icons.Default.Cancel, null,
-                            tint     = Color(0xFF991B1B),
-                            modifier = Modifier.size(16.dp)
-                        )
-                        Text(
-                            text = if (project.projectStatus == "Lost")
-                                "โครงการนี้ไม่ได้รับงาน" else "โครงการนี้ถูกยกเลิก",
-                            fontSize   = 13.sp,
-                            color      = Color(0xFF991B1B),
-                            fontWeight = FontWeight.Medium
-                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(
+                                Icons.Default.Cancel, null,
+                                tint     = Color(0xFF991B1B),
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Text(
+                                text = if (project.projectStatus == "Lost")
+                                    "โครงการนี้ไม่ได้รับงาน" else "โครงการนี้ถูกยกเลิก",
+                                fontSize   = 13.sp,
+                                color      = Color(0xFF991B1B),
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                        
+                        // แสดงสาเหตุ (Loss Reason)
+                        if (!project.lossReason.isNullOrBlank()) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                modifier = Modifier.padding(start = 24.dp)
+                            ) {
+                                Icon(
+                                    Icons.Default.Info, null,
+                                    tint = Color(0xFF991B1B),
+                                    modifier = Modifier.size(14.dp)
+                                )
+                                Text(
+                                    text = "สาเหตุ: ${project.lossReason}",
+                                    fontSize = 12.sp,
+                                    color = Color(0xFF991B1B),
+                                    fontWeight = FontWeight.Normal
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -778,6 +818,7 @@ fun ProjectDetailPreview() {
             onEditProject = {},
             onCreateActivity = {},
             onInventoryClick = {},
+            onSalesResultClick = {},
             onRecordResult = { _, _ -> },
             onActivityClick = {}
         )
