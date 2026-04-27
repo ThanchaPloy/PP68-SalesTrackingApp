@@ -1,5 +1,6 @@
 package com.example.pp68_salestrackingapp.ui.screen.project
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
@@ -46,7 +47,8 @@ fun AddProjectScreen(
     AddProjectContent(
         uiState = uiState,
         onEvent = viewModel::onEvent,
-        onBack = onBack
+        onBack = onBack,
+        lossReasonOptions = viewModel.lossReasonOptions
     )
 }
 
@@ -54,7 +56,8 @@ fun AddProjectScreen(
 fun AddProjectContent(
     uiState: AddProjectUiState,
     onEvent: (AddProjectEvent) -> Unit,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    lossReasonOptions: List<String> = emptyList()
 ) {
     Scaffold(
         topBar = {
@@ -177,6 +180,24 @@ fun AddProjectContent(
                 }
             }
 
+            // ── Billing Branch * ──────────────────────────────
+            FormField("สาขาที่เปิดบิล", required = true) {
+                if (uiState.isLoadingTeams) LoadingFieldProject()
+                else DropdownField(
+                    value       = uiState.selectedBillingBranchName ?: "",
+                    placeholder = "เลือกสาขาที่เปิดบิล",
+                    options     = uiState.teamOptions.map { it.second },
+                    isError     = uiState.billingBranchError != null,
+                    errorMsg    = uiState.billingBranchError,
+                    onSelect    = { idx ->
+                        onEvent(AddProjectEvent.BillingBranchSelected(
+                            uiState.teamOptions[idx].first,
+                            uiState.teamOptions[idx].second
+                        ))
+                    }
+                )
+            }
+
             // ── Branch/Team ────────────────────────────────────
             FormField("สาขาที่รับผิดชอบ") {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -254,6 +275,35 @@ fun AddProjectContent(
                         onEvent(AddProjectEvent.StatusChanged(statusList[idx]))
                     }
                 )
+            }
+
+            // ── Loss Reason (แสดงเมื่อเป็น Lost หรือ Failed) ──────────────────
+            AnimatedVisibility(visible = uiState.projectStatus == "Lost" || uiState.projectStatus == "Failed") {
+                Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                    FormField("เหตุผลที่ไม่ได้งาน", required = true) {
+                        DropdownField(
+                            value       = uiState.lossReason,
+                            placeholder = "เลือกเหตุผล",
+                            options     = lossReasonOptions,
+                            isError     = uiState.lossReasonError != null,
+                            errorMsg    = uiState.lossReasonError,
+                            onSelect    = { idx ->
+                                onEvent(AddProjectEvent.LossReasonChanged(lossReasonOptions[idx]))
+                            }
+                        )
+                    }
+
+                    if (uiState.lossReason == "อื่น ๆ") {
+                        FormField("ระบุเหตุผลอื่น ๆ", required = true) {
+                            FormTextField(
+                                value         = uiState.otherLossReason,
+                                onValueChange = { onEvent(AddProjectEvent.OtherLossReasonChanged(it)) },
+                                placeholder   = "กรอกเหตุผลที่ไม่ได้งาน",
+                                isError       = uiState.lossReasonError != null
+                            )
+                        }
+                    }
+                }
             }
 
             // ── Site Location + Google Maps ──────────────────

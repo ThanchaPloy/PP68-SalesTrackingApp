@@ -94,20 +94,27 @@ fun CreateAppointmentScreen(
             verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
 
-            FormField(label = "เลือกโครงการ", required = true) {
+            FormField(label = "เลือกโครงการ (ไม่ระบุได้)") {
+                val options = state.projectOptions.map { it.name }.toMutableList()
+                options.add(0, "ไม่ระบุโครงการ")
+                
                 DropdownField(
-                    value        = state.selectedProjectName ?: "",
+                    value        = if (state.selectedProjectId == null) "ไม่ระบุโครงการ" else (state.selectedProjectName ?: ""),
                     placeholder  = "เลือกโครงการ",
-                    options      = state.projectOptions.map { it.name },
+                    options      = options,
                     isError      = state.projectError != null,
                     errorMsg     = state.projectError,
                     onSelect     = { idx ->
-                        val opt = state.projectOptions[idx]
-                        onEvent(CreateAppointmentEvent.ProjectSelected(
-                            opt.id,
-                            opt.name,
-                            opt.status
-                        ))
+                        if (idx == 0) {
+                            onEvent(CreateAppointmentEvent.ProjectSelected(null, null, null))
+                        } else {
+                            val opt = state.projectOptions[idx - 1]
+                            onEvent(CreateAppointmentEvent.ProjectSelected(
+                                opt.id,
+                                opt.name,
+                                opt.status
+                            ))
+                        }
                     }
                 )
             }
@@ -123,11 +130,48 @@ fun CreateAppointmentScreen(
 
             FormField(label = "ผู้ติดต่อ") {
                 if (state.selectedProjectId == null) {
-                    Text("เลือกโครงการก่อน", color = TextGray, fontSize = 14.sp)
+                    // ✅ กรณีไม่เลือกโครงการ: แสดงช่องค้นหาและ Dropdown รวม
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        FormTextField(
+                            value = state.contactSearchQuery,
+                            onValueChange = { onEvent(CreateAppointmentEvent.ContactSearchQueryChanged(it)) },
+                            placeholder = "ค้นหาชื่อผู้ติดต่อ...",
+                            leadingIcon = Icons.Default.Search
+                        )
+                        
+                        val filteredContacts = if (state.contactSearchQuery.isBlank()) {
+                            state.allContactOptions
+                        } else {
+                            state.allContactOptions.filter { it.name.contains(state.contactSearchQuery, ignoreCase = true) }
+                        }
+                        
+                        if (filteredContacts.isNotEmpty()) {
+                            FlowRow(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                filteredContacts.take(15).forEach { contact ->
+                                    val isSelected = state.selectedContactIds.contains(contact.id)
+                                    FilterChip(
+                                        selected = isSelected,
+                                        onClick = { onEvent(CreateAppointmentEvent.ContactToggled(contact.id)) },
+                                        label = { Text(contact.name, fontSize = 11.sp) },
+                                        colors = FilterChipDefaults.filterChipColors(
+                                            selectedContainerColor = RedPrimary.copy(alpha = 0.1f),
+                                            selectedLabelColor = RedPrimary
+                                        )
+                                    )
+                                }
+                            }
+                        } else {
+                            Text("ไม่พบรายชื่อผู้ติดต่อ", color = TextGray, fontSize = 12.sp)
+                        }
+                    }
                 } else if (state.isLoadingContacts) {
                     CircularProgressIndicator(color = RedPrimary, modifier = Modifier.size(24.dp))
                 } else if (state.contactOptions.isEmpty()) {
-                    Text("ไม่มีรายชื่อผู้ติดต่อ", color = TextGray, fontSize = 13.sp)
+                    Text("ไม่มีรายชื่อผู้ติดต่อในโครงการนี้", color = TextGray, fontSize = 13.sp)
                 } else {
                     FlowRow(
                         modifier = Modifier.fillMaxWidth(),
@@ -226,99 +270,91 @@ fun CreateAppointmentScreen(
             FormField(
                 label = "วัตถุประสงค์/เป้าหมายกิจกรรม"
             ) {
-                when {
-                    state.selectedProjectId == null -> {
-                        Text("เลือกโครงการก่อน", color = TextGray, fontSize = 14.sp)
-                    }
-
-                    state.isLoadingMasters -> {
-                        CircularProgressIndicator(color = RedPrimary, modifier = Modifier.size(24.dp))
-                    }
-
-                    else -> {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .border(1.dp, BorderGray, RoundedCornerShape(10.dp))
-                                .background(BgField)
-                                .padding(8.dp),
-                            verticalArrangement = Arrangement.spacedBy(4.dp)
-                        ) {
-                            // Standard options
-                            for (master in state.masterOptions) {
-                                val isSelected = state.selectedMasterIds.contains(master.masterId)
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clip(RoundedCornerShape(8.dp))
-                                        .clickable { onEvent(CreateAppointmentEvent.MasterToggled(master.masterId)) }
-                                        .padding(horizontal = 12.dp, vertical = 8.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Checkbox(
-                                        checked         = isSelected,
-                                        onCheckedChange = {
-                                            onEvent(CreateAppointmentEvent.MasterToggled(master.masterId))
-                                        },
-                                        colors = CheckboxDefaults.colors(checkedColor = RedPrimary)
-                                    )
-                                    Spacer(Modifier.width(8.dp))
-                                    Text(
-                                        text       = master.actName,
-                                        fontSize   = 14.sp,
-                                        color      = if (isSelected) TextDark else TextGray,
-                                        fontWeight = if (isSelected) FontWeight.Medium else FontWeight.Normal
-                                    )
-                                }
-                            }
-
-                            // "Other" option
+                if (state.isLoadingMasters) {
+                    CircularProgressIndicator(color = RedPrimary, modifier = Modifier.size(24.dp))
+                } else {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .border(1.dp, BorderGray, RoundedCornerShape(10.dp))
+                            .background(BgField)
+                            .padding(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        // Standard options
+                        for (master in state.masterOptions) {
+                            val isSelected = state.selectedMasterIds.contains(master.masterId)
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .clip(RoundedCornerShape(8.dp))
-                                    .clickable { onEvent(CreateAppointmentEvent.OtherToggled) }
+                                    .clickable { onEvent(CreateAppointmentEvent.MasterToggled(master.masterId)) }
                                     .padding(horizontal = 12.dp, vertical = 8.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Checkbox(
-                                    checked         = state.isOtherSelected,
-                                    onCheckedChange = { onEvent(CreateAppointmentEvent.OtherToggled) },
+                                    checked         = isSelected,
+                                    onCheckedChange = {
+                                        onEvent(CreateAppointmentEvent.MasterToggled(master.masterId))
+                                    },
                                     colors = CheckboxDefaults.colors(checkedColor = RedPrimary)
                                 )
                                 Spacer(Modifier.width(8.dp))
                                 Text(
-                                    text       = "อื่นๆ",
+                                    text       = master.actName,
                                     fontSize   = 14.sp,
-                                    color      = if (state.isOtherSelected) TextDark else TextGray,
-                                    fontWeight = if (state.isOtherSelected) FontWeight.Medium else FontWeight.Normal
+                                    color      = if (isSelected) TextDark else TextGray,
+                                    fontWeight = if (isSelected) FontWeight.Medium else FontWeight.Normal
                                 )
                             }
+                        }
 
-                            if (state.isOtherSelected) {
-                                OutlinedTextField(
-                                    value = state.otherObjectiveText,
-                                    onValueChange = { onEvent(CreateAppointmentEvent.OtherObjectiveTextChanged(it)) },
-                                    placeholder = { Text("ระบุวัตถุประสงค์อื่นๆ", fontSize = 13.sp) },
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(horizontal = 12.dp, vertical = 4.dp),
-                                    shape = RoundedCornerShape(8.dp),
-                                    colors = OutlinedTextFieldDefaults.colors(
-                                        focusedBorderColor = RedPrimary,
-                                        unfocusedBorderColor = BorderGray
-                                    )
-                                )
-                            }
+                        // "Other" option
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(8.dp))
+                                .clickable { onEvent(CreateAppointmentEvent.OtherToggled) }
+                                .padding(horizontal = 12.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Checkbox(
+                                checked         = state.isOtherSelected,
+                                onCheckedChange = { onEvent(CreateAppointmentEvent.OtherToggled) },
+                                colors = CheckboxDefaults.colors(checkedColor = RedPrimary)
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                text       = "อื่นๆ",
+                                fontSize   = 14.sp,
+                                color      = if (state.isOtherSelected) TextDark else TextGray,
+                                fontWeight = if (state.isOtherSelected) FontWeight.Medium else FontWeight.Normal
+                            )
+                        }
 
-                            state.masterError?.let {
-                                Text(
-                                    it,
-                                    color    = ErrorRed,
-                                    fontSize = 12.sp,
-                                    modifier = Modifier.padding(start = 12.dp)
+                        if (state.isOtherSelected) {
+                            OutlinedTextField(
+                                value = state.otherObjectiveText,
+                                onValueChange = { onEvent(CreateAppointmentEvent.OtherObjectiveTextChanged(it)) },
+                                placeholder = { Text("ระบุวัตถุประสงค์อื่นๆ", fontSize = 13.sp) },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 12.dp, vertical = 4.dp),
+                                shape = RoundedCornerShape(8.dp),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedBorderColor = RedPrimary,
+                                    unfocusedBorderColor = BorderGray
                                 )
-                            }
+                            )
+                        }
+
+                        state.masterError?.let {
+                            Text(
+                                it,
+                                color    = ErrorRed,
+                                fontSize = 12.sp,
+                                modifier = Modifier.padding(start = 12.dp)
+                            )
                         }
                     }
                 }

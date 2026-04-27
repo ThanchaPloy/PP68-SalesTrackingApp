@@ -3,6 +3,7 @@ package com.example.pp68_salestrackingapp.ui.viewmodels.project
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.pp68_salestrackingapp.data.repository.BranchRepository
 import com.example.pp68_salestrackingapp.data.repository.ProductRepository
 import com.example.pp68_salestrackingapp.data.repository.ProductSimpleDto
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -18,9 +19,19 @@ data class AddProductUiState(
     val selectedProductName: String = "",
     val selectedGroup: String = "",
     val selectedSubgroup: String = "",
+    val color: String? = null,
+    val thickness: String? = null,
+    val width: String? = null,
+    val length: String? = null,
+    val dimensionUnit: String? = null,
     val quantity: String = "",
     val unit: String = "",
     val wantedDate: String? = null,
+    
+    val shippingBranchOptions: List<Pair<String, String>> = emptyList(),
+    val selectedShippingBranchId: String? = null,
+    val selectedShippingBranchName: String? = null,
+    val isLoadingBranches: Boolean = false,
     
     val filteredNames: List<String> = emptyList(),
     
@@ -33,7 +44,8 @@ data class AddProductUiState(
 @HiltViewModel
 class AddProductViewModel @Inject constructor(
     private val savedStateHandle: SavedStateHandle,
-    private val productRepo: ProductRepository
+    private val productRepo: ProductRepository,
+    private val branchRepo: BranchRepository
 ) : ViewModel() {
 
     // ✅ ใช้ Key "projectId" ให้ตรงกับ NavGraph
@@ -45,6 +57,7 @@ class AddProductViewModel @Inject constructor(
 
     init {
         loadProducts()
+        loadBranches()
     }
 
     private fun loadProducts() {
@@ -60,6 +73,22 @@ class AddProductViewModel @Inject constructor(
         }
     }
 
+    private fun loadBranches() {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoadingBranches = true) }
+            try {
+                branchRepo.syncFromRemote()
+                val branches = branchRepo.observeBranches()
+                _uiState.update { it.copy(
+                    shippingBranchOptions = branches.map { b -> b.branchId to b.branchName },
+                    isLoadingBranches = false
+                ) }
+            } catch (e: Exception) {
+                _uiState.update { it.copy(isLoadingBranches = false) }
+            }
+        }
+    }
+
     fun onBrandSelected(brand: String) {
         val filtered = _uiState.value.products.filter { it.brand == brand }
         _uiState.update { it.copy(
@@ -67,6 +96,11 @@ class AddProductViewModel @Inject constructor(
             selectedProductName = "",
             selectedGroup = "",
             selectedSubgroup = "",
+            color = null,
+            thickness = null,
+            width = null,
+            length = null,
+            dimensionUnit = null,
             unit = "",
             filteredNames = filtered.map { it.productName }.distinct()
         ) }
@@ -80,6 +114,11 @@ class AddProductViewModel @Inject constructor(
             selectedProductName = name,
             selectedGroup = product?.category ?: "",
             selectedSubgroup = product?.subCategory ?: "",
+            color = product?.color,
+            thickness = product?.thickness,
+            width = product?.width,
+            length = product?.length,
+            dimensionUnit = product?.dimensionUnit,
             unit = product?.unit ?: ""
         ) }
     }
@@ -90,6 +129,10 @@ class AddProductViewModel @Inject constructor(
 
     fun onDateSelected(date: String) {
         _uiState.update { it.copy(wantedDate = date.ifBlank { null }) }
+    }
+
+    fun onShippingBranchSelected(id: String, name: String) {
+        _uiState.update { it.copy(selectedShippingBranchId = id, selectedShippingBranchName = name) }
     }
 
     fun save() {
@@ -116,6 +159,11 @@ class AddProductViewModel @Inject constructor(
             return
         }
 
+        if (state.selectedShippingBranchId == null) {
+            _uiState.update { it.copy(error = "กรุณาเลือกสาขาที่ออกของ") }
+            return
+        }
+
         viewModelScope.launch {
             _uiState.update { it.copy(isSaving = true, error = null) }
             
@@ -123,7 +171,8 @@ class AddProductViewModel @Inject constructor(
                 projectId = projectId,
                 productId = product.productId,
                 quantity = qty,
-                wantedDate = state.wantedDate
+                wantedDate = state.wantedDate,
+                shippingBranchId = state.selectedShippingBranchId
             ).fold(
                 onSuccess = {
                     // ✅ เมื่อบันทึกสำเร็จ ต้องเปลี่ยนสถานะเพื่อให้ UI กลับหน้าเดิม

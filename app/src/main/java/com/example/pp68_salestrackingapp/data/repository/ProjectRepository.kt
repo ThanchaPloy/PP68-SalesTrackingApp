@@ -23,6 +23,8 @@ class ProjectRepository @Inject constructor(
     fun searchProjectsFlow(query: String): Flow<List<Project>> =
         projectDao.searchProjects("%$query%")
 
+    fun getProjectByIdFlow(projectId: String): Flow<Project?> = projectDao.getProjectByIdFlow(projectId)
+
     suspend fun refreshProjects(userId: String): Result<Unit> {
         return withContext(Dispatchers.IO) {
             try {
@@ -134,13 +136,16 @@ class ProjectRepository @Inject constructor(
                     else              -> 0
                 }
 
-                val updates = mapOf(
+                val updates = mutableMapOf(
                     "project_name"   to project.projectName,
                     "project_status" to (project.projectStatus ?: ""),
                     "expected_value" to (project.expectedValue?.toString() ?: ""),
                     "branch_id"      to (project.branchId ?: ""),
                     "progress_pct"   to progressPct.toString()
                 )
+                // ✅ เพิ่มพิกัดในการ Update
+                project.projectLat?.let { updates["project_lat"] = it.toString() }
+                project.projectLong?.let { updates["project_long"] = it.toString() }
                 
                 // บันทึกลง Local
                 projectDao.insertProject(project.copy(progressPct = progressPct))
@@ -250,6 +255,11 @@ class ProjectRepository @Inject constructor(
     ): Result<Unit> {
         return withContext(Dispatchers.IO) {
             try {
+                // ✅ ลบสมาชิกเดิมออกก่อนเพื่อป้องกัน Conflict และข้อมูลซ้ำซ้อน
+                apiService.deleteProjectMembers("eq.$projectId")
+                
+                if (userIds.isEmpty()) return@withContext Result.success(Unit)
+
                 val members = userIds.map { userId ->
                     ProjectMemberInsertDto(
                         projectId = projectId,
@@ -288,5 +298,9 @@ class ProjectRepository @Inject constructor(
                 } else Result.success(emptyList())
             } catch (e: Exception) { Result.failure(e) }
         }
+    }
+
+    suspend fun countProjectsByPrefix(prefix: String): Int {
+        return projectDao.getAllProjects().first().count { it.projectNumber?.startsWith(prefix) == true }
     }
 }

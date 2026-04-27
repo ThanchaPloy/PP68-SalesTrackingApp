@@ -20,6 +20,10 @@ data class Project(
     @SerializedName("branch_id")
     val branchId: String? = null,
 
+    @ColumnInfo(name = "billingBranchId")
+    @SerializedName("billing_branch_id")
+    val billingBranchId: String? = null,
+
     @ColumnInfo(name = "projectNumber")
     @SerializedName("project_number")
     val projectNumber: String? = null,
@@ -66,5 +70,9 @@ data class Project(
 
     @ColumnInfo(name = "createdAt")
     @SerializedName("created_at")
-    val createdAt: String? = null
+    val createdAt: String? = null,
+
+    @ColumnInfo(name = "lossReason")
+    @SerializedName("loss_reason")
+    val lossReason: String? = null
 )
