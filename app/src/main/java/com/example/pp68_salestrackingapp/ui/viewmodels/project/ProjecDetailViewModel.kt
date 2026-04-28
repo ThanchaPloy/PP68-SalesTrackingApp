@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -31,16 +32,18 @@ data class TeamMember(
 )
 
 data class HistoryItem(
-    val activityId: String,
+    val activityId: String? = null,
+    val resultId: String? = null,
     val title: String,
     val description: String? = null,
     val plannedDate: String? = null,
     val planStatus: String = "completed",
     val activityType: String = "online",
-    val contactName: String? = null
+    val contactName: String? = null,
+    val isStandaloneResult: Boolean = false
 )
 
-// ── 2. UI State สำหรับหน้า Detail ─────────────────────────────────────
+// ── 2. UI State ──────────────────────────────────────────────────────
 data class ProjectDetailUiState(
     val isLoading: Boolean = false,
     val isDeleting: Boolean = false,
@@ -71,56 +74,87 @@ class ProjectDetailViewModel @Inject constructor(
     init {
         projectId?.let { id ->
             observeProject(id)
-            observeActivities(id)
+            observeActivitiesAndResults(id)
         }
     }
 
     private fun observeProject(id: String) {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
-            // ✅ เปลี่ยนมาใช้ Flow เพื่อให้ UI อัปเดตทันทีเมื่อฐานข้อมูล Local เปลี่ยนแปลง
             projectRepo.getProjectByIdFlow(id).collectLatest { project ->
                 if (project != null) {
-                    val company = customerRepo.getCustomerById(project.custId).getOrNull()?.companyName ?: ""
+                    val company = customerRepo.getCustomerById(project.custId)
+                        .getOrNull()?.companyName ?: ""
+
+                    // ✅ เรียกใช้ผ่าน Repository ที่เราเตรียมไว้ แก้ปัญหา Unresolved 'apiService'
+                    val members = projectRepo.getProjectMembersDetailed(id).map {
+                        TeamMember(it.first, it.second)
+                    }
+
                     _uiState.update { state ->
                         state.copy(
-                            isLoading = false,
-                            project = project,
+                            isLoading   = false,
+                            project     = project,
                             companyName = company,
-                            teamMembers = listOf(
-                                TeamMember("U01", "สมชาย ใจดี"),
-                                TeamMember("U02", "สมหญิง รักงาน")
-                            )
+                            teamMembers = members
                         )
                     }
-                } else {
-                    // ถ้าใน Flow ไม่มี (เช่น พึ่งสร้างเสร็จหมาดๆ หรือข้อมูลยังไม่ sync) ให้ลองดึงผ่าน API
-                    projectRepo.getProjectById(id)
                 }
             }
         }
     }
 
-    private fun observeActivities(id: String) {
+    private fun observeActivitiesAndResults(id: String) {
         viewModelScope.launch {
-            activityRepo.getActivitiesByProjectFlow(id).collect { activities ->
+            combine(
+                activityRepo.getActivitiesByProjectFlow(id),
+                activityRepo.getResultsByProjectFlow(id)
+            ) { activities, results ->
+
                 val tasks = activities
                     .filter { it.status.lowercase() != "completed" }
                     .map { TaskItem(it.activityId, it.activityType, it.detail, it.activityDate) }
-                
-                val history = activities
+
+                val activityHistory = activities
                     .filter { it.status.lowercase() == "completed" }
-                    .map { HistoryItem(it.activityId, it.activityType, it.detail, it.activityDate, it.status, it.activityType, it.contactName) }
-                
+                    .map { act ->
+                        HistoryItem(
+                            activityId    = act.activityId,
+                            title         = if (!act.detail.isNullOrBlank()) act.detail else act.activityType,
+                            description   = act.activityType,
+                            plannedDate   = act.activityDate,
+                            planStatus    = act.status,
+                            activityType  = act.activityType,
+                            contactName   = act.contactName,
+                            isStandaloneResult = false
+                        )
+                    }
+
+                val standaloneHistory = results
+                    .filter { it.activityId == null }
+                    .map { res ->
+                        HistoryItem(
+                            activityId    = null,
+                            resultId      = res.resultId,
+                            title         = if (!res.summary.isNullOrBlank()) {
+                                if (res.summary.length > 50) res.summary.take(47) + "..." else res.summary
+                            } else "บันทึกผลการขายอิสระ",
+                            description   = "Standalone Report",
+                            plannedDate   = res.reportDate,
+                            planStatus    = "completed",
+                            activityType  = "report",
+                            contactName   = "Standalone Record",
+                            isStandaloneResult = true
+                        )
+                    }
+
+                val fullHistory = (activityHistory + standaloneHistory)
+                    .sortedByDescending { it.plannedDate }
+
+                tasks to fullHistory
+            }.collect { (tasks, history) ->
                 _uiState.update { it.copy(upcomingTasks = tasks, history = history) }
             }
-        }
-    }
-
-    fun loadProjectDetail(projectId: String) {
-        // Method นี้อาจไม่จำเป็นต้องใช้แล้วถ้าใช้ observeProject(id) ใน init
-        viewModelScope.launch {
-            projectRepo.getProjectById(projectId)
         }
     }
 

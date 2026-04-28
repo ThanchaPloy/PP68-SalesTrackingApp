@@ -6,6 +6,7 @@ import com.example.pp68_salestrackingapp.data.repository.ActivityRepository
 import com.example.pp68_salestrackingapp.data.repository.AuthRepository
 import com.example.pp68_salestrackingapp.data.model.AuthUser
 import com.example.pp68_salestrackingapp.data.repository.CallLogRepository
+import com.example.pp68_salestrackingapp.data.repository.ContactRepository
 import com.example.pp68_salestrackingapp.data.repository.CustomerRepository
 import com.example.pp68_salestrackingapp.data.repository.ProjectRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -46,7 +47,8 @@ class HomeViewModel @Inject constructor(
     private val authRepo:     AuthRepository,
     private val customerRepo: CustomerRepository,
     private val projectRepo:  ProjectRepository,
-    private val callLogRepo: CallLogRepository
+    private val contactRepo:  ContactRepository,
+    private val callLogRepo:  CallLogRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(HomeUiState(authUser = authRepo.currentUser()))
@@ -139,8 +141,11 @@ class HomeViewModel @Inject constructor(
             // Refresh all relevant data from remote
             try {
                 activityRepo.refreshActivities(userId)
-                customerRepo.refreshCustomers(userId)
+                val branchId = authRepo.currentUser()?.teamId ?: return@launch
+                customerRepo.refreshCustomers(branchId)
                 projectRepo.refreshProjects(userId)
+                // ✅ เพิ่มการ Sync ผู้ติดต่อตั้งแต่วันเริ่มต้นแอป
+                contactRepo.refreshContacts(userId)
             } catch (e: Exception) {
                 android.util.Log.e("HomeVM", "Error refreshing data: ${e.message}")
             }

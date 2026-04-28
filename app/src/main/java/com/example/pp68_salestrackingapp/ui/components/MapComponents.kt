@@ -63,7 +63,7 @@ fun GoogleMapPickerField(
     var suggestions       by remember { mutableStateOf<List<AutocompletePrediction>>(emptyList()) }
     var isSearching       by remember { mutableStateOf(false) }
     var showSuggestions   by remember { mutableStateOf(false) }
-    var searchJob:  Job?  = remember { null }
+    var searchJob         by remember { mutableStateOf<Job?>(null) }
 
     val markerPosition    = remember { mutableStateOf(LatLng(lat, lng)) }
     val cameraPositionState = rememberCameraPositionState {
@@ -76,10 +76,15 @@ fun GoogleMapPickerField(
     val placesClient = remember {
         if (isPreview) null else {
             if (!Places.isInitialized()) {
-                // ✅ Use key from BuildConfig instead of hardcoded string
                 Places.initialize(context, BuildConfig.MAPS_API_KEY)
             }
             Places.createClient(context)
+        }
+    }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            searchJob?.cancel()
         }
     }
 

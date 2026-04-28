@@ -16,6 +16,10 @@ data class ContactPerson(
     @SerializedName("cust_id")
     val custId: String,
 
+    @ColumnInfo(name = "userId")
+    @SerializedName("user_id")
+    val userId: String? = null, // ✅ ใส่กลับตาม CSV
+
     @ColumnInfo(name = "fullName")
     @SerializedName("full_name")
     val fullName: String? = null,
@@ -28,7 +32,7 @@ data class ContactPerson(
     @SerializedName("position")
     val position: String? = null,
 
-    @ColumnInfo(name = "phoneNumber")
+    @ColumnInfo(name = "phone_number")
     @SerializedName("phone_number")
     val phoneNumber: String? = null,
 

@@ -1,6 +1,7 @@
 package com.example.pp68_salestrackingapp.data.repository
 
 import com.example.pp68_salestrackingapp.data.local.ProjectDao
+import com.example.pp68_salestrackingapp.data.model.ContactPerson
 import com.example.pp68_salestrackingapp.data.model.Project
 import com.example.pp68_salestrackingapp.data.model.ProjectContact
 import com.example.pp68_salestrackingapp.data.model.ProjectMemberInsertDto
@@ -76,15 +77,33 @@ class ProjectRepository @Inject constructor(
         }
     }
 
+    suspend fun getProjectMembersDetailed(projectId: String): List<Pair<String, String>> {
+        return withContext(Dispatchers.IO) {
+            try {
+                val resp = apiService.getProjectMembers("eq.$projectId")
+                if (resp.isSuccessful) {
+                    val members = resp.body() ?: emptyList()
+                    members.mapNotNull { m ->
+                        val uResp = apiService.getUserById("eq.${m.userId}")
+                        if (uResp.isSuccessful) {
+                            val user = uResp.body()?.firstOrNull()
+                            if (user != null) {
+                                user.userId to (user.fullName ?: user.userId)
+                            } else null
+                        } else null
+                    }
+                } else emptyList()
+            } catch (e: Exception) { emptyList() }
+        }
+    }
+
     suspend fun createProject(project: Project, userId: String): Result<Project> {
         return withContext(Dispatchers.IO) {
-            // 1. บันทึกลง Local ทันที
             val generatedNumber = generateNewProjectNumber(project.branchId ?: "")
             val projectWithNumber = project.copy(projectNumber = generatedNumber)
             projectDao.insertProject(projectWithNumber)
 
             try {
-                // 2. พยายามส่งขึ้น Server
                 val response = apiService.addProject(projectWithNumber.copy(projectNumber = null))
                 if (response.isSuccessful) {
                     val member = ProjectMemberInsertDto(
@@ -100,7 +119,6 @@ class ProjectRepository @Inject constructor(
                     Result.failure(Exception("Server Rejected: $errBody"))
                 }
             } catch (e: Exception) {
-                // 3. ถ้า Error เพราะ Network (Timeout/Offline) ให้ผ่าน
                 if (e is IOException) Result.success(projectWithNumber)
                 else Result.failure(e)
             }
@@ -136,18 +154,20 @@ class ProjectRepository @Inject constructor(
                     else              -> 0
                 }
 
-                val updates = mutableMapOf(
-                    "project_name"   to project.projectName,
-                    "project_status" to (project.projectStatus ?: ""),
-                    "expected_value" to (project.expectedValue?.toString() ?: ""),
-                    "branch_id"      to (project.branchId ?: ""),
-                    "progress_pct"   to progressPct.toString()
+                val updates = mutableMapOf<String, Any?>(
+                    "project_name"      to project.projectName,
+                    "project_status"    to project.projectStatus,
+                    "expected_value"    to project.expectedValue,
+                    "branch_id"         to project.branchId,
+                    "billing_branch_id" to project.billingBranchId,
+                    "loss_reason"       to project.lossReason,
+                    "start_date"        to project.startDate,
+                    "closing_date"      to project.closingDate,
+                    "progress_pct"      to progressPct
                 )
-                // ✅ เพิ่มพิกัดในการ Update
-                project.projectLat?.let { updates["project_lat"] = it.toString() }
-                project.projectLong?.let { updates["project_long"] = it.toString() }
+                project.projectLat?.let { updates["project_lat"] = it }
+                project.projectLong?.let { updates["project_long"] = it }
                 
-                // บันทึกลง Local
                 projectDao.insertProject(project.copy(progressPct = progressPct))
                 
                 val response = apiService.updateProject("eq.${project.projectId}", updates)
@@ -205,13 +225,6 @@ class ProjectRepository @Inject constructor(
                             projectName = project?.projectName ?: projectId,
                             updatedBy   = updatedBy
                         )
-                        firebaseService.pushStatusChangeEvent(
-                            projectId   = projectId,
-                            projectName = project?.projectName ?: projectId,
-                            oldStatus   = project?.projectStatus ?: "N/A",
-                            newStatus   = newStatus,
-                            updatedBy   = updatedBy
-                        )
                     }
                     Result.success(Unit)
                 } else {
@@ -255,22 +268,23 @@ class ProjectRepository @Inject constructor(
     ): Result<Unit> {
         return withContext(Dispatchers.IO) {
             try {
-                // ✅ ลบสมาชิกเดิมออกก่อนเพื่อป้องกัน Conflict และข้อมูลซ้ำซ้อน
                 apiService.deleteProjectMembers("eq.$projectId")
-                
                 if (userIds.isEmpty()) return@withContext Result.success(Unit)
 
                 val members = userIds.map { userId ->
                     ProjectMemberInsertDto(
                         projectId = projectId,
-                        userId    = userId,
+                        userId    = userId.trim(),
                         saleRole  = role,
                         projectNumber = projectNumber
                     )
                 }
                 val response = apiService.addProjectMembers(members)
                 if (response.isSuccessful) Result.success(Unit)
-                else Result.failure(Exception("HTTP ${response.code()}"))
+                else {
+                    val err = response.errorBody()?.string() ?: "Unknown error"
+                    Result.failure(Exception("Failed to add members: $err"))
+                }
             } catch (e: Exception) { Result.failure(e) }
         }
     }
@@ -280,23 +294,38 @@ class ProjectRepository @Inject constructor(
             try {
                 apiService.deleteProjectContacts("eq.$projectId")
                 if (contactIds.isNotEmpty()) {
-                    val contacts = contactIds.map { ProjectContact(projectId, it) }
+                    val contacts = contactIds.map { ProjectContact(projectId, it.trim()) }
                     val response = apiService.addProjectContacts(contacts)
                     if (response.isSuccessful) Result.success(Unit)
-                    else Result.failure(Exception("HTTP ${response.code()}"))
+                    else {
+                        val err = response.errorBody()?.string() ?: "Unknown error"
+                        Result.failure(Exception("Failed to add contacts: $err"))
+                    }
                 } else Result.success(Unit)
             } catch (e: Exception) { Result.failure(e) }
         }
     }
 
-    suspend fun getProjectContacts(projectId: String): Result<List<com.example.pp68_salestrackingapp.data.model.ContactPerson>> {
+    suspend fun getProjectContacts(projectId: String): Result<List<ContactPerson>> {
         return withContext(Dispatchers.IO) {
             try {
                 val response = apiService.getProjectContacts("eq.$projectId")
                 if (response.isSuccessful && response.body() != null) {
-                    Result.success(response.body()!!.mapNotNull { it.contactPerson })
-                } else Result.success(emptyList())
-            } catch (e: Exception) { Result.failure(e) }
+                    // ✅ ดึง contactId จาก ProjectContactResponse row โดยตรง
+                    val contacts = response.body()!!.map { row ->
+                        ContactPerson(
+                            contactId = row.contactId,  // ← แก้จาก contact_id เป็น contactId
+                            custId    = "",
+                            fullName  = row.contactPerson?.fullName
+                        )
+                    }
+                    Result.success(contacts)
+                } else {
+                    Result.success(emptyList())
+                }
+            } catch (e: Exception) {
+                Result.failure(e)
+            }
         }
     }
 

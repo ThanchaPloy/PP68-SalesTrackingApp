@@ -21,7 +21,6 @@ import com.example.pp68_salestrackingapp.ui.screen.export.MonthlyReportScreen
 import com.example.pp68_salestrackingapp.ui.screen.export.WeeklyReportScreen
 import com.example.pp68_salestrackingapp.ui.screen.project.*
 import com.example.pp68_salestrackingapp.ui.screen.contact.*
-import com.example.pp68_salestrackingapp.ui.screen.activity.SalesResultScreen
 
 @Composable
 fun SalesTrackingApp() {
@@ -248,11 +247,12 @@ fun SalesTrackingApp() {
                 onCreateActivity = { id -> navController.navigate(Route.CreateActivityWithProject.createRoute(id)) },
                 onSalesResultClick = { navController.navigate(Route.StandaloneSalesResult.createRoute(it)) },
                 onInventoryClick = { id -> navController.navigate(Route.ProjectInventory.createRoute(id)) },
-                onRecordResult = { pId, activityId -> 
+                onRecordResult = { pId, activityId, resultId -> 
                     if (activityId != null) {
                         navController.navigate(Route.SalesResult.createRoute(activityId))
                     } else if (pId != null) {
-                        navController.navigate(Route.CreateActivityWithProject.createRoute(pId))
+                        // ✅ ปรับให้พาไปหน้า StandaloneSalesResult และส่ง resultId ไปด้วย
+                        navController.navigate(Route.StandaloneSalesResult.createRoute(pId, resultId))
                     }
                 },
                 onActivityClick = { id -> navController.navigate(Route.ActivityDetail.createRoute(id)) },
@@ -267,7 +267,10 @@ fun SalesTrackingApp() {
         //สำหรับบบันทึกผลการขาย
         composable(
             route = Route.StandaloneSalesResult.path,
-            arguments = listOf(navArgument("projectId") { type = NavType.StringType })
+            arguments = listOf(
+                navArgument("projectId") { type = NavType.StringType },
+                navArgument("resultId") { type = NavType.StringType; nullable = true }
+            )
         ) {
             SalesResultScreen(
                 onBack     = { navController.popBackStack() },
