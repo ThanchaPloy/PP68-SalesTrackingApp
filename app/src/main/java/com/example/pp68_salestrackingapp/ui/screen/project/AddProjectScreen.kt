@@ -345,6 +345,7 @@ fun AddProjectContent(
 }
 
 // ── Member chip grid ────────────────────────────────────────
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun MemberChipGrid(
     options:     List<Pair<String, String>>,
@@ -359,27 +360,33 @@ private fun MemberChipGrid(
             .background(Color.White)
             .padding(12.dp)
     ) {
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            options.chunked(3).forEach { row ->
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    row.forEach { (id, name) ->
-                        val selected = id in selectedIds
-                        FilterChip(
-                            selected = selected,
-                            onClick  = { onToggle(id) },
-                            label    = { Text(name, fontSize = 12.sp, maxLines = 1) },
-                            colors   = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor   = AppColors.Primary,
-                                selectedLabelColor       = Color.White,
-                                selectedLeadingIconColor = Color.White
-                            ),
-                            leadingIcon = if (selected) {
-                                { Icon(Icons.Default.Check, null,
-                                    modifier = Modifier.size(14.dp)) }
-                            } else null
-                        )
-                    }
-                }
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            options.forEach { (id, name) ->
+                val selected = id in selectedIds
+                FilterChip(
+                    selected = selected,
+                    onClick  = { onToggle(id) },
+                    label    = { 
+                        Text(
+                            text = name, 
+                            fontSize = 12.sp, 
+                            maxLines = 1
+                        ) 
+                    },
+                    colors   = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor   = AppColors.Primary,
+                        selectedLabelColor       = Color.White,
+                        selectedLeadingIconColor = Color.White
+                    ),
+                    leadingIcon = if (selected) {
+                        { Icon(Icons.Default.Check, null,
+                            modifier = Modifier.size(14.dp)) }
+                    } else null
+                )
             }
         }
     }

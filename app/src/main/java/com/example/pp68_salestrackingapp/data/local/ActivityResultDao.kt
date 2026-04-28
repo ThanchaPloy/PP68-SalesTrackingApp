@@ -10,6 +10,10 @@ interface ActivityResultDao {
     @Query("SELECT * FROM activity_result WHERE appointment_id = :id LIMIT 1")
     suspend fun getResultByActivityId(id: String): ActivityResult?
 
+    // ✅ เพิ่มใหม่ — query ด้วย result_id
+    @Query("SELECT * FROM activity_result WHERE result_id = :resultId LIMIT 1")
+    suspend fun getResultById(resultId: String): ActivityResult?
+
     // ✅ เพิ่มใหม่ — query ด้วย project_id
     @Query("SELECT * FROM activity_result WHERE project_id = :projectId ORDER BY rowid DESC")
     fun getResultsByProjectId(projectId: String): Flow<List<ActivityResult>>

@@ -20,6 +20,7 @@ ktor                   = "2.3.12"
 googleMapsCompose      = "6.1.2"
 playServicesLocation = "21.3.0"
 firebaseBom = "33.7.0"
+adapters = "3.2.0-alpha11"
 
 [libraries]
 androidx-core-ktx                 = { group = "androidx.core",            name = "core-ktx",                      version.ref = "coreKtx" }
@@ -60,6 +61,7 @@ firebase-bom = { group = "com.google.firebase", name = "firebase-bom", version.r
 firebase-database = { group = "com.google.firebase", name = "firebase-database" }
 firebase-messaging = { group = "com.google.firebase", name = "firebase-messaging" }
 firebase-analytics = { group = "com.google.firebase", name = "firebase-analytics" }
+androidx-adapters = { group = "androidx.databinding", name = "adapters", version.ref = "adapters" }
 
 [plugins]
 android-application = { id = "com.android.application",          version.ref = "agp" }

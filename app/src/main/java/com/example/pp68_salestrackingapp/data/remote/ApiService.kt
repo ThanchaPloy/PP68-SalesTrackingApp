@@ -85,12 +85,6 @@ interface ApiService {
     ): Response<List<Customer>>
 
     @GET("customer")
-    suspend fun getCustomersByBranch(
-        @Query("branch_id") branchId: String,
-        @Query("limit") limit: Int = 1000
-    ): Response<List<Customer>>
-
-    @GET("customer")
     suspend fun getCustomerById(
         @Query("cust_id") custId: String,
         @Query("limit") limit: Int = 1
@@ -109,9 +103,10 @@ interface ApiService {
     ): Response<Unit>
 
     // ── Contact Person ───────────────────────────────────────
+
     @GET("contact_person")
     suspend fun getContactsByCustomerIds(
-        @Query("cust_id") custIds: String,
+        @Query("cust_id") custId: String,
         @Query("limit") limit: Int = 1000
     ): Response<List<ContactPerson>>
 
@@ -131,6 +126,19 @@ interface ApiService {
     suspend fun deleteContactsByCustomer(
         @Query("cust_id") custId: String
     ): Response<Unit>
+
+    // ต้องเพิ่มใน ApiService.kt
+    @GET("contact_person")
+    suspend fun getContactsByUserId(
+        @Query("user_id") userId: String,
+        @Query("limit") limit: Int = 1000
+    ): Response<List<ContactPerson>>
+
+    @GET("customer")
+    suspend fun getCustomersByBranch(
+        @Query("branch_id") branchId: String,
+        @Query("limit") limit: Int = 1000
+    ): Response<List<Customer>>
 
     // ── Project ──────────────────────────────────────────────
     @GET("project")
@@ -191,6 +199,7 @@ interface ApiService {
     suspend fun deleteProjectContacts(
         @Query("project_id") projectId: String
     ): Response<Unit>
+
 
     // ── Product ───────────────────────────────────────────────────
     @GET("products")
@@ -356,6 +365,12 @@ interface ApiService {
         @Query("on_conflict") onConflict: String = "appointment_id",
         @Body result: @JvmSuppressWildcards Map<String, Any?>
     ): Response<List<ActivityResult>>
+
+    @GET("project_sales_member")
+    suspend fun getProjectMembers(
+        @Query("project_id") projectId: String,
+        @Query("select") select: String = "user_id,sale_role"
+    ): Response<List<ProjectMemberDto>>
 }
 
 // ── DTOs ─────────────────────────────────────────────────────
@@ -391,3 +406,4 @@ interface UploadApiService {
 data class UploadPhotoResponse(
     @SerializedName("photo_url") val photoUrl: String
 )
+

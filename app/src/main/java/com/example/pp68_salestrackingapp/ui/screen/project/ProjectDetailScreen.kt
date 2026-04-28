@@ -20,6 +20,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -63,7 +64,7 @@ fun ProjectDetailScreen(
     onCreateActivity:    (String) -> Unit = {},
     onSalesResultClick: (String) -> Unit,
     onInventoryClick:    (String) -> Unit = {},
-    onRecordResult:      (projectId: String?, activityId: String?) -> Unit = { _, _ -> },
+    onRecordResult:      (projectId: String?, activityId: String?, resultId: String?) -> Unit = { _, _, _ -> },
     onActivityClick:     (String) -> Unit = {},
     onCheckin:           (String) -> Unit = {},
     onFinish:            (String) -> Unit = {},
@@ -109,7 +110,7 @@ fun ProjectDetailContent(
     onCreateActivity: (String) -> Unit,
     onInventoryClick: (String) -> Unit,
     onSalesResultClick: (String) -> Unit,
-    onRecordResult: (String?, String?) -> Unit,
+    onRecordResult: (String?, String?, String?) -> Unit,
     onActivityClick: (String) -> Unit,
     onCheckin: (String) -> Unit = {},
     onFinish: (String) -> Unit = {},
@@ -190,7 +191,7 @@ fun ProjectDetailContent(
                     shape          = CircleShape,
                     modifier       = Modifier.size(52.dp)
                 ) {
-                    Icon(Icons.Default.Assignment, "บันทึกผลการขาย",
+                    Icon(Icons.AutoMirrored.Filled.Assignment, "บันทึกผลการขาย",
                         modifier = Modifier.size(22.dp))
                 }
             }
@@ -298,9 +299,22 @@ fun ProjectDetailContent(
                     items(historySorted) { item ->
                         TimelineHistoryRow(
                             item = item,
-                            onClick = { onActivityClick(item.activityId) },
-                            onFinish = { onFinish(item.activityId) },
-                            onRecordResult = { onRecordResult(null, item.activityId) },
+                            onClick = { 
+                                if (item.isStandaloneResult) {
+                                    // สำหรับ standalone เปิดหน้ารายงานโดยตรง
+                                    onRecordResult(s.project?.projectId, null, item.resultId)
+                                } else {
+                                    item.activityId?.let { onActivityClick(it) }
+                                }
+                            },
+                            onFinish = { item.activityId?.let { onFinish(it) } },
+                            onRecordResult = { 
+                                if (item.isStandaloneResult) {
+                                    onRecordResult(s.project?.projectId, null, item.resultId)
+                                } else {
+                                    onRecordResult(null, item.activityId, null)
+                                }
+                            },
                             isLast = item == historySorted.last()
                         )
                     }
@@ -743,40 +757,69 @@ private fun SalesTeamRow(members: List<TeamMember>) {
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp),
-        horizontalArrangement = Arrangement.spacedBy((-8).dp) // Overlap effect
+        horizontalArrangement = Arrangement.spacedBy((-8).dp), // Overlap effect
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        members.take(5).forEachIndexed { idx, member ->
-            Box(
-                modifier = Modifier
-                    .size(40.dp)
-                    .clip(CircleShape)
-                    .background(avatarColors[idx % avatarColors.size])
-                    .border(2.dp, White, CircleShape),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    member.fullName.take(1).uppercase(),
-                    color = White, fontWeight = FontWeight.Bold
-                )
+        Row(horizontalArrangement = Arrangement.spacedBy((-8).dp)) {
+            members.take(5).forEachIndexed { idx, member ->
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(CircleShape)
+                        .background(avatarColors[idx % avatarColors.size])
+                        .border(2.dp, White, CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        member.fullName.take(1).uppercase(),
+                        color = White, fontWeight = FontWeight.Bold
+                    )
+                }
             }
-        }
-        if (members.size > 5) {
-            Box(
-                modifier = Modifier
-                    .size(40.dp)
-                    .clip(CircleShape)
-                    .background(Color.LightGray)
-                    .border(2.dp, White, CircleShape),
-                contentAlignment = Alignment.Center
-            ) {
-                Text("+${members.size - 5}", fontSize = 12.sp, color = TextDark)
+            if (members.size > 5) {
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(CircleShape)
+                        .background(Color.LightGray)
+                        .border(2.dp, White, CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text("+${members.size - 5}", fontSize = 12.sp, color = TextDark)
+                }
             }
         }
         
         Spacer(Modifier.width(16.dp))
-        Column(verticalArrangement = Arrangement.Center, modifier = Modifier.height(40.dp)) {
-            Text("${members.size} สมาชิก", fontWeight = FontWeight.Bold, fontSize = 14.sp)
-            Text("ได้รับมอบหมายในโครงการนี้", fontSize = 11.sp, color = TextGray)
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.Center
+        ) {
+            val namesText = if (members.isEmpty()) {
+                "ยังไม่มีสมาชิก"
+            } else {
+                val taken = members.take(2)
+                val names = taken.joinToString(", ") { it.fullName.split(" ").firstOrNull() ?: it.fullName }
+                if (members.size > 2) {
+                    "$names และคนอื่นๆ อีก ${members.size - 2} คน"
+                } else {
+                    names
+                }
+            }
+            
+            Text(
+                text = namesText,
+                fontWeight = FontWeight.Bold,
+                fontSize = 14.sp,
+                color = TextDark,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                text = "ได้รับมอบหมายในโครงการนี้",
+                fontSize = 11.sp,
+                color = TextGray
+            )
         }
     }
 }
@@ -819,7 +862,7 @@ fun ProjectDetailPreview() {
             onCreateActivity = {},
             onInventoryClick = {},
             onSalesResultClick = {},
-            onRecordResult = { _, _ -> },
+            onRecordResult = { _, _, _ -> },
             onActivityClick = {}
         )
     }

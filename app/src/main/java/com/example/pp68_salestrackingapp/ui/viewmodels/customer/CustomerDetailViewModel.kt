@@ -9,18 +9,15 @@ import com.example.pp68_salestrackingapp.data.repository.AuthRepository
 import com.example.pp68_salestrackingapp.data.repository.CustomerRepository
 import com.example.pp68_salestrackingapp.data.repository.ProjectRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 @HiltViewModel
 class CustomerDetailViewModel @Inject constructor(
     private val customerRepo: CustomerRepository,
-    private val projectRepo: ProjectRepository,
-    private val authRepo: AuthRepository
+    private val projectRepo:  ProjectRepository,
+    private val authRepo:     AuthRepository
 ) : ViewModel() {
 
     private val _customer = MutableStateFlow<Customer?>(null)
@@ -43,45 +40,46 @@ class CustomerDetailViewModel @Inject constructor(
 
     private var currentCustId: String? = null
 
+    // ✅ Offline-first: observe Flow + refresh background
     fun load(custId: String) {
         currentCustId = custId
         viewModelScope.launch {
             _isLoading.value = true
-            try {
-                // 1. ดึงข้อมูล Customer
-                customerRepo.getCustomerById(custId).onSuccess { customer ->
-                    _customer.value = customer
+
+            // 1. โหลด customer
+            customerRepo.getCustomerById(custId).onSuccess { _customer.value = it }
+
+            // 2. Observe contacts เป็น Flow — อัปเดตอัตโนมัติ
+            launch {
+                customerRepo.getContactsForCustomerFlow(custId).collect {
+                    _contacts.value = it
                 }
-
-                // 2. ดึง Contact
-                refreshContacts(custId)
-
-                // 3. ดึง Project แยก active/closed
-                val closedStatuses = setOf("Completed", "Lost", "Failed")
-                val allProjects = projectRepo.getAllProjectsFlow().first()
-                    .filter { it.custId == custId }
-
-                _activeProjects.value = allProjects.filter { it.projectStatus !in closedStatuses }
-                _closedProjects.value = allProjects.filter { it.projectStatus in closedStatuses }
-
-            } catch (e: Exception) {
-                e.printStackTrace()
-            } finally {
-                _isLoading.value = false
             }
-        }
-    }
 
-    private suspend fun refreshContacts(custId: String) {
-        customerRepo.getContactPersons(custId).onSuccess { contacts ->
-            _contacts.value = contacts
+            // 3. Background fetch จาก Server → เขียน Local → Flow emit เอง
+            launch {
+                customerRepo.refreshContactsForCustomer(custId)
+            }
+
+            // 4. Projects
+            launch {
+                projectRepo.getAllProjectsFlow()
+                    .map { it.filter { p -> p.custId == custId } }
+                    .collect { allProjects ->
+                        val closed = setOf("Completed", "Lost", "Failed")
+                        _activeProjects.value = allProjects.filter { it.projectStatus !in closed }
+                        _closedProjects.value = allProjects.filter { it.projectStatus in closed }
+                    }
+            }
+
+            _isLoading.value = false
         }
     }
 
     fun deleteContact(contactId: String) {
         viewModelScope.launch {
             customerRepo.deleteContact(contactId).onSuccess {
-                currentCustId?.let { refreshContacts(it) }
+                // ไม่ต้องสั่ง refreshContacts เองแล้ว เพราะ Flow ใน load() จะจัดการให้เมื่อ Local DB เปลี่ยน
             }
         }
     }

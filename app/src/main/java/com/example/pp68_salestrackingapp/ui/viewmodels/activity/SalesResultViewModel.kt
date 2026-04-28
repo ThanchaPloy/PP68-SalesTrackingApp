@@ -25,6 +25,7 @@ data class SalesResultUiState(
     val mode: ResultMode = ResultMode.FROM_APPOINTMENT,
     val projectId: String? = null,
     val activityId: String? = null,
+    val resultId: String? = null, // ✅ เพิ่ม resultId ใน state
     val project: Project? = null,
     val reportDate: String = LocalDate.now().toString(),
     val currentStatus: String = "",
@@ -38,7 +39,7 @@ data class SalesResultUiState(
     val isProposalSent: Boolean = false,
     val proposalDate: String? = null,
     val competitorCount: Int = 0,
-    val dmInvolved: Boolean = false, // ✅ Added
+    val dmInvolved: Boolean = false,
     val visitSummary: String = "",
     val isLoading: Boolean = false,
     val isSaving: Boolean = false,
@@ -59,8 +60,8 @@ data class SalesResultUiState(
 )
 
 enum class ResultMode {
-    FROM_APPOINTMENT,  // มาจาก check-in/finish
-    STANDALONE         // สร้างอิสระจาก ProjectDetail
+    FROM_APPOINTMENT,
+    STANDALONE
 }
 
 @HiltViewModel
@@ -86,15 +87,19 @@ class SalesResultViewModel @Inject constructor(
     init {
         val pId = savedStateHandle.get<String>("projectId")
         val aId = savedStateHandle.get<String>("activityId")
+        val rId = savedStateHandle.get<String>("resultId") // ✅ รับ resultId จาก Navigation
 
-        // ✅ ตัดสิน mode จาก activityId
+        Log.d("SalesResult", "init: projectId=$pId, activityId=$aId, resultId=$rId")
+
         val mode = if (aId.isNullOrBlank()) ResultMode.STANDALONE else ResultMode.FROM_APPOINTMENT
-
-        _uiState.update { it.copy(projectId = pId, activityId = aId, mode = mode) }
+        _uiState.update { it.copy(projectId = pId, activityId = aId, resultId = rId, mode = mode) }
 
         when (mode) {
-            ResultMode.STANDALONE        -> pId?.let { loadProjectData(it) }
-            ResultMode.FROM_APPOINTMENT  -> aId?.let { loadActivityData(it) }
+            ResultMode.STANDALONE -> {
+                pId?.let { loadProjectData(it) }
+                rId?.let { loadResultById(it) } // ✅ ถ้ามี rId ให้โหลดข้อมูลรายงานนั้นๆ ขึ้นมาแสดง
+            }
+            ResultMode.FROM_APPOINTMENT -> aId?.let { loadActivityData(it) }
         }
     }
 
@@ -116,6 +121,81 @@ class SalesResultViewModel @Inject constructor(
             }
         }
     }
+
+    // ✅ ฟังก์ชันสำหรับโหลดข้อมูลรายงานโดยใช้ ID
+    private fun loadResultById(rId: String) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoading = true) }
+            val result = activityRepo.getResultById(rId)
+            if (result != null) {
+                applyResultToUi(result)
+            }
+            _uiState.update { it.copy(isLoading = false) }
+        }
+    }
+
+    private fun loadActivityData(aId: String) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoading = true) }
+
+            activityRepo.getActivityById(aId).onSuccess { list ->
+                list.firstOrNull()?.let { act ->
+                    _uiState.update {
+                        it.copy(
+                            activityId = aId,
+                            projectId  = act.projectId,
+                            reportDate = act.activityDate ?: LocalDate.now().toString()
+                        )
+                    }
+                    act.projectId?.let { loadProjectData(it) }
+                }
+            }
+
+            val result = activityRepo.getActivityResult(aId)
+            if (result != null) {
+                applyResultToUi(result)
+            }
+            _uiState.update { it.copy(isLoading = false) }
+        }
+    }
+
+    // ✅ ฟังก์ชันช่วยในการนำข้อมูลจาก Entity มาใส่ใน UI State (ลดการเขียนโค้ดซ้ำ)
+    private fun applyResultToUi(result: ActivityResult) {
+        val existingReason = result.lossReason ?: ""
+        val (reason, other) = if (existingReason in lossReasonOptions) {
+            existingReason to ""
+        } else if (existingReason.isNotBlank()) {
+            "อื่น ๆ" to existingReason
+        } else {
+            "" to ""
+        }
+
+        _uiState.update {
+            it.copy(
+                reportDate             = result.reportDate ?: it.reportDate,
+                newStatus              = STATUS_REVERSE[result.newStatus] ?: result.newStatus ?: "",
+                isStatusUpdateEnabled  = !result.newStatus.isNullOrBlank(),
+                opportunityScore       = OPPORTUNITY_REVERSE[result.opportunityScore] ?: result.opportunityScore ?: it.opportunityScore,
+                dealPosition           = DEAL_POSITION_REVERSE[result.dealPosition] ?: result.dealPosition ?: "",
+                previousSolution       = SOLUTION_REVERSE[result.previousSolution] ?: result.previousSolution ?: "",
+                counterpartyMultiplier = COUNTERPARTY_REVERSE[result.counterpartyMultiplier] ?: result.counterpartyMultiplier ?: "",
+                responseSpeed          = RESPONSE_SPEED_REVERSE[result.responseSpeed] ?: result.responseSpeed ?: "",
+                isProposalSent         = result.isProposalSent,
+                proposalDate           = result.proposalDate,
+                competitorCount        = result.competitorCount,
+                dmInvolved             = result.dmInvolved,
+                visitSummary           = result.summary ?: "",
+                photoUrl               = result.photoUrl,
+                photoTakenAt           = result.photoTakenAt,
+                photoLat               = result.photoLat,
+                photoLng               = result.photoLng,
+                photoDeviceModel       = result.photoDeviceModel,
+                lossReason             = reason,
+                otherLossReason        = other
+            )
+        }
+    }
+
     companion object {
         val DEAL_POSITION_MAP = mapOf(
             "ลูกค้าใช้เราอยู่แล้ว การต่อสัญญามีโอกาสสูงมาก" to "incumbent",
@@ -165,63 +245,6 @@ class SalesResultViewModel @Inject constructor(
         val OPPORTUNITY_REVERSE      = OPPORTUNITY_MAP.entries.associate { (k, v) -> v to k }
     }
 
-    private fun loadActivityData(aId: String) {
-        viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true) }
-
-            activityRepo.getActivityById(aId).onSuccess { list ->
-                list.firstOrNull()?.let { act ->
-                    _uiState.update {
-                        it.copy(
-                            activityId = aId,
-                            projectId  = act.projectId,
-                            reportDate = act.activityDate ?: LocalDate.now().toString()
-                        )
-                    }
-                    act.projectId?.let { loadProjectData(it) }
-                }
-            }
-
-            val result = activityRepo.getActivityResult(aId)
-            if (result != null) {
-                val existingReason = result.lossReason ?: ""
-                val (reason, other) = if (existingReason in lossReasonOptions) {
-                    existingReason to ""
-                } else if (existingReason.isNotBlank()) {
-                    "อื่น ๆ" to existingReason
-                } else {
-                    "" to ""
-                }
-
-                _uiState.update {
-                    it.copy(
-                        reportDate             = result.reportDate ?: it.reportDate,
-                        newStatus              = STATUS_REVERSE[result.newStatus] ?: result.newStatus ?: "",
-                        isStatusUpdateEnabled  = !result.newStatus.isNullOrBlank(),
-                        opportunityScore       = OPPORTUNITY_REVERSE[result.opportunityScore] ?: result.opportunityScore ?: it.opportunityScore,
-                        dealPosition           = DEAL_POSITION_REVERSE[result.dealPosition] ?: result.dealPosition ?: "",
-                        previousSolution       = SOLUTION_REVERSE[result.previousSolution] ?: result.previousSolution ?: "",
-                        counterpartyMultiplier = COUNTERPARTY_REVERSE[result.counterpartyMultiplier] ?: result.counterpartyMultiplier ?: "",
-                        responseSpeed          = RESPONSE_SPEED_REVERSE[result.responseSpeed] ?: result.responseSpeed ?: "",
-                        isProposalSent         = result.isProposalSent,
-                        proposalDate           = result.proposalDate,
-                        competitorCount        = result.competitorCount,
-                        dmInvolved             = result.dmInvolved,
-                        visitSummary           = result.summary ?: "",
-                        photoUrl               = result.photoUrl,
-                        photoTakenAt           = result.photoTakenAt,
-                        photoLat               = result.photoLat,
-                        photoLng               = result.photoLng,
-                        photoDeviceModel       = result.photoDeviceModel,
-                        lossReason             = reason,
-                        otherLossReason        = other
-                    )
-                }
-            }
-            _uiState.update { it.copy(isLoading = false) }
-        }
-    }
-
     fun onReportDateChanged(date: String)         { _uiState.update { it.copy(reportDate = date) } }
     fun onStatusToggle(enabled: Boolean)          { _uiState.update { it.copy(isStatusUpdateEnabled = enabled) } }
     fun onNewStatusSelected(status: String)       { _uiState.update { it.copy(newStatus = status, lossReasonError = null) } }
@@ -253,7 +276,6 @@ class SalesResultViewModel @Inject constructor(
                 val lat = if (hasGps) latLong[0].toDouble() else null
                 val lng = if (hasGps) latLong[1].toDouble() else null
 
-                // ✅ เพิ่มตรงนี้ — คำนวณว่าพิกัดรูปตรงกับสถานที่นัดไหม
                 val isLocationValid: Boolean? = if (hasGps) {
                     val plannedLat = _uiState.value.project?.projectLat?.toDouble()
                     val plannedLng = _uiState.value.project?.projectLong?.toDouble()
@@ -272,7 +294,7 @@ class SalesResultViewModel @Inject constructor(
                         photoLat             = lat,
                         photoLng             = lng,
                         photoDeviceModel     = deviceModel,
-                        isPhotoLocationValid = isLocationValid  // ✅ เพิ่ม
+                        isPhotoLocationValid = isLocationValid
                     )
                 }
             }
@@ -332,22 +354,14 @@ class SalesResultViewModel @Inject constructor(
 
     fun save() {
         val s = _uiState.value
+        android.util.Log.d("SalesResult", "save() called, mode=${s.mode}, projectId=${s.projectId}, activityId=${s.activityId}")
 
         if (s.visitSummary.isBlank()) {
             _uiState.update { it.copy(error = "กรุณากรอกสรุปการเข้าพบ") }
             return
         }
 
-        // Validate Loss Reason if status is Lost or Failed
-        if (s.isStatusUpdateEnabled && (s.newStatus == "Lost" || s.newStatus == "Failed")) {
-            if (s.lossReason.isBlank()) {
-                _uiState.update { it.copy(lossReasonError = "กรุณาเลือกหรือระบุเหตุผลที่ไม่ได้งาน", error = "กรุณาระบุเหตุผลที่ไม่ได้งาน") }
-                return
-            } else if (s.lossReason == "อื่น ๆ" && s.otherLossReason.isBlank()) {
-                _uiState.update { it.copy(lossReasonError = "กรุณาระบุเหตุผลอื่น ๆ", error = "กรุณาระบุเหตุผลอื่น ๆ") }
-                return
-            }
-        }
+        if (s.isSaving) return
 
         viewModelScope.launch {
             _uiState.update { it.copy(isSaving = true, error = null) }
@@ -360,12 +374,12 @@ class SalesResultViewModel @Inject constructor(
                 } else null
 
                 val resultToSave = ActivityResult(
-                    resultId               = "RES-" + java.util.UUID.randomUUID().toString().take(8).uppercase(),
-                    activityId             = if (s.mode == ResultMode.FROM_APPOINTMENT) s.activityId else null,
+                    resultId               = s.resultId ?: java.util.UUID.randomUUID().toString(), // ✅ ถ้ามี ID เดิมให้ใช้เดิม (เป็นการแก้) ถ้าไม่มีให้สร้างใหม่
+                    activityId             = s.activityId,
                     projectId              = s.projectId,
                     createdBy              = user?.userId,
                     reportDate             = s.reportDate,
-                    newStatus              = if (s.isStatusUpdateEnabled) STATUS_MAP[s.newStatus] else null,
+                    newStatus              = if (s.isStatusUpdateEnabled) STATUS_MAP[s.newStatus] ?: s.newStatus.ifBlank { null } else null,
                     opportunityScore       = OPPORTUNITY_MAP[s.opportunityScore] ?: s.opportunityScore,
                     dealPosition           = DEAL_POSITION_MAP[s.dealPosition] ?: s.dealPosition.ifBlank { null },
                     previousSolution       = SOLUTION_MAP[s.previousSolution] ?: s.previousSolution.ifBlank { null },
@@ -374,9 +388,9 @@ class SalesResultViewModel @Inject constructor(
                     isProposalSent         = s.isProposalSent,
                     proposalDate           = s.proposalDate,
                     competitorCount        = s.competitorCount,
-                    dmInvolved             = s.dmInvolved, // ✅ Added
+                    dmInvolved             = s.dmInvolved,
                     summary                = s.visitSummary,
-                    photoUrl               = s.photoUrl,   // ✅ Added
+                    photoUrl               = s.photoUrl,
                     photoTakenAt           = s.photoTakenAt,
                     photoLat               = s.photoLat,
                     photoLng               = s.photoLng,
