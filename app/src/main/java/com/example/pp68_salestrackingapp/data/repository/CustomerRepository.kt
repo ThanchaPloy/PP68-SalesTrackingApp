@@ -106,10 +106,44 @@ class CustomerRepository @Inject constructor(
         }
     }
 
+    suspend fun updateCustomer(customer: Customer): kotlin.Result<Unit> {
+        return withContext(Dispatchers.IO) {
+            customerDao.insertCustomer(customer)
+            try {
+                val updates = mutableMapOf<String, Any?>()
+                updates["company_name"] = customer.companyName
+                updates["branch"]       = customer.branch
+                updates["cust_type"]    = customer.custType
+                updates["company_addr"] = customer.companyAddr
+                updates["company_lat"]  = customer.companyLat
+                updates["company_long"] = customer.companyLong
+                updates["company_status"] = customer.companyStatus
+                updates["first_customer_date"] = customer.firstCustomerDate
+
+                val response = apiService.updateCustomer("eq.${customer.custId}", updates)
+                if (response.isSuccessful) {
+                    kotlin.Result.success(Unit)
+                } else {
+                    val errBody = response.errorBody()?.string() ?: ""
+                    kotlin.Result.failure(Exception("Update failed: $errBody"))
+                }
+            } catch (e: IOException) {
+                kotlin.Result.success(Unit)
+            } catch (e: Exception) {
+                kotlin.Result.failure(e)
+            }
+        }
+    }
+
     suspend fun deleteCustomer(custId: String): kotlin.Result<Unit> {
         return withContext(Dispatchers.IO) {
             try {
-                val response = apiService.deleteCustomer("eq.$custId")
+                val query = "eq.$custId"
+                apiService.deleteActivitiesByCustomer(query)
+                apiService.deleteProjectsByCustomer(query)
+                apiService.deleteContactsByCustomer(query)
+                
+                val response = apiService.deleteCustomer(query)
                 if (response.isSuccessful) {
                     customerDao.deleteCustomerById(custId)
                     kotlin.Result.success(Unit)
@@ -148,26 +182,22 @@ class CustomerRepository @Inject constructor(
         }
     }
 
-    // ✅ ดึง API แล้วเขียน Local → UI observe Flow ได้เอง
     suspend fun refreshContactsForCustomer(custId: String): kotlin.Result<Unit> {
         return withContext(Dispatchers.IO) {
             try {
                 val resp = apiService.getContactsByCustomerIds("eq.$custId")
                 if (resp.isSuccessful && resp.body() != null) {
-                    // เขียนลง Local — Flow จะ emit ให้ UI อัตโนมัติ
                     contactDao.insertContacts(resp.body()!!)
                     kotlin.Result.success(Unit)
                 } else {
                     kotlin.Result.failure(Exception("HTTP ${resp.code()}"))
                 }
             } catch (e: Exception) {
-                // offline → ใช้ local ที่มีอยู่แล้ว ไม่ error
                 kotlin.Result.success(Unit)
             }
         }
     }
 
-    // ✅ expose Flow ให้ UI observe แทน suspend fun
     fun getContactsForCustomerFlow(custId: String): Flow<List<ContactPerson>> =
         contactDao.getContactsByCustomer(custId)
 

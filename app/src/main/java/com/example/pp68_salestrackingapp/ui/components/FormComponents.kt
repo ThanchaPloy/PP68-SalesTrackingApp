@@ -52,7 +52,8 @@ fun FormTextField(
     errorMsg: String? = null,
     keyboardType: KeyboardType = KeyboardType.Text,
     singleLine: Boolean = true,
-    readOnly: Boolean = false
+    readOnly: Boolean = false,
+    enabled: Boolean = true
 ) {
     Column {
         OutlinedTextField(
@@ -66,18 +67,22 @@ fun FormTextField(
             isError = isError,
             singleLine = singleLine,
             readOnly = readOnly,
+            enabled = enabled,
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(10.dp),
             keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
             colors = OutlinedTextFieldDefaults.colors(
                 unfocusedBorderColor = AppColors.Border,
                 focusedBorderColor = AppColors.Primary,
-                unfocusedContainerColor = Color.White,
-                focusedContainerColor = Color.White,
+                unfocusedContainerColor = if (enabled) Color.White else Color(0xFFF5F5F5),
+                focusedContainerColor = if (enabled) Color.White else Color(0xFFF5F5F5),
                 unfocusedTextColor = AppColors.TextPrimary,
                 focusedTextColor = AppColors.TextPrimary,
                 cursorColor = AppColors.Primary,
-                errorBorderColor = AppColors.Error
+                errorBorderColor = AppColors.Error,
+                disabledBorderColor = AppColors.Border,
+                disabledTextColor = AppColors.TextSecondary,
+                disabledPlaceholderColor = AppColors.TextHint
             )
         )
         if (isError && errorMsg != null) {
@@ -96,7 +101,8 @@ fun DropdownField(
     options: List<String>,
     onSelect: (Int) -> Unit,
     isError: Boolean = false,
-    errorMsg: String? = null
+    errorMsg: String? = null,
+    enabled: Boolean = true
 ) {
     var expanded by remember { mutableStateOf(false) }
     Column {
@@ -109,8 +115,8 @@ fun DropdownField(
                     if (isError) AppColors.Error else AppColors.Border,
                     RoundedCornerShape(10.dp)
                 )
-                .background(Color.White)
-                .clickable { expanded = true }
+                .background(if (enabled) Color.White else Color(0xFFF5F5F5))
+                .clickable(enabled = enabled) { expanded = true }
                 .padding(horizontal = 16.dp, vertical = 14.dp)
         ) {
             Row(
@@ -120,7 +126,7 @@ fun DropdownField(
             ) {
                 Text(
                     text = value.ifBlank { placeholder },
-                    color = if (value.isBlank()) AppColors.TextHint else AppColors.TextPrimary,
+                    color = if (value.isBlank()) AppColors.TextHint else if (enabled) AppColors.TextPrimary else AppColors.TextSecondary,
                     fontSize = 14.sp
                 )
                 Icon(
@@ -160,7 +166,8 @@ fun DropdownField(
 fun DatePickerField(
     selectedDate: String?,
     placeholder: String,
-    onDateSelected: (String) -> Unit
+    onDateSelected: (String) -> Unit,
+    enabled: Boolean = true
 ) {
     var showPicker by remember { mutableStateOf(false) }
 
@@ -169,8 +176,8 @@ fun DatePickerField(
             .fillMaxWidth()
             .clip(RoundedCornerShape(10.dp))
             .border(1.dp, AppColors.Border, RoundedCornerShape(10.dp))
-            .background(Color.White)
-            .clickable { showPicker = true }
+            .background(if (enabled) Color.White else Color(0xFFF5F5F5))
+            .clickable(enabled = enabled) { showPicker = true }
             .padding(horizontal = 16.dp, vertical = 14.dp)
     ) {
         Row(
@@ -188,11 +195,11 @@ fun DatePickerField(
                 )
                 Text(
                     text = selectedDate ?: placeholder,
-                    color = if (selectedDate == null) AppColors.TextHint else AppColors.TextPrimary,
+                    color = if (selectedDate == null) AppColors.TextHint else if (enabled) AppColors.TextPrimary else AppColors.TextSecondary,
                     fontSize = 14.sp
                 )
             }
-            if (selectedDate != null) {
+            if (selectedDate != null && enabled) {
                 IconButton(
                     onClick = { onDateSelected("") },
                     modifier = Modifier.size(20.dp)
@@ -206,7 +213,7 @@ fun DatePickerField(
         }
     }
 
-    if (showPicker) {
+    if (showPicker && enabled) {
         val datePickerState = rememberDatePickerState()
         DatePickerDialog(
             onDismissRequest = { showPicker = false },

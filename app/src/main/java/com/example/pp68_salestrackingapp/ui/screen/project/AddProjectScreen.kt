@@ -26,37 +26,33 @@ import com.example.pp68_salestrackingapp.ui.components.*
 import com.example.pp68_salestrackingapp.ui.theme.AppColors
 import com.example.pp68_salestrackingapp.ui.theme.SalesTrackingTheme
 
-// ═══════════════════════════════════════════════════════════════
 @Composable
 fun AddProjectScreen(
     projectId: String? = null,
-    onBack:  () -> Unit,
-    onSaved: () -> Unit,
+    onBack:    () -> Unit,
+    onSaved:   () -> Unit,
     viewModel: AddProjectViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
 
     LaunchedEffect(projectId) {
-        if (projectId != null) {
-            viewModel.onEvent(AddProjectEvent.LoadProject(projectId))
-        }
+        if (projectId != null) viewModel.onEvent(AddProjectEvent.LoadProject(projectId))
     }
-
     LaunchedEffect(uiState.isSaved) { if (uiState.isSaved) onSaved() }
 
     AddProjectContent(
-        uiState = uiState,
-        onEvent = viewModel::onEvent,
-        onBack = onBack,
+        uiState           = uiState,
+        onEvent           = viewModel::onEvent,
+        onBack            = onBack,
         lossReasonOptions = viewModel.lossReasonOptions
     )
 }
 
 @Composable
 fun AddProjectContent(
-    uiState: AddProjectUiState,
-    onEvent: (AddProjectEvent) -> Unit,
-    onBack: () -> Unit,
+    uiState:           AddProjectUiState,
+    onEvent:           (AddProjectEvent) -> Unit,
+    onBack:            () -> Unit,
     lossReasonOptions: List<String> = emptyList()
 ) {
     Scaffold(
@@ -74,7 +70,8 @@ fun AddProjectContent(
                     }
                     Text(
                         if (uiState.projectId != null) "Edit Project" else "Create Project",
-                        fontWeight = FontWeight.Bold, fontSize = 18.sp, color = AppColors.Primary)
+                        fontWeight = FontWeight.Bold, fontSize = 18.sp, color = AppColors.Primary
+                    )
                 }
             }
         },
@@ -103,7 +100,7 @@ fun AddProjectContent(
                     ) {
                         Icon(Icons.Default.Tag, null, tint = AppColors.Primary, modifier = Modifier.size(18.dp))
                         Text(
-                            text = uiState.generatedProjectNumber,
+                            text       = uiState.generatedProjectNumber,
                             fontSize   = 15.sp,
                             fontWeight = FontWeight.SemiBold,
                             color      = if (uiState.generatedProjectNumber.contains("รอกด"))
@@ -112,11 +109,9 @@ fun AddProjectContent(
                         Spacer(Modifier.weight(1f))
                         Surface(color = AppColors.Primary.copy(alpha = 0.1f), shape = RoundedCornerShape(4.dp)) {
                             Text(
-                                "AUTO",
-                                fontSize   = 10.sp,
-                                fontWeight = FontWeight.Bold,
-                                color      = AppColors.Primary,
-                                modifier   = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                "AUTO", fontSize = 10.sp, fontWeight = FontWeight.Bold,
+                                color    = AppColors.Primary,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                             )
                         }
                     }
@@ -152,7 +147,7 @@ fun AddProjectContent(
                 )
             }
 
-            // ── Contact Person (กรองตาม customer) ────────────
+            // ── Contact Person ────────────────────────────────
             FormField("ผู้ติดต่อ") {
                 if (uiState.isLoadingContacts) {
                     LoadingFieldProject()
@@ -173,26 +168,28 @@ fun AddProjectContent(
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
-                            if (uiState.selectedCustomerId == null) "เลือกบริษัทลูกค้าก่อน" else "ไม่พบรายชื่อผู้ติดต่อ",
+                            if (uiState.selectedCustomerId == null) "เลือกบริษัทลูกค้าก่อน"
+                            else "ไม่พบรายชื่อผู้ติดต่อ",
                             color = AppColors.TextHint, fontSize = 14.sp
                         )
                     }
                 }
             }
 
-            // ── Billing Branch * ──────────────────────────────
+            // ── Billing Branch * ─────────────────────────────
+            // ✅ ใช้ billingBranchOptions แทน teamOptions → แสดงทุกสาขา
             FormField("สาขาที่เปิดบิล", required = true) {
-                if (uiState.isLoadingTeams) LoadingFieldProject()
+                if (uiState.isLoadingBillingBranches) LoadingFieldProject()
                 else DropdownField(
                     value       = uiState.selectedBillingBranchName ?: "",
                     placeholder = "เลือกสาขาที่เปิดบิล",
-                    options     = uiState.teamOptions.map { it.second },
+                    options     = uiState.billingBranchOptions.map { it.second },
                     isError     = uiState.billingBranchError != null,
                     errorMsg    = uiState.billingBranchError,
                     onSelect    = { idx ->
                         onEvent(AddProjectEvent.BillingBranchSelected(
-                            uiState.teamOptions[idx].first,
-                            uiState.teamOptions[idx].second
+                            uiState.billingBranchOptions[idx].first,
+                            uiState.billingBranchOptions[idx].second
                         ))
                     }
                 )
@@ -218,8 +215,7 @@ fun AddProjectContent(
                         if (uiState.isLoadingMembers) {
                             LoadingFieldProject()
                         } else if (uiState.teamMemberOptions.isNotEmpty()) {
-                            Text("เลือกสมาชิกที่รับผิดชอบ",
-                                fontSize = 12.sp, color = AppColors.TextSecondary)
+                            Text("เลือกสมาชิกที่รับผิดชอบ", fontSize = 12.sp, color = AppColors.TextSecondary)
                             MemberChipGrid(
                                 options     = uiState.teamMemberOptions,
                                 selectedIds = uiState.selectedMemberIds,
@@ -271,13 +267,11 @@ fun AddProjectContent(
                     options     = statusList,
                     isError     = uiState.statusError != null,
                     errorMsg    = uiState.statusError,
-                    onSelect    = { idx ->
-                        onEvent(AddProjectEvent.StatusChanged(statusList[idx]))
-                    }
+                    onSelect    = { idx -> onEvent(AddProjectEvent.StatusChanged(statusList[idx])) }
                 )
             }
 
-            // ── Loss Reason (แสดงเมื่อเป็น Lost หรือ Failed) ──────────────────
+            // ── Loss Reason ───────────────────────────────────
             AnimatedVisibility(visible = uiState.projectStatus == "Lost" || uiState.projectStatus == "Failed") {
                 Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                     FormField("เหตุผลที่ไม่ได้งาน", required = true) {
@@ -287,12 +281,9 @@ fun AddProjectContent(
                             options     = lossReasonOptions,
                             isError     = uiState.lossReasonError != null,
                             errorMsg    = uiState.lossReasonError,
-                            onSelect    = { idx ->
-                                onEvent(AddProjectEvent.LossReasonChanged(lossReasonOptions[idx]))
-                            }
+                            onSelect    = { idx -> onEvent(AddProjectEvent.LossReasonChanged(lossReasonOptions[idx])) }
                         )
                     }
-
                     if (uiState.lossReason == "อื่น ๆ") {
                         FormField("ระบุเหตุผลอื่น ๆ", required = true) {
                             FormTextField(
@@ -306,10 +297,9 @@ fun AddProjectContent(
                 }
             }
 
-            // ── Site Location + Google Maps ──────────────────
+            // ── Site Location ─────────────────────────────────
             FormField("สถานที่ตั้งโครงการ") {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    // ใช้ GoogleMapPickerField จาก MapComponents.kt ที่มีระบบค้นหา
                     GoogleMapPickerField(
                         lat = uiState.siteLat ?: 13.7563,
                         lng = uiState.siteLong ?: 100.5018,
@@ -332,11 +322,12 @@ fun AddProjectContent(
                 colors   = ButtonDefaults.buttonColors(containerColor = AppColors.Primary)
             ) {
                 if (uiState.isLoading) {
-                    CircularProgressIndicator(
-                        color = Color.White, modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                    CircularProgressIndicator(color = Color.White, modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
                 } else {
-                    Text(if (uiState.projectId != null) "อัปเดตโครงการ" else "สร้างโครงการ", fontSize = 16.sp,
-                        fontWeight = FontWeight.SemiBold, color = Color.White)
+                    Text(
+                        if (uiState.projectId != null) "อัปเดตโครงการ" else "สร้างโครงการ",
+                        fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = Color.White
+                    )
                 }
             }
             Spacer(Modifier.height(32.dp))
@@ -344,7 +335,7 @@ fun AddProjectContent(
     }
 }
 
-// ── Member chip grid ────────────────────────────────────────
+// ── Member chip grid ──────────────────────────────────────────
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun MemberChipGrid(
@@ -362,29 +353,22 @@ private fun MemberChipGrid(
     ) {
         FlowRow(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-            modifier = Modifier.fillMaxWidth()
+            verticalArrangement   = Arrangement.spacedBy(8.dp),
+            modifier              = Modifier.fillMaxWidth()
         ) {
             options.forEach { (id, name) ->
                 val selected = id in selectedIds
                 FilterChip(
                     selected = selected,
                     onClick  = { onToggle(id) },
-                    label    = { 
-                        Text(
-                            text = name, 
-                            fontSize = 12.sp, 
-                            maxLines = 1
-                        ) 
-                    },
+                    label    = { Text(name, fontSize = 12.sp, maxLines = 1) },
                     colors   = FilterChipDefaults.filterChipColors(
                         selectedContainerColor   = AppColors.Primary,
                         selectedLabelColor       = Color.White,
                         selectedLeadingIconColor = Color.White
                     ),
                     leadingIcon = if (selected) {
-                        { Icon(Icons.Default.Check, null,
-                            modifier = Modifier.size(14.dp)) }
+                        { Icon(Icons.Default.Check, null, modifier = Modifier.size(14.dp)) }
                     } else null
                 )
             }
@@ -392,6 +376,7 @@ private fun MemberChipGrid(
     }
 }
 
+// ── Loading placeholder ───────────────────────────────────────
 @Composable
 private fun LoadingFieldProject() {
     Box(
@@ -404,11 +389,10 @@ private fun LoadingFieldProject() {
         contentAlignment = Alignment.Center
     ) {
         Row(
-            verticalAlignment = Alignment.CenterVertically,
+            verticalAlignment    = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            CircularProgressIndicator(
-                color = AppColors.Primary, modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+            CircularProgressIndicator(color = AppColors.Primary, modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
             Text("กำลังโหลด...", color = AppColors.TextSecondary, fontSize = 13.sp)
         }
     }
@@ -420,26 +404,27 @@ fun AddProjectScreenPreview() {
     SalesTrackingTheme {
         AddProjectContent(
             uiState = AddProjectUiState(
-                projectNumber = "PRJ-2023-001",
-                projectName = "New Office Construction",
-                branch = "Bangkok",
-                customerOptions = listOf("1" to "ACME Corp", "2" to "Globex"),
+                projectNumber        = "PRJ-2023-001",
+                projectName          = "New Office Construction",
+                branch               = "Bangkok",
+                customerOptions      = listOf("1" to "ACME Corp", "2" to "Globex"),
                 selectedCustomerName = "ACME Corp",
-                selectedCustomerId = "1",
-                contactOptions = listOf("c1" to "John Smith"),
-                selectedContactIds = setOf("c1"),
-                expectedValue = "1500000",
-                startDate = "2023-11-01",
-                closeDate = "2024-05-01",
-                projectStatus = "New Project",
-                teamOptions = listOf("t1" to "Sales Team Alpha"),
-                selectedTeamId = "t1",
-                selectedTeamName = "Sales Team Alpha",
-                teamMemberOptions = listOf("m1" to "Alice", "m2" to "Bob", "m3" to "Charlie"),
-                selectedMemberIds = setOf("m1", "m2")
+                selectedCustomerId   = "1",
+                contactOptions       = listOf("c1" to "John Smith"),
+                selectedContactIds   = setOf("c1"),
+                expectedValue        = "1500000",
+                startDate            = "2023-11-01",
+                closeDate            = "2024-05-01",
+                projectStatus        = "New Project",
+                teamOptions          = listOf("t1" to "Sales Team Alpha"),
+                selectedTeamId       = "t1",
+                selectedTeamName     = "Sales Team Alpha",
+                teamMemberOptions    = listOf("m1" to "Alice", "m2" to "Bob", "m3" to "Charlie"),
+                selectedMemberIds    = setOf("m1", "m2"),
+                billingBranchOptions = listOf("b1" to "Bangkok Branch", "b2" to "Chiang Mai Branch")
             ),
             onEvent = {},
-            onBack = {}
+            onBack  = {}
         )
     }
 }

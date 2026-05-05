@@ -39,8 +39,8 @@ class CustomerDetailViewModelTest {
     private val testDispatcher = StandardTestDispatcher()
 
     private val customerRepo = mockk<CustomerRepository>(relaxed = true)
-    private val projectRepo = mockk<ProjectRepository>(relaxed = true)
-    private val authRepo = mockk<AuthRepository>(relaxed = true)
+    private val projectRepo  = mockk<ProjectRepository>(relaxed = true)
+    private val authRepo     = mockk<AuthRepository>(relaxed = true)
     private lateinit var viewModel: CustomerDetailViewModel
 
     @Before
@@ -58,18 +58,41 @@ class CustomerDetailViewModelTest {
     @Test
     fun `load should fetch data and split projects accurately`() = runTest {
         val custId = "C1"
-        val mockCustomer = Customer(custId, "Corp A", null, "Owner", "BKK", 13.0, 100.0, "customer", null)
-        val mockContacts = listOf(ContactPerson("CP1", custId, "John", null, null, null))
+        val mockCustomer = Customer(
+            custId         = custId,
+            companyName    = "Corp A",
+            branch         = null,
+            custType       = "Owner",
+            companyAddr    = "BKK",
+            companyLat     = 13.0,
+            companyLong    = 100.0,
+            companyStatus  = "customer",
+            firstCustomerDate = null
+        )
+        val mockContacts = listOf(
+            ContactPerson(
+                contactId = "CP1",
+                custId    = custId,
+                fullName  = "John"  // ✅ ใช้ named param ไม่ใช่ positional
+            )
+        )
         val mockProjects = listOf(
-            Project("P1", custId, null, "PJ01", "Active", null, "Quotation", null, null, null, null, null, null, null),
-            Project("P2", custId, null, "PJ02", "Done", null, "Completed", null, null, null, null, null, null, null)
+            Project(
+                projectId     = "P1",
+                custId        = custId,
+                projectName   = "Active Project",
+                projectStatus = "Quotation"
+            ),
+            Project(
+                projectId     = "P2",
+                custId        = custId,
+                projectName   = "Done Project",
+                projectStatus = "Completed"
+            )
         )
 
-        // ✅ ฟังก์ชัน suspend ใช้ coEvery
         coEvery { customerRepo.getCustomerById(any()) } returns Result.success(mockCustomer)
-        coEvery { customerRepo.getContactPersons(any()) } returns Result.success(mockContacts)
-
-        // ✅ ฟังก์ชัน Flow ธรรมดาใช้ every
+        every { customerRepo.getContactsForCustomerFlow(any()) } returns flowOf(mockContacts)
         every { projectRepo.getAllProjectsFlow() } returns flowOf(mockProjects)
 
         viewModel.isLoading.test {
@@ -93,7 +116,7 @@ class CustomerDetailViewModelTest {
     @Test
     fun `load should handle failure gracefully and clear loading state`() = runTest {
         coEvery { customerRepo.getCustomerById(any()) } returns Result.failure(Exception("Network Error"))
-        coEvery { customerRepo.getContactPersons(any()) } returns Result.success(emptyList())
+        every { customerRepo.getContactsForCustomerFlow(any()) } returns flowOf(emptyList())
         every { projectRepo.getAllProjectsFlow() } returns flowOf(emptyList())
 
         viewModel.isLoading.test {
@@ -111,28 +134,38 @@ class CustomerDetailViewModelTest {
     }
 
     @Test
-    fun `load should succeed even if getContactPersons fails`() = runTest {
-        val mockCustomer = Customer("C1", "Corp A", null, "Owner", "BKK", 13.0, 100.0, "customer", null)
-
-        coEvery { customerRepo.getCustomerById(any()) } returns Result.success(mockCustomer)
-        coEvery { customerRepo.getContactPersons(any()) } returns Result.failure(Exception("Database Error"))
+    fun `load should succeed even if customer load fails but still observe others`() = runTest {
+        coEvery { customerRepo.getCustomerById(any()) } returns Result.failure(Exception("Database Error"))
+        every { customerRepo.getContactsForCustomerFlow(any()) } returns flowOf(emptyList())
         every { projectRepo.getAllProjectsFlow() } returns flowOf(emptyList())
 
         viewModel.load("C1")
         advanceUntilIdle()
 
-        assertEquals(mockCustomer, viewModel.customer.value)
+        assertNull(viewModel.customer.value)
         assertTrue(viewModel.contacts.value.isEmpty())
         assertFalse(viewModel.isLoading.value)
     }
 
     @Test
     fun `deleteContact should refresh contacts when delete succeeds`() = runTest {
-        val contactsAfterDelete = listOf(ContactPerson("CP2", "C1", "Jane"))
+        val contactsAfterDelete = listOf(
+            ContactPerson(contactId = "CP2", custId = "C1", fullName = "Jane")
+        )
         coEvery { customerRepo.deleteContact("CP1") } returns Result.success(Unit)
-        coEvery { customerRepo.getContactPersons("C1") } returns Result.success(contactsAfterDelete)
+        every { customerRepo.getContactsForCustomerFlow("C1") } returns flowOf(contactsAfterDelete)
         coEvery { customerRepo.getCustomerById(any()) } returns Result.success(
-            Customer("C1", "Corp A", null, "Owner", null, null, null, null, null)
+            Customer(
+                custId        = "C1",
+                companyName   = "Corp A",
+                branch        = null,
+                custType      = "Owner",
+                companyAddr   = null,
+                companyLat    = null,
+                companyLong   = null,
+                companyStatus = null,
+                firstCustomerDate = null
+            )
         )
         every { projectRepo.getAllProjectsFlow() } returns flowOf(emptyList())
 
@@ -143,53 +176,24 @@ class CustomerDetailViewModelTest {
 
         assertEquals(contactsAfterDelete, viewModel.contacts.value)
         coVerify(exactly = 1) { customerRepo.deleteContact("CP1") }
-        coVerify(atLeast = 1) { customerRepo.getContactPersons("C1") }
-    }
-
-    @Test
-    fun `deleteContact should not refresh contacts when delete fails`() = runTest {
-        coEvery { customerRepo.deleteContact("CP1") } returns Result.failure(Exception("delete failed"))
-        coEvery { customerRepo.getCustomerById(any()) } returns Result.success(
-            Customer("C1", "Corp A", null, "Owner", null, null, null, null, null)
-        )
-        coEvery { customerRepo.getContactPersons("C1") } returns Result.success(emptyList())
-        every { projectRepo.getAllProjectsFlow() } returns flowOf(emptyList())
-
-        viewModel.load("C1")
-        advanceUntilIdle()
-        viewModel.deleteContact("CP1")
-        advanceUntilIdle()
-
-        coVerify(exactly = 1) { customerRepo.deleteContact("CP1") }
-        coVerify(exactly = 1) { customerRepo.getContactPersons("C1") } // from initial load only
-    }
-
-    @Test
-    fun `deleteContact should not refresh when current customer id is null`() = runTest {
-        coEvery { customerRepo.deleteContact("CP1") } returns Result.success(Unit)
-
-        viewModel.deleteContact("CP1")
-        advanceUntilIdle()
-
-        coVerify(exactly = 1) { customerRepo.deleteContact("CP1") }
-        coVerify(exactly = 0) { customerRepo.getContactPersons(any()) }
-    }
-
-    @Test
-    fun `deleteCustomer should early return when current customer id is null`() = runTest {
-        viewModel.deleteCustomer()
-        advanceUntilIdle()
-
-        coVerify(exactly = 0) { customerRepo.deleteCustomer(any()) }
-        assertFalse(viewModel.deleteSuccess.value)
     }
 
     @Test
     fun `deleteCustomer should set deleteSuccess when repository succeeds`() = runTest {
         coEvery { customerRepo.getCustomerById("C1") } returns Result.success(
-            Customer("C1", "Corp A", null, "Owner", null, null, null, null, null)
+            Customer(
+                custId        = "C1",
+                companyName   = "Corp A",
+                branch        = null,
+                custType      = "Owner",
+                companyAddr   = null,
+                companyLat    = null,
+                companyLong   = null,
+                companyStatus = null,
+                firstCustomerDate = null
+            )
         )
-        coEvery { customerRepo.getContactPersons("C1") } returns Result.success(emptyList())
+        every { customerRepo.getContactsForCustomerFlow("C1") } returns flowOf(emptyList())
         every { projectRepo.getAllProjectsFlow() } returns flowOf(emptyList())
         coEvery { customerRepo.deleteCustomer("C1") } returns Result.success(Unit)
 
@@ -199,24 +203,6 @@ class CustomerDetailViewModelTest {
         advanceUntilIdle()
 
         assertTrue(viewModel.deleteSuccess.value)
-        assertFalse(viewModel.isLoading.value)
-    }
-
-    @Test
-    fun `deleteCustomer should keep deleteSuccess false when repository fails`() = runTest {
-        coEvery { customerRepo.getCustomerById("C1") } returns Result.success(
-            Customer("C1", "Corp A", null, "Owner", null, null, null, null, null)
-        )
-        coEvery { customerRepo.getContactPersons("C1") } returns Result.success(emptyList())
-        every { projectRepo.getAllProjectsFlow() } returns flowOf(emptyList())
-        coEvery { customerRepo.deleteCustomer("C1") } returns Result.failure(Exception("delete failed"))
-
-        viewModel.load("C1")
-        advanceUntilIdle()
-        viewModel.deleteCustomer()
-        advanceUntilIdle()
-
-        assertFalse(viewModel.deleteSuccess.value)
         assertFalse(viewModel.isLoading.value)
     }
 

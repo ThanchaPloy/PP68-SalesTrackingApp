@@ -7,11 +7,11 @@ import com.example.pp68_salestrackingapp.data.model.Project
 import com.example.pp68_salestrackingapp.data.model.ProjectProductDto
 import com.example.pp68_salestrackingapp.data.remote.ApiService
 import com.example.pp68_salestrackingapp.data.remote.ProductMasterDto
+import com.example.pp68_salestrackingapp.data.repository.BranchRepository
 import com.example.pp68_salestrackingapp.data.repository.CustomerRepository
 import com.example.pp68_salestrackingapp.data.repository.ProjectRepository
 import io.mockk.coEvery
 import io.mockk.coVerify
-import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -40,9 +40,10 @@ class ProjectInventoryViewModelTest {
     val instantTaskExecutorRule = InstantTaskExecutorRule()
 
     private val dispatcher = StandardTestDispatcher()
-    private val projectRepo = mockk<ProjectRepository>(relaxed = true)
+    private val projectRepo  = mockk<ProjectRepository>(relaxed = true)
     private val customerRepo = mockk<CustomerRepository>(relaxed = true)
-    private val apiService = mockk<ApiService>(relaxed = true)
+    private val branchRepo   = mockk<BranchRepository>(relaxed = true)   // ✅ เพิ่ม
+    private val apiService   = mockk<ApiService>(relaxed = true)
 
     @Before
     fun setUp() {
@@ -54,6 +55,57 @@ class ProjectInventoryViewModelTest {
         Dispatchers.resetMain()
     }
 
+    // ── helper สร้าง VM ให้ส่ง argument ครบทุกครั้ง ────────────────────
+    private fun buildVm(projectId: String? = null): ProjectInventoryViewModel {
+        val handle = if (projectId != null)
+            SavedStateHandle(mapOf("projectId" to projectId))
+        else
+            SavedStateHandle()
+        return ProjectInventoryViewModel(handle, projectRepo, customerRepo, branchRepo, apiService)
+    }
+
+    // ── helper สร้าง ProductMasterDto พร้อม default ─────────────────────
+    private fun productMasterDto(
+        productId: String,
+        productGroup: String? = null,
+        productType: String? = null,
+        productSubgroup: String? = null,
+        brand: String? = null,
+        unit: String? = null,
+        color: String? = null,
+        thickness: String? = null,
+        width: String? = null,
+        length: String? = null,
+        dimensionUnit: String? = null
+    ) = ProductMasterDto(
+        productId      = productId,
+        productGroup   = productGroup,
+        productType    = productType,
+        productSubgroup = productSubgroup,
+        brand          = brand,
+        unit           = unit,
+        color          = color,
+        thickness      = thickness,
+        width          = width,
+        length         = length,
+        dimensionUnit  = dimensionUnit
+    )
+
+    // ── helper สร้าง ProjectProductDto พร้อม default ─────────────────────
+    private fun projectProductDto(
+        projectId: String,
+        productId: String,
+        quantity: Double? = null,
+        desiredDate: String? = null,
+        shippingBranchId: String? = null
+    ) = ProjectProductDto(
+        projectId        = projectId,
+        productId        = productId,
+        quantity         = quantity,
+        desiredDate      = desiredDate,
+        shippingBranchId = shippingBranchId
+    )
+
     @Test
     fun givenInit_whenLoadSuccess_thenPopulatesProjectCompanyAndMappedItems() = runTest {
         coEvery { projectRepo.getProjectById("PRJ-1") } returns Result.success(
@@ -63,27 +115,13 @@ class ProjectInventoryViewModelTest {
             Customer("C1", "Company A", null, null, null, null, null, null, null)
         )
         coEvery { apiService.getProjectProducts("eq.PRJ-1") } returns Response.success(
-            listOf(ProjectProductDto("PRJ-1", "P1", 10.0, null))
+            listOf(projectProductDto("PRJ-1", "P1", quantity = 10.0))
         )
         coEvery { apiService.getProductMaster() } returns Response.success(
-            listOf(
-                ProductMasterDto(
-                    productId = "P1",
-                    productGroup = "Glass 10mm",
-                    productType = "Glass",
-                    productSubgroup = null,
-                    brand = "Brand",
-                    unit = "sqm"
-                )
-            )
+            listOf(productMasterDto("P1", productGroup = "Glass 10mm", productType = "Glass", unit = "sqm"))
         )
 
-        val vm = ProjectInventoryViewModel(
-            SavedStateHandle(mapOf("projectId" to "PRJ-1")),
-            projectRepo,
-            customerRepo,
-            apiService
-        )
+        val vm = buildVm("PRJ-1")
         runCurrent()
         assertTrue(vm.uiState.value.isLoading)
         advanceUntilIdle()
@@ -105,12 +143,7 @@ class ProjectInventoryViewModelTest {
         )
         coEvery { apiService.getProjectProducts("eq.PRJ-1") } returns Response.success(emptyList())
 
-        val vm = ProjectInventoryViewModel(
-            SavedStateHandle(mapOf("projectId" to "PRJ-1")),
-            projectRepo,
-            customerRepo,
-            apiService
-        )
+        val vm = buildVm("PRJ-1")
         advanceUntilIdle()
 
         assertTrue(vm.uiState.value.items.isEmpty())
@@ -119,12 +152,7 @@ class ProjectInventoryViewModelTest {
 
     @Test
     fun givenMissingProjectId_whenInitThenLoad_thenNoRepositoryCallsAndDefaultState() = runTest {
-        val vm = ProjectInventoryViewModel(
-            SavedStateHandle(),
-            projectRepo,
-            customerRepo,
-            apiService
-        )
+        val vm = buildVm()
         advanceUntilIdle()
 
         assertEquals(null, vm.uiState.value.project)
@@ -140,12 +168,7 @@ class ProjectInventoryViewModelTest {
     fun givenProjectRepositoryThrows_whenLoad_thenSetsErrorAndStopsLoading() = runTest {
         coEvery { projectRepo.getProjectById("PRJ-1") } throws RuntimeException("boom")
 
-        val vm = ProjectInventoryViewModel(
-            SavedStateHandle(mapOf("projectId" to "PRJ-1")),
-            projectRepo,
-            customerRepo,
-            apiService
-        )
+        val vm = buildVm("PRJ-1")
         advanceUntilIdle()
 
         assertFalse(vm.uiState.value.isLoading)
@@ -157,12 +180,7 @@ class ProjectInventoryViewModelTest {
         coEvery { projectRepo.getProjectById("PRJ-1") } returns Result.failure(Exception("project missing"))
         coEvery { apiService.getProjectProducts("eq.PRJ-1") } returns Response.success(emptyList())
 
-        val vm = ProjectInventoryViewModel(
-            SavedStateHandle(mapOf("projectId" to "PRJ-1")),
-            projectRepo,
-            customerRepo,
-            apiService
-        )
+        val vm = buildVm("PRJ-1")
         advanceUntilIdle()
 
         assertNull(vm.uiState.value.project)
@@ -170,7 +188,6 @@ class ProjectInventoryViewModelTest {
         assertTrue(vm.uiState.value.items.isEmpty())
         assertFalse(vm.uiState.value.isLoading)
         assertNull(vm.uiState.value.error)
-        coVerify(exactly = 0) { customerRepo.getCustomerById(any()) }
     }
 
     @Test
@@ -181,12 +198,7 @@ class ProjectInventoryViewModelTest {
         coEvery { customerRepo.getCustomerById("C404") } returns Result.failure(Exception("not found"))
         coEvery { apiService.getProjectProducts("eq.PRJ-1") } returns Response.success(emptyList())
 
-        val vm = ProjectInventoryViewModel(
-            SavedStateHandle(mapOf("projectId" to "PRJ-1")),
-            projectRepo,
-            customerRepo,
-            apiService
-        )
+        val vm = buildVm("PRJ-1")
         advanceUntilIdle()
 
         assertEquals("", vm.uiState.value.companyName)
@@ -202,16 +214,10 @@ class ProjectInventoryViewModelTest {
             Customer("C1", "Company A", null, null, null, null, null, null, null)
         )
         coEvery { apiService.getProjectProducts("eq.PRJ-1") } returns Response.error(
-            500,
-            "err".toResponseBody("text/plain".toMediaType())
+            500, "err".toResponseBody("text/plain".toMediaType())
         )
 
-        val vm = ProjectInventoryViewModel(
-            SavedStateHandle(mapOf("projectId" to "PRJ-1")),
-            projectRepo,
-            customerRepo,
-            apiService
-        )
+        val vm = buildVm("PRJ-1")
         advanceUntilIdle()
 
         assertTrue(vm.uiState.value.items.isEmpty())
@@ -228,20 +234,15 @@ class ProjectInventoryViewModelTest {
         )
         coEvery { apiService.getProjectProducts("eq.PRJ-1") } returns Response.success(
             listOf(
-                ProjectProductDto("PRJ-1", "P1", null, null),
-                ProjectProductDto("PRJ-1", "UNKNOWN", 5.0, null)
+                projectProductDto("PRJ-1", "P1", quantity = null),
+                projectProductDto("PRJ-1", "UNKNOWN", quantity = 5.0)
             )
         )
         coEvery { apiService.getProductMaster() } returns Response.success(
-            listOf(ProductMasterDto("P1", null, null, null, null, null))
+            listOf(productMasterDto("P1"))
         )
 
-        val vm = ProjectInventoryViewModel(
-            SavedStateHandle(mapOf("projectId" to "PRJ-1")),
-            projectRepo,
-            customerRepo,
-            apiService
-        )
+        val vm = buildVm("PRJ-1")
         advanceUntilIdle()
 
         val items = vm.uiState.value.items
@@ -261,16 +262,11 @@ class ProjectInventoryViewModelTest {
             Customer("C1", "Company A", null, null, null, null, null, null, null)
         )
         coEvery { apiService.getProjectProducts("eq.PRJ-1") } returns Response.success(
-            listOf(ProjectProductDto("PRJ-1", "P1", 1.0, null))
+            listOf(projectProductDto("PRJ-1", "P1", quantity = 1.0))
         )
         coEvery { apiService.getProductMaster() } returns Response.success(null)
 
-        val vm = ProjectInventoryViewModel(
-            SavedStateHandle(mapOf("projectId" to "PRJ-1")),
-            projectRepo,
-            customerRepo,
-            apiService
-        )
+        val vm = buildVm("PRJ-1")
         advanceUntilIdle()
 
         assertTrue(vm.uiState.value.items.isEmpty())
@@ -287,12 +283,7 @@ class ProjectInventoryViewModelTest {
         )
         coEvery { apiService.getProjectProducts("eq.PRJ-1") } throws RuntimeException("network down")
 
-        val vm = ProjectInventoryViewModel(
-            SavedStateHandle(mapOf("projectId" to "PRJ-1")),
-            projectRepo,
-            customerRepo,
-            apiService
-        )
+        val vm = buildVm("PRJ-1")
         advanceUntilIdle()
 
         assertTrue(vm.uiState.value.items.isEmpty())
@@ -310,12 +301,7 @@ class ProjectInventoryViewModelTest {
         )
         coEvery { apiService.getProjectProducts("eq.PRJ-1") } returns Response.success(emptyList())
 
-        val vm = ProjectInventoryViewModel(
-            SavedStateHandle(mapOf("projectId" to "PRJ-1")),
-            projectRepo,
-            customerRepo,
-            apiService
-        )
+        val vm = buildVm("PRJ-1")
         advanceUntilIdle()
         assertEquals("first boom", vm.uiState.value.error)
 

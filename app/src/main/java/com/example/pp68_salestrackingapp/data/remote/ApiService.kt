@@ -7,60 +7,45 @@ import okhttp3.RequestBody
 import retrofit2.Response
 import retrofit2.http.*
 
-
 interface ApiService {
 
-    // ── User ─────────────────────────────────────────────────────
+    // ════════════════════════════════════════════════════════════
+    // USER
+    // ════════════════════════════════════════════════════════════
+
     @GET("user")
     suspend fun getUserById(
         @Query("user_id") userId: String,
-        @Query("select") select: String = "user_id,full_name,branch_id,role,email,phone_number",
-        @Query("limit") limit: Int = 1
+        @Query("select")  select: String = "user_id,full_name,branch_id,role,email,phone_number",
+        @Query("limit")   limit:  Int    = 1
     ): Response<List<UserDto>>
 
     @GET("user")
     suspend fun getUsersByBranch(
         @Query("branch_id") branchId: String,
-        @Query("select") select: String = "user_id,full_name,role",
+        @Query("select")    select:   String = "user_id,full_name,role",
         @Query("is_active") isActive: String = "eq.true",
-        @Query("limit") limit: Int = 100
+        @Query("limit")     limit:    Int    = 100
     ): Response<List<UserDto>>
 
     @PATCH("user")
-    @Headers(
-        "Prefer: return=representation",
-        "Content-Profile: public"
-    )
+    @Headers("Prefer: return=representation", "Content-Profile: public")
     suspend fun updateFcmToken(
-        @Query("user_id") userId: String,
-        @Body updates: Map<String, String>
+        @Query("user_id") userId:  String,
+        @Body             updates: Map<String, String>
     ): Response<List<UserDto>>
 
     @PATCH("user")
-    @Headers(
-        "Prefer: return=representation",
-        "Content-Profile: public"
-    )
+    @Headers("Prefer: return=representation", "Content-Profile: public")
     suspend fun updateUserProfile(
-        @Query("user_id") userId: String,
-        @Body updates: Map<String, String>
+        @Query("user_id") userId:  String,
+        @Body             updates: Map<String, String>
     ): Response<List<UserDto>>
 
-    @POST("project_sales_member")
-    @Headers(
-        "Prefer: return=representation",
-        "Content-Profile: public"
-    )
-    suspend fun addProjectMembers(
-        @Body members: List<ProjectMemberInsertDto>
-    ): Response<List<ProjectMemberInsertDto>>
+    // ════════════════════════════════════════════════════════════
+    // BRANCH
+    // ════════════════════════════════════════════════════════════
 
-    @DELETE("project_sales_member")
-    suspend fun deleteProjectMembers(
-        @Query("project_id") projectId: String
-    ): Response<Unit>
-
-    // ── Branch ───────────────────────────────────────────────────
     @GET("branch")
     suspend fun getBranches(
         @Query("limit") limit: Int = 100
@@ -69,10 +54,13 @@ interface ApiService {
     @GET("branch")
     suspend fun getBranchById(
         @Query("branch_id") branchId: String,
-        @Query("limit") limit: Int = 1
+        @Query("limit")     limit:    Int = 1
     ): Response<List<Branch>>
 
-    // ── Customer ─────────────────────────────────────────────
+    // ════════════════════════════════════════════════════════════
+    // CUSTOMER
+    // ════════════════════════════════════════════════════════════
+
     @GET("customer")
     suspend fun getCustomers(
         @Query("limit") limit: Int = 1000
@@ -81,41 +69,72 @@ interface ApiService {
     @GET("customer")
     suspend fun getCustomersByIds(
         @Query("cust_id") custIds: String,
-        @Query("limit") limit: Int = 1000
+        @Query("limit")   limit:   Int = 1000
     ): Response<List<Customer>>
 
     @GET("customer")
     suspend fun getCustomerById(
         @Query("cust_id") custId: String,
-        @Query("limit") limit: Int = 1
+        @Query("limit")   limit:  Int = 1
+    ): Response<List<Customer>>
+
+    @GET("customer")
+    suspend fun getCustomersByBranch(
+        @Query("branch_id") branchId: String,
+        @Query("limit")     limit:    Int = 1000
     ): Response<List<Customer>>
 
     @POST("customer")
-    @Headers(
-        "Prefer: return=representation",
-        "Content-Profile: public"
-    )
-    suspend fun addCustomer(@Body customer: Customer): Response<List<Customer>>
+    @Headers("Prefer: return=representation", "Content-Profile: public")
+    suspend fun addCustomer(
+        @Body customer: Customer
+    ): Response<List<Customer>>
+
+    @PATCH("customer")
+    @Headers("Prefer: return=representation", "Content-Profile: public")
+    suspend fun updateCustomer(
+        @Query("cust_id") custId:   String,
+        @Body             updates: @JvmSuppressWildcards Map<String, Any?>  // ✅ แก้แล้ว
+    ): Response<List<Customer>>
 
     @DELETE("customer")
     suspend fun deleteCustomer(
         @Query("cust_id") custId: String
     ): Response<Unit>
 
-    // ── Contact Person ───────────────────────────────────────
+    @DELETE("customer")
+    suspend fun deleteCustomersByCustomer(
+        @Query("cust_id") custId: String
+    ): Response<Unit>
+
+    // ════════════════════════════════════════════════════════════
+    // CONTACT PERSON
+    // ════════════════════════════════════════════════════════════
 
     @GET("contact_person")
     suspend fun getContactsByCustomerIds(
         @Query("cust_id") custId: String,
-        @Query("limit") limit: Int = 1000
+        @Query("limit")   limit:  Int = 1000
+    ): Response<List<ContactPerson>>
+
+    @GET("contact_person")
+    suspend fun getContactsByUserId(
+        @Query("user_id") userId: String,
+        @Query("limit")   limit:  Int = 1000
     ): Response<List<ContactPerson>>
 
     @POST("contact_person")
-    @Headers(
-        "Prefer: return=representation",
-        "Content-Profile: public"
-    )
-    suspend fun addContact(@Body contact: ContactPerson): Response<List<ContactPerson>>
+    @Headers("Prefer: return=representation", "Content-Profile: public")
+    suspend fun addContact(
+        @Body contact: ContactPerson
+    ): Response<List<ContactPerson>>
+
+    @PATCH("contact_person")
+    @Headers("Prefer: return=representation", "Content-Profile: public")
+    suspend fun updateContact(
+        @Query("contact_id") contactId: String,
+        @Body                updates:  @JvmSuppressWildcards Map<String, Any?>  // ✅ แก้แล้ว
+    ): Response<List<ContactPerson>>
 
     @DELETE("contact_person")
     suspend fun deleteContact(
@@ -127,47 +146,33 @@ interface ApiService {
         @Query("cust_id") custId: String
     ): Response<Unit>
 
-    // ต้องเพิ่มใน ApiService.kt
-    @GET("contact_person")
-    suspend fun getContactsByUserId(
-        @Query("user_id") userId: String,
-        @Query("limit") limit: Int = 1000
-    ): Response<List<ContactPerson>>
+    // ════════════════════════════════════════════════════════════
+    // PROJECT
+    // ════════════════════════════════════════════════════════════
 
-    @GET("customer")
-    suspend fun getCustomersByBranch(
-        @Query("branch_id") branchId: String,
-        @Query("limit") limit: Int = 1000
-    ): Response<List<Customer>>
-
-    // ── Project ──────────────────────────────────────────────
     @GET("project")
     suspend fun getProjectsByIds(
         @Query("project_id") projectIds: String,
-        @Query("limit") limit: Int = 1000
+        @Query("limit")      limit:      Int = 1000
     ): Response<List<Project>>
 
     @GET("project")
     suspend fun getProjectById(
         @Query("project_id") projectId: String,
-        @Query("limit") limit: Int = 1
+        @Query("limit")      limit:     Int = 1
     ): Response<List<Project>>
 
     @POST("project")
-    @Headers(
-        "Prefer: return=representation",
-        "Content-Profile: public"
-    )
-    suspend fun addProject(@Body project: Project): Response<List<Project>>
+    @Headers("Prefer: return=representation", "Content-Profile: public")
+    suspend fun addProject(
+        @Body project: Project
+    ): Response<List<Project>>
 
     @PATCH("project")
-    @Headers(
-        "Prefer: return=representation",
-        "Content-Profile: public"
-    )
+    @Headers("Prefer: return=representation", "Content-Profile: public")
     suspend fun updateProject(
         @Query("project_id") projectId: String,
-        @Body updates: @JvmSuppressWildcards Map<String, Any?>
+        @Body                updates:  @JvmSuppressWildcards Map<String, Any?>
     ): Response<List<Project>>
 
     @DELETE("project")
@@ -180,17 +185,46 @@ interface ApiService {
         @Query("cust_id") custId: String
     ): Response<Unit>
 
-    // ── Project Contact (Multi-Contact) ──────────────────────────
+    // ════════════════════════════════════════════════════════════
+    // PROJECT MEMBER
+    // ════════════════════════════════════════════════════════════
+
+    @GET("project_sales_member")
+    suspend fun getMyProjectIds(
+        @Query("user_id") userId: String,
+        @Query("select")  select: String = "project_id,project_number",
+        @Query("limit")   limit:  Int    = 1000
+    ): Response<List<ProjectMemberDto>>
+
+    @GET("project_sales_member")
+    suspend fun getProjectMembers(
+        @Query("project_id") projectId: String,
+        @Query("select")     select:    String = "user_id,sale_role"
+    ): Response<List<ProjectMemberDto>>
+
+    @POST("project_sales_member")
+    @Headers("Prefer: return=representation", "Content-Profile: public")
+    suspend fun addProjectMembers(
+        @Body members: List<ProjectMemberInsertDto>
+    ): Response<List<ProjectMemberInsertDto>>
+
+    @DELETE("project_sales_member")
+    suspend fun deleteProjectMembers(
+        @Query("project_id") projectId: String
+    ): Response<Unit>
+
+    // ════════════════════════════════════════════════════════════
+    // PROJECT CONTACT
+    // ════════════════════════════════════════════════════════════
+
     @GET("project_contact")
     suspend fun getProjectContacts(
         @Query("project_id") projectId: String,
-        @Query("select") select: String = "contact_id,contact_person(full_name)"
+        @Query("select")     select:    String = "contact_id,contact_person(full_name)"
     ): Response<List<ProjectContactResponse>>
 
     @POST("project_contact")
-    @Headers(
-        "Content-Profile: public"
-    )
+    @Headers("Content-Profile: public")
     suspend fun addProjectContacts(
         @Body contacts: List<ProjectContact>
     ): Response<Unit>
@@ -200,8 +234,10 @@ interface ApiService {
         @Query("project_id") projectId: String
     ): Response<Unit>
 
+    // ════════════════════════════════════════════════════════════
+    // PRODUCT
+    // ════════════════════════════════════════════════════════════
 
-    // ── Product ───────────────────────────────────────────────────
     @GET("products")
     suspend fun getProductMaster(
         @Query("limit") limit: Int = 1000
@@ -210,47 +246,43 @@ interface ApiService {
     @GET("project_product")
     suspend fun getProjectProducts(
         @Query("project_id") projectId: String,
-        @Query("limit") limit: Int = 100
+        @Query("limit")      limit:     Int = 100
     ): Response<List<ProjectProductDto>>
 
     @POST("project_product")
-    @Headers(
-        "Prefer: return=representation",
-        "Content-Profile: public"
-    )
+    @Headers("Prefer: return=representation", "Content-Profile: public")
     suspend fun addProductToProject(
         @Body item: ProjectProductInsertDto
     ): Response<List<ProjectProductInsertDto>>
 
-    // ── Appointment ──────────────────────────────────────────
+    // ════════════════════════════════════════════════════════════
+    // APPOINTMENT (SALES ACTIVITY)
+    // ════════════════════════════════════════════════════════════
+
     @GET("appointment")
     suspend fun getMyAppointments(
         @Query("user_id") userId: String,
-        @Query("limit") limit: Int = 1000,
-        @Query("order") order: String = "planned_date.desc"
+        @Query("limit")   limit:  Int    = 1000,
+        @Query("order")   order:  String = "planned_date.desc"
     ): Response<List<SalesActivity>>
 
     @GET("appointment")
     suspend fun getAppointmentById(
         @Query("appointment_id") appointmentId: String,
-        @Query("limit") limit: Int = 1
+        @Query("limit")          limit:         Int = 1
     ): Response<List<SalesActivity>>
 
     @POST("appointment")
-    @Headers(
-        "Prefer: return=representation",
-        "Content-Profile: public"
-    )
-    suspend fun addActivity(@Body activity: SalesActivity): Response<List<SalesActivity>>
+    @Headers("Prefer: return=representation", "Content-Profile: public")
+    suspend fun addActivity(
+        @Body activity: SalesActivity
+    ): Response<List<SalesActivity>>
 
     @PATCH("appointment")
-    @Headers(
-        "Prefer: return=representation",
-        "Content-Profile: public"
-    )
+    @Headers("Prefer: return=representation", "Content-Profile: public")
     suspend fun updateActivity(
         @Query("appointment_id") appointmentId: String,
-        @Body updates: @JvmSuppressWildcards Map<String, Any>
+        @Body                    updates:       @JvmSuppressWildcards Map<String, Any>
     ): Response<List<SalesActivity>>
 
     @DELETE("appointment")
@@ -268,94 +300,66 @@ interface ApiService {
         @Query("cust_id") custId: String
     ): Response<Unit>
 
-    // ── Activity Master & Checklist ──────────────────────────
+    // ════════════════════════════════════════════════════════════
+    // ACTIVITY MASTER & CHECKLIST
+    // ════════════════════════════════════════════════════════════
+
     @GET("activity_master")
     suspend fun getMasterActivities(
         @Query("is_active") isActive: String = "eq.true",
-        @Query("limit") limit: Int = 100
+        @Query("limit")     limit:    Int    = 100
     ): Response<List<ActivityMasterDto>>
 
     @GET("activity_checklist")
     suspend fun getChecklistByAppointment(
         @Query("appointment_id") appointmentId: String,
-        @Query("select") select: String = "master_id,is_done",
-        @Query("limit") limit: Int = 50
+        @Query("select")         select:        String = "master_id,is_done",
+        @Query("limit")          limit:         Int    = 50
     ): Response<List<ChecklistItemDto>>
 
     @POST("activity_checklist")
-    @Headers(
-        "Prefer: return=representation",
-        "Content-Profile: public"
-    )
+    @Headers("Prefer: return=representation", "Content-Profile: public")
     suspend fun insertChecklist(
         @Body items: List<ChecklistInsertDto>
     ): Response<List<ChecklistInsertDto>>
 
     @PATCH("activity_checklist")
-    @Headers(
-        "Prefer: return=representation",
-        "Content-Profile: public"
-    )
+    @Headers("Prefer: return=representation", "Content-Profile: public")
     suspend fun updateChecklist(
         @Query("appointment_id") appointmentId: String,
         @Query("master_id")      masterId:      String,
-        @Body updates: @JvmSuppressWildcards Map<String, Any>
+        @Body                    updates:       @JvmSuppressWildcards Map<String, Any>
     ): Response<List<ChecklistInsertDto>>
 
-    @GET("project_sales_member")
-    suspend fun getMyProjectIds(
-        @Query("user_id") userId: String,
-        @Query("select") select: String = "project_id,project_number",
-        @Query("limit") limit: Int = 1000
-    ): Response<List<ProjectMemberDto>>
+    // ════════════════════════════════════════════════════════════
+    // ACTIVITY RESULT
+    // ════════════════════════════════════════════════════════════
 
-    // ── Call Logs ─────────────────────────────────────────────────
-    @POST("call_logs")
-    @Headers(
-        "Prefer: return=representation",
-        "Content-Profile: public"
-    )
-    suspend fun insertCallLog(
-        @Body log: Map<String, String>
-    ): Response<List<Map<String, String>>>
+    @GET("activity_result")
+    suspend fun getActivityResult(
+        @Query("appointment_id") appointmentId: String,
+        @Query("limit")          limit:         Int = 1
+    ): Response<List<ActivityResult>>
 
-    // ── Activity Result ───────────────────────────────────────────
     @POST("activity_result")
-    @Headers(
-        "Prefer: return=representation",
-        "Content-Profile: public"
-    )
+    @Headers("Prefer: return=representation", "Content-Profile: public")
     suspend fun insertActivityResult(
         @Body result: ActivityResult
     ): Response<List<ActivityResult>>
 
     @POST("activity_result")
-    @Headers(
-        "Prefer: return=representation",
-        "Content-Profile: public"
-    )
+    @Headers("Prefer: return=representation", "Content-Profile: public")
     suspend fun insertActivityResultMap(
         @Body result: @JvmSuppressWildcards Map<String, Any?>
     ): Response<List<ActivityResult>>
 
-
     @PATCH("activity_result")
-    @Headers(
-        "Prefer: return=representation",
-        "Content-Profile: public"
-    )
+    @Headers("Prefer: return=representation", "Content-Profile: public")
     suspend fun updateActivityResultMap(
         @Query("appointment_id") appointmentId: String,
-        @Body updates: @JvmSuppressWildcards Map<String, Any?>
+        @Body                    updates:       @JvmSuppressWildcards Map<String, Any?>
     ): Response<List<ActivityResult>>
 
-    @GET("activity_result")
-    suspend fun getActivityResult(
-        @Query("appointment_id") appointmentId: String,
-        @Query("limit") limit: Int = 1
-    ): Response<List<ActivityResult>>
-
-    // ✅ ปรับปรุง upsert ให้รองรับ on_conflict ผ่าน Query Param
     @POST("activity_result")
     @Headers(
         "Prefer: return=representation,resolution=merge-duplicates",
@@ -363,17 +367,45 @@ interface ApiService {
     )
     suspend fun upsertActivityResult(
         @Query("on_conflict") onConflict: String = "appointment_id",
-        @Body result: @JvmSuppressWildcards Map<String, Any?>
+        @Body                 result:     @JvmSuppressWildcards Map<String, Any?>
     ): Response<List<ActivityResult>>
 
-    @GET("project_sales_member")
-    suspend fun getProjectMembers(
+    // ════════════════════════════════════════════════════════════
+    // CALL LOGS
+    // ════════════════════════════════════════════════════════════
+
+    @POST("call_logs")
+    @Headers("Prefer: return=representation", "Content-Profile: public")
+    suspend fun insertCallLog(
+        @Body log: Map<String, String>
+    ): Response<List<Map<String, String>>>
+
+    // ── Project Product ──────────────────────────────────────────
+
+    @PATCH("project_product")
+    @Headers("Prefer: return=representation", "Content-Profile: public")
+    suspend fun updateProjectProduct(
         @Query("project_id") projectId: String,
-        @Query("select") select: String = "user_id,sale_role"
-    ): Response<List<ProjectMemberDto>>
+        @Query("product_id") productId: String,
+        @Body updates: @JvmSuppressWildcards Map<String, Any?>
+    ): Response<List<ProjectProductDto>>
+
+    @DELETE("project_product")
+    suspend fun deleteProjectProduct(
+        @Query("project_id") projectId: String,
+        @Query("product_id") productId: String
+    ): Response<Unit>
+
+    @POST("rpc/set_app_context")
+    suspend fun setAppContext(
+        @Body body: Map<String, String>
+    ): Response<Unit>
 }
 
-// ── DTOs ─────────────────────────────────────────────────────
+// ════════════════════════════════════════════════════════════════
+// DTOs
+// ════════════════════════════════════════════════════════════════
+
 data class ProductMasterDto(
     @SerializedName("product_id")       val productId:       String,
     @SerializedName("product_group")    val productGroup:    String?,
@@ -389,17 +421,20 @@ data class ProductMasterDto(
 )
 
 data class ProjectContactResponse(
-    @SerializedName("contact_id") val contactId: String,
+    @SerializedName("contact_id")     val contactId:     String,
     @SerializedName("contact_person") val contactPerson: ContactPerson? = null
 )
 
-// สำหรับรูป
+// ════════════════════════════════════════════════════════════════
+// UPLOAD SERVICE
+// ════════════════════════════════════════════════════════════════
+
 interface UploadApiService {
     @Multipart
     @POST("upload-visit-photo")
     suspend fun uploadVisitPhoto(
         @Part("appointment_id") appointmentId: RequestBody,
-        @Part photo: MultipartBody.Part
+        @Part                   photo:         MultipartBody.Part
     ): Response<UploadPhotoResponse>
 }
 

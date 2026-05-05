@@ -164,7 +164,12 @@ private fun ContactCard(contact: ContactPerson, onClick: () -> Unit, onEdit: () 
                 }
                 Spacer(Modifier.width(12.dp))
                 Column(modifier = Modifier.weight(1f)) {
-                    Text(contact.fullName ?: "ไม่ระบุชื่อ", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+
+                    val displayName = buildString {
+                        append(contact.fullName ?: "ไม่ระบุชื่อ")
+                        if (!contact.nickname.isNullOrBlank()) append(" (${contact.nickname})")
+                    }
+                    Text(displayName, fontWeight = FontWeight.Bold, fontSize = 16.sp)
                     Text(contact.position ?: "ไม่มีตำแหน่ง", color = TextGray, fontSize = 13.sp)
                 }
                 IconButton(onClick = onEdit) { Icon(Icons.Default.Edit, null, modifier = Modifier.size(18.dp), tint = TextGray) }

@@ -117,9 +117,9 @@ class StatsViewModel @Inject constructor(
 
     private fun calculateStats(projects: List<Project>, activities: List<SalesActivity>): StatsUiState {
         // ── Weekly ────────────────────────────────────────────────────
+        // ✅ แก้ไข: นับโปรเจคที่สร้างใหม่ทั้งหมดในสัปดาห์นี้ เป็น "ลูกค้ามุ่งหวังใหม่" โดยไม่สนสถานะปัจจุบัน
         val weeklyLeads = projects.count { p ->
-            p.projectStatus == "Lead" &&
-                    isInRange(p.createdAt?.take(10), weekStart, weekEnd)
+            isInRange(p.createdAt?.take(10), weekStart, weekEnd)
         }
 
         val weeklyNewProj = projects.count { p ->
@@ -146,9 +146,9 @@ class StatsViewModel @Inject constructor(
         val totalValue = projects.filter { it.projectStatus !in listOf("Lost", "Failed") }
             .sumOf { it.expectedValue ?: 0.0 }
 
+        // ✅ แก้ไข: นับโปรเจคที่สร้างใหม่ทั้งหมดในเดือนนี้ เป็น "ลูกค้ามุ่งหวังใหม่" โดยไม่สนสถานะปัจจุบัน
         val monthlyLeads = projects.count { p ->
-            p.projectStatus == "Lead" &&
-                    isInRange(p.createdAt?.take(10), monthStart, monthEnd)
+            isInRange(p.createdAt?.take(10), monthStart, monthEnd)
         }
 
         val closingMonthCount = projects.count { p ->

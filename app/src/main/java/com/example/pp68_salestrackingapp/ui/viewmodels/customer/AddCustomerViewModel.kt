@@ -178,7 +178,11 @@ class AddCustomerViewModel @Inject constructor(
                 firstCustomerDate = s.firstCustomerDate
             )
 
-            val result = customerRepo.addCustomer(customer)
+            val result = if (s.custId != null) {
+                customerRepo.updateCustomer(customer)
+            } else {
+                customerRepo.addCustomer(customer)
+            }
 
             result.fold(
                 onSuccess = { _uiState.update { it.copy(isLoading = false, isSaved = true) } },

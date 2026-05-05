@@ -2,6 +2,7 @@ package com.example.pp68_salestrackingapp.ui.viewmodels.activity
 
 import androidx.arch.core.executor.testing.InstantTaskExecutorRule
 import com.example.pp68_salestrackingapp.data.model.*
+import com.example.pp68_salestrackingapp.data.remote.ApiService
 import com.example.pp68_salestrackingapp.data.repository.*
 import com.example.pp68_salestrackingapp.ui.screen.project.*
 import io.mockk.*
@@ -24,6 +25,7 @@ class AddProjectViewModelTest {
     private val customerRepo = mockk<CustomerRepository>()
     private val authRepo = mockk<AuthRepository>()
     private val branchRepo = mockk<BranchRepository>()
+    private val apiService = mockk<ApiService>(relaxed = true)
     private lateinit var viewModel: AddProjectViewModel
 
     @Before
@@ -59,7 +61,7 @@ class AddProjectViewModelTest {
     }
 
     private fun initViewModel() {
-        viewModel = AddProjectViewModel(projectRepo, customerRepo, authRepo, branchRepo)
+        viewModel = AddProjectViewModel(projectRepo, customerRepo, authRepo, branchRepo, apiService)
     }
 
     @Test

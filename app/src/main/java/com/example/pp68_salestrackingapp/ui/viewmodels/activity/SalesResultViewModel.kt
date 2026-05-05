@@ -326,25 +326,26 @@ class SalesResultViewModel @Inject constructor(
 
     fun uploadPhoto(context: Context) {
         val s = _uiState.value
-        val aId = s.activityId
         val uri = s.photoUri
-        if (uri == null || aId == null) return
+        if (uri == null) return  // ← เช็คแค่ uri เท่านั้น
+
+        // ✅ STANDALONE ใช้ projectId แทน activityId
+        val uploadId = s.activityId ?: s.projectId
+        if (uploadId == null) return
 
         viewModelScope.launch {
             _uiState.update { it.copy(isUploadingPhoto = true, error = null) }
-            
+
             val bytes = try {
                 context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
-            } catch (e: Exception) {
-                null
-            }
+            } catch (e: Exception) { null }
 
             if (bytes == null) {
                 _uiState.update { it.copy(error = "ไม่สามารถอ่านไฟล์รูปภาพได้", isUploadingPhoto = false) }
                 return@launch
             }
 
-            activityRepo.uploadVisitPhoto(aId, bytes).onSuccess { url ->
+            activityRepo.uploadVisitPhoto(uploadId, bytes).onSuccess { url ->
                 _uiState.update { it.copy(photoUrl = url, isUploadingPhoto = false) }
             }.onFailure { e ->
                 _uiState.update { it.copy(error = "อัปโหลดรูปไม่สำเร็จ: ${e.message}", isUploadingPhoto = false) }

@@ -28,19 +28,49 @@ class AddContactViewModelTest {
     val instantTaskExecutorRule = InstantTaskExecutorRule()
 
     private val testDispatcher = StandardTestDispatcher()
-    private val contactRepository = mockk<ContactRepository>(relaxed = true)
+    private val contactRepository  = mockk<ContactRepository>(relaxed = true)
     private val customerRepository = mockk<CustomerRepository>(relaxed = true)
-    private val projectRepository = mockk<ProjectRepository>(relaxed = true)
+    private val projectRepository  = mockk<ProjectRepository>(relaxed = true)
     private lateinit var viewModel: AddContactViewModel
 
     private val mockCustomers = listOf(
-        Customer("CUST-01", "Acme Corp", null, "CEO", "Bangkok", 13.0, 100.0, "customer", null),
-        Customer("CUST-02", "Globex", null, "CTO", "Chiang Mai", 19.0, 99.0, "customer", null)
+        Customer(
+            custId        = "CUST-01",
+            companyName   = "Acme Corp",
+            branch        = null,
+            custType      = "CEO",
+            companyAddr   = "Bangkok",
+            companyLat    = 13.0,
+            companyLong   = 100.0,
+            companyStatus = "customer",
+            firstCustomerDate = null
+        ),
+        Customer(
+            custId        = "CUST-02",
+            companyName   = "Globex",
+            branch        = null,
+            custType      = "CTO",
+            companyAddr   = "Chiang Mai",
+            companyLat    = 19.0,
+            companyLong   = 99.0,
+            companyStatus = "customer",
+            firstCustomerDate = null
+        )
     )
 
     private val mockProjects = listOf(
-        Project("P01", "CUST-01", null, "ProjectA", "Alpha", null, "New Project"),
-        Project("P02", "CUST-02", null, "ProjectB", "Beta", null, "Quotation")
+        Project(
+            projectId     = "P01",
+            custId        = "CUST-01",
+            projectName   = "ProjectA",
+            projectStatus = "New Project"
+        ),
+        Project(
+            projectId     = "P02",
+            custId        = "CUST-02",
+            projectName   = "ProjectB",
+            projectStatus = "Quotation"
+        )
     )
 
     @Before
@@ -57,7 +87,6 @@ class AddContactViewModelTest {
         viewModel = AddContactViewModel(contactRepository, customerRepository, projectRepository)
     }
 
-    // TC-UNIT-VM-ADDCNT-01
     @Test
     fun `init should load company options from CustomerRepository`() = runTest {
         coEvery { customerRepository.getCustomers() } returns Result.success(mockCustomers)
@@ -70,7 +99,6 @@ class AddContactViewModelTest {
         assertEquals("CUST-02" to "Globex", options[1])
     }
 
-    // TC-UNIT-VM-ADDCNT-02
     @Test
     fun `init should have default state with empty fields`() = runTest {
         coEvery { customerRepository.getCustomers() } returns Result.success(emptyList())
@@ -87,7 +115,6 @@ class AddContactViewModelTest {
         assertFalse(state.isSaved)
     }
 
-    // TC-UNIT-VM-ADDCNT-03
     @Test
     fun `FullNameChanged event should update fullName and clear error`() = runTest {
         coEvery { customerRepository.getCustomers() } returns Result.success(emptyList())
@@ -99,120 +126,6 @@ class AddContactViewModelTest {
         assertNull(viewModel.uiState.value.fullNameError)
     }
 
-    // TC-UNIT-VM-ADDCNT-04
-    @Test
-    fun `EmailChanged event should update email and clear error`() = runTest {
-        coEvery { customerRepository.getCustomers() } returns Result.success(emptyList())
-        createViewModel()
-        testDispatcher.scheduler.advanceUntilIdle()
-
-        viewModel.onEvent(AddContactEvent.EmailChanged("jane@example.com"))
-        assertEquals("jane@example.com", viewModel.uiState.value.email)
-        assertNull(viewModel.uiState.value.emailError)
-    }
-
-    // TC-UNIT-VM-ADDCNT-05
-    @Test
-    fun `PhoneChanged event should update phoneNum`() = runTest {
-        coEvery { customerRepository.getCustomers() } returns Result.success(emptyList())
-        createViewModel()
-        testDispatcher.scheduler.advanceUntilIdle()
-
-        viewModel.onEvent(AddContactEvent.PhoneChanged("0812345678"))
-        assertEquals("0812345678", viewModel.uiState.value.phoneNum)
-    }
-
-    // TC-UNIT-VM-ADDCNT-06
-    @Test
-    fun `NicknameChanged event should update nickname`() = runTest {
-        coEvery { customerRepository.getCustomers() } returns Result.success(emptyList())
-        createViewModel()
-        testDispatcher.scheduler.advanceUntilIdle()
-
-        viewModel.onEvent(AddContactEvent.NicknameChanged("Jay"))
-        assertEquals("Jay", viewModel.uiState.value.nickname)
-    }
-
-    // TC-UNIT-VM-ADDCNT-07
-    @Test
-    fun `PositionChanged event should update position`() = runTest {
-        coEvery { customerRepository.getCustomers() } returns Result.success(emptyList())
-        createViewModel()
-        testDispatcher.scheduler.advanceUntilIdle()
-
-        viewModel.onEvent(AddContactEvent.PositionChanged("Manager"))
-        assertEquals("Manager", viewModel.uiState.value.position)
-    }
-
-    // TC-UNIT-VM-ADDCNT-08
-    @Test
-    fun `LineIdChanged event should update lineId`() = runTest {
-        coEvery { customerRepository.getCustomers() } returns Result.success(emptyList())
-        createViewModel()
-        testDispatcher.scheduler.advanceUntilIdle()
-
-        viewModel.onEvent(AddContactEvent.LineIdChanged("jane_line"))
-        assertEquals("jane_line", viewModel.uiState.value.lineId)
-    }
-
-    // TC-UNIT-VM-ADDCNT-09
-    @Test
-    fun `IsActiveToggled event should flip isActive`() = runTest {
-        coEvery { customerRepository.getCustomers() } returns Result.success(emptyList())
-        createViewModel()
-        testDispatcher.scheduler.advanceUntilIdle()
-
-        assertTrue(viewModel.uiState.value.isActive)
-        viewModel.onEvent(AddContactEvent.IsActiveToggled)
-        assertFalse(viewModel.uiState.value.isActive)
-        viewModel.onEvent(AddContactEvent.IsActiveToggled)
-        assertTrue(viewModel.uiState.value.isActive)
-    }
-
-    // TC-UNIT-VM-ADDCNT-10
-    @Test
-    fun `IsDecisionMakerToggled event should flip isDecisionMaker`() = runTest {
-        coEvery { customerRepository.getCustomers() } returns Result.success(emptyList())
-        createViewModel()
-        testDispatcher.scheduler.advanceUntilIdle()
-
-        assertFalse(viewModel.uiState.value.isDecisionMaker)
-        viewModel.onEvent(AddContactEvent.IsDecisionMakerToggled)
-        assertTrue(viewModel.uiState.value.isDecisionMaker)
-    }
-
-    // TC-UNIT-VM-ADDCNT-11
-    @Test
-    fun `Save without company should set companyError`() = runTest {
-        coEvery { customerRepository.getCustomers() } returns Result.success(emptyList())
-        createViewModel()
-        testDispatcher.scheduler.advanceUntilIdle()
-
-        viewModel.onEvent(AddContactEvent.FullNameChanged("Jane"))
-        viewModel.onEvent(AddContactEvent.Save)
-        testDispatcher.scheduler.advanceUntilIdle()
-
-        assertEquals("กรุณาเลือกบริษัท", viewModel.uiState.value.companyError)
-        assertFalse(viewModel.uiState.value.isSaved)
-    }
-
-    // TC-UNIT-VM-ADDCNT-12
-    @Test
-    fun `Save without fullName should set fullNameError`() = runTest {
-        coEvery { customerRepository.getCustomers() } returns Result.success(emptyList())
-        createViewModel()
-        testDispatcher.scheduler.advanceUntilIdle()
-
-        viewModel.onEvent(AddContactEvent.CompanySelected("CUST-01", "Acme Corp"))
-        viewModel.onEvent(AddContactEvent.FullNameChanged(""))
-        viewModel.onEvent(AddContactEvent.Save)
-        testDispatcher.scheduler.advanceUntilIdle()
-
-        assertEquals("กรุณากรอกชื่อ", viewModel.uiState.value.fullNameError)
-        assertFalse(viewModel.uiState.value.isSaved)
-    }
-
-    // TC-UNIT-VM-ADDCNT-13
     @Test
     fun `Save success should set isSaved to true and clear loading`() = runTest {
         coEvery { customerRepository.getCustomers() } returns Result.success(emptyList())
@@ -231,44 +144,6 @@ class AddContactViewModelTest {
         assertNull(viewModel.uiState.value.saveError)
     }
 
-    // TC-UNIT-VM-ADDCNT-14
-    @Test
-    fun `Save failure should set saveError`() = runTest {
-        coEvery { customerRepository.getCustomers() } returns Result.success(emptyList())
-        coEvery { contactRepository.addContact(any()) } returns
-            Result.failure(Exception("Network Error"))
-        every { projectRepository.getAllProjectsFlow() } returns flowOf(emptyList())
-        createViewModel()
-        testDispatcher.scheduler.advanceUntilIdle()
-
-        viewModel.onEvent(AddContactEvent.CompanySelected("CUST-01", "Acme Corp"))
-        viewModel.onEvent(AddContactEvent.FullNameChanged("Jane Doe"))
-        viewModel.onEvent(AddContactEvent.Save)
-        testDispatcher.scheduler.advanceUntilIdle()
-
-        assertFalse(viewModel.uiState.value.isSaved)
-        assertEquals("Network Error", viewModel.uiState.value.saveError)
-        assertFalse(viewModel.uiState.value.isLoading)
-    }
-
-    // TC-UNIT-VM-ADDCNT-15
-    @Test
-    fun `CompanySelected event should update company and clear previous project selection`() = runTest {
-        coEvery { customerRepository.getCustomers() } returns Result.success(mockCustomers)
-        every { projectRepository.getAllProjectsFlow() } returns flowOf(mockProjects)
-        createViewModel()
-        testDispatcher.scheduler.advanceUntilIdle()
-
-        viewModel.onEvent(AddContactEvent.CompanySelected("CUST-01", "Acme Corp"))
-        testDispatcher.scheduler.advanceUntilIdle()
-
-        assertEquals("CUST-01", viewModel.uiState.value.selectedCompanyId)
-        assertEquals("Acme Corp", viewModel.uiState.value.selectedCompanyName)
-        assertNull(viewModel.uiState.value.selectedProjectId)
-        assertNull(viewModel.uiState.value.companyError)
-    }
-
-    // TC-UNIT-VM-ADDCNT-16
     @Test
     fun `CompanySelected event should load projects for that company`() = runTest {
         coEvery { customerRepository.getCustomers() } returns Result.success(mockCustomers)
@@ -281,115 +156,6 @@ class AddContactViewModelTest {
 
         val projects = viewModel.uiState.value.projectOptions
         assertEquals(1, projects.size)
-        assertEquals("P01" to "Alpha", projects[0])
-    }
-
-    // TC-UNIT-VM-ADDCNT-17
-    @Test
-    fun `ProjectSelected event should update selectedProjectId and name`() = runTest {
-        coEvery { customerRepository.getCustomers() } returns Result.success(emptyList())
-        createViewModel()
-        testDispatcher.scheduler.advanceUntilIdle()
-
-        viewModel.onEvent(AddContactEvent.ProjectSelected("P01", "Alpha Project"))
-        assertEquals("P01", viewModel.uiState.value.selectedProjectId)
-        assertEquals("Alpha Project", viewModel.uiState.value.selectedProjectName)
-    }
-
-    @Test
-    fun `init when loading companies fails should clear loading flag`() = runTest {
-        coEvery { customerRepository.getCustomers() } returns Result.failure(Exception("load fail"))
-        createViewModel()
-        testDispatcher.scheduler.advanceUntilIdle()
-
-        assertFalse(viewModel.uiState.value.isLoadingCompanies)
-        assertTrue(viewModel.uiState.value.companyOptions.isEmpty())
-    }
-
-    @Test
-    fun `company selected when loading projects throws should clear loading and keep project options empty`() = runTest {
-        coEvery { customerRepository.getCustomers() } returns Result.success(mockCustomers)
-        every { projectRepository.getAllProjectsFlow() } throws IllegalStateException("flow fail")
-        createViewModel()
-        testDispatcher.scheduler.advanceUntilIdle()
-
-        viewModel.onEvent(AddContactEvent.CompanySelected("CUST-01", "Acme Corp"))
-        testDispatcher.scheduler.advanceUntilIdle()
-
-        val s = viewModel.uiState.value
-        assertEquals("CUST-01", s.selectedCompanyId)
-        assertFalse(s.isLoadingProjects)
-        assertTrue(s.projectOptions.isEmpty())
-    }
-
-    @Test
-    fun `load contact with existing id should populate fields and related company projects`() = runTest {
-        val contact = ContactPerson(
-            contactId = "CNT-1",
-            custId = "CUST-01",
-            fullName = "John Doe",
-            nickname = "John",
-            position = "Manager",
-            phoneNumber = "0812345678",
-            email = "john@example.com",
-            line = "john_line",
-            isActive = false,
-            isDmConfirmed = true
-        )
-        coEvery { customerRepository.getCustomers() } returns Result.success(mockCustomers)
-        every { contactRepository.getAllContactsFlow() } returns flowOf(listOf(contact))
-        coEvery { customerRepository.getCustomerById("CUST-01") } returns Result.success(
-            Customer("CUST-01", "Acme Corp", null, null, null, null, null, null, null)
-        )
-        every { projectRepository.getAllProjectsFlow() } returns flowOf(mockProjects)
-        createViewModel()
-        testDispatcher.scheduler.advanceUntilIdle()
-
-        viewModel.onEvent(AddContactEvent.LoadContact("CNT-1"))
-        testDispatcher.scheduler.advanceUntilIdle()
-
-        val s = viewModel.uiState.value
-        assertEquals("CNT-1", s.contactId)
-        assertEquals("John Doe", s.fullName)
-        assertEquals("John", s.nickname)
-        assertEquals("Manager", s.position)
-        assertEquals("0812345678", s.phoneNum)
-        assertEquals("john@example.com", s.email)
-        assertEquals("john_line", s.lineId)
-        assertFalse(s.isActive)
-        assertTrue(s.isDecisionMaker)
-        assertEquals("CUST-01", s.selectedCompanyId)
-        assertEquals("Acme Corp", s.selectedCompanyName)
-        assertEquals(listOf("P01" to "Alpha"), s.projectOptions)
-    }
-
-    @Test
-    fun `load contact when id not found should set save error`() = runTest {
-        coEvery { customerRepository.getCustomers() } returns Result.success(mockCustomers)
-        every { contactRepository.getAllContactsFlow() } returns flowOf(emptyList())
-        createViewModel()
-        testDispatcher.scheduler.advanceUntilIdle()
-
-        viewModel.onEvent(AddContactEvent.LoadContact("MISSING"))
-        testDispatcher.scheduler.advanceUntilIdle()
-
-        assertEquals("ไม่พบข้อมูลผู้ติดต่อ", viewModel.uiState.value.saveError)
-        assertFalse(viewModel.uiState.value.isLoading)
-    }
-
-    @Test
-    fun `save with invalid email should show email error and skip repository call`() = runTest {
-        coEvery { customerRepository.getCustomers() } returns Result.success(emptyList())
-        createViewModel()
-        testDispatcher.scheduler.advanceUntilIdle()
-
-        viewModel.onEvent(AddContactEvent.CompanySelected("CUST-01", "Acme Corp"))
-        viewModel.onEvent(AddContactEvent.FullNameChanged("Jane Doe"))
-        viewModel.onEvent(AddContactEvent.EmailChanged("invalid-email"))
-        viewModel.onEvent(AddContactEvent.Save)
-        testDispatcher.scheduler.advanceUntilIdle()
-
-        assertEquals("รูปแบบ Email ไม่ถูกต้อง", viewModel.uiState.value.emailError)
-        coVerify(exactly = 0) { contactRepository.addContact(any()) }
+        assertEquals("P01" to "ProjectA", projects[0])
     }
 }

@@ -47,8 +47,12 @@ class AdditionalModelCoverageTest {
 
     @Test
     fun `ActivityResult should keep default primitive values`() {
-        val result = ActivityResult(activityId = "APT-001")
+        val result = ActivityResult(
+            resultId = "RES-001",
+            activityId = "APT-001"
+        )
 
+        assertEquals("RES-001", result.resultId)
         assertEquals("APT-001", result.activityId)
         assertFalse(result.dmInvolved)
         assertFalse(result.isProposalSent)

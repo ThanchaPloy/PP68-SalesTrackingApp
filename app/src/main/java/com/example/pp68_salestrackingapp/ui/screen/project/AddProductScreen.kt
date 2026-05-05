@@ -31,8 +31,8 @@ import com.example.pp68_salestrackingapp.ui.viewmodels.project.AddProductViewMod
 @Composable
 fun AddProductScreen(
     projectId: String,
-    onBack: () -> Unit,
-    onSaved: () -> Unit,
+    onBack:    () -> Unit,
+    onSaved:   () -> Unit,
     viewModel: AddProductViewModel = hiltViewModel()
 ) {
     val s by viewModel.uiState.collectAsState()
@@ -42,33 +42,36 @@ fun AddProductScreen(
     }
 
     AddProductContent(
-        s = s,
-        onBack = onBack,
-        onBrandSelected = { viewModel.onBrandSelected(it) },
-        onNameSelected = { viewModel.onNameSelected(it) },
-        onQuantityChange = { viewModel.onQuantityChange(it) },
-        onDateSelected = { viewModel.onDateSelected(it) },
+        s                        = s,
+        onBack                   = onBack,
+        onBrandSelected          = { viewModel.onBrandSelected(it) },
+        onNameSelected           = { viewModel.onNameSelected(it) },
+        onQuantityChange         = { viewModel.onQuantityChange(it) },
+        onDateSelected           = { viewModel.onDateSelected(it) },
         onShippingBranchSelected = { id, name -> viewModel.onShippingBranchSelected(id, name) },
-        onSave = { viewModel.save() }
+        onSave                   = { viewModel.save() }
     )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AddProductContent(
-    s: AddProductUiState,
-    onBack: () -> Unit,
-    onBrandSelected: (String) -> Unit,
-    onNameSelected: (String) -> Unit,
-    onQuantityChange: (String) -> Unit,
-    onDateSelected: (String) -> Unit,
+    s:                        AddProductUiState,
+    onBack:                   () -> Unit,
+    onBrandSelected:          (String) -> Unit,
+    onNameSelected:           (String) -> Unit,
+    onQuantityChange:         (String) -> Unit,
+    onDateSelected:           (String) -> Unit,
     onShippingBranchSelected: (String, String) -> Unit,
-    onSave: () -> Unit
+    onSave:                   () -> Unit
 ) {
+    val titleText = if (s.isEditMode) "แก้ไขสินค้า" else "เพิ่มสินค้า"
+    val saveText  = if (s.isEditMode) "บันทึกการแก้ไข" else "บันทึกสินค้า"
+
     Scaffold(
         topBar = {
             CenterAlignedTopAppBar(
-                title = { Text("Add Product", fontWeight = FontWeight.Bold, fontSize = 18.sp) },
+                title = { Text(titleText, fontWeight = FontWeight.Bold, fontSize = 18.sp) },
                 navigationIcon = {
                     Box(
                         modifier = Modifier
@@ -78,7 +81,10 @@ fun AddProductContent(
                             .background(AppColors.Primary),
                         contentAlignment = Alignment.Center
                     ) {
-                        Icon(Icons.Default.Inventory, null, tint = Color.White, modifier = Modifier.size(20.dp))
+                        Icon(
+                            if (s.isEditMode) Icons.Default.Edit else Icons.Default.Inventory,
+                            null, tint = Color.White, modifier = Modifier.size(20.dp)
+                        )
                     }
                 },
                 actions = {
@@ -98,141 +104,109 @@ fun AddProductContent(
                 .padding(20.dp),
             verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
-            // Section Header
             Row(
-                verticalAlignment = Alignment.CenterVertically,
+                verticalAlignment     = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Icon(Icons.Default.Inventory, null, tint = AppColors.Primary, modifier = Modifier.size(18.dp))
                 Text("ข้อมูลสินค้า", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = AppColors.TextSecondary)
             }
 
-            // Form Fields
             val brands = s.products.map { it.brand }.distinct().filter { it.isNotBlank() }
-            FormField(label = "แบรนด์สินค้า") {
-                DropdownField(
-                    value = s.selectedBrand,
-                    placeholder = if (s.isLoading) "กำลังโหลด..." else "เลือกแบรนด์สินค้า",
-                    options = brands,
-                    onSelect = { onBrandSelected(brands[it]) }
-                )
-            }
 
-            FormField(label = "ชื่อสินค้า") {
-                DropdownField(
-                    value = s.selectedProductName,
-                    placeholder = if (s.selectedBrand.isBlank()) "กรุณาเลือกแบรนด์ก่อน" else "เลือกชื่อสินค้า",
-                    options = s.filteredNames,
-                    onSelect = { onNameSelected(s.filteredNames[it]) }
-                )
-            }
-
-            FormField(label = "กลุ่มสินค้า") {
-                FormTextField(
-                    value = s.selectedGroup,
-                    onValueChange = {},
-                    placeholder = "กลุ่มของสินค้า",
-                    readOnly = true
-                )
-            }
-
-            FormField(label = "กลุ่มย่อยสินค้า") {
-                FormTextField(
-                    value = s.selectedSubgroup,
-                    onValueChange = {},
-                    placeholder = "ประเภทย่อยของสินค้า",
-                    readOnly = true
-                )
-            }
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                FormField(label = "สี", modifier = Modifier.weight(1f)) {
+            // ── Edit mode: แสดง brand/name เป็น readonly TextField แทน Dropdown ──
+            if (s.isEditMode) {
+                FormField("แบรนด์สินค้า") {
                     FormTextField(
-                        value = s.color ?: "-",
+                        value         = s.selectedBrand,
                         onValueChange = {},
-                        placeholder = "สี",
-                        readOnly = true
+                        placeholder   = "แบรนด์สินค้า",
+                        readOnly      = true
                     )
                 }
-                FormField(label = "ความหนา", modifier = Modifier.weight(1f)) {
+                FormField("ชื่อสินค้า") {
                     FormTextField(
-                        value = s.thickness ?: "-",
+                        value         = s.selectedProductName,
                         onValueChange = {},
-                        placeholder = "หนา",
-                        readOnly = true
+                        placeholder   = "ชื่อสินค้า",
+                        readOnly      = true
+                    )
+                }
+            } else {
+                FormField("แบรนด์สินค้า") {
+                    DropdownField(
+                        value       = s.selectedBrand,
+                        placeholder = if (s.isLoading) "กำลังโหลด..." else "เลือกแบรนด์สินค้า",
+                        options     = brands,
+                        onSelect    = { onBrandSelected(brands[it]) }
+                    )
+                }
+                FormField("ชื่อสินค้า") {
+                    DropdownField(
+                        value       = s.selectedProductName,
+                        placeholder = if (s.selectedBrand.isBlank()) "กรุณาเลือกแบรนด์ก่อน" else "เลือกชื่อสินค้า",
+                        options     = s.filteredNames,
+                        onSelect    = { onNameSelected(s.filteredNames[it]) }
                     )
                 }
             }
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                FormField(label = "กว้าง", modifier = Modifier.weight(1f)) {
-                    FormTextField(
-                        value = s.width ?: "-",
-                        onValueChange = {},
-                        placeholder = "กว้าง",
-                        readOnly = true
-                    )
+            FormField("กลุ่มสินค้า") {
+                FormTextField(value = s.selectedGroup, onValueChange = {}, placeholder = "กลุ่มของสินค้า", readOnly = true)
+            }
+            FormField("กลุ่มย่อยสินค้า") {
+                FormTextField(value = s.selectedSubgroup, onValueChange = {}, placeholder = "ประเภทย่อยของสินค้า", readOnly = true)
+            }
+
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                FormField("สี", modifier = Modifier.weight(1f)) {
+                    FormTextField(value = s.color ?: "-", onValueChange = {}, placeholder = "สี", readOnly = true)
                 }
-                FormField(label = "ยาว", modifier = Modifier.weight(1f)) {
-                    FormTextField(
-                        value = s.length ?: "-",
-                        onValueChange = {},
-                        placeholder = "ยาว",
-                        readOnly = true
-                    )
-                }
-                FormField(label = "หน่วยวัด", modifier = Modifier.weight(1f)) {
-                    FormTextField(
-                        value = s.dimensionUnit ?: "-",
-                        onValueChange = {},
-                        placeholder = "หน่วย",
-                        readOnly = true
-                    )
+                FormField("ความหนา", modifier = Modifier.weight(1f)) {
+                    FormTextField(value = s.thickness ?: "-", onValueChange = {}, placeholder = "หนา", readOnly = true)
                 }
             }
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                FormField(label = "จำนวน", modifier = Modifier.weight(1f)) {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                FormField("กว้าง", modifier = Modifier.weight(1f)) {
+                    FormTextField(value = s.width ?: "-", onValueChange = {}, placeholder = "กว้าง", readOnly = true)
+                }
+                FormField("ยาว", modifier = Modifier.weight(1f)) {
+                    FormTextField(value = s.length ?: "-", onValueChange = {}, placeholder = "ยาว", readOnly = true)
+                }
+                FormField("หน่วยวัด", modifier = Modifier.weight(1f)) {
+                    FormTextField(value = s.dimensionUnit ?: "-", onValueChange = {}, placeholder = "หน่วย", readOnly = true)
+                }
+            }
+
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                FormField("จำนวน", modifier = Modifier.weight(1f)) {
                     FormTextField(
-                        value = s.quantity,
+                        value         = s.quantity,
                         onValueChange = onQuantityChange,
-                        placeholder = "จำนวนสินค้า",
-                        keyboardType = KeyboardType.Number
+                        placeholder   = "จำนวนสินค้า",
+                        keyboardType  = KeyboardType.Number
                     )
                 }
-                FormField(label = "หน่วยนับ", modifier = Modifier.weight(1f)) {
-                    FormTextField(
-                        value = s.unit,
-                        onValueChange = {},
-                        placeholder = "หน่วย",
-                        readOnly = true
-                    )
+                FormField("หน่วยนับ", modifier = Modifier.weight(1f)) {
+                    FormTextField(value = s.unit, onValueChange = {}, placeholder = "หน่วย", readOnly = true)
                 }
             }
 
-            FormField(label = "วันที่ลูกค้าต้องการ") {
+            FormField("วันที่ลูกค้าต้องการ") {
                 DatePickerField(
-                    selectedDate = s.wantedDate,
-                    placeholder = "เลือกวันที่ส่งมอบ",
+                    selectedDate   = s.wantedDate,
+                    placeholder    = "เลือกวันที่ส่งมอบ",
                     onDateSelected = onDateSelected
                 )
             }
 
-            FormField(label = "สาขาที่ออกของ") {
+            FormField("สาขาที่ออกของ") {
                 DropdownField(
-                    value = s.selectedShippingBranchName ?: "",
+                    value       = s.selectedShippingBranchName ?: "",
                     placeholder = if (s.isLoadingBranches) "กำลังโหลด..." else "เลือกสาขาที่ออกของ",
-                    options = s.shippingBranchOptions.map { it.second },
-                    onSelect = { idx ->
+                    options     = s.shippingBranchOptions.map { it.second },
+                    onSelect    = { idx ->
                         val item = s.shippingBranchOptions[idx]
                         onShippingBranchSelected(item.first, item.second)
                     }
@@ -241,56 +215,40 @@ fun AddProductContent(
 
             Spacer(Modifier.height(20.dp))
 
-            // Action Buttons
             Button(
-                onClick = onSave,
+                onClick  = onSave,
                 modifier = Modifier.fillMaxWidth().height(52.dp),
-                shape = RoundedCornerShape(12.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = AppColors.Primary),
-                enabled = !s.isSaving && s.selectedProductName.isNotBlank() && s.quantity.isNotBlank() && s.selectedShippingBranchId != null
+                shape    = RoundedCornerShape(12.dp),
+                colors   = ButtonDefaults.buttonColors(containerColor = AppColors.Primary),
+                enabled  = !s.isSaving &&
+                        s.selectedProductName.isNotBlank() &&
+                        s.quantity.isNotBlank() &&
+                        s.selectedShippingBranchId != null
             ) {
                 if (s.isSaving) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(24.dp),
-                        color = Color.White,
-                        strokeWidth = 2.dp
-                    )
+                    CircularProgressIndicator(modifier = Modifier.size(24.dp), color = Color.White, strokeWidth = 2.dp)
                 } else {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Icon(Icons.Default.CheckCircle, null, modifier = Modifier.size(20.dp))
-                        Text("บันทึกสินค้า", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                        Text(saveText, fontWeight = FontWeight.Bold, fontSize = 16.sp)
                     }
                 }
             }
 
-            TextButton(
-                onClick = onBack,
-                modifier = Modifier.fillMaxWidth()
-            ) {
+            TextButton(onClick = onBack, modifier = Modifier.fillMaxWidth()) {
                 Text("ยกเลิก", color = AppColors.TextSecondary, fontWeight = FontWeight.Medium)
             }
 
             if (s.error != null) {
-                Text(
-                    s.error!!,
-                    color = AppColors.Error,
-                    fontSize = 14.sp,
-                    modifier = Modifier.align(Alignment.CenterHorizontally)
-                )
+                Text(s.error!!, color = AppColors.Error, fontSize = 14.sp,
+                    modifier = Modifier.align(Alignment.CenterHorizontally))
             }
         }
     }
 }
 
 @Composable
-private fun FormField(
-    label: String,
-    modifier: Modifier = Modifier,
-    content: @Composable () -> Unit
-) {
+private fun FormField(label: String, modifier: Modifier = Modifier, content: @Composable () -> Unit) {
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(label, fontSize = 14.sp, fontWeight = FontWeight.Bold, color = AppColors.TextPrimary)
         content()
@@ -304,43 +262,19 @@ fun AddProductScreenPreview() {
         AddProductContent(
             s = AddProductUiState(
                 products = listOf(
-                    ProductSimpleDto(
-                        productId = "1",
-                        productName = "Product A",
-                        brand = "Brand X",
-                        category = "Category 1",
-                        subCategory = "Subcategory 1",
-                        unit = "ชิ้น",
-                        color = "Red",
-                        thickness = "10mm",
-                        width = "100cm",
-                        length = "200cm",
-                        dimensionUnit = "cm"
-                    )
+                    ProductSimpleDto("1", "Product A", "Brand X", "Category 1", "Subcategory 1", "ชิ้น",
+                        "Red", "10mm", "100cm", "200cm", "cm")
                 ),
-                selectedBrand = "Brand X",
-                selectedProductName = "Product A",
-                selectedGroup = "Category 1",
-                selectedSubgroup = "Subcategory 1",
-                color = "Red",
-                thickness = "10mm",
-                width = "100cm",
-                length = "200cm",
-                dimensionUnit = "cm",
-                quantity = "5",
-                unit = "ชิ้น",
-                filteredNames = listOf("Product A"),
-                shippingBranchOptions = listOf("B1" to "Bangkok Branch"),
-                selectedShippingBranchId = "B1",
-                selectedShippingBranchName = "Bangkok Branch"
+                selectedBrand = "Brand X", selectedProductName = "Product A",
+                selectedGroup = "Category 1", selectedSubgroup = "Subcategory 1",
+                color = "Red", thickness = "10mm", width = "100cm", length = "200cm", dimensionUnit = "cm",
+                quantity = "5", unit = "ชิ้น", filteredNames = listOf("Product A"),
+                shippingBranchOptions    = listOf("B1" to "Bangkok Branch"),
+                selectedShippingBranchId = "B1", selectedShippingBranchName = "Bangkok Branch",
+                isEditMode = true
             ),
-            onBack = {},
-            onBrandSelected = {},
-            onNameSelected = {},
-            onQuantityChange = {},
-            onDateSelected = {},
-            onShippingBranchSelected = { _, _ -> },
-            onSave = {}
+            onBack = {}, onBrandSelected = {}, onNameSelected = {},
+            onQuantityChange = {}, onDateSelected = {}, onShippingBranchSelected = { _, _ -> }, onSave = {}
         )
     }
 }

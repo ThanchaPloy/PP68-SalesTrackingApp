@@ -104,7 +104,8 @@ class ProjectRepository @Inject constructor(
             projectDao.insertProject(projectWithNumber)
 
             try {
-                val response = apiService.addProject(projectWithNumber.copy(projectNumber = null))
+                // ✅ แก้ไข: ส่ง projectNumber ไปด้วยเพื่อให้บันทึกลงคอลัมน์ project_number ในตาราง project
+                val response = apiService.addProject(projectWithNumber)
                 if (response.isSuccessful) {
                     val member = ProjectMemberInsertDto(
                         projectId = projectWithNumber.projectId,
@@ -154,6 +155,10 @@ class ProjectRepository @Inject constructor(
                     else              -> 0
                 }
 
+                apiService.setAppContext(
+                    mapOf("user_id" to updatedBy.ifBlank { "unknown" }, "source" to "edit_project")
+                )
+
                 val updates = mutableMapOf<String, Any?>(
                     "project_name"      to project.projectName,
                     "project_status"    to project.projectStatus,
@@ -163,7 +168,7 @@ class ProjectRepository @Inject constructor(
                     "loss_reason"       to project.lossReason,
                     "start_date"        to project.startDate,
                     "closing_date"      to project.closingDate,
-                    "progress_pct"      to progressPct
+                    "progress_pct"      to progressPct,
                 )
                 project.projectLat?.let { updates["project_lat"] = it }
                 project.projectLong?.let { updates["project_long"] = it }
@@ -215,6 +220,11 @@ class ProjectRepository @Inject constructor(
     ): Result<Unit> {
         return withContext(Dispatchers.IO) {
             try {
+
+                apiService.setAppContext(
+                    mapOf("user_id" to updatedBy.ifBlank { "unknown" }, "source" to "activity_result")
+                )
+
                 val response = apiService.updateProject("eq.$projectId", fields)
                 if (response.isSuccessful) {
                     fields["project_status"]?.let { newStatus ->
@@ -314,7 +324,7 @@ class ProjectRepository @Inject constructor(
                     // ✅ ดึง contactId จาก ProjectContactResponse row โดยตรง
                     val contacts = response.body()!!.map { row ->
                         ContactPerson(
-                            contactId = row.contactId,  // ← แก้จาก contact_id เป็น contactId
+                            contactId = row.contactId,
                             custId    = "",
                             fullName  = row.contactPerson?.fullName
                         )

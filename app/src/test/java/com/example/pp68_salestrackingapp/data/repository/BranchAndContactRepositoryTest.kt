@@ -137,6 +137,7 @@ class ContactRepositoryTest {
     private lateinit var repository: ContactRepository
     private val apiService = mockk<ApiService>(relaxed = true)
     private val contactDao = mockk<ContactDao>(relaxed = true)
+    private val authRepo = mockk<AuthRepository>(relaxed = true)
 
     private val sampleContact = ContactPerson(
         contactId   = "CON-001",
@@ -151,7 +152,7 @@ class ContactRepositoryTest {
 
     @Before
     fun setup() {
-        repository = ContactRepository(apiService, contactDao)
+        repository = ContactRepository(apiService, contactDao, authRepo)
     }
 
     // TC-UNIT-CONT-01

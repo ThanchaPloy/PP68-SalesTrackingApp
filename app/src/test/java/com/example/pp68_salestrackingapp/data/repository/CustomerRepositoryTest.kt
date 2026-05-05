@@ -32,11 +32,12 @@ class CustomerRepositoryExtendedTest {
     private val contactDao  = mockk<ContactDao>(relaxed = true)
     private val projectDao  = mockk<ProjectDao>(relaxed = true)
     private val activityDao = mockk<ActivityDao>(relaxed = true)
+    private val authRepo    = mockk<AuthRepository>(relaxed = true)
 
     private val sampleCustomer = Customer(
         custId = "CST-001", companyName = "บริษัท แสนสิริ", branch = null,
-        custType = "Developer", companyAddr = null, companyLat = null,
-        companyLong = null, companyStatus = "customer", firstCustomerDate = null
+        custType = "Developer", companyAddr = null, companyLat = 13.0,
+        companyLong = 100.0, companyStatus = "customer", firstCustomerDate = null
     )
 
     private val sampleContacts = listOf(
@@ -49,13 +50,13 @@ class CustomerRepositoryExtendedTest {
     )
 
     private val sampleCustomers = listOf(
-        Customer("CST-001", "แสนสิริ", null, "Developer", null, null, null, "customer", null),
-        Customer("CST-002", "เมเจอร์", null, "Developer", null, null, null, "customer", null)
+        Customer("CST-001", "แสนสิริ", null, "Developer", null, 13.0, 100.0, "customer", null),
+        Customer("CST-002", "เมเจอร์", null, "Developer", null, 13.0, 100.0, "customer", null)
     )
 
     @Before
     fun setup() {
-        repository = CustomerRepository(apiService, customerDao, contactDao, projectDao, activityDao)
+        repository = CustomerRepository(apiService, customerDao, contactDao, projectDao, activityDao, authRepo)
     }
 
     // TC-UNIT-CUST-EXT-01
@@ -156,8 +157,7 @@ class CustomerRepositoryExtendedTest {
     // TC-UNIT-CUST-EXT-09
     @Test
     fun `getContactPersons success should return list`() = runTest {
-        coEvery { apiService.getContactsByCustomerIds("eq.CST-001") } returns
-                Response.success(sampleContacts)
+        every { contactDao.getContactsByCustomer("CST-001") } returns flowOf(sampleContacts)
 
         val result = repository.getContactPersons("CST-001")
 
@@ -167,9 +167,8 @@ class CustomerRepositoryExtendedTest {
 
     // TC-UNIT-CUST-EXT-10
     @Test
-    fun `getContactPersons API error should return failure`() = runTest {
-        coEvery { apiService.getContactsByCustomerIds(any()) } returns
-                Response.error(500, "error".toResponseBody())
+    fun `getContactPersons failure should return failure`() = runTest {
+        every { contactDao.getContactsByCustomer(any()) } throws Exception("DB Error")
 
         val result = repository.getContactPersons("CST-001")
 
@@ -222,14 +221,9 @@ class CustomerRepositoryExtendedTest {
     // TC-UNIT-CUST-FINAL-05
     @Test
     fun `refreshCustomers success should clear and insert customers`() = runTest {
-        val members  = listOf(ProjectMemberDto("PJ-001", "USR-001", "owner", "TS-26-S001-001"))
-        val projects = listOf(Project(projectId = "PJ-001", custId = "CST-001", projectName = "P1"))
+        coEvery { apiService.getCustomersByBranch(branchId = any()) } returns Response.success(sampleCustomers)
 
-        coEvery { apiService.getMyProjectIds("eq.USR-001") } returns Response.success(members)
-        coEvery { apiService.getProjectsByIds(any()) } returns Response.success(projects)
-        coEvery { apiService.getCustomersByIds(any()) } returns Response.success(sampleCustomers)
-
-        val result = repository.refreshCustomers("USR-001")
+        val result = repository.refreshCustomers("BR-001")
 
         assertTrue(result.isSuccess)
         coVerify { customerDao.clearAndInsert(sampleCustomers) }
@@ -237,22 +231,20 @@ class CustomerRepositoryExtendedTest {
 
     // TC-UNIT-CUST-FINAL-06
     @Test
-    fun `refreshCustomers no projects should clear local and return success`() = runTest {
-        coEvery { apiService.getMyProjectIds(any()) } returns Response.success(emptyList())
+    fun `refreshCustomers API error should return failure`() = runTest {
+        coEvery { apiService.getCustomersByBranch(any()) } returns Response.error(500, "error".toResponseBody())
 
-        val result = repository.refreshCustomers("USR-001")
+        val result = repository.refreshCustomers("BR-001")
 
-        assertTrue(result.isSuccess)
-        coVerify { customerDao.clearAndInsert(emptyList()) }
+        assertTrue(result.isFailure)
     }
 
     // TC-UNIT-CUST-FINAL-07
     @Test
     fun `refreshCustomers network exception should return failure`() = runTest {
-        // ใช้ throws แทน Response.error() เพราะ repository จัดการ HTTP error แบบ success
-        coEvery { apiService.getMyProjectIds(any()) } throws Exception("Network error")
+        coEvery { apiService.getCustomersByBranch(any()) } throws Exception("Network error")
 
-        val result = repository.refreshCustomers("USR-001")
+        val result = repository.refreshCustomers("BR-001")
 
         assertTrue(result.isFailure)
     }

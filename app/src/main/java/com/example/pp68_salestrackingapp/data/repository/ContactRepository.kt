@@ -39,9 +39,8 @@ class ContactRepository @Inject constructor(
     suspend fun addContact(contact: ContactPerson): kotlin.Result<Unit> {
         return withContext(Dispatchers.IO) {
             val user = authRepo.currentUser()
-            val userId = user?.userId?.trim() // ทำความสะอาด ID
+            val userId = user?.userId?.trim()
 
-            // ✅ แนบเจ้าของข้อมูลเข้าไป และทำความสะอาดข้อมูลอื่นๆ
             val contactWithOwner = contact.copy(
                 userId = userId,
                 fullName = contact.fullName?.trim(),
@@ -49,21 +48,44 @@ class ContactRepository @Inject constructor(
                 email = contact.email?.trim()
             )
 
-            // 1. บันทึกลงเครื่องทันที
-            contactDao.insertAll(listOf(contactWithOwner))
+            contactDao.insertContact(contactWithOwner)
             try {
-                // 2. พยายามส่งขึ้น Server
                 val response = apiService.addContact(contactWithOwner)
                 if (response.isSuccessful) {
                     kotlin.Result.success(Unit)
                 } else {
                     val errBody = response.errorBody()?.string() ?: ""
-                    // Log error ให้เห็นชัดเจนใน Logcat
-                    android.util.Log.e("ContactRepo", "Server Rejected: $errBody")
                     kotlin.Result.failure(Exception("Server Rejected: $errBody"))
                 }
             } catch (e: Exception) {
-                // 3. ถ้า Error เพราะ Network (Timeout/Offline) ให้ผ่านไปก่อน เดี๋ยว Sync ทีหลัง
+                if (e is IOException) kotlin.Result.success(Unit)
+                else kotlin.Result.failure(e)
+            }
+        }
+    }
+
+    suspend fun updateContact(contact: ContactPerson): kotlin.Result<Unit> {
+        return withContext(Dispatchers.IO) {
+            contactDao.insertContact(contact)
+            try {
+                val updates = mutableMapOf<String, Any?>()
+                updates["full_name"]   = contact.fullName
+                updates["nickname"]    = contact.nickname
+                updates["position"]    = contact.position
+                updates["phone_number"] = contact.phoneNumber
+                updates["email"]       = contact.email
+                updates["line"]        = contact.line
+                updates["is_active"]   = contact.isActive
+                updates["is_dm_confirmed"] = contact.isDmConfirmed
+
+                val response = apiService.updateContact("eq.${contact.contactId}", updates)
+                if (response.isSuccessful) {
+                    kotlin.Result.success(Unit)
+                } else {
+                    val errBody = response.errorBody()?.string() ?: ""
+                    kotlin.Result.failure(Exception("Update failed: $errBody"))
+                }
+            } catch (e: Exception) {
                 if (e is IOException) kotlin.Result.success(Unit)
                 else kotlin.Result.failure(e)
             }

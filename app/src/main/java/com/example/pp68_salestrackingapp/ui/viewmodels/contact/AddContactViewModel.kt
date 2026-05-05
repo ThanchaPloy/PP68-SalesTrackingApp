@@ -231,7 +231,11 @@ class AddContactViewModel @Inject constructor(
                 isDmConfirmed = s.isDecisionMaker
             )
 
-            val result = contactRepo.addContact(contactToSave)
+            val result = if (s.contactId != null) {
+                contactRepo.updateContact(contactToSave)
+            } else {
+                contactRepo.addContact(contactToSave)
+            }
 
             result.fold(
                 onSuccess = { _uiState.update { it.copy(isLoading = false, isSaved = true) } },

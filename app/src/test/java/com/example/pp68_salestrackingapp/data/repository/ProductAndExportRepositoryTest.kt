@@ -25,9 +25,9 @@ class ProductRepositoryTest {
     private val apiService = mockk<ApiService>(relaxed = true)
 
     private val sampleProducts = listOf(
-        ProductMasterDto("PRD-001", "Glass", "Clear Glass", null, "BrandA", "ตร.ม."),
-        ProductMasterDto("PRD-002", "Aluminum", "Frame", null, "BrandB", "เส้น"),
-        ProductMasterDto("PRD-003", "Hardware", "Hinge", null, null, "ชิ้น")
+        ProductMasterDto("PRD-001", "Glass", "Clear Glass", null, "BrandA", "ตร.ม.", null, null, null, null, null),
+        ProductMasterDto("PRD-002", "Aluminum", "Frame", null, "BrandB", "เส้น", null, null, null, null, null),
+        ProductMasterDto("PRD-003", "Hardware", "Hinge", null, null, "ชิ้น", null, null, null, null, null)
     )
 
     @Before

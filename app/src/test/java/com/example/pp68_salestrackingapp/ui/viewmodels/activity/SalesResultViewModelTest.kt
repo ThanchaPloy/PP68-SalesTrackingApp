@@ -94,6 +94,7 @@ class SalesResultViewModelTest {
             Project(projectId = "PRJ-1", custId = "C1", projectName = "Project A", projectStatus = "Lead")
         )
         coEvery { activityRepo.getActivityResult("A1") } returns ActivityResult(
+            resultId = "R1",
             activityId = "A1",
             newStatus = "Quotation",
             opportunityScore = "WARM",
@@ -283,6 +284,7 @@ class SalesResultViewModelTest {
             Project(projectId = "PRJ-1", custId = "C1", projectName = "Project A", projectStatus = "Lead")
         )
         coEvery { activityRepo.getActivityResult("A1") } returns ActivityResult(
+            resultId = "R1",
             activityId = "A1",
             reportDate = "2026-04-02",
             newStatus = "Make a Decision",
