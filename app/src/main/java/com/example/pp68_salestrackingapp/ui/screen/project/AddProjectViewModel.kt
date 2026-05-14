@@ -13,11 +13,12 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import java.util.UUID
 import javax.inject.Inject
 
 data class AddProjectUiState(
     val projectId:              String? = null,
-    val displayProjectId:       String  = "รอกดบันทึกเพื่อสร้างหมายเลข",
+    val generatedProjectNumber: String  = "รอกดบันทึกเพื่อสร้างหมายเลข",
     val projectName:            String  = "",
     val branch:                 String  = "",
     val expectedValue:          String  = "",
@@ -41,8 +42,6 @@ data class AddProjectUiState(
     val teamMemberOptions:      List<Pair<String, String>> = emptyList(),
     val selectedMemberIds:      Set<String> = emptySet(),
     val isLoadingMembers:       Boolean = false,
-    val billingBranchOptions:      List<Pair<String, String>> = emptyList(),
-    val isLoadingBillingBranches:  Boolean = false,
     val selectedBillingBranchId:   String? = null,
     val selectedBillingBranchName: String? = null,
     val projectNameError:       String? = null,
@@ -52,6 +51,7 @@ data class AddProjectUiState(
     val isLoading:              Boolean = false,
     val isSaved:                Boolean = false,
     val saveError:              String? = null,
+    val projectNumber:          String  = "",
     val lossReason:             String  = "",
     val otherLossReason:        String  = "",
     val lossReasonError:        String? = null
@@ -98,51 +98,22 @@ class AddProjectViewModel @Inject constructor(
     init {
         loadCustomers()
         checkUserBranchAndLoadTeams()
-        loadAllBillingBranches()
-    }
-
-    private fun loadAllBillingBranches() {
-        viewModelScope.launch {
-            _uiState.update { it.copy(isLoadingBillingBranches = true) }
-            try {
-                val result = branchRepo.getBranches()
-                result.onSuccess { branches ->
-                    _uiState.update {
-                        it.copy(
-                            billingBranchOptions     = branches.map { b -> b.branchId to b.branchName },
-                            isLoadingBillingBranches = false
-                        )
-                    }
-                }.onFailure {
-                    branchRepo.syncFromRemote()
-                    val cached = branchRepo.observeBranches()
-                    _uiState.update {
-                        it.copy(
-                            billingBranchOptions     = cached.map { b -> b.branchId to b.branchName },
-                            isLoadingBillingBranches = false
-                        )
-                    }
-                }
-            } catch (e: Exception) {
-                _uiState.update { it.copy(isLoadingBillingBranches = false) }
-            }
-        }
     }
 
     private fun checkUserBranchAndLoadTeams() {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoadingTeams = true) }
-            val currentUser  = authRepo.currentUser()
+            val currentUser = authRepo.currentUser()
             val userBranchId = currentUser?.teamId ?: ""
 
             if (userBranchId == "PJ-001") {
                 val branch = branchRepo.getBranchById(userBranchId)
                 _uiState.update {
                     it.copy(
-                        selectedTeamId   = userBranchId,
+                        selectedTeamId = userBranchId,
                         selectedTeamName = branch?.branchName ?: "ทีมโปรเจค",
-                        teamOptions      = listOf(userBranchId to (branch?.branchName ?: "ทีมโปรเจค")),
-                        isLoadingTeams   = false
+                        teamOptions = listOf(userBranchId to (branch?.branchName ?: "ทีมโปรเจค")),
+                        isLoadingTeams = false
                     )
                 }
                 loadMembersForTeam(userBranchId)
@@ -150,8 +121,8 @@ class AddProjectViewModel @Inject constructor(
                 try {
                     branchRepo.syncFromRemote()
                     val allBranches = branchRepo.observeBranches()
-                    val userBranch  = allBranches.find { it.branchId == userBranchId }
-
+                    val userBranch = allBranches.find { it.branchId == userBranchId }
+                    
                     val filteredBranches = if (userBranch != null) {
                         allBranches.filter { it.region == userBranch.region }
                     } else {
@@ -160,17 +131,18 @@ class AddProjectViewModel @Inject constructor(
 
                     _uiState.update {
                         it.copy(
-                            teamOptions    = filteredBranches.map { b -> b.branchId to b.branchName },
+                            teamOptions = filteredBranches.map { b -> b.branchId to b.branchName },
                             isLoadingTeams = false
                         )
                     }
-
+                    
                     if (filteredBranches.size == 1) {
                         val b = filteredBranches.first()
                         onEvent(AddProjectEvent.TeamSelected(b.branchId, b.branchName))
                     } else if (userBranch != null && _uiState.value.projectId == null) {
                         onEvent(AddProjectEvent.TeamSelected(userBranch.branchId, userBranch.branchName))
                     }
+
                 } catch (e: Exception) {
                     _uiState.update { it.copy(isLoadingTeams = false) }
                 }
@@ -180,6 +152,7 @@ class AddProjectViewModel @Inject constructor(
 
     private suspend fun loadContactsAndReturn(custId: String): List<Pair<String, String>> {
         return try {
+            // ✅ ดึงจาก API โดยตรงตามที่แนะนำ
             val resp = apiService.getContactsByCustomerIds("eq.$custId")
             if (resp.isSuccessful && resp.body() != null) {
                 resp.body()!!.map { c -> c.contactId.trim() to (c.fullName ?: "") }
@@ -203,21 +176,21 @@ class AddProjectViewModel @Inject constructor(
 
                     _uiState.update {
                         it.copy(
-                            projectId              = project.projectId,
-                            displayProjectId       = project.projectId,
-                            projectName            = project.projectName,
-                            projectStatus          = project.projectStatus,
-                            expectedValue          = project.expectedValue?.toString() ?: "",
-                            startDate              = project.startDate,
-                            closeDate              = project.closingDate,
-                            siteLat                = project.projectLat,
-                            siteLong               = project.projectLong,
-                            selectedCustomerId     = project.custId,
-                            selectedTeamId         = project.branchId,
+                            projectId             = project.projectId,
+                            generatedProjectNumber = project.projectNumber ?: "",
+                            projectName           = project.projectName,
+                            projectStatus         = project.projectStatus,
+                            expectedValue         = project.expectedValue?.toString() ?: "",
+                            startDate             = project.startDate,
+                            closeDate             = project.closingDate,
+                            siteLat               = project.projectLat,
+                            siteLong              = project.projectLong,
+                            selectedCustomerId    = project.custId,
+                            selectedTeamId        = project.branchId,
                             selectedBillingBranchId = project.billingBranchId,
-                            lossReason             = reason,
-                            otherLossReason        = other,
-                            isLoading              = false
+                            lossReason            = reason,
+                            otherLossReason       = other,
+                            isLoading             = false
                         )
                     }
 
@@ -225,11 +198,24 @@ class AddProjectViewModel @Inject constructor(
                         _uiState.update { it.copy(selectedCustomerName = c.companyName) }
                     }
 
+                    // ✅ ปรับปรุงตามคำแนะนำ: รอ loadContactsAndReturn เสร็จก่อน แล้วอัปเดตพร้อมกัน
                     val contactOptions = loadContactsAndReturn(project.custId)
-                    _uiState.update { it.copy(contactOptions = contactOptions, isLoadingContacts = false) }
+                    // ✅ set contactOptions ทันทีที่ดึงมาได้ — ไม่รอ getProjectContacts
+                    _uiState.update {
+                        it.copy(
+                            contactOptions    = contactOptions,
+                            isLoadingContacts = false
+                        )
+                    }
 
+                    // ✅ set selectedContactIds แยกต่างหาก
                     projectRepo.getProjectContacts(id).onSuccess { contacts ->
                         val selectedIds = contacts.mapNotNull { it.contactId.trim() }.toSet()
+
+                        // ✅ เพิ่ม log ดูค่าจริง
+                        android.util.Log.d("AddProject", "contactOptions IDs: ${contactOptions.map { it.first }}")
+                        android.util.Log.d("AddProject", "selectedIds: $selectedIds")
+
                         _uiState.update { it.copy(selectedContactIds = selectedIds) }
                     }
 
@@ -238,22 +224,16 @@ class AddProjectViewModel @Inject constructor(
                             _uiState.update { it.copy(selectedTeamName = b.branchName) }
                         }
                         loadMembersForTeam(bid)
-
+                        
                         val existingMembers = projectRepo.getProjectMembersDetailed(id)
-                        _uiState.update {
-                            it.copy(selectedMemberIds = existingMembers.map { m -> m.first.trim() }.toSet())
-                        }
+                        _uiState.update { it.copy(
+                            selectedMemberIds = existingMembers.map { m -> m.first.trim() }.toSet() 
+                        )}
                     }
 
                     project.billingBranchId?.let { bid ->
-                        val billingName = _uiState.value.billingBranchOptions
-                            .find { it.first == bid }?.second
-                        if (billingName != null) {
-                            _uiState.update { it.copy(selectedBillingBranchName = billingName) }
-                        } else {
-                            branchRepo.observeBranches().find { it.branchId == bid }?.let { b ->
-                                _uiState.update { it.copy(selectedBillingBranchName = b.branchName) }
-                            }
+                        branchRepo.observeBranches().find { it.branchId == bid }?.let { b ->
+                            _uiState.update { it.copy(selectedBillingBranchName = b.branchName) }
                         }
                     }
                 },
@@ -276,7 +256,9 @@ class AddProjectViewModel @Inject constructor(
                         )
                     }
                 },
-                onFailure = { _uiState.update { it.copy(isLoadingCustomers = false) } }
+                onFailure = {
+                    _uiState.update { it.copy(isLoadingCustomers = false) }
+                }
             )
         }
     }
@@ -284,6 +266,7 @@ class AddProjectViewModel @Inject constructor(
     private fun loadContacts(custId: String) {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoadingContacts = true) }
+            // ✅ เปลี่ยนมาดึงจาก API ตรงตามแนวทาง loadContactsAndReturn
             try {
                 val resp = apiService.getContactsByCustomerIds("eq.$custId")
                 if (resp.isSuccessful && resp.body() != null) {
@@ -303,12 +286,10 @@ class AddProjectViewModel @Inject constructor(
             _uiState.update { it.copy(isLoadingMembers = true) }
             projectRepo.getMembersByBranch(teamId).fold(
                 onSuccess = { list ->
-                    _uiState.update {
-                        it.copy(
-                            teamMemberOptions = list.map { it.first.trim() to it.second },
-                            isLoadingMembers  = false
-                        )
-                    }
+                    _uiState.update { it.copy(
+                        teamMemberOptions = list.map { it.first.trim() to it.second }, 
+                        isLoadingMembers = false 
+                    )}
                 },
                 onFailure = { _uiState.update { it.copy(isLoadingMembers = false) } }
             )
@@ -334,21 +315,22 @@ class AddProjectViewModel @Inject constructor(
                 }
                 loadContacts(event.id.trim())
             }
-            is AddProjectEvent.ContactToggled -> {
-                val current  = _uiState.value.selectedContactIds.toMutableSet()
+            is AddProjectEvent.ContactToggled    -> {
+                val current = _uiState.value.selectedContactIds.toMutableSet()
                 val targetId = event.id.trim()
-                if (targetId in current) current.remove(targetId) else current.add(targetId)
+                if (targetId in current) current.remove(targetId)
+                else current.add(targetId)
                 _uiState.update { it.copy(selectedContactIds = current) }
             }
             is AddProjectEvent.ExpectedValueChanged ->
                 _uiState.update { it.copy(expectedValue = event.value) }
-            is AddProjectEvent.StartDateChanged ->
+            is AddProjectEvent.StartDateChanged   ->
                 _uiState.update { it.copy(startDate = event.value.ifBlank { null }) }
-            is AddProjectEvent.CloseDateChanged ->
+            is AddProjectEvent.CloseDateChanged   ->
                 _uiState.update { it.copy(closeDate = event.value.ifBlank { null }) }
-            is AddProjectEvent.StatusChanged ->
+            is AddProjectEvent.StatusChanged      ->
                 _uiState.update { it.copy(projectStatus = event.value, statusError = null) }
-            is AddProjectEvent.TeamSelected -> {
+            is AddProjectEvent.TeamSelected       -> {
                 _uiState.update {
                     it.copy(
                         selectedTeamId    = event.id.trim(),
@@ -362,19 +344,20 @@ class AddProjectViewModel @Inject constructor(
             is AddProjectEvent.BillingBranchSelected -> {
                 _uiState.update {
                     it.copy(
-                        selectedBillingBranchId   = event.id.trim(),
+                        selectedBillingBranchId = event.id.trim(),
                         selectedBillingBranchName = event.name,
-                        billingBranchError        = null
+                        billingBranchError = null
                     )
                 }
             }
-            is AddProjectEvent.MemberToggled -> {
-                val current      = _uiState.value.selectedMemberIds.toMutableSet()
+            is AddProjectEvent.MemberToggled      -> {
+                val current = _uiState.value.selectedMemberIds.toMutableSet()
                 val targetUserId = event.userId.trim()
-                if (targetUserId in current) current.remove(targetUserId) else current.add(targetUserId)
+                if (targetUserId in current) current.remove(targetUserId)
+                else current.add(targetUserId)
                 _uiState.update { it.copy(selectedMemberIds = current) }
             }
-            is AddProjectEvent.LocationPicked ->
+            is AddProjectEvent.LocationPicked     ->
                 _uiState.update {
                     it.copy(
                         siteLat      = event.lat,
@@ -427,20 +410,20 @@ class AddProjectViewModel @Inject constructor(
             _uiState.update { it.copy(isLoading = true, saveError = null) }
             val s = _uiState.value
             try {
-                val user      = authRepo.currentUser()
-                val userId    = user?.userId ?: "USR-0000"
-                val branchId  = s.selectedTeamId ?: user?.teamId ?: "XX-0001"
+                val userId   = authRepo.currentUser()?.userId ?: "USR-0000"
+                val branchId = s.selectedTeamId ?: authRepo.currentUser()?.teamId ?: "XX-0001"
+                val projectId = s.projectId ?: ("PJ-" + UUID.randomUUID().toString().take(8).uppercase())
 
                 val finalLossReason = if (s.projectStatus == "Lost" || s.projectStatus == "Failed") {
                     if (s.lossReason == "อื่น ๆ") s.otherLossReason else s.lossReason
                 } else null
 
-                // ✅ projectId จะถูกสร้างใน repository โดยใช้รูปแบบ project number
                 val projectToSave = Project(
-                    projectId             = s.projectId ?: "",
+                    projectId             = projectId,
                     custId                = s.selectedCustomerId ?: "",
                     branchId              = branchId,
                     billingBranchId       = s.selectedBillingBranchId,
+                    projectNumber         = if (s.projectId != null) s.generatedProjectNumber else null,
                     projectName           = s.projectName,
                     expectedValue         = s.expectedValue.replace(",", "").toDoubleOrNull(),
                     projectStatus         = s.projectStatus,
@@ -453,30 +436,19 @@ class AddProjectViewModel @Inject constructor(
                     lossReason            = finalLossReason
                 )
 
-                val result = if (s.projectId != null) {
-                    projectRepo.updateProject(projectToSave)
-                } else {
+                val result = if (s.projectId != null) projectRepo.updateProject(projectToSave)
+                else {
                     projectRepo.createProject(projectToSave, userId).fold(
-                        onSuccess = { createdProject ->
-                            // อัปเดต ID เพื่อใช้ในการเพิ่มสมาชิก/ติดต่อ
-                            _uiState.update { it.copy(projectId = createdProject.projectId) }
-                            kotlin.Result.success(Unit)
-                        },
+                        onSuccess = { kotlin.Result.success(Unit) },
                         onFailure = { kotlin.Result.failure(it) }
                     )
                 }
 
                 result.onSuccess {
-                    val finalProjectId = _uiState.value.projectId ?: ""
                     val memberIds = s.selectedMemberIds.map { it.trim() }.ifEmpty { listOf(userId.trim()) }
-                    
-                    // ✅ ในตาราง project_sales_member ไม่มี project_number แล้ว
-                    projectRepo.addProjectMembers(
-                        projectId = finalProjectId,
-                        userIds   = memberIds,
-                        role      = "owner"
-                    )
-                    projectRepo.saveProjectContacts(finalProjectId, s.selectedContactIds.map { it.trim() })
+                    projectRepo.addProjectMembers(projectId, memberIds, role = "owner")
+                    projectRepo.saveProjectContacts(projectId, s.selectedContactIds.map { it.trim() })
+
                     _uiState.update { it.copy(isLoading = false, isSaved = true) }
                 }.onFailure { e ->
                     _uiState.update { it.copy(isLoading = false, saveError = e.message) }

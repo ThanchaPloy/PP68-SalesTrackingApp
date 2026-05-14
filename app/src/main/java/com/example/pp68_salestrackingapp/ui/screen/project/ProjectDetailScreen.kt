@@ -20,6 +20,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -63,7 +64,7 @@ fun ProjectDetailScreen(
     onCreateActivity:    (String) -> Unit = {},
     onSalesResultClick: (String) -> Unit,
     onInventoryClick:    (String) -> Unit = {},
-    onRecordResult:      (projectId: String?, activityId: String?) -> Unit = { _, _ -> },
+    onRecordResult:      (projectId: String?, activityId: String?, resultId: String?) -> Unit = { _, _, _ -> },
     onActivityClick:     (String) -> Unit = {},
     onCheckin:           (String) -> Unit = {},
     onFinish:            (String) -> Unit = {},
@@ -109,7 +110,7 @@ fun ProjectDetailContent(
     onCreateActivity: (String) -> Unit,
     onInventoryClick: (String) -> Unit,
     onSalesResultClick: (String) -> Unit,
-    onRecordResult: (String?, String?) -> Unit,
+    onRecordResult: (String?, String?, String?) -> Unit,
     onActivityClick: (String) -> Unit,
     onCheckin: (String) -> Unit = {},
     onFinish: (String) -> Unit = {},
@@ -190,7 +191,7 @@ fun ProjectDetailContent(
                     shape          = CircleShape,
                     modifier       = Modifier.size(52.dp)
                 ) {
-                    Icon(Icons.Default.Assignment, "บันทึกผลการขาย",
+                    Icon(Icons.AutoMirrored.Filled.Assignment, "บันทึกผลการขาย",
                         modifier = Modifier.size(22.dp))
                 }
             }
@@ -298,9 +299,22 @@ fun ProjectDetailContent(
                     items(historySorted) { item ->
                         TimelineHistoryRow(
                             item = item,
-                            onClick = { onActivityClick(item.activityId) },
-                            onFinish = { onFinish(item.activityId) },
-                            onRecordResult = { onRecordResult(null, item.activityId) },
+                            onClick = { 
+                                if (item.isStandaloneResult) {
+                                    // สำหรับ standalone เปิดหน้ารายงานโดยตรง
+                                    onRecordResult(s.project?.projectId, null, item.resultId)
+                                } else {
+                                    item.activityId?.let { onActivityClick(it) }
+                                }
+                            },
+                            onFinish = { item.activityId?.let { onFinish(it) } },
+                            onRecordResult = { 
+                                if (item.isStandaloneResult) {
+                                    onRecordResult(s.project?.projectId, null, item.resultId)
+                                } else {
+                                    onRecordResult(null, item.activityId, null)
+                                }
+                            },
                             isLast = item == historySorted.last()
                         )
                     }
@@ -319,12 +333,12 @@ private fun TimelineTaskRow(
     onFinish: () -> Unit,
     isLast: Boolean
 ) {
-    // ... logic remains same as provided in prompt ...
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp)
     ) {
+        // Timeline Column
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             modifier = Modifier.width(24.dp)
@@ -347,11 +361,14 @@ private fun TimelineTaskRow(
                 Spacer(Modifier.height(24.dp))
             }
         }
+        
         Spacer(Modifier.width(8.dp))
+        
         TaskCard(task = task, onClick = onClick, onCheckin = onCheckin, onFinish = onFinish)
     }
 }
 
+// ── Timeline Row for History ──────────────────────────────────
 @Composable
 private fun TimelineHistoryRow(
     item: HistoryItem, 
@@ -365,6 +382,7 @@ private fun TimelineHistoryRow(
             .fillMaxWidth()
             .padding(horizontal = 16.dp)
     ) {
+        // Timeline Column
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             modifier = Modifier.width(24.dp)
@@ -387,7 +405,9 @@ private fun TimelineHistoryRow(
                 Spacer(Modifier.height(24.dp))
             }
         }
+        
         Spacer(Modifier.width(8.dp))
+        
         HistoryCard(item = item, onClick = onClick, onFinish = onFinish, onRecordResult = onRecordResult)
     }
 }
@@ -419,7 +439,7 @@ private fun ProjectHeaderCard(
                         color      = TextDark
                     )
                     Text(
-                        text = "เลขที่: ${project.projectId}",
+                        "อ้างอิง: ${project.projectNumber}",
                         fontSize = 12.sp,
                         color    = TextGray
                     )
@@ -490,6 +510,7 @@ private fun ProjectHeaderCard(
                 }
             }
 
+            // ✅ เพิ่ม Progress Bar หรือ Loss Reason
             if (project.projectStatus !in listOf("Lost", "Failed")) {
                 Spacer(Modifier.height(16.dp))
                 HorizontalDivider(color = Color(0xFFFFFFFF).copy(alpha = 0.5f))
@@ -521,20 +542,38 @@ private fun ProjectHeaderCard(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            Icon(Icons.Default.Cancel, null, tint = Color(0xFF991B1B), modifier = Modifier.size(16.dp))
+                            Icon(
+                                Icons.Default.Cancel, null,
+                                tint     = Color(0xFF991B1B),
+                                modifier = Modifier.size(16.dp)
+                            )
                             Text(
-                                text = if (project.projectStatus == "Lost") "โครงการนี้ไม่ได้รับงาน" else "โครงการนี้ถูกยกเลิก",
-                                fontSize = 13.sp, color = Color(0xFF991B1B), fontWeight = FontWeight.Medium
+                                text = if (project.projectStatus == "Lost")
+                                    "โครงการนี้ไม่ได้รับงาน" else "โครงการนี้ถูกยกเลิก",
+                                fontSize   = 13.sp,
+                                color      = Color(0xFF991B1B),
+                                fontWeight = FontWeight.Medium
                             )
                         }
+                        
+                        // แสดงสาเหตุ (Loss Reason)
                         if (!project.lossReason.isNullOrBlank()) {
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                                 modifier = Modifier.padding(start = 24.dp)
                             ) {
-                                Icon(Icons.Default.Info, null, tint = Color(0xFF991B1B), modifier = Modifier.size(14.dp))
-                                Text(text = "สาเหตุ: ${project.lossReason}", fontSize = 12.sp, color = Color(0xFF991B1B))
+                                Icon(
+                                    Icons.Default.Info, null,
+                                    tint = Color(0xFF991B1B),
+                                    modifier = Modifier.size(14.dp)
+                                )
+                                Text(
+                                    text = "สาเหตุ: ${project.lossReason}",
+                                    fontSize = 12.sp,
+                                    color = Color(0xFF991B1B),
+                                    fontWeight = FontWeight.Normal
+                                )
                             }
                         }
                     }
@@ -569,7 +608,9 @@ private fun SectionHeader(icon: ImageVector, title: String, sub: String?) {
             Spacer(Modifier.width(8.dp))
             Text(title, fontWeight = FontWeight.Bold, fontSize = 16.sp, color = TextDark)
         }
-        sub?.let { Text(it, fontSize = 12.sp, color = TextGray) }
+        sub?.let {
+            Text(it, fontSize = 12.sp, color = TextGray)
+        }
     }
 }
 
@@ -607,22 +648,27 @@ private fun TaskCard(task: TaskItem, onClick: () -> Unit, onCheckin: () -> Unit,
             task.description?.let {
                 Text(it, fontSize = 13.sp, color = TextGray, modifier = Modifier.padding(top = 4.dp))
             }
+            
             Spacer(Modifier.height(12.dp))
+            
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(
                     onClick = onCheckin,
                     colors = ButtonDefaults.buttonColors(containerColor = BlueBtn),
                     shape = RoundedCornerShape(8.dp),
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
                     modifier = Modifier.height(32.dp)
                 ) {
                     Icon(Icons.Default.LocationOn, null, modifier = Modifier.size(14.dp))
                     Spacer(Modifier.width(4.dp))
                     Text("เช็คอิน", fontSize = 11.sp)
                 }
+                
                 OutlinedButton(
                     onClick = onFinish,
                     border = androidx.compose.foundation.BorderStroke(1.dp, BlueBtn),
                     shape = RoundedCornerShape(8.dp),
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
                     modifier = Modifier.height(32.dp)
                 ) {
                     Text("เสร็จสิ้น", fontSize = 11.sp, color = BlueBtn)
@@ -650,6 +696,7 @@ private fun HistoryCard(item: HistoryItem, onClick: () -> Unit, onFinish: () -> 
                     Text(item.title, fontWeight = FontWeight.Bold, fontSize = 15.sp, color = TextDark)
                     Text(item.plannedDate ?: "-", fontSize = 12.sp, color = TextGray)
                 }
+                
                 Surface(
                     color = if(item.planStatus.lowercase() == "completed") Color(0xFFE8F5E9) else Color(0xFFE3F2FD),
                     shape = RoundedCornerShape(8.dp)
@@ -657,12 +704,17 @@ private fun HistoryCard(item: HistoryItem, onClick: () -> Unit, onFinish: () -> 
                     Text(
                         if(item.planStatus.lowercase() == "completed") "เสร็จสิ้น" else item.planStatus.uppercase(),
                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                        fontSize = 10.sp, fontWeight = FontWeight.Bold,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
                         color = if(item.planStatus.lowercase() == "completed") Color(0xFF2E7D32) else Color(0xFF1976D2)
                     )
                 }
             }
-            Row(modifier = Modifier.padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+
+            Row(
+                modifier = Modifier.padding(top = 12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 Icon(
                     when(item.activityType.lowercase()){
                         "call" -> Icons.Default.Phone
@@ -674,7 +726,9 @@ private fun HistoryCard(item: HistoryItem, onClick: () -> Unit, onFinish: () -> 
                 Spacer(Modifier.width(4.dp))
                 Text(item.contactName ?: "ไม่ระบุชื่อผู้ติดต่อ", fontSize = 13.sp, color = TextGray)
             }
+            
             Spacer(Modifier.height(12.dp))
+            
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (item.planStatus.lowercase() != "completed") {
                     Button(
@@ -682,8 +736,11 @@ private fun HistoryCard(item: HistoryItem, onClick: () -> Unit, onFinish: () -> 
                         colors = ButtonDefaults.buttonColors(containerColor = RedPrimary),
                         shape = RoundedCornerShape(8.dp),
                         modifier = Modifier.height(32.dp)
-                    ) { Text("เสร็จสมบูรณ์", fontSize = 11.sp) }
+                    ) {
+                        Text("เสร็จสมบูรณ์", fontSize = 11.sp)
+                    }
                 }
+                
                 TextButton(onClick = onRecordResult) {
                     Icon(Icons.AutoMirrored.Filled.OpenInNew, null, modifier = Modifier.size(14.dp), tint = BlueBtn)
                     Spacer(Modifier.width(4.dp))
@@ -697,29 +754,72 @@ private fun HistoryCard(item: HistoryItem, onClick: () -> Unit, onFinish: () -> 
 @Composable
 private fun SalesTeamRow(members: List<TeamMember>) {
     Row(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-        horizontalArrangement = Arrangement.spacedBy((-8).dp)
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp),
+        horizontalArrangement = Arrangement.spacedBy((-8).dp), // Overlap effect
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        members.take(5).forEachIndexed { idx, member ->
-            Box(
-                modifier = Modifier.size(40.dp).clip(CircleShape)
-                    .background(avatarColors[idx % avatarColors.size])
-                    .border(2.dp, White, CircleShape),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(member.fullName.take(1).uppercase(), color = White, fontWeight = FontWeight.Bold)
+        Row(horizontalArrangement = Arrangement.spacedBy((-8).dp)) {
+            members.take(5).forEachIndexed { idx, member ->
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(CircleShape)
+                        .background(avatarColors[idx % avatarColors.size])
+                        .border(2.dp, White, CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        member.fullName.take(1).uppercase(),
+                        color = White, fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+            if (members.size > 5) {
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(CircleShape)
+                        .background(Color.LightGray)
+                        .border(2.dp, White, CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text("+${members.size - 5}", fontSize = 12.sp, color = TextDark)
+                }
             }
         }
-        if (members.size > 5) {
-            Box(
-                modifier = Modifier.size(40.dp).clip(CircleShape).background(Color.LightGray).border(2.dp, White, CircleShape),
-                contentAlignment = Alignment.Center
-            ) { Text("+${members.size - 5}", fontSize = 12.sp, color = TextDark) }
-        }
+        
         Spacer(Modifier.width(16.dp))
-        Column(verticalArrangement = Arrangement.Center, modifier = Modifier.height(40.dp)) {
-            Text("${members.size} สมาชิก", fontWeight = FontWeight.Bold, fontSize = 14.sp)
-            Text("ได้รับมอบหมายในโครงการนี้", fontSize = 11.sp, color = TextGray)
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.Center
+        ) {
+            val namesText = if (members.isEmpty()) {
+                "ยังไม่มีสมาชิก"
+            } else {
+                val taken = members.take(2)
+                val names = taken.joinToString(", ") { it.fullName.split(" ").firstOrNull() ?: it.fullName }
+                if (members.size > 2) {
+                    "$names และคนอื่นๆ อีก ${members.size - 2} คน"
+                } else {
+                    names
+                }
+            }
+            
+            Text(
+                text = namesText,
+                fontWeight = FontWeight.Bold,
+                fontSize = 14.sp,
+                color = TextDark,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                text = "ได้รับมอบหมายในโครงการนี้",
+                fontSize = 11.sp,
+                color = TextGray
+            )
         }
     }
 }
@@ -732,6 +832,7 @@ fun ProjectDetailPreview() {
             s = ProjectDetailUiState(
                 project = Project(
                     projectId = "P1",
+                    projectNumber = "PRJ-2023-001",
                     projectName = "Building A Renovation",
                     custId = "C1",
                     branchId = "B1",
@@ -742,12 +843,27 @@ fun ProjectDetailPreview() {
                     closingDate = "2023-12-31"
                 ),
                 companyName = "Global Tech Solution Co., Ltd.",
-                upcomingTasks = listOf(TaskItem("T1", "Site Survey", "Check building structure", "2024-06-20")),
-                teamMembers = listOf(TeamMember("U1", "John Doe")),
-                history = listOf(HistoryItem("H1", "First Meeting", "Initial req", "2024-05-10", "completed", "meeting", "Khun Somchai"))
+                upcomingTasks = listOf(
+                    TaskItem("T1", "Site Survey", "Check building structure", "2024-06-20"),
+                    TaskItem("T2", "Quotation Draft", "Prepare document for client", "2024-06-25")
+                ),
+                teamMembers = listOf(
+                    TeamMember("U1", "John Doe"),
+                    TeamMember("U2", "Jane Smith"),
+                    TeamMember("U3", "Bob Wilson")
+                ),
+                history = listOf(
+                    HistoryItem("H1", "First Meeting", "Initial requirement discussion", "2024-05-10", "completed", "meeting", "Khun Somchai"),
+                    HistoryItem("H2", "Follow-up Call", "Discussing the draft proposal", "2024-05-15", "completed", "call", "Khun Somchai")
+                )
             ),
-            onBack = {}, onEditProject = {}, onCreateActivity = {}, onInventoryClick = {},
-            onSalesResultClick = {}, onRecordResult = { _, _ -> }, onActivityClick = {}
+            onBack = {},
+            onEditProject = {},
+            onCreateActivity = {},
+            onInventoryClick = {},
+            onSalesResultClick = {},
+            onRecordResult = { _, _, _ -> },
+            onActivityClick = {}
         )
     }
 }

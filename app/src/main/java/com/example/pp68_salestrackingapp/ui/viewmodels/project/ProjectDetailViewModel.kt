@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -31,16 +32,18 @@ data class TeamMember(
 )
 
 data class HistoryItem(
-    val activityId: String,
+    val activityId: String? = null,
+    val resultId: String? = null,
     val title: String,
     val description: String? = null,
     val plannedDate: String? = null,
     val planStatus: String = "completed",
     val activityType: String = "online",
-    val contactName: String? = null
+    val contactName: String? = null,
+    val isStandaloneResult: Boolean = false
 )
 
-// ── 2. UI State สำหรับหน้า Detail ─────────────────────────────────────
+// ── 2. UI State ──────────────────────────────────────────────────────
 data class ProjectDetailUiState(
     val isLoading: Boolean = false,
     val isDeleting: Boolean = false,
@@ -71,14 +74,7 @@ class ProjectDetailViewModel @Inject constructor(
     init {
         projectId?.let { id ->
             observeProject(id)
-            observeActivities(id)
-            syncProjectFromServer(id)
-        }
-    }
-
-    private fun syncProjectFromServer(id: String) {
-        viewModelScope.launch {
-            projectRepo.syncProject(id)
+            observeActivitiesAndResults(id)
         }
     }
 
@@ -87,48 +83,76 @@ class ProjectDetailViewModel @Inject constructor(
             _uiState.update { it.copy(isLoading = true) }
             projectRepo.getProjectByIdFlow(id).collectLatest { project ->
                 if (project != null) {
-                    // ✅ อัปเดตข้อมูลโครงการหลักทันที
+                    val company = customerRepo.getCustomerById(project.custId)
+                        .getOrNull()?.companyName ?: ""
+
+                    // ✅ เรียกใช้ผ่าน Repository ที่เราเตรียมไว้ แก้ปัญหา Unresolved 'apiService'
+                    val members = projectRepo.getProjectMembersDetailed(id).map {
+                        TeamMember(it.first, it.second)
+                    }
+
                     _uiState.update { state ->
                         state.copy(
-                            isLoading = false,
-                            project = project,
-                            error = null
+                            isLoading   = false,
+                            project     = project,
+                            companyName = company,
+                            teamMembers = members
                         )
                     }
-
-                    // ✅ ดึงชื่อบริษัท (ไม่ block UI)
-                    launch {
-                        val company = customerRepo.getCustomerById(project.custId).getOrNull()?.companyName ?: ""
-                        _uiState.update { it.copy(companyName = company) }
-                    }
-
-                    // ✅ ดึงรายชื่อสมาชิก (ไม่ block UI)
-                    launch {
-                        val members = projectRepo.getProjectMembersDetailed(id).map { 
-                            TeamMember(it.first, it.second)
-                        }
-                        if (members.isNotEmpty()) {
-                            _uiState.update { it.copy(teamMembers = members) }
-                        }
-                    }
-                } else {
-                    projectRepo.getProjectById(id)
                 }
             }
         }
     }
 
-    private fun observeActivities(id: String) {
+    private fun observeActivitiesAndResults(id: String) {
         viewModelScope.launch {
-            activityRepo.getActivitiesByProjectFlow(id).collect { activities ->
+            combine(
+                activityRepo.getActivitiesByProjectFlow(id),
+                activityRepo.getResultsByProjectFlow(id)
+            ) { activities, results ->
+
                 val tasks = activities
                     .filter { it.status.lowercase() != "completed" }
                     .map { TaskItem(it.activityId, it.activityType, it.detail, it.activityDate) }
-                
-                val history = activities
+
+                val activityHistory = activities
                     .filter { it.status.lowercase() == "completed" }
-                    .map { HistoryItem(it.activityId, it.activityType, it.detail, it.activityDate, it.status, it.activityType, it.contactName) }
-                
+                    .map { act ->
+                        HistoryItem(
+                            activityId    = act.activityId,
+                            title         = if (!act.detail.isNullOrBlank()) act.detail else act.activityType,
+                            description   = act.activityType,
+                            plannedDate   = act.activityDate,
+                            planStatus    = act.status,
+                            activityType  = act.activityType,
+                            contactName   = act.contactName,
+                            isStandaloneResult = false
+                        )
+                    }
+
+                val standaloneHistory = results
+                    .filter { it.activityId == null }
+                    .map { res ->
+                        HistoryItem(
+                            activityId    = null,
+                            resultId      = res.resultId,
+                            title         = if (!res.summary.isNullOrBlank()) {
+                                if (res.summary.length > 50) res.summary.take(47) + "..." else res.summary
+                            } else "บันทึกผลการขายอิสระ",
+                            description   = "Standalone Report",
+                            plannedDate   = res.reportDate,
+                            planStatus    = "completed",
+                            activityType  = "report",
+                            contactName   = "Standalone Record",
+                            isStandaloneResult = true
+                        )
+                    }
+
+                val fullHistory = (activityHistory + standaloneHistory)
+                    .sortedByDescending { it.plannedDate }
+
+                tasks to fullHistory
+            }.collect { (tasks, history) ->
                 _uiState.update { it.copy(upcomingTasks = tasks, history = history) }
             }
         }

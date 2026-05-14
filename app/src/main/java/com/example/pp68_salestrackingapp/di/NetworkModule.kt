@@ -42,11 +42,16 @@ object NetworkModule {
         return Interceptor { chain ->
             val originalRequest = chain.request()
             val requestBuilder = originalRequest.newBuilder()
-                .header("Content-Type", "application/json")
 
-            if (!originalRequest.url.encodedPath.contains("login-api") &&
-                !originalRequest.url.encodedPath.contains("register-api")) {
+            val path = originalRequest.url.encodedPath
+            
+            // ✅ ถ้าเป็น Login API (Cloud Functions) ไม่ต้องส่ง Header ของ PostgREST
+            if (path.contains("-api")) {
+                requestBuilder.header("Content-Type", "application/json")
+            } else {
+                // ✅ สำหรับ PostgREST API
                 requestBuilder
+                    .header("Content-Type", "application/json")
                     .header("Accept-Profile", "public")
                     .header("Content-Profile", "public")
 

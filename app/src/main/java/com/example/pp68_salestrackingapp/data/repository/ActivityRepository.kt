@@ -29,12 +29,16 @@ class ActivityRepository @Inject constructor(
 ) {
     fun getAllActivitiesFlow(): Flow<List<SalesActivity>> = activityDao.getAllActivities()
 
+    // ต้องเพิ่มใน ActivityRepository.kt
+    fun getAllResultsFlow(): Flow<List<ActivityResult>> = resultDao.getAllResultsFlow()
     fun getActivitiesByProjectFlow(projectId: String): Flow<List<SalesActivity>> =
         activityDao.getActivitiesByProject(projectId)
 
     fun getAllResultIdsFlow(): Flow<List<String>> = resultDao.getAllResultIdsFlow()
 
-    fun getAllResultsFlow(): Flow<List<ActivityResult>> = resultDao.getAllResultsFlow()
+    // ✅ เพิ่มใหม่เพื่อดึงผลลัพธ์ทั้งหมดของโครงการ
+    fun getResultsByProjectFlow(projectId: String): Flow<List<ActivityResult>> = 
+        resultDao.getAllResultsByProject(projectId)
 
     suspend fun refreshActivities(userId: String): kotlin.Result<Unit> {
         return withContext(Dispatchers.IO) {
@@ -382,6 +386,18 @@ class ActivityRepository @Inject constructor(
         }
     }
 
+    // ✅ เพิ่มใหม่ — ดึง result ด้วย resultId
+    suspend fun getResultById(resultId: String): ActivityResult? {
+        return withContext(Dispatchers.IO) {
+            try {
+                // เบื้องต้นดึงจาก Local ก่อน (ปกติ Sync อยู่แล้ว)
+                resultDao.getResultById(resultId)
+            } catch (e: Exception) {
+                null
+            }
+        }
+    }
+
     // ✅ Mode 1: บันทึกหลัง appointment
     suspend fun saveActivityResult(result: ActivityResult): kotlin.Result<Unit> {
         return withContext(Dispatchers.IO) {
@@ -422,22 +438,16 @@ class ActivityRepository @Inject constructor(
     ): kotlin.Result<Unit> {
         return withContext(Dispatchers.IO) {
             try {
-                val resultWithProject = result.copy(
-                    resultId   = "RES-" + java.util.UUID.randomUUID().toString().take(8).uppercase(),
-                    projectId  = projectId,
-                    activityId = null  // ✅ ไม่มี appointment
-                )
+                // 1. บันทึก Local เสมอ
+                resultDao.insertResult(result)
 
-                // บันทึก Local
-                resultDao.insertResult(resultWithProject)
-
-                // POST ขึ้น API
-                val body = buildResultBody(resultWithProject)
+                // 2. POST ขึ้น API
+                val body = buildResultBody(result)
                 val apiResp = apiService.insertActivityResultMap(body)
 
                 if (apiResp.isSuccessful) {
                     // ✅ อัปเดตสถานะ Project
-                    syncProjectStatus(resultWithProject)
+                    syncProjectStatus(result)
                     kotlin.Result.success(Unit)
                 } else {
                     val err = apiResp.errorBody()?.string() ?: "Unknown"
@@ -460,7 +470,7 @@ class ActivityRepository @Inject constructor(
         try {
             val project = projectDao.getProjectById(pid)
             if (project != null && project.projectStatus != newStatus) {
-                val updated = project.copy(projectStatus = newStatus)
+                val updated = project.copy(projectStatus = newStatus, lossReason = result.lossReason)
                 // เรียกใช้ updateProject ของ Repo เพื่อส่งขึ้น Server และ Firebase
                 projectRepo.updateProject(updated, result.createdBy ?: "")
             }
@@ -492,6 +502,7 @@ class ActivityRepository @Inject constructor(
         if (result.photoLat != null)                  body["photo_lat"]          = result.photoLat
         if (result.photoLng != null)                  body["photo_lng"]          = result.photoLng
         if (!result.photoDeviceModel.isNullOrBlank()) body["photo_device_model"] = result.photoDeviceModel
+        result.lossReason?.let       { body["loss_reason"]       = it }
         return body
     }
 

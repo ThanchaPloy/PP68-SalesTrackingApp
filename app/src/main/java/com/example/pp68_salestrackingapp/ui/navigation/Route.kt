@@ -56,8 +56,9 @@ sealed class Route(val path: String) {
     object EditContact : Route("edit_contact/{contactId}") {
         fun createRoute(contactId: String) = "edit_contact/$contactId"
     }
-    // ✅ เพิ่ม route ใหม่ที่รับ projectId แทน activityId
-    object StandaloneSalesResult : Route("standalone_sales_result/{projectId}") {
-        fun createRoute(projectId: String) = "standalone_sales_result/$projectId"
+    // ✅ ปรับให้รับ resultId เป็น query param ได้
+    object StandaloneSalesResult : Route("standalone_sales_result/{projectId}?resultId={resultId}") {
+        fun createRoute(projectId: String, resultId: String? = null) = 
+            "standalone_sales_result/$projectId" + (resultId?.let { "?resultId=$it" } ?: "")
     }
 }

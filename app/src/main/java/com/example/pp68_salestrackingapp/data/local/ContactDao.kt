@@ -44,21 +44,8 @@ interface ContactDao {
     @Query("SELECT * FROM contact_person WHERE custId = :custId")
     suspend fun getContactsByCustomerId(custId: String): List<ContactPerson>
 
-
     @Query("DELETE FROM contact_person")
     suspend fun deleteAll()
-
-    // ContactDao.kt
-    @Query("SELECT * FROM contact_person WHERE createdBy = :userId ORDER BY fullName ASC")
-    fun getContactsByUser(userId: String): Flow<List<ContactPerson>>
-
-    @Query("""
-        SELECT cp.* FROM contact_person cp
-        INNER JOIN customer c ON cp.custId = c.custId
-        WHERE cp.createdBy = :userId AND (cp.fullName LIKE :query OR cp.nickname LIKE :query OR c.companyName LIKE :query)
-    """)
-    fun searchContactsByUser(query: String, userId: String): Flow<List<ContactPerson>>
-
 
     @Transaction
     suspend fun clearAndInsert(contacts: List<ContactPerson>) {
