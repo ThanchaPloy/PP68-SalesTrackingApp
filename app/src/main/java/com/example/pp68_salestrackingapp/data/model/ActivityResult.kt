@@ -8,7 +8,6 @@ import com.google.gson.annotations.SerializedName
 
 @Entity(
     tableName = "activity_result",
-    // ✅ เปลี่ยน index ให้ query ได้ทั้งสองแบบ
     indices = [
         Index("appointment_id"),
         Index("project_id")
@@ -18,15 +17,15 @@ data class ActivityResult(
     @PrimaryKey
     @ColumnInfo(name = "result_id")
     @SerializedName("result_id")
-    val resultId: String,  // ✅ UUID ใหม่ — ไม่ผูกกับ appointment
+    val resultId: String,
 
     @ColumnInfo(name = "appointment_id")
     @SerializedName("appointment_id")
-    val activityId: String? = null,  // ✅ nullable แล้ว
+    val activityId: String? = null,
 
     @ColumnInfo(name = "project_id")
     @SerializedName("project_id")
-    val projectId: String? = null,   // ✅ เพิ่มใหม่ — ผูกตรงกับ project
+    val projectId: String? = null,
 
     @ColumnInfo(name = "created_by")
     @SerializedName("created_by")

@@ -31,6 +31,7 @@ import com.example.pp68_salestrackingapp.ui.viewmodels.project.AddProductViewMod
 @Composable
 fun AddProductScreen(
     projectId: String,
+    productId: String? = null,
     onBack: () -> Unit,
     onSaved: () -> Unit,
     viewModel: AddProductViewModel = hiltViewModel()
@@ -65,10 +66,13 @@ fun AddProductContent(
     onShippingBranchSelected: (String, String) -> Unit,
     onSave: () -> Unit
 ) {
+    val title = if (s.isEditMode) "Edit Product" else "Add Product"
+    val buttonText = if (s.isEditMode) "แก้ไขข้อมูลสินค้า" else "บันทึกสินค้า"
+
     Scaffold(
         topBar = {
             CenterAlignedTopAppBar(
-                title = { Text("Add Product", fontWeight = FontWeight.Bold, fontSize = 18.sp) },
+                title = { Text(title, fontWeight = FontWeight.Bold, fontSize = 18.sp) },
                 navigationIcon = {
                     Box(
                         modifier = Modifier
@@ -114,7 +118,8 @@ fun AddProductContent(
                     value = s.selectedBrand,
                     placeholder = if (s.isLoading) "กำลังโหลด..." else "เลือกแบรนด์สินค้า",
                     options = brands,
-                    onSelect = { onBrandSelected(brands[it]) }
+                    onSelect = { onBrandSelected(brands[it]) },
+                    enabled = !s.isEditMode // ปิดการเปลี่ยนแบรนด์ตอนแก้ไข (ถ้าต้องการ)
                 )
             }
 
@@ -123,7 +128,8 @@ fun AddProductContent(
                     value = s.selectedProductName,
                     placeholder = if (s.selectedBrand.isBlank()) "กรุณาเลือกแบรนด์ก่อน" else "เลือกชื่อสินค้า",
                     options = s.filteredNames,
-                    onSelect = { onNameSelected(s.filteredNames[it]) }
+                    onSelect = { onNameSelected(s.filteredNames[it]) },
+                    enabled = !s.isEditMode // ปิดการเปลี่ยนสินค้าตอนแก้ไข
                 )
             }
 
@@ -260,17 +266,19 @@ fun AddProductContent(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Icon(Icons.Default.CheckCircle, null, modifier = Modifier.size(20.dp))
-                        Text("บันทึกสินค้า", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                        Icon(if (s.isEditMode) Icons.Default.EditNote else Icons.Default.CheckCircle, null, modifier = Modifier.size(20.dp))
+                        Text(buttonText, fontWeight = FontWeight.Bold, fontSize = 16.sp)
                     }
                 }
             }
 
-            TextButton(
-                onClick = onBack,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text("ยกเลิก", color = AppColors.TextSecondary, fontWeight = FontWeight.Medium)
+            if (!s.isEditMode) {
+                TextButton(
+                    onClick = onBack,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("ยกเลิก", color = AppColors.TextSecondary, fontWeight = FontWeight.Medium)
+                }
             }
 
             if (s.error != null) {
@@ -289,10 +297,16 @@ fun AddProductContent(
 private fun FormField(
     label: String,
     modifier: Modifier = Modifier,
+    enabled: Boolean = true,
     content: @Composable () -> Unit
 ) {
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(label, fontSize = 14.sp, fontWeight = FontWeight.Bold, color = AppColors.TextPrimary)
+        Text(
+            label, 
+            fontSize = 14.sp, 
+            fontWeight = FontWeight.Bold, 
+            color = if (enabled) AppColors.TextPrimary else AppColors.TextSecondary
+        )
         content()
     }
 }

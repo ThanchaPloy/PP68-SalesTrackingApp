@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.pp68_salestrackingapp.data.model.ContactPerson
 import com.example.pp68_salestrackingapp.data.model.Project
+import com.example.pp68_salestrackingapp.data.repository.AuthRepository
 import com.example.pp68_salestrackingapp.data.repository.ContactRepository
 import com.example.pp68_salestrackingapp.data.repository.CustomerRepository
 import com.example.pp68_salestrackingapp.data.repository.ProjectRepository
@@ -16,7 +17,6 @@ import kotlinx.coroutines.launch
 import java.util.UUID
 import javax.inject.Inject
 
-// ─── UI State ─────────────────────────────────────────────────
 data class AddContactUiState(
     val contactId: String? = null,
     val fullName:  String = "",
@@ -27,27 +27,22 @@ data class AddContactUiState(
     val lineId:    String = "",
     val isActive:  Boolean = true,
     val isDecisionMaker: Boolean = false,
-
     val companyOptions:      List<Pair<String, String>> = emptyList(),
     val selectedCompanyId:   String? = null,
     val selectedCompanyName: String? = null,
     val isLoadingCompanies:  Boolean = false,
-
     val projectOptions:      List<Pair<String, String>> = emptyList(),
     val selectedProjectId:   String? = null,
     val selectedProjectName: String? = null,
     val isLoadingProjects:   Boolean = false,
-
     val companyError:  String? = null,
     val fullNameError: String? = null,
     val emailError:    String? = null,
-
     val isLoading: Boolean = false,
     val isSaved:   Boolean = false,
     val saveError: String? = null
 )
 
-// ─── Events ───────────────────────────────────────────────────
 sealed class AddContactEvent {
     data class LoadContact(val id: String) : AddContactEvent()
     data class CompanySelected(val id: String, val name: String) : AddContactEvent()
@@ -63,12 +58,12 @@ sealed class AddContactEvent {
     object Save            : AddContactEvent()
 }
 
-// ─── ViewModel ────────────────────────────────────────────────
 @HiltViewModel
 class AddContactViewModel @Inject constructor(
     private val contactRepo:  ContactRepository,
     private val customerRepo: CustomerRepository,
-    private val projectRepo:  ProjectRepository
+    private val projectRepo:  ProjectRepository,
+    private val authRepo:     AuthRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(AddContactUiState())
@@ -82,29 +77,22 @@ class AddContactViewModel @Inject constructor(
             try {
                 val contacts = contactRepo.getAllContactsFlow().first()
                 val contact = contacts.find { it.contactId == id }
-
                 if (contact != null) {
-                    var cName = ""
-                    customerRepo.getCustomerById(contact.custId).onSuccess { cust ->
-                        cName = cust.companyName
-                    }
-
-                    _uiState.update {
-                        it.copy(
-                            contactId = contact.contactId,
-                            fullName = contact.fullName ?: "",
-                            nickname = contact.nickname ?: "",
-                            position = contact.position ?: "",
-                            phoneNum = contact.phoneNumber ?: "",
-                            email = contact.email ?: "",
-                            lineId = contact.line ?: "",
-                            isActive = contact.isActive ?: true,
-                            isDecisionMaker = contact.isDmConfirmed ?: false,
-                            selectedCompanyId = contact.custId,
-                            selectedCompanyName = cName,
-                            isLoading = false
-                        )
-                    }
+                    val cName = customerRepo.getCustomerById(contact.custId).getOrNull()?.companyName ?: ""
+                    _uiState.update { it.copy(
+                        contactId = contact.contactId,
+                        fullName = contact.fullName ?: "",
+                        nickname = contact.nickname ?: "",
+                        position = contact.position ?: "",
+                        phoneNum = contact.phoneNumber ?: "",
+                        email = contact.email ?: "",
+                        lineId = contact.line ?: "",
+                        isActive = contact.isActive ?: true,
+                        isDecisionMaker = contact.isDmConfirmed ?: false,
+                        selectedCompanyId = contact.custId,
+                        selectedCompanyName = cName,
+                        isLoading = false
+                    ) }
                     loadProjectsForCompany(contact.custId)
                 } else {
                     _uiState.update { it.copy(isLoading = false, saveError = "ไม่พบข้อมูลผู้ติดต่อ") }
@@ -118,17 +106,9 @@ class AddContactViewModel @Inject constructor(
     private fun loadCompanies() {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoadingCompanies = true) }
-            customerRepo.getCustomers().fold(
-                onSuccess = { customers ->
-                    _uiState.update {
-                        it.copy(
-                            companyOptions     = customers.map { c -> c.custId to c.companyName },
-                            isLoadingCompanies = false
-                        )
-                    }
-                },
-                onFailure = { _uiState.update { it.copy(isLoadingCompanies = false) } }
-            )
+            customerRepo.getCustomers().onSuccess { customers ->
+                _uiState.update { it.copy(companyOptions = customers.map { it.custId to it.companyName }, isLoadingCompanies = false) }
+            }.onFailure { _uiState.update { it.copy(isLoadingCompanies = false) } }
         }
     }
 
@@ -136,22 +116,9 @@ class AddContactViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.update { it.copy(isLoadingProjects = true, projectOptions = emptyList()) }
             try {
-                val projects: List<Project> = projectRepo.getAllProjectsFlow().first()
-                    .filter { it.custId == custId }
-
-                val options: List<Pair<String, String>> = projects.map { p ->
-                    p.projectId to p.projectName
-                }
-
-                _uiState.update {
-                    it.copy(
-                        projectOptions    = options,
-                        isLoadingProjects = false
-                    )
-                }
-            } catch (e: Exception) {
-                _uiState.update { it.copy(isLoadingProjects = false) }
-            }
+                val projects = projectRepo.getAllProjectsFlow().first().filter { it.custId == custId }
+                _uiState.update { it.copy(projectOptions = projects.map { it.projectId to it.projectName }, isLoadingProjects = false) }
+            } catch (e: Exception) { _uiState.update { it.copy(isLoadingProjects = false) } }
         }
     }
 
@@ -159,65 +126,35 @@ class AddContactViewModel @Inject constructor(
         when (event) {
             is AddContactEvent.LoadContact -> loadContact(event.id)
             is AddContactEvent.CompanySelected -> {
-                _uiState.update {
-                    it.copy(
-                        selectedCompanyId   = event.id,
-                        selectedCompanyName = event.name,
-                        companyError        = null,
-                        selectedProjectId   = null,
-                        selectedProjectName = null,
-                        projectOptions      = emptyList()
-                    )
-                }
+                _uiState.update { it.copy(selectedCompanyId = event.id, selectedCompanyName = event.name, companyError = null, selectedProjectId = null, selectedProjectName = null, projectOptions = emptyList()) }
                 loadProjectsForCompany(event.id)
             }
-            is AddContactEvent.ProjectSelected ->
-                _uiState.update { it.copy(selectedProjectId = event.id, selectedProjectName = event.name) }
-            is AddContactEvent.FullNameChanged ->
-                _uiState.update { it.copy(fullName = event.value, fullNameError = null) }
-            is AddContactEvent.NicknameChanged ->
-                _uiState.update { it.copy(nickname = event.value) }
-            is AddContactEvent.PositionChanged ->
-                _uiState.update { it.copy(position = event.value) }
-            is AddContactEvent.PhoneChanged ->
-                _uiState.update { it.copy(phoneNum = event.value) }
-            is AddContactEvent.EmailChanged ->
-                _uiState.update { it.copy(email = event.value, emailError = null) }
-            is AddContactEvent.LineIdChanged ->
-                _uiState.update { it.copy(lineId = event.value) }
-            is AddContactEvent.IsActiveToggled ->
-                _uiState.update { it.copy(isActive = !it.isActive) }
-            is AddContactEvent.IsDecisionMakerToggled ->
-                _uiState.update { it.copy(isDecisionMaker = !it.isDecisionMaker) }
+            is AddContactEvent.ProjectSelected -> _uiState.update { it.copy(selectedProjectId = event.id, selectedProjectName = event.name) }
+            is AddContactEvent.FullNameChanged -> _uiState.update { it.copy(fullName = event.value, fullNameError = null) }
+            is AddContactEvent.NicknameChanged -> _uiState.update { it.copy(nickname = event.value) }
+            is AddContactEvent.PositionChanged -> _uiState.update { it.copy(position = event.value) }
+            is AddContactEvent.PhoneChanged -> _uiState.update { it.copy(phoneNum = event.value) }
+            is AddContactEvent.EmailChanged -> _uiState.update { it.copy(email = event.value, emailError = null) }
+            is AddContactEvent.LineIdChanged -> _uiState.update { it.copy(lineId = event.value) }
+            is AddContactEvent.IsActiveToggled -> _uiState.update { it.copy(isActive = !it.isActive) }
+            is AddContactEvent.IsDecisionMakerToggled -> _uiState.update { it.copy(isDecisionMaker = !it.isDecisionMaker) }
             is AddContactEvent.Save -> save()
         }
     }
 
-    private fun validate(): Boolean {
-        var valid = true
-        val s = _uiState.value
-
-        if (s.selectedCompanyId.isNullOrBlank()) {
-            _uiState.update { it.copy(companyError = "กรุณาเลือกบริษัท") }
-            valid = false
-        }
-        if (s.fullName.isBlank()) {
-            _uiState.update { it.copy(fullNameError = "กรุณากรอกชื่อ") }
-            valid = false
-        }
-        if (s.email.isNotBlank() && !android.util.Patterns.EMAIL_ADDRESS.matcher(s.email).matches()) {
-            _uiState.update { it.copy(emailError = "รูปแบบ Email ไม่ถูกต้อง") }
-            valid = false
-        }
-        return valid
-    }
-
     private fun save() {
-        if (!validate()) return
+        if (_uiState.value.selectedCompanyId.isNullOrBlank()) {
+            _uiState.update { it.copy(companyError = "กรุณาเลือกบริษัท") }
+            return
+        }
+        if (_uiState.value.fullName.isBlank()) {
+            _uiState.update { it.copy(fullNameError = "กรุณากรอกชื่อ") }
+            return
+        }
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, saveError = null) }
             val s = _uiState.value
-
+            val currentUserId = authRepo.currentUser()?.userId
             val contactToSave = ContactPerson(
                 contactId = s.contactId ?: ("CNT-" + UUID.randomUUID().toString().take(8).uppercase()),
                 custId = s.selectedCompanyId!!,
@@ -228,16 +165,12 @@ class AddContactViewModel @Inject constructor(
                 email = s.email.ifBlank { null },
                 line = s.lineId.ifBlank { null },
                 isActive = s.isActive,
-                isDmConfirmed = s.isDecisionMaker
+                isDmConfirmed = s.isDecisionMaker,
+                createdBy = currentUserId // ✅ บันทึกผู้สร้าง
             )
-
-            val result = contactRepo.addContact(contactToSave)
-
-            result.fold(
+            contactRepo.addContact(contactToSave).fold(
                 onSuccess = { _uiState.update { it.copy(isLoading = false, isSaved = true) } },
-                onFailure = { e ->
-                    _uiState.update { it.copy(isLoading = false, saveError = e.message) }
-                }
+                onFailure = { e -> _uiState.update { it.copy(isLoading = false, saveError = e.message) } }
             )
         }
     }

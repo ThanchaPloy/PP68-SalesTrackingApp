@@ -27,6 +27,7 @@ class ActivityRepositoryTest {
     private val planItemDao = mockk<ActivityPlanItemDao>(relaxed = true)
     private val resultDao   = mockk<ActivityResultDao>(relaxed = true)
     private val appointmentContactDao = mockk<AppointmentContactDao>(relaxed = true)
+    private val projectRepo = mockk<ProjectRepository>(relaxed = true)
 
     private val sampleActivity = SalesActivity(
         activityId   = "APT-001",
@@ -65,7 +66,7 @@ class ActivityRepositoryTest {
     @Before
     fun setup() {
         repository = ActivityRepository(
-            apiService, uploadApiService, activityDao, projectDao, customerDao, contactDao, planItemDao, resultDao, appointmentContactDao
+            apiService, uploadApiService, activityDao, projectDao, customerDao, contactDao, planItemDao, resultDao, appointmentContactDao, projectRepo
         )
     }
 

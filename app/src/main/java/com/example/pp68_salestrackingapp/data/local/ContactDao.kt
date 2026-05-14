@@ -18,8 +18,8 @@ interface ContactDao {
     @Query("SELECT * FROM contact_person")
     fun getAllContactPersons(): Flow<List<ContactPerson>>
 
-    // 3. ค้นหาจากชื่อ (ใช้ fullName)
-    @Query("SELECT * FROM contact_person WHERE fullName LIKE '%' || :searchQuery || '%'")
+    // 3. ค้นหาจากชื่อ และชื่อเล่น
+    @Query("SELECT * FROM contact_person WHERE fullName LIKE '%' || :searchQuery || '%' OR nickname LIKE '%' || :searchQuery || '%'")
     fun searchContacts(searchQuery: String): Flow<List<ContactPerson>>
 
     // 4. ดึงตาม ID ลูกค้า (ใช้ custId ให้ตรงกับใน Model)
@@ -47,6 +47,17 @@ interface ContactDao {
 
     @Query("DELETE FROM contact_person")
     suspend fun deleteAll()
+
+    // ContactDao.kt
+    @Query("SELECT * FROM contact_person WHERE createdBy = :userId ORDER BY fullName ASC")
+    fun getContactsByUser(userId: String): Flow<List<ContactPerson>>
+
+    @Query("""
+        SELECT cp.* FROM contact_person cp
+        INNER JOIN customer c ON cp.custId = c.custId
+        WHERE cp.createdBy = :userId AND (cp.fullName LIKE :query OR cp.nickname LIKE :query OR c.companyName LIKE :query)
+    """)
+    fun searchContactsByUser(query: String, userId: String): Flow<List<ContactPerson>>
 
 
     @Transaction

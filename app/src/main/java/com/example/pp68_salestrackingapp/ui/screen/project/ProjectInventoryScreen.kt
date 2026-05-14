@@ -7,7 +7,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -42,6 +41,7 @@ fun ProjectInventoryScreen(
     projectId: String,
     onBack: () -> Unit,
     onAddProduct: (String) -> Unit,
+    onEditProduct: (String, String) -> Unit,
     onNotificationClick: () -> Unit = {},
     onSettingsClick: () -> Unit = {},
     onLogoutClick: () -> Unit = {},
@@ -51,7 +51,7 @@ fun ProjectInventoryScreen(
 ) {
     val s by viewModel.uiState.collectAsState()
 
-    // ✅ reload ทุกครั้งที่ composable กลับมา (เช่น หลัง navigate back)
+    // reload ทุกครั้งที่ composable กลับมา (เช่น หลัง navigate back)
     val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
         val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
@@ -67,6 +67,8 @@ fun ProjectInventoryScreen(
         s = s,
         onBack = onBack,
         onAddProduct = { onAddProduct(projectId) },
+        onEditProduct = { prodId -> onEditProduct(projectId, prodId) },
+        onDeleteProduct = { viewModel.deleteProduct(it) },
         onNotificationClick = onNotificationClick,
         onSettingsClick = onSettingsClick,
         onLogoutClick = onLogoutClick,
@@ -80,12 +82,16 @@ fun ProjectInventoryContent(
     s: ProjectInventoryUiState,
     onBack: () -> Unit,
     onAddProduct: () -> Unit,
+    onEditProduct: (String) -> Unit,
+    onDeleteProduct: (String) -> Unit,
     onNotificationClick: () -> Unit = {},
     onSettingsClick: () -> Unit = {},
     onLogoutClick: () -> Unit = {},
     currentTab: Int,
     onTabChange: (Int) -> Unit
 ) {
+    var itemToDelete by remember { mutableStateOf<InventoryItem?>(null) }
+
     Scaffold(
         topBar = {
             AppTopBar(
@@ -174,7 +180,11 @@ fun ProjectInventoryContent(
                     }
 
                     items(s.items) { item ->
-                        ProductInventoryCard(item)
+                        ProductInventoryCard(
+                            item = item,
+                            onEdit = { onEditProduct(item.productId) },
+                            onDelete = { itemToDelete = item }
+                        )
                     }
                     
                     item { Spacer(Modifier.height(80.dp)) }
@@ -182,10 +192,38 @@ fun ProjectInventoryContent(
             }
         }
     }
+
+    itemToDelete?.let { item ->
+        AlertDialog(
+            onDismissRequest = { itemToDelete = null },
+            title = { Text("ยืนยันการลบ") },
+            text = { Text("คุณต้องการลบรายการ ${item.productName} ออกจากโครงการใช่หรือไม่?") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        onDeleteProduct(item.productId)
+                        itemToDelete = null
+                    },
+                    colors = ButtonDefaults.textButtonColors(contentColor = RedPrimary)
+                ) {
+                    Text("ลบ")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { itemToDelete = null }) {
+                    Text("ยกเลิก")
+                }
+            }
+        )
+    }
 }
 
 @Composable
-fun ProductInventoryCard(item: InventoryItem) {
+fun ProductInventoryCard(
+    item: InventoryItem,
+    onEdit: () -> Unit,
+    onDelete: () -> Unit
+) {
     Surface(
         shape = RoundedCornerShape(16.dp),
         color = White,
@@ -214,7 +252,14 @@ fun ProductInventoryCard(item: InventoryItem) {
                         Text(item.category, fontSize = 13.sp, color = TextGray)
                     }
                 }
-                Icon(Icons.Default.MoreHoriz, null, tint = TextGray)
+                Row {
+                    IconButton(onClick = onEdit) {
+                        Icon(Icons.Default.Edit, "แก้ไข", tint = Color(0xFF1976D2), modifier = Modifier.size(20.dp))
+                    }
+                    IconButton(onClick = onDelete) {
+                        Icon(Icons.Default.Delete, "ลบ", tint = RedPrimary, modifier = Modifier.size(20.dp))
+                    }
+                }
             }
 
             Spacer(Modifier.height(16.dp))
@@ -261,7 +306,6 @@ fun ProjectInventoryScreenPreview() {
 
                 project = Project(
                     projectId = "PJ-001",
-                    projectNumber = "PJN-001",
                     projectName = "คอนโด Happy",
                     custId = "C-001",
                     branchId = "B-001",
@@ -283,6 +327,8 @@ fun ProjectInventoryScreenPreview() {
             ),
             onBack = {},
             onAddProduct = {},
+            onEditProduct = {},
+            onDeleteProduct = {},
             currentTab = 3,
             onTabChange = {}
         )

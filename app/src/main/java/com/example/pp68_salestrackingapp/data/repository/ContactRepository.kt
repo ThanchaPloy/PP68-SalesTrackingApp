@@ -17,28 +17,13 @@ class ContactRepository @Inject constructor(
     fun getAllContactsFlow(): Flow<List<ContactPerson>> = contactDao.getAllContacts()
     fun searchContactsFlow(query: String): Flow<List<ContactPerson>> = contactDao.searchContacts("%$query%")
 
+    // ContactRepository.kt
     suspend fun refreshContacts(userId: String): kotlin.Result<Unit> {
         return withContext(Dispatchers.IO) {
             try {
-                val memberResp = apiService.getMyProjectIds(userId = "eq.$userId")
-                if (!memberResp.isSuccessful || memberResp.body().isNullOrEmpty()) {
-                    return@withContext kotlin.Result.success(Unit)
-                }
-
-                val projectIds = memberResp.body()!!.map { it.projectId }
-                val idsParam = "in.(${projectIds.joinToString(",")})"
-
-                val projectResp = apiService.getProjectsByIds(projectIds = idsParam)
-                if (!projectResp.isSuccessful || projectResp.body().isNullOrEmpty()) {
-                    return@withContext kotlin.Result.success(Unit)
-                }
-
-                val custIds = projectResp.body()!!.map { it.custId }.distinct()
-                val custIdsParam = "in.(${custIds.joinToString(",")})"
-
-                val contactResp = apiService.getContactsByCustomerIds(custIds = custIdsParam)
+                val contactResp = apiService.getContactPersons(createdBy = "eq.$userId")
                 if (contactResp.isSuccessful && contactResp.body() != null) {
-                    contactDao.clearAndInsert(contactResp.body()!!)
+                    contactDao.insertAll(contactResp.body()!!)  // ✅ upsert แทน clearAndInsert
                     kotlin.Result.success(Unit)
                 } else {
                     kotlin.Result.failure(Exception("โหลด Contact ไม่สำเร็จ: HTTP ${contactResp.code()}"))
@@ -69,4 +54,10 @@ class ContactRepository @Inject constructor(
             }
         }
     }
+
+    fun getContactsByUserFlow(userId: String): Flow<List<ContactPerson>> =
+        contactDao.getContactsByUser(userId)
+
+    fun searchContactsByUserFlow(query: String, userId: String): Flow<List<ContactPerson>> =
+        contactDao.searchContactsByUser("%$query%", userId)
 }

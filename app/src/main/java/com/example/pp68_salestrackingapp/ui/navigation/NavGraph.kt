@@ -27,7 +27,6 @@ import com.example.pp68_salestrackingapp.ui.screen.activity.SalesResultScreen
 fun SalesTrackingApp() {
     val navController = rememberNavController()
     
-    // ✅ ติดตาม Route ปัจจุบันเพื่อให้ Bottom Bar อัปเดตถูกต้องเสมอ
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
     val currentTab = remember(currentRoute) { getTabIndex(currentRoute) }
@@ -264,7 +263,6 @@ fun SalesTrackingApp() {
             )
         }
 
-        //สำหรับบบันทึกผลการขาย
         composable(
             route = Route.StandaloneSalesResult.path,
             arguments = listOf(navArgument("projectId") { type = NavType.StringType })
@@ -275,7 +273,6 @@ fun SalesTrackingApp() {
             )
         }
 
-        // ✅ เพิ่ม Composable สำหรับ ProjectInventory
         composable(
             route = Route.ProjectInventory.path,
             arguments = listOf(navArgument("projectId") { type = NavType.StringType })
@@ -285,6 +282,7 @@ fun SalesTrackingApp() {
                 projectId = projectId,
                 onBack = { navController.popBackStack() },
                 onAddProduct = { id -> navController.navigate(Route.AddProduct.createRoute(id)) },
+                onEditProduct = { pId, prodId -> navController.navigate(Route.EditProduct.createRoute(pId, prodId)) },
                 onNotificationClick = { navController.navigate(Route.Notification.path) },
                 onSettingsClick = { navController.navigate(Route.Settings.path) },
                 onLogoutClick = onLogout,
@@ -293,7 +291,6 @@ fun SalesTrackingApp() {
             )
         }
 
-        // ✅ เพิ่ม Composable สำหรับ AddProduct
         composable(
             route = Route.AddProduct.path,
             arguments = listOf(navArgument("projectId") { type = NavType.StringType })
@@ -301,6 +298,23 @@ fun SalesTrackingApp() {
             val projectId = backStackEntry.arguments?.getString("projectId") ?: ""
             AddProductScreen(
                 projectId = projectId,
+                onBack = { navController.popBackStack() },
+                onSaved = { navController.popBackStack() }
+            )
+        }
+
+        composable(
+            route = Route.EditProduct.path,
+            arguments = listOf(
+                navArgument("projectId") { type = NavType.StringType },
+                navArgument("productId") { type = NavType.StringType }
+            )
+        ) { backStackEntry ->
+            val projectId = backStackEntry.arguments?.getString("projectId") ?: ""
+            val productId = backStackEntry.arguments?.getString("productId") ?: ""
+            AddProductScreen(
+                projectId = projectId,
+                productId = productId,
                 onBack = { navController.popBackStack() },
                 onSaved = { navController.popBackStack() }
             )
@@ -379,7 +393,7 @@ fun SalesTrackingApp() {
                 onCheckIn = { id -> navController.navigate(Route.CheckIn.createRoute(id)) },
                 onWeeklyReport = { navController.navigate(Route.WeeklyReport.path) },
                 onMonthlyReport = { navController.navigate(Route.MonthlyReport.path) },
-                onViewDetails = { id -> navController.navigate(Route.ActivityDetail.createRoute(id)) } // ✅ เพิ่ม View Details
+                onViewDetails = { id -> navController.navigate(Route.ActivityDetail.createRoute(id)) }
             )
         }
 

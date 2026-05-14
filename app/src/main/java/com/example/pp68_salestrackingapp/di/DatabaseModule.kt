@@ -31,6 +31,7 @@ object DatabaseModule {
             "sales_tracking_db"
         )
             .fallbackToDestructiveMigration()
+            .addMigrations(AppDatabase.MIGRATION_28_29)
             .build()
     }
 

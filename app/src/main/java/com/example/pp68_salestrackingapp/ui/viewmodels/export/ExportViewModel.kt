@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.YearMonth
+import java.time.format.DateTimeFormatter
 import java.time.temporal.WeekFields
 import java.util.Locale
 import javax.inject.Inject
@@ -20,6 +21,8 @@ data class ExportUiState(
     val isLoading: Boolean = false,
     val activities: List<ExportActivityItem> = emptyList(),
     val projects: List<ExportProjectItem> = emptyList(),
+    val selectedDate: LocalDate = LocalDate.now(),
+    val weekRangeText: String = "",
     val error: String? = null
 )
 
@@ -30,7 +33,7 @@ data class ExportActivityItem(
     val topic: String?,
     val note: String?,
     val status: String,
-    val results: List<String> = emptyList() // เพิ่มผลหลังการขายเป็นรายการย่อย
+    val results: List<String> = emptyList()
 )
 
 data class ExportProjectItem(
@@ -51,23 +54,25 @@ class ExportViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(ExportUiState())
     val uiState: StateFlow<ExportUiState> = _uiState
 
+    private val dateFormatter = DateTimeFormatter.ofPattern("d MMM yyyy", Locale("th", "TH"))
+
     fun loadWeeklyData(date: LocalDate) {
         val weekFields = WeekFields.of(Locale.getDefault())
         val startOfWeek = date.with(weekFields.dayOfWeek(), 1L)
         val endOfWeek = date.with(weekFields.dayOfWeek(), 7L)
 
+        val rangeText = "${startOfWeek.format(dateFormatter)} - ${endOfWeek.format(dateFormatter)}"
+
+        _uiState.update { it.copy(selectedDate = date, weekRangeText = rangeText) }
+
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, error = null) }
             
             try {
-                // 1. ดึง Appointments
                 val activitiesResult = activityRepo.getMyActivitiesWithDetails()
                 val allActivities = activitiesResult.getOrDefault(emptyList())
-                
-                // 2. ดึง Results ทั้งหมด (จาก Local)
                 val allResults = activityRepo.getAllResultsFlow().first()
 
-                // กรอง Appointments ในสัปดาห์นี้
                 val filteredActivities = allActivities.filter { card ->
                     try {
                         if (card.plannedDate.isNullOrBlank()) false else {
@@ -77,7 +82,6 @@ class ExportViewModel @Inject constructor(
                     } catch (e: Exception) { false }
                 }
 
-                // กรอง Results ในสัปดาห์นี้ (กรณี standalone)
                 val filteredResults = allResults.filter { res ->
                     try {
                         if (res.reportDate.isNullOrBlank()) false else {
@@ -87,13 +91,9 @@ class ExportViewModel @Inject constructor(
                     } catch (e: Exception) { false }
                 }
 
-                // ดึงข้อมูล Project สำหรับ standalone results
                 val projectsMap = projectRepo.getAllProjectsFlow().first().associateBy { it.projectId }
-
-                // รวมข้อมูล
                 val exportItems = mutableListOf<ExportActivityItem>()
 
-                // เพิ่ม Appointment พร้อม Result ที่ผูกไว้
                 filteredActivities.forEach { act ->
                     val relatedResults = allResults.filter { it.activityId == act.activityId }
                     exportItems.add(
@@ -109,7 +109,6 @@ class ExportViewModel @Inject constructor(
                     )
                 }
 
-                // เพิ่ม Standalone Results (ที่ไม่มี appointmentId ในสัปดาห์นี้)
                 val appIdsInWeek = filteredActivities.map { it.activityId }.toSet()
                 filteredResults.filter { it.activityId == null || it.activityId !in appIdsInWeek }.forEach { res ->
                     val project = projectsMap[res.projectId]
@@ -136,9 +135,6 @@ class ExportViewModel @Inject constructor(
     }
 
     fun loadMonthlyData(yearMonth: YearMonth) {
-        val startOfMonth = yearMonth.atDay(1)
-        val endOfMonth = yearMonth.atEndOfMonth()
-
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, error = null) }
             try {
@@ -175,16 +171,13 @@ class ExportViewModel @Inject constructor(
     fun generateActivityCsvString(): String {
         val activities = _uiState.value.activities
         val builder = StringBuilder()
-
         builder.append("Date,Project Name,Company Name,Topic,Note,Status,Results\n")
-
         activities.forEach {
             val safeProject = it.projectName?.replace("\"", "\"\"") ?: ""
             val safeCompany = it.companyName?.replace("\"", "\"\"") ?: ""
             val safeTopic = it.topic?.replace("\"", "\"\"") ?: ""
             val safeNote = it.note?.replace("\"", "\"\"") ?: ""
             val safeResults = it.results.joinToString("; ").replace("\"", "\"\"")
-
             builder.append("${it.date},\"$safeProject\",\"$safeCompany\",\"$safeTopic\",\"$safeNote\",${it.status},\"$safeResults\"\n")
         }
         return builder.toString()
