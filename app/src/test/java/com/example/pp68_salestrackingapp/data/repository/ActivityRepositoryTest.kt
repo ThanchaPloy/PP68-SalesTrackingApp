@@ -372,4 +372,53 @@ class ActivityRepositoryTest {
         assertEquals("onsite", card.activityType)
         assertEquals("planned", card.planStatus)
     }
+
+    @Test
+    fun `saveStandaloneResult should upsert by result_id and omit appointment_id`() = runTest {
+        val result = ActivityResult(
+            resultId = "RES-001",
+            projectId = "PJ-001",
+            summary = "standalone"
+        )
+        coEvery { apiService.upsertActivityResultByResultId(any(), any()) } returns Response.success(emptyList())
+
+        val saveResult = repository.saveStandaloneResult("PJ-001", result)
+
+        assertTrue(saveResult.isSuccess)
+        coVerify(exactly = 1) {
+            apiService.upsertActivityResultByResultId(
+                "result_id",
+                match { body ->
+                    body["result_id"] == "RES-001" &&
+                        body["project_id"] == "PJ-001" &&
+                        !body.containsKey("appointment_id")
+                }
+            )
+        }
+        coVerify(exactly = 0) { apiService.insertActivityResultMap(any()) }
+    }
+
+    @Test
+    fun `saveActivityResult should upsert by appointment_id without overriding result_id`() = runTest {
+        val result = ActivityResult(
+            resultId = "RES-002",
+            activityId = "APT-001",
+            projectId = "PJ-001",
+            summary = "from appointment"
+        )
+        coEvery { apiService.upsertActivityResult(any(), any()) } returns Response.success(emptyList())
+
+        val saveResult = repository.saveActivityResult(result)
+
+        assertTrue(saveResult.isSuccess)
+        coVerify(exactly = 1) {
+            apiService.upsertActivityResult(
+                "appointment_id",
+                match { body ->
+                    body["appointment_id"] == "APT-001" &&
+                        !body.containsKey("result_id")
+                }
+            )
+        }
+    }
 }

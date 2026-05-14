@@ -410,8 +410,22 @@ class AddProjectViewModel @Inject constructor(
             _uiState.update { it.copy(isLoading = true, saveError = null) }
             val s = _uiState.value
             try {
-                val userId   = authRepo.currentUser()?.userId ?: "USR-0000"
-                val branchId = s.selectedTeamId ?: authRepo.currentUser()?.teamId ?: "XX-0001"
+                val currentUser = authRepo.currentUser()
+                if (currentUser == null) {
+                    _uiState.update {
+                        it.copy(isLoading = false, saveError = "กรุณาเข้าสู่ระบบใหม่ แล้วลองอีกครั้ง")
+                    }
+                    return@launch
+                }
+
+                val userId = currentUser.userId
+                val branchId = s.selectedTeamId ?: currentUser.teamId
+                if (branchId.isNullOrBlank()) {
+                    _uiState.update {
+                        it.copy(isLoading = false, saveError = "ไม่พบข้อมูลทีมขาย กรุณาเลือกทีมก่อนบันทึก")
+                    }
+                    return@launch
+                }
                 val projectId = s.projectId ?: ("PJ-" + UUID.randomUUID().toString().take(8).uppercase())
 
                 val finalLossReason = if (s.projectStatus == "Lost" || s.projectStatus == "Failed") {

@@ -366,6 +366,16 @@ interface ApiService {
         @Body result: @JvmSuppressWildcards Map<String, Any?>
     ): Response<List<ActivityResult>>
 
+    @POST("activity_result")
+    @Headers(
+        "Prefer: return=representation,resolution=merge-duplicates",
+        "Content-Profile: public"
+    )
+    suspend fun upsertActivityResultByResultId(
+        @Query("on_conflict") onConflict: String = "result_id",
+        @Body result: @JvmSuppressWildcards Map<String, Any?>
+    ): Response<List<ActivityResult>>
+
     @GET("project_sales_member")
     suspend fun getProjectMembers(
         @Query("project_id") projectId: String,
@@ -406,4 +416,3 @@ interface UploadApiService {
 data class UploadPhotoResponse(
     @SerializedName("photo_url") val photoUrl: String
 )
-

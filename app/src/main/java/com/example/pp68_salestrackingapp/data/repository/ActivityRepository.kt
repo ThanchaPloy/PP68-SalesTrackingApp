@@ -441,9 +441,13 @@ class ActivityRepository @Inject constructor(
                 // 1. บันทึก Local เสมอ
                 resultDao.insertResult(result)
 
-                // 2. POST ขึ้น API
-                val body = buildResultBody(result)
-                val apiResp = apiService.insertActivityResultMap(body)
+                // 2. Upsert ตาม result_id เพื่อรองรับทั้งสร้างใหม่และแก้ไขผลเดิม
+                val body = buildResultBody(
+                    result = result,
+                    includeResultId = true,
+                    includeAppointmentId = false
+                )
+                val apiResp = apiService.upsertActivityResultByResultId(result = body)
 
                 if (apiResp.isSuccessful) {
                     // ✅ อัปเดตสถานะ Project
@@ -480,9 +484,18 @@ class ActivityRepository @Inject constructor(
     }
 
     // ✅ Extract body building ออกมาเป็น private fun เพื่อใช้ร่วมกัน
-    private fun buildResultBody(result: ActivityResult): MutableMap<String, Any?> {
+    private fun buildResultBody(
+        result: ActivityResult,
+        includeResultId: Boolean = false,
+        includeAppointmentId: Boolean = true
+    ): MutableMap<String, Any?> {
         val body = mutableMapOf<String, Any?>()
-        body["appointment_id"]   = result.activityId
+        if (includeResultId) {
+            body["result_id"] = result.resultId
+        }
+        if (includeAppointmentId && !result.activityId.isNullOrBlank()) {
+            body["appointment_id"] = result.activityId
+        }
         result.projectId?.let    { body["project_id"]       = it } // ✅ เพิ่ม projectId เข้าไปใน body ด้วย
         result.createdBy?.let    { body["created_by"]       = it }
         result.reportDate?.let   { body["report_date"]      = it }
