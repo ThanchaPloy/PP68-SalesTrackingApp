@@ -380,14 +380,13 @@ class ActivityRepositoryTest {
             projectId = "PJ-001",
             summary = "standalone"
         )
-        coEvery { apiService.upsertActivityResultByResultId(any(), any()) } returns Response.success(emptyList())
+        coEvery { apiService.upsertActivityResultByResultId(any()) } returns Response.success(emptyList())
 
         val saveResult = repository.saveStandaloneResult("PJ-001", result)
 
         assertTrue(saveResult.isSuccess)
         coVerify(exactly = 1) {
             apiService.upsertActivityResultByResultId(
-                "result_id",
                 match { body ->
                     body["result_id"] == "RES-001" &&
                         body["project_id"] == "PJ-001" &&

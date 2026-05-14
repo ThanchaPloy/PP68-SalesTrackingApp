@@ -320,7 +320,7 @@ interface ApiService {
     ): Response<List<Map<String, String>>>
 
     // ── Activity Result ───────────────────────────────────────────
-    @POST("activity_result")
+    @POST("activity_result?on_conflict=result_id")
     @Headers(
         "Prefer: return=representation",
         "Content-Profile: public"
@@ -372,8 +372,7 @@ interface ApiService {
         "Content-Profile: public"
     )
     suspend fun upsertActivityResultByResultId(
-        @Query("on_conflict") onConflict: String = "result_id",
-        @Body result: @JvmSuppressWildcards Map<String, Any?>
+        @Body body: @JvmSuppressWildcards Map<String, Any?>
     ): Response<List<ActivityResult>>
 
     @GET("project_sales_member")

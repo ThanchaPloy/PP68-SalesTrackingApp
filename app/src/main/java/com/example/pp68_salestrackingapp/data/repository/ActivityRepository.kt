@@ -447,7 +447,7 @@ class ActivityRepository @Inject constructor(
                     includeResultId = true,
                     includeAppointmentId = false
                 )
-                val apiResp = apiService.upsertActivityResultByResultId(result = body)
+                val apiResp = apiService.upsertActivityResultByResultId(body = body)
 
                 if (apiResp.isSuccessful) {
                     // ✅ อัปเดตสถานะ Project
