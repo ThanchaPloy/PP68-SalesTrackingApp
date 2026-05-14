@@ -3,6 +3,7 @@ package com.example.pp68_salestrackingapp.ui.viewmodels.customer
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.pp68_salestrackingapp.data.model.Customer
+import com.example.pp68_salestrackingapp.data.repository.AuthRepository
 import com.example.pp68_salestrackingapp.data.repository.CustomerRepository
 import com.example.pp68_salestrackingapp.data.repository.ProjectRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -23,23 +24,21 @@ data class AddCustomerUiState(
     val selectedLat:         Double? = null,
     val selectedLng:         Double? = null,
     val custType:            String? = null,
-    val companyStatus:       String  = "customer", // Default status
+    val companyStatus:       String  = "customer",
     val selectedProjectId:   String? = null,
     val selectedProjectName: String? = null,
     val firstCustomerDate:   String? = null,
-
-    // dropdown options โหลดจาก DB
-    val projectOptions: List<Pair<String, String>> = emptyList(),
+    val projectOptions:      List<Pair<String, String>> = emptyList(),
 
     // validation
     val companyNameError: String? = null,
     val custTypeError:    String? = null,
 
     // ui
-    val isLoading: Boolean = false,
-    val isSaved:   Boolean = false,
-    val saveError: String? = null,
-    val projectNumber:String  = ""
+    val isLoading:    Boolean = false,
+    val isSaved:      Boolean = false,
+    val saveError:    String? = null,
+    val projectNumber: String = ""
 )
 
 // ─── Events ───────────────────────────────────────────────────
@@ -61,7 +60,8 @@ sealed class AddCustomerEvent {
 @HiltViewModel
 class AddCustomerViewModel @Inject constructor(
     private val customerRepo: CustomerRepository,
-    private val projectRepo:  ProjectRepository
+    private val projectRepo:  ProjectRepository,
+    private val authRepo:     AuthRepository          // ✅ เพิ่ม AuthRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(AddCustomerUiState())
@@ -76,9 +76,7 @@ class AddCustomerViewModel @Inject constructor(
                 _uiState.update {
                     it.copy(projectOptions = projects.map { p -> p.projectId to p.projectName })
                 }
-            } catch (e: Exception) {
-                // optional field — ไม่ต้อง error
-            }
+            } catch (_: Exception) {}
         }
     }
 
@@ -89,16 +87,16 @@ class AddCustomerViewModel @Inject constructor(
                 onSuccess = { customer ->
                     _uiState.update {
                         it.copy(
-                            custId = customer.custId,
-                            companyName = customer.companyName,
-                            branch = customer.branch ?: "",
-                            address = customer.companyAddr ?: "",
-                            selectedLat = customer.companyLat,
-                            selectedLng = customer.companyLong,
-                            custType = customer.custType,
-                            companyStatus = customer.companyStatus ?: "customer",
+                            custId            = customer.custId,
+                            companyName       = customer.companyName,
+                            branch            = customer.branch ?: "",
+                            address           = customer.companyAddr ?: "",
+                            selectedLat       = customer.companyLat,
+                            selectedLng       = customer.companyLong,
+                            custType          = customer.custType,
+                            companyStatus     = customer.companyStatus ?: "customer",
                             firstCustomerDate = customer.firstCustomerDate,
-                            isLoading = false
+                            isLoading         = false
                         )
                     }
                 },
@@ -111,7 +109,9 @@ class AddCustomerViewModel @Inject constructor(
 
     fun onEvent(event: AddCustomerEvent) {
         when (event) {
-            is AddCustomerEvent.LoadCustomer -> loadCustomer(event.id)
+            is AddCustomerEvent.LoadCustomer ->
+                loadCustomer(event.id)
+
             is AddCustomerEvent.CompanyNameChanged ->
                 _uiState.update { it.copy(companyName = event.value, companyNameError = null) }
 
@@ -131,16 +131,13 @@ class AddCustomerViewModel @Inject constructor(
                 _uiState.update { it.copy(companyStatus = event.value) }
 
             is AddCustomerEvent.ProjectSelected ->
-                _uiState.update {
-                    it.copy(selectedProjectId = event.id, selectedProjectName = event.name)
-                }
+                _uiState.update { it.copy(selectedProjectId = event.id, selectedProjectName = event.name) }
 
             is AddCustomerEvent.FirstCustomerDateChanged ->
                 _uiState.update { it.copy(firstCustomerDate = event.value.ifBlank { null }) }
 
-            is AddCustomerEvent.UseCurrentLocation -> {
+            is AddCustomerEvent.UseCurrentLocation ->
                 _uiState.update { it.copy(selectedLat = 13.7563, selectedLng = 100.5018) }
-            }
 
             is AddCustomerEvent.Save -> save()
         }
@@ -165,20 +162,29 @@ class AddCustomerViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, saveError = null) }
             val s = _uiState.value
-            
+
+            // ✅ ดึง branchId จาก user ที่ล็อกอินอยู่
+            val userBranchId = authRepo.currentUser()?.teamId
+
             val customer = Customer(
-                custId = s.custId ?: ("CUST-" + UUID.randomUUID().toString().take(8).uppercase()),
-                companyName = s.companyName,
-                branch = s.branch.ifBlank { null },
-                custType = s.custType,
-                companyAddr = s.address.ifBlank { null },
-                companyLat = s.selectedLat,
-                companyLong = s.selectedLng,
-                companyStatus = s.companyStatus,
+                custId            = s.custId ?: "CUST-${UUID.randomUUID().toString().take(8).uppercase()}",
+                companyName       = s.companyName,
+                branchId          = userBranchId,        // ✅ set branchId เพื่อให้คนในสาขาเดียวกันเห็น
+                branch            = s.branch.ifBlank { null },
+                custType          = s.custType,
+                companyAddr       = s.address.ifBlank { null },
+                companyLat        = s.selectedLat,
+                companyLong       = s.selectedLng,
+                companyStatus     = s.companyStatus,
                 firstCustomerDate = s.firstCustomerDate
             )
 
-            val result = customerRepo.addCustomer(customer)
+            // ✅ Create = POST, Edit = PATCH
+            val result = if (s.custId != null) {
+                customerRepo.updateCustomer(s.custId, customer)
+            } else {
+                customerRepo.addCustomer(customer)
+            }
 
             result.fold(
                 onSuccess = { _uiState.update { it.copy(isLoading = false, isSaved = true) } },

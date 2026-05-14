@@ -61,8 +61,8 @@ class CustomerDetailViewModelTest {
         val mockCustomer = Customer(custId, "Corp A", null, "Owner", "BKK", 13.0, 100.0, "customer", null)
         val mockContacts = listOf(ContactPerson("CP1", custId, "John", null, null, null))
         val mockProjects = listOf(
-            Project("P1", custId, null, "PJ01", "Active", null, "Quotation", null, null, null, null, null, null, null),
-            Project("P2", custId, null, "PJ02", "Done", null, "Completed", null, null, null, null, null, null, null)
+            Project(projectId = "P1", custId = custId, projectNumber = "PJ01", projectName = "Active", projectStatus = "Quotation"),
+            Project(projectId = "P2", custId = custId, projectNumber = "PJ02", projectName = "Done", projectStatus = "Completed")
         )
 
         // ✅ ฟังก์ชัน suspend ใช้ coEvery

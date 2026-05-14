@@ -222,7 +222,7 @@ class CustomerRepositoryExtendedTest {
     // TC-UNIT-CUST-FINAL-05
     @Test
     fun `refreshCustomers success should clear and insert customers`() = runTest {
-        val members  = listOf(ProjectMemberDto("PJ-001", "USR-001", "owner", "TS-26-S001-001"))
+        val members  = listOf(ProjectMemberDto("PJ-001", "USR-001", "owner"))
         val projects = listOf(Project(projectId = "PJ-001", custId = "CST-001", projectName = "P1"))
 
         coEvery { apiService.getMyProjectIds("eq.USR-001") } returns Response.success(members)

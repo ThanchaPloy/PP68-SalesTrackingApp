@@ -72,29 +72,46 @@ class ProjectDetailViewModel @Inject constructor(
         projectId?.let { id ->
             observeProject(id)
             observeActivities(id)
+            syncProjectFromServer(id)
+        }
+    }
+
+    private fun syncProjectFromServer(id: String) {
+        viewModelScope.launch {
+            projectRepo.syncProject(id)
         }
     }
 
     private fun observeProject(id: String) {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
-            // ✅ เปลี่ยนมาใช้ Flow เพื่อให้ UI อัปเดตทันทีเมื่อฐานข้อมูล Local เปลี่ยนแปลง
             projectRepo.getProjectByIdFlow(id).collectLatest { project ->
                 if (project != null) {
-                    val company = customerRepo.getCustomerById(project.custId).getOrNull()?.companyName ?: ""
+                    // ✅ อัปเดตข้อมูลโครงการหลักทันที
                     _uiState.update { state ->
                         state.copy(
                             isLoading = false,
                             project = project,
-                            companyName = company,
-                            teamMembers = listOf(
-                                TeamMember("U01", "สมชาย ใจดี"),
-                                TeamMember("U02", "สมหญิง รักงาน")
-                            )
+                            error = null
                         )
                     }
+
+                    // ✅ ดึงชื่อบริษัท (ไม่ block UI)
+                    launch {
+                        val company = customerRepo.getCustomerById(project.custId).getOrNull()?.companyName ?: ""
+                        _uiState.update { it.copy(companyName = company) }
+                    }
+
+                    // ✅ ดึงรายชื่อสมาชิก (ไม่ block UI)
+                    launch {
+                        val members = projectRepo.getProjectMembersDetailed(id).map { 
+                            TeamMember(it.first, it.second)
+                        }
+                        if (members.isNotEmpty()) {
+                            _uiState.update { it.copy(teamMembers = members) }
+                        }
+                    }
                 } else {
-                    // ถ้าใน Flow ไม่มี (เช่น พึ่งสร้างเสร็จหมาดๆ หรือข้อมูลยังไม่ sync) ให้ลองดึงผ่าน API
                     projectRepo.getProjectById(id)
                 }
             }
@@ -114,13 +131,6 @@ class ProjectDetailViewModel @Inject constructor(
                 
                 _uiState.update { it.copy(upcomingTasks = tasks, history = history) }
             }
-        }
-    }
-
-    fun loadProjectDetail(projectId: String) {
-        // Method นี้อาจไม่จำเป็นต้องใช้แล้วถ้าใช้ observeProject(id) ใน init
-        viewModelScope.launch {
-            projectRepo.getProjectById(projectId)
         }
     }
 

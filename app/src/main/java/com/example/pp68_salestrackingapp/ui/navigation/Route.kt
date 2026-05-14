@@ -26,6 +26,9 @@ sealed class Route(val path: String) {
     object AddProduct : Route("add_product/{projectId}") {
         fun createRoute(projectId: String) = "add_product/$projectId"
     }
+    object EditProduct : Route("edit_product/{projectId}/{productId}") {
+        fun createRoute(projectId: String, productId: String) = "edit_product/$projectId/$productId"
+    }
     object ActivityDetail : Route("activity_detail/{activityId}") {
         fun createRoute(activityId: String) = "activity_detail/$activityId"
     }

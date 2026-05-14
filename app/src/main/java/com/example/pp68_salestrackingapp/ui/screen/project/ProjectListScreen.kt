@@ -417,7 +417,7 @@ fun ProjectListItem(project: Project, onClick: () -> Unit) {
                         overflow = TextOverflow.Ellipsis
                     )
                     Text(
-                        text = "เลขที่: ${project.projectNumber ?: "-"}",
+                        text = "เลขที่: ${project.projectId}",
                         fontSize = 12.sp,
                         color = TextGray
                     )
@@ -485,7 +485,6 @@ fun ProjectListScreenPreview() {
         Project(
             projectId = "1",
             custId = "C001",
-            projectNumber = "PJ-001",
             projectName = "Office Building Renovation",
             expectedValue = 1500000.0,
             projectStatus = "New Project",
@@ -495,7 +494,6 @@ fun ProjectListScreenPreview() {
         Project(
             projectId = "2",
             custId = "C002",
-            projectNumber = "PJ-002",
             projectName = "New Condominium Project",
             expectedValue = 5000000.0,
             projectStatus = "Quotation",
@@ -505,7 +503,6 @@ fun ProjectListScreenPreview() {
         Project(
             projectId = "3",
             custId = "C003",
-            projectNumber = "PJ-003",
             projectName = "Small Shop Interior",
             expectedValue = 250000.0,
             projectStatus = "Completed",

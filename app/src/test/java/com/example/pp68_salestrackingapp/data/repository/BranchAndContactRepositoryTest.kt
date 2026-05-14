@@ -157,7 +157,7 @@ class ContactRepositoryTest {
     // TC-UNIT-CONT-01
     @Test
     fun `refreshContacts success should clear and insert`() = runTest {
-        val members  = listOf(ProjectMemberDto("PJ-001", "USR-001", "owner", "TS-26-S001-001"))
+        val members  = listOf(ProjectMemberDto("PJ-001", "USR-001", "owner"))
         val projects = listOf(Project(projectId = "PJ-001", custId = "CST-001", projectName = "P1"))
         val contacts = listOf(sampleContact)
 

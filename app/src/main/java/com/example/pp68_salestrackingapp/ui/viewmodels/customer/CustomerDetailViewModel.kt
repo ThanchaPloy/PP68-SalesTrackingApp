@@ -53,7 +53,7 @@ class CustomerDetailViewModel @Inject constructor(
                     _customer.value = customer
                 }
 
-                // 2. ดึง Contact
+                // 2. ดึง Contact (เฉพาะที่ตนเองสร้าง)
                 refreshContacts(custId)
 
                 // 3. ดึง Project แยก active/closed
@@ -73,7 +73,8 @@ class CustomerDetailViewModel @Inject constructor(
     }
 
     private suspend fun refreshContacts(custId: String) {
-        customerRepo.getContactPersons(custId).onSuccess { contacts ->
+        val currentUserId = authRepo.currentUser()?.userId
+        customerRepo.getContactPersons(custId, currentUserId).onSuccess { contacts ->
             _contacts.value = contacts
         }
     }

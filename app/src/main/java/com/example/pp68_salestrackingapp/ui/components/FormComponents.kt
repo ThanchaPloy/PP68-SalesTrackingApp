@@ -95,6 +95,7 @@ fun DropdownField(
     placeholder: String,
     options: List<String>,
     onSelect: (Int) -> Unit,
+    enabled: Boolean = true,
     isError: Boolean = false,
     errorMsg: String? = null
 ) {
@@ -109,8 +110,8 @@ fun DropdownField(
                     if (isError) AppColors.Error else AppColors.Border,
                     RoundedCornerShape(10.dp)
                 )
-                .background(Color.White)
-                .clickable { expanded = true }
+                .background(if (enabled) Color.White else Color(0xFFF5F5F5))
+                .clickable(enabled = enabled) { expanded = true }
                 .padding(horizontal = 16.dp, vertical = 14.dp)
         ) {
             Row(
@@ -120,7 +121,7 @@ fun DropdownField(
             ) {
                 Text(
                     text = value.ifBlank { placeholder },
-                    color = if (value.isBlank()) AppColors.TextHint else AppColors.TextPrimary,
+                    color = if (!enabled || value.isBlank()) AppColors.TextHint else AppColors.TextPrimary,
                     fontSize = 14.sp
                 )
                 Icon(

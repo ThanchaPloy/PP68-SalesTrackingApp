@@ -534,7 +534,6 @@ fun CustomerDetailScreenPreview() {
             projectId = "P001",
             custId = "C001",
             branchId = "B001",
-            projectNumber = "PJ-001",
             projectName = "Project Alpha",
             expectedValue = 1000000.0,
             projectStatus = "Active",

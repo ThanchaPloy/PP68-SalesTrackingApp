@@ -7,11 +7,12 @@ import com.example.pp68_salestrackingapp.data.model.Project
 import com.example.pp68_salestrackingapp.data.model.ProjectProductDto
 import com.example.pp68_salestrackingapp.data.remote.ApiService
 import com.example.pp68_salestrackingapp.data.remote.ProductMasterDto
+import com.example.pp68_salestrackingapp.data.repository.BranchRepository
 import com.example.pp68_salestrackingapp.data.repository.CustomerRepository
+import com.example.pp68_salestrackingapp.data.repository.ProductRepository
 import com.example.pp68_salestrackingapp.data.repository.ProjectRepository
 import io.mockk.coEvery
 import io.mockk.coVerify
-import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -42,6 +43,8 @@ class ProjectInventoryViewModelTest {
     private val dispatcher = StandardTestDispatcher()
     private val projectRepo = mockk<ProjectRepository>(relaxed = true)
     private val customerRepo = mockk<CustomerRepository>(relaxed = true)
+    private val branchRepo = mockk<BranchRepository>(relaxed = true)
+    private val productRepo = mockk<ProductRepository>(relaxed = true)
     private val apiService = mockk<ApiService>(relaxed = true)
 
     @Before
@@ -63,7 +66,7 @@ class ProjectInventoryViewModelTest {
             Customer("C1", "Company A", null, null, null, null, null, null, null)
         )
         coEvery { apiService.getProjectProducts("eq.PRJ-1") } returns Response.success(
-            listOf(ProjectProductDto("PRJ-1", "P1", 10.0, null))
+            listOf(ProjectProductDto("PRJ-1", "P1", 10.0, null, null))
         )
         coEvery { apiService.getProductMaster() } returns Response.success(
             listOf(
@@ -73,7 +76,12 @@ class ProjectInventoryViewModelTest {
                     productType = "Glass",
                     productSubgroup = null,
                     brand = "Brand",
-                    unit = "sqm"
+                    unit = "sqm",
+                    color = null,
+                    thickness = null,
+                    width = null,
+                    length = null,
+                    dimensionUnit = null
                 )
             )
         )
@@ -82,6 +90,8 @@ class ProjectInventoryViewModelTest {
             SavedStateHandle(mapOf("projectId" to "PRJ-1")),
             projectRepo,
             customerRepo,
+            branchRepo,
+            productRepo,
             apiService
         )
         runCurrent()
@@ -109,6 +119,8 @@ class ProjectInventoryViewModelTest {
             SavedStateHandle(mapOf("projectId" to "PRJ-1")),
             projectRepo,
             customerRepo,
+            branchRepo,
+            productRepo,
             apiService
         )
         advanceUntilIdle()
@@ -123,6 +135,8 @@ class ProjectInventoryViewModelTest {
             SavedStateHandle(),
             projectRepo,
             customerRepo,
+            branchRepo,
+            productRepo,
             apiService
         )
         advanceUntilIdle()
@@ -144,6 +158,8 @@ class ProjectInventoryViewModelTest {
             SavedStateHandle(mapOf("projectId" to "PRJ-1")),
             projectRepo,
             customerRepo,
+            branchRepo,
+            productRepo,
             apiService
         )
         advanceUntilIdle()
@@ -161,6 +177,8 @@ class ProjectInventoryViewModelTest {
             SavedStateHandle(mapOf("projectId" to "PRJ-1")),
             projectRepo,
             customerRepo,
+            branchRepo,
+            productRepo,
             apiService
         )
         advanceUntilIdle()
@@ -185,6 +203,8 @@ class ProjectInventoryViewModelTest {
             SavedStateHandle(mapOf("projectId" to "PRJ-1")),
             projectRepo,
             customerRepo,
+            branchRepo,
+            productRepo,
             apiService
         )
         advanceUntilIdle()
@@ -210,6 +230,8 @@ class ProjectInventoryViewModelTest {
             SavedStateHandle(mapOf("projectId" to "PRJ-1")),
             projectRepo,
             customerRepo,
+            branchRepo,
+            productRepo,
             apiService
         )
         advanceUntilIdle()
@@ -228,18 +250,20 @@ class ProjectInventoryViewModelTest {
         )
         coEvery { apiService.getProjectProducts("eq.PRJ-1") } returns Response.success(
             listOf(
-                ProjectProductDto("PRJ-1", "P1", null, null),
-                ProjectProductDto("PRJ-1", "UNKNOWN", 5.0, null)
+                ProjectProductDto("PRJ-1", "P1", null, null, null),
+                ProjectProductDto("PRJ-1", "UNKNOWN", 5.0, null, null)
             )
         )
         coEvery { apiService.getProductMaster() } returns Response.success(
-            listOf(ProductMasterDto("P1", null, null, null, null, null))
+            listOf(ProductMasterDto("P1", null, null, null, null, null, null, null, null, null, null))
         )
 
         val vm = ProjectInventoryViewModel(
             SavedStateHandle(mapOf("projectId" to "PRJ-1")),
             projectRepo,
             customerRepo,
+            branchRepo,
+            productRepo,
             apiService
         )
         advanceUntilIdle()
@@ -261,7 +285,7 @@ class ProjectInventoryViewModelTest {
             Customer("C1", "Company A", null, null, null, null, null, null, null)
         )
         coEvery { apiService.getProjectProducts("eq.PRJ-1") } returns Response.success(
-            listOf(ProjectProductDto("PRJ-1", "P1", 1.0, null))
+            listOf(ProjectProductDto("PRJ-1", "P1", 1.0, null, null))
         )
         coEvery { apiService.getProductMaster() } returns Response.success(null)
 
@@ -269,6 +293,8 @@ class ProjectInventoryViewModelTest {
             SavedStateHandle(mapOf("projectId" to "PRJ-1")),
             projectRepo,
             customerRepo,
+            branchRepo,
+            productRepo,
             apiService
         )
         advanceUntilIdle()
@@ -291,6 +317,8 @@ class ProjectInventoryViewModelTest {
             SavedStateHandle(mapOf("projectId" to "PRJ-1")),
             projectRepo,
             customerRepo,
+            branchRepo,
+            productRepo,
             apiService
         )
         advanceUntilIdle()
@@ -314,6 +342,8 @@ class ProjectInventoryViewModelTest {
             SavedStateHandle(mapOf("projectId" to "PRJ-1")),
             projectRepo,
             customerRepo,
+            branchRepo,
+            productRepo,
             apiService
         )
         advanceUntilIdle()

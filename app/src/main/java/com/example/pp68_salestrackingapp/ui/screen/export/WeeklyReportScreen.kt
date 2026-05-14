@@ -6,15 +6,13 @@ import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.pdf.PdfDocument
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.EventNote
-import androidx.compose.material.icons.filled.PictureAsPdf
-import androidx.compose.material.icons.filled.TableChart
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -33,7 +31,9 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileOutputStream
+import java.time.Instant
 import java.time.LocalDate
+import java.time.ZoneId
 
 private val RedReport = Color(0xFFAE2138)
 
@@ -50,14 +50,17 @@ fun WeeklyReportScreen(
 
     WeeklyReportContent(
         state = s,
-        onBack = onBack
+        onBack = onBack,
+        onDateSelected = { viewModel.loadWeeklyData(it) }
     )
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun WeeklyReportContent(
     state: ExportUiState,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    onDateSelected: (LocalDate) -> Unit
 ) {
     val context       = LocalContext.current
     val scope         = rememberCoroutineScope()
@@ -66,6 +69,11 @@ fun WeeklyReportContent(
     var csvLoading    by remember { mutableStateOf(false) }
     var pdfLoading    by remember { mutableStateOf(false) }
     val isAnyExporting = csvLoading || pdfLoading
+
+    var showDatePicker by remember { mutableStateOf(false) }
+    val datePickerState = rememberDatePickerState(
+        initialSelectedDateMillis = state.selectedDate.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+    )
 
     fun doExport(
         setLoading: (Boolean) -> Unit,
@@ -89,6 +97,26 @@ fun WeeklyReportContent(
             } finally {
                 setLoading(false)
             }
+        }
+    }
+
+    if (showDatePicker) {
+        DatePickerDialog(
+            onDismissRequest = { showDatePicker = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    datePickerState.selectedDateMillis?.let { millis ->
+                        val selectedDate = Instant.ofEpochMilli(millis).atZone(ZoneId.systemDefault()).toLocalDate()
+                        onDateSelected(selectedDate)
+                    }
+                    showDatePicker = false
+                }) { Text("ตกลง", color = RedReport) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDatePicker = false }) { Text("ยกเลิก") }
+            }
+        ) {
+            DatePicker(state = datePickerState)
         }
     }
 
@@ -125,6 +153,7 @@ fun WeeklyReportContent(
                             tint = Color(0xFF1A1A1A))
                     }
                     Text("Back", fontSize = 14.sp, color = Color(0xFF1A1A1A))
+
                     Spacer(Modifier.weight(1f))
 
                     if (state.activities.isNotEmpty()) {
@@ -143,7 +172,7 @@ fun WeeklyReportContent(
                                     ) {
                                         exportToCsv(
                                             context,
-                                            "Weekly_Report_${LocalDate.now()}",
+                                            "Weekly_Report_${state.selectedDate}",
                                             state.activities
                                         )
                                     }
@@ -164,7 +193,7 @@ fun WeeklyReportContent(
                                     ) {
                                         exportToPdf(
                                             context,
-                                            "Weekly_Report_${LocalDate.now()}",
+                                            "Weekly_Report_${state.selectedDate}",
                                             state.activities
                                         )
                                     }
@@ -172,6 +201,39 @@ fun WeeklyReportContent(
                             )
                         }
                     }
+                }
+            }
+
+            // ── Date Selector ─────────────────────────────────
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                color = Color.White
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { showDatePicker = true }
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center
+                ) {
+                    Icon(Icons.Default.CalendarToday, null, tint = RedReport, modifier = Modifier.size(20.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(
+                            text = "สัปดาห์ที่เลือก",
+                            fontSize = 12.sp,
+                            color = Color.Gray
+                        )
+                        Text(
+                            text = state.weekRangeText,
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = RedReport
+                        )
+                    }
+                    Spacer(Modifier.width(8.dp))
+                    Icon(Icons.Default.Edit, null, tint = Color.Gray, modifier = Modifier.size(16.dp))
                 }
             }
 
@@ -188,7 +250,10 @@ fun WeeklyReportContent(
                         Icon(Icons.Default.EventNote, null,
                             modifier = Modifier.size(64.dp), tint = Color.LightGray)
                         Spacer(Modifier.height(8.dp))
-                        Text("ไม่มีแผนงานหรือผลการทำงานในสัปดาห์นี้", color = Color.Gray)
+                        Text("ไม่มีแผนงานหรือผลการทำงานในช่วงสัปดาห์นี้", color = Color.Gray)
+                        TextButton(onClick = { showDatePicker = true }) {
+                            Text("เลือกสัปดาห์อื่น", color = RedReport)
+                        }
                     }
                 }
 
@@ -199,7 +264,7 @@ fun WeeklyReportContent(
                 ) {
                     item {
                         Text(
-                            "สรุปรายงานรายสัปดาห์ (${state.activities.size} items)",
+                            "สรุปกิจกรรม (${state.activities.size} รายการ)",
                             fontWeight = FontWeight.SemiBold,
                             fontSize   = 14.sp,
                             color      = Color.Gray,
@@ -242,7 +307,7 @@ private fun ExportButton(
                 strokeWidth = 2.dp
             )
             Spacer(Modifier.width(6.dp))
-            Text("กำลังส่งออก...", fontSize = 12.sp)
+            Text("...", fontSize = 12.sp)
         } else {
             Icon(
                 imageVector        = if (label == "PDF") Icons.Default.PictureAsPdf
@@ -302,10 +367,10 @@ fun ReportActivityCard(item: ExportActivityItem) {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(Color(0xFFF9F9F9), RoundedCornerShape(8.dp))
+                        .background(Color(0xFFF0F0F0), RoundedCornerShape(8.dp))
                         .padding(8.dp)
                 ) {
-                    Text(item.note, fontSize = 12.sp, color = Color.DarkGray, maxLines = 3)
+                    Text(item.note, fontSize = 12.sp, color = Color.DarkGray, maxLines = 5)
                 }
             }
 
@@ -328,7 +393,7 @@ fun ReportActivityCard(item: ExportActivityItem) {
 fun exportToCsv(context: Context, fileName: String, activities: List<ExportActivityItem>) {
     val header  = "Date,Company,Project,Topic,Status,Note,Results\n"
     val content = activities.joinToString("\n") {
-        val note = it.note?.replace(",", ";")?.replace("\n", " ") ?: ""
+        val note = it.note?.replace(",", ";")?.replace("\n", " ")?.replace("\"", "'") ?: ""
         val results = it.results.joinToString("; ").replace(",", ";").replace("\n", " ")
         "\"${it.date}\"," +
                 "\"${it.companyName?.replace(",", ";") ?: ""}\"," +
@@ -450,9 +515,11 @@ fun WeeklyReportPreview() {
                         status = "completed",
                         results = listOf("เข้าไปแนะนำตัวเบื้องต้น")
                     )
-                )
+                ),
+                weekRangeText = "23 ต.ค. 2023 - 29 ต.ค. 2023"
             ),
-            onBack = {}
+            onBack = {},
+            onDateSelected = {}
         )
     }
 }

@@ -9,6 +9,7 @@ import com.example.pp68_salestrackingapp.data.repository.ProjectRepository
 import com.example.pp68_salestrackingapp.data.model.Project
 import com.example.pp68_salestrackingapp.data.remote.ApiService
 import com.example.pp68_salestrackingapp.data.repository.BranchRepository
+import com.example.pp68_salestrackingapp.data.repository.ProductRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -40,6 +41,7 @@ class ProjectInventoryViewModel @Inject constructor(
     private val projectRepo: ProjectRepository,
     private val customerRepo: CustomerRepository,
     private val branchRepo: BranchRepository,
+    private val productRepo: ProductRepository,
     private val apiService: ApiService
 ) : ViewModel() {
 
@@ -115,6 +117,28 @@ class ProjectInventoryViewModel @Inject constructor(
             }
         } catch (e: Exception) {
             emptyList()
+        }
+    }
+
+    fun deleteProduct(productId: String) {
+        val currentId = projectId ?: return
+        viewModelScope.launch {
+            productRepo.deleteProjectProduct(currentId, productId).onSuccess {
+                load()
+            }.onFailure { e ->
+                _uiState.update { it.copy(error = "ลบไม่สำเร็จ: ${e.message}") }
+            }
+        }
+    }
+
+    fun updateProductQuantity(productId: String, newQuantity: Double) {
+        val currentId = projectId ?: return
+        viewModelScope.launch {
+            productRepo.updateProjectProduct(currentId, productId, mapOf("quantity" to newQuantity)).onSuccess {
+                load()
+            }.onFailure { e ->
+                _uiState.update { it.copy(error = "แก้ไขไม่สำเร็จ: ${e.message}") }
+            }
         }
     }
 }
