@@ -24,10 +24,6 @@ data class Project(
     @SerializedName("billing_branch_id")
     val billingBranchId: String? = null,
 
-    @ColumnInfo(name = "projectNumber")
-    @SerializedName("project_number")
-    val projectNumber: String? = null,
-
     @ColumnInfo(name = "projectName")
     @SerializedName("project_name")
     val projectName: String,

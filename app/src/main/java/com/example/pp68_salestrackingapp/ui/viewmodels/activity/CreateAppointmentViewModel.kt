@@ -203,7 +203,7 @@ class CreateAppointmentViewModel @Inject constructor(
 
                 _uiState.update { it.copy(masterOptions = filtered) }
 
-                customerRepo.getContactPersons(custId).onSuccess { contacts ->
+                customerRepo.getContactPersons(custId, null).onSuccess { contacts ->
                     _uiState.update {
                         it.copy(
                             contactOptions    = contacts

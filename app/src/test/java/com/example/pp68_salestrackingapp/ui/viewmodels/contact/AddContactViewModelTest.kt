@@ -39,8 +39,8 @@ class AddContactViewModelTest {
     )
 
     private val mockProjects = listOf(
-        Project("P01", "CUST-01", null, "ProjectA", "Alpha", null, "New Project"),
-        Project("P02", "CUST-02", null, "ProjectB", "Beta", null, "Quotation")
+        Project(projectId = "P01", custId = "CUST-01", projectNumber = "ProjectA", projectName = "Alpha", projectStatus = "New Project"),
+        Project(projectId = "P02", custId = "CUST-02", projectNumber = "ProjectB", projectName = "Beta", projectStatus = "Quotation")
     )
 
     @Before

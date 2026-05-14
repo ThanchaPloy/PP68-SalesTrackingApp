@@ -129,6 +129,28 @@ class ProductRepositoryTest {
 
         assertTrue(result.isSuccess)
     }
+
+    // TC-UNIT-PROD-10: Update Product
+    @Test
+    fun `updateProjectProduct success should return success`() = runTest {
+        coEvery { apiService.updateProjectProduct(any(), any(), any()) } returns Response.success(emptyList())
+
+        val result = repository.updateProjectProduct("PJ-001", "PRD-001", mapOf("quantity" to 25.0))
+
+        assertTrue(result.isSuccess)
+        coVerify { apiService.updateProjectProduct(any(), any(), any()) }
+    }
+
+    // TC-UNIT-PROD-11: Delete Product
+    @Test
+    fun `deleteProjectProduct success should return success`() = runTest {
+        coEvery { apiService.deleteProjectProduct(any(), any()) } returns Response.success(Unit)
+
+        val result = repository.deleteProjectProduct("PJ-001", "PRD-001")
+
+        assertTrue(result.isSuccess)
+        coVerify { apiService.deleteProjectProduct(any(), any()) }
+    }
 }
 
 @OptIn(ExperimentalCoroutinesApi::class)

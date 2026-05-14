@@ -9,6 +9,7 @@ data class Customer(
     @PrimaryKey
     @SerializedName("cust_id") val custId: String,
     @SerializedName("company_name") val companyName: String,
+    @SerializedName("branch_id") val branchId: String? = null,
     @SerializedName("branch") val branch: String?,
     @SerializedName("cust_type") val custType: String?,
     @SerializedName("company_addr") val companyAddr: String?,

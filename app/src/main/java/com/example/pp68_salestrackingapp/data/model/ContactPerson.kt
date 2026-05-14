@@ -50,5 +50,9 @@ data class ContactPerson(
 
     @ColumnInfo(name = "isDmConfirmed")
     @SerializedName("is_dm_confirmed")
-    val isDmConfirmed: Boolean? = false
+    val isDmConfirmed: Boolean? = false,
+
+    @ColumnInfo(name = "createdBy")
+    @SerializedName("user_id")   // ✅ แก้จาก "created_by" → "user_id" ให้ตรงกับ DB column จริง
+    val createdBy: String? = null
 )

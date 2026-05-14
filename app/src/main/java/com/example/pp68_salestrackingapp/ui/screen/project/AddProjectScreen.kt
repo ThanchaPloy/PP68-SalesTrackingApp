@@ -103,10 +103,10 @@ fun AddProjectContent(
                     ) {
                         Icon(Icons.Default.Tag, null, tint = AppColors.Primary, modifier = Modifier.size(18.dp))
                         Text(
-                            text = uiState.generatedProjectNumber,
+                            text = uiState.displayProjectId,
                             fontSize   = 15.sp,
                             fontWeight = FontWeight.SemiBold,
-                            color      = if (uiState.generatedProjectNumber.contains("รอกด"))
+                            color      = if (uiState.displayProjectId.contains("รอกด"))
                                 AppColors.TextSecondary else AppColors.TextPrimary
                         )
                         Spacer(Modifier.weight(1f))
@@ -420,7 +420,8 @@ fun AddProjectScreenPreview() {
     SalesTrackingTheme {
         AddProjectContent(
             uiState = AddProjectUiState(
-                projectNumber = "PRJ-2023-001",
+                projectId = "PRJ-2023-001",
+                displayProjectId = "PRJ-2023-001",
                 projectName = "New Office Construction",
                 branch = "Bangkok",
                 customerOptions = listOf("1" to "ACME Corp", "2" to "Globex"),

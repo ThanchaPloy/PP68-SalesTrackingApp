@@ -85,4 +85,43 @@ class ProductRepository @Inject constructor(
             }
         }
     }
+
+    suspend fun updateProjectProduct(
+        projectId: String,
+        productId: String,
+        updates: Map<String, Any?>
+    ): Result<Unit> {
+        return withContext(Dispatchers.IO) {
+            try {
+                val response = apiService.updateProjectProduct("eq.$projectId", "eq.$productId", updates)
+                if (response.isSuccessful) {
+                    Result.success(Unit)
+                } else {
+                    val errorBody = response.errorBody()?.string() ?: ""
+                    Result.failure(Exception("HTTP ${response.code()}: $errorBody"))
+                }
+            } catch (e: Exception) {
+                Result.failure(e)
+            }
+        }
+    }
+
+    suspend fun deleteProjectProduct(
+        projectId: String,
+        productId: String
+    ): Result<Unit> {
+        return withContext(Dispatchers.IO) {
+            try {
+                val response = apiService.deleteProjectProduct("eq.$projectId", "eq.$productId")
+                if (response.isSuccessful) {
+                    Result.success(Unit)
+                } else {
+                    val errorBody = response.errorBody()?.string() ?: ""
+                    Result.failure(Exception("HTTP ${response.code()}: $errorBody"))
+                }
+            } catch (e: Exception) {
+                Result.failure(e)
+            }
+        }
+    }
 }
