@@ -34,13 +34,13 @@ class ProjectRepository @Inject constructor(
                     projectDao.clearAndInsert(emptyList())
                     return@withContext Result.success(Unit)
                 }
-                
+
                 val memberData = memberResp.body()!!
                 val projectIds = memberData.map { it.projectId }
-                
+
                 val idsParam   = "in.(${projectIds.joinToString(",")})"
                 val projectResp = apiService.getProjectsByIds(projectIds = idsParam)
-                
+
                 if (projectResp.isSuccessful && projectResp.body() != null) {
                     val projects = projectResp.body()!!
                     projectDao.clearAndInsert(projects)
@@ -59,7 +59,7 @@ class ProjectRepository @Inject constructor(
             try {
                 val local = projectDao.getProjectById(projectId)
                 if (local != null) return@withContext Result.success(local)
-                
+
                 val response = apiService.getProjectById("eq.$projectId")
                 if (response.isSuccessful && !response.body().isNullOrEmpty()) {
                     val project = response.body()!!.first()
@@ -80,7 +80,7 @@ class ProjectRepository @Inject constructor(
                 val response = apiService.getProjectById("eq.$projectId")
                 if (response.isSuccessful && !response.body().isNullOrEmpty()) {
                     val project = response.body()!!.first()
-                    projectDao.insertProject(project) 
+                    projectDao.insertProject(project)
                     Result.success(project)
                 } else {
                     Result.failure(Exception("Sync ล้มเหลว: ไม่พบข้อมูลบน Server"))
@@ -181,13 +181,14 @@ class ProjectRepository @Inject constructor(
                     "loss_reason"       to project.lossReason,
                     "start_date"        to project.startDate,
                     "closing_date"      to project.closingDate,
-                    "progress_pct"      to progressPct
+                    "progress_pct"      to progressPct,
+                    "updated_at"        to java.time.Instant.now().toString()
                 )
                 project.projectLat?.let { updates["project_lat"] = it }
                 project.projectLong?.let { updates["project_long"] = it }
-                
+
                 projectDao.insertProject(project.copy(progressPct = progressPct))
-                
+
                 val response = apiService.updateProject("eq.${project.projectId}", updates)
                 if (response.isSuccessful) {
                     firebaseService.updateProjectStatus(

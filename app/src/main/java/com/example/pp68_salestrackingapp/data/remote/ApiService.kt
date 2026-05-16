@@ -71,7 +71,6 @@ interface ApiService {
     @Headers("Prefer: return=representation", "Content-Profile: public")
     suspend fun addCustomer(@Body customer: Customer): Response<List<Customer>>
 
-    // ✅ เพิ่ม PATCH สำหรับ update customer
     @PATCH("customer")
     @Headers("Prefer: return=representation", "Content-Profile: public")
     suspend fun updateCustomer(
@@ -86,21 +85,21 @@ interface ApiService {
     @GET("contact_person")
     suspend fun getContactPersons(
         @Query("cust_id") custId: String? = null,
-        @Query("user_id") createdBy: String? = null,   // ✅ แก้จาก "created_by" → "user_id"
+        @Query("user_id") createdBy: String? = null,
         @Query("limit") limit: Int = 1000
     ): Response<List<ContactPerson>>
 
     @GET("contact_person")
     suspend fun getContactsByCustomer(
         @Query("cust_id") custId: String,
-        @Query("user_id") createdBy: String? = null,   // ✅ แก้จาก "created_by" → "user_id"
+        @Query("user_id") createdBy: String? = null,
         @Query("limit") limit: Int = 1000
     ): Response<List<ContactPerson>>
 
     @GET("contact_person")
     suspend fun getContactsByCustomerIds(
         @Query("cust_id") custIds: String,
-        @Query("user_id") createdBy: String? = null,   // ✅ แก้จาก "created_by" → "user_id"
+        @Query("user_id") createdBy: String? = null,
         @Query("limit") limit: Int = 1000
     ): Response<List<ContactPerson>>
 
@@ -113,6 +112,13 @@ interface ApiService {
 
     @DELETE("contact_person")
     suspend fun deleteContactsByCustomer(@Query("cust_id") custId: String): Response<Unit>
+
+    @PATCH("contact_person")
+    @Headers("Prefer: return=representation", "Content-Profile: public")
+    suspend fun updateContact(
+        @Query("contact_id") contactId: String,
+        @Body updates: @JvmSuppressWildcards Map<String, Any?>
+    ): Response<List<ContactPerson>>
 
     // ── Project ──────────────────────────────────────────────────
     @GET("project")
@@ -200,12 +206,12 @@ interface ApiService {
     @Headers("Prefer: return=representation,resolution=merge-duplicates", "Content-Profile: public")
     suspend fun upsertActivityResult(@Body result: @JvmSuppressWildcards Map<String, Any?>): Response<List<ActivityResult>>
 
-    @POST("activity_result")
-    @Headers("Prefer: return=representation", "Content-Profile: public")
-    suspend fun insertActivityResultMap(@Body result: @JvmSuppressWildcards Map<String, Any?>): Response<List<ActivityResult>>
-
     @GET("activity_result")
     suspend fun getActivityResult(@Query("appointment_id") appointmentId: String, @Query("limit") limit: Int = 1): Response<List<ActivityResult>>
+
+    // ✅ เพิ่มใหม่: ดึงข้อมูลบันทึกด้วยรหัสบันทึก (Result ID) โดยตรง
+    @GET("activity_result")
+    suspend fun getResultById(@Query("result_id") resultId: String, @Query("limit") limit: Int = 1): Response<List<ActivityResult>>
 
     // ── Checklist ────────────────────────────────────────────────
     @GET("appointment_checklist")
@@ -227,7 +233,6 @@ interface ApiService {
     @Headers("Prefer: return=representation", "Content-Profile: public")
     suspend fun insertCallLog(@Body body: @JvmSuppressWildcards Map<String, String>): Response<Unit>
 
-    // ── PostgREST context (สำหรับ Trigger log stage change) ─────
     @POST("rpc/set_app_context")
     suspend fun setAppContext(@Body body: @JvmSuppressWildcards Map<String, String>): Response<Unit>
 }

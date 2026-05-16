@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -120,15 +121,42 @@ class ProjectDetailViewModel @Inject constructor(
 
     private fun observeActivities(id: String) {
         viewModelScope.launch {
-            activityRepo.getActivitiesByProjectFlow(id).collect { activities ->
+            combine(
+                activityRepo.getActivitiesByProjectFlow(id),
+                activityRepo.getResultsByProjectFlow(id)
+            ) { activities, results ->
+                // 1. กองงานที่กำลังจะมาถึง (กรองเฉพาะที่ยังไม่เสร็จ)
                 val tasks = activities
                     .filter { it.status.lowercase() != "completed" }
                     .map { TaskItem(it.activityId, it.activityType, it.detail, it.activityDate) }
-                
-                val history = activities
-                    .filter { it.status.lowercase() == "completed" }
-                    .map { HistoryItem(it.activityId, it.activityType, it.detail, it.activityDate, it.status, it.activityType, it.contactName) }
-                
+
+                // 2. ประวัติกิจกรรม (อ้างอิงจากตาราง ActivityResult เป็นหลัก)
+                val actMap = activities.associateBy { it.activityId }
+                val history = results.map { res ->
+                    val act = res.activityId?.let { actMap[it] }
+                    
+                    // ✅ ปรับหัวข้อตามเงื่อนไข: 
+                    // ถ้ามาจากนัดหมาย (activityId != null) ให้ใช้ "นัดหมาย"
+                    // ถ้าสร้างอิสระจาก FAB (standalone) ให้ใช้สรุปย่อเป็นหัวข้อ
+                    val title = if (res.activityId != null) {
+                        "นัดหมาย"
+                    } else {
+                        res.summary?.take(40)?.let { if (it.length == 40) "$it..." else it } 
+                            ?: "บันทึกสรุปการเข้าพบ"
+                    }
+
+                    HistoryItem(
+                        activityId   = res.activityId ?: res.resultId,
+                        title        = title,
+                        description  = res.summary, // บันทึกผลจริงๆ จะอยู่ในนี้
+                        plannedDate  = res.reportDate ?: act?.activityDate,
+                        planStatus   = "completed",
+                        activityType = act?.activityType ?: "visit",
+                        contactName  = act?.contactName ?: "ไม่ระบุชื่อผู้ติดต่อ"
+                    )
+                }
+                tasks to history
+            }.collect { (tasks, history) ->
                 _uiState.update { it.copy(upcomingTasks = tasks, history = history) }
             }
         }

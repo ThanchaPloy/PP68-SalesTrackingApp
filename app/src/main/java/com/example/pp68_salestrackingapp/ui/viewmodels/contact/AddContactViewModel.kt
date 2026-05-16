@@ -75,8 +75,7 @@ class AddContactViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
             try {
-                val contacts = contactRepo.getAllContactsFlow().first()
-                val contact = contacts.find { it.contactId == id }
+                val contact = contactRepo.getContactById(id)  // ✅ ดึงตรงจาก DB
                 if (contact != null) {
                     val cName = customerRepo.getCustomerById(contact.custId).getOrNull()?.companyName ?: ""
                     _uiState.update { it.copy(
@@ -122,6 +121,7 @@ class AddContactViewModel @Inject constructor(
         }
     }
 
+
     fun onEvent(event: AddContactEvent) {
         when (event) {
             is AddContactEvent.LoadContact -> loadContact(event.id)
@@ -156,22 +156,31 @@ class AddContactViewModel @Inject constructor(
             val s = _uiState.value
             val currentUserId = authRepo.currentUser()?.userId
             val contactToSave = ContactPerson(
-                contactId = s.contactId ?: ("CNT-" + UUID.randomUUID().toString().take(8).uppercase()),
-                custId = s.selectedCompanyId!!,
-                fullName = s.fullName,
-                nickname = s.nickname.ifBlank { null },
-                position = s.position.ifBlank { null },
+                contactId   = s.contactId ?: ("CNT-" + UUID.randomUUID().toString().take(8).uppercase()),
+                custId      = s.selectedCompanyId!!,
+                fullName    = s.fullName,
+                nickname    = s.nickname.ifBlank { null },
+                position    = s.position.ifBlank { null },
                 phoneNumber = s.phoneNum.ifBlank { null },
-                email = s.email.ifBlank { null },
-                line = s.lineId.ifBlank { null },
-                isActive = s.isActive,
+                email       = s.email.ifBlank { null },
+                line        = s.lineId.ifBlank { null },
+                isActive    = s.isActive,
                 isDmConfirmed = s.isDecisionMaker,
-                createdBy = currentUserId // ✅ บันทึกผู้สร้าง
+                createdBy   = currentUserId
             )
-            contactRepo.addContact(contactToSave).fold(
+
+            // ✅ แยก edit vs create
+            val result = if (s.contactId != null) {
+                contactRepo.updateContact(s.contactId, contactToSave)  // PATCH
+            } else {
+                contactRepo.addContact(contactToSave)                   // POST
+            }
+
+            result.fold(
                 onSuccess = { _uiState.update { it.copy(isLoading = false, isSaved = true) } },
                 onFailure = { e -> _uiState.update { it.copy(isLoading = false, saveError = e.message) } }
             )
         }
     }
+
 }

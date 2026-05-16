@@ -9,12 +9,15 @@ import com.example.pp68_salestrackingapp.ui.viewmodels.activity.ActivityCard
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.MultipartBody
 import okhttp3.RequestBody.Companion.toRequestBody
 import javax.inject.Inject
+import javax.inject.Singleton
 
+@Singleton
 class ActivityRepository @Inject constructor(
     private val apiService: ApiService,
     private val uploadApiService: UploadApiService,
@@ -25,16 +28,21 @@ class ActivityRepository @Inject constructor(
     private val planItemDao: ActivityPlanItemDao,
     private val resultDao: ActivityResultDao,
     private val appointmentContactDao: AppointmentContactDao,
-    private val projectRepo: ProjectRepository // ✅ ฉีด ProjectRepository เข้ามาเพื่อใช้อัปเดตสถานะ
+    private val projectRepo: ProjectRepository
 ) {
     fun getAllActivitiesFlow(): Flow<List<SalesActivity>> = activityDao.getAllActivities()
 
     fun getActivitiesByProjectFlow(projectId: String): Flow<List<SalesActivity>> =
-        activityDao.getActivitiesByProject(projectId)
+        activityDao.getActivitiesByProject(projectId).map { list ->
+            list.map { enrichActivity(it) }
+        }
 
     fun getAllResultIdsFlow(): Flow<List<String>> = resultDao.getAllResultIdsFlow()
 
     fun getAllResultsFlow(): Flow<List<ActivityResult>> = resultDao.getAllResultsFlow()
+
+    fun getResultsByProjectFlow(projectId: String): Flow<List<ActivityResult>> =
+        resultDao.getAllResultsByProject(projectId)
 
     suspend fun refreshActivities(userId: String): kotlin.Result<Unit> {
         return withContext(Dispatchers.IO) {
@@ -207,23 +215,22 @@ class ActivityRepository @Inject constructor(
         return withContext(Dispatchers.IO) {
             try {
                 val local = activityDao.getActivityById(id)
-                // ✅ ถ้ามีข้อมูลในเครื่องและมีเวลาครบถ้วน ให้ใช้ข้อมูลในเครื่อง
                 if (local != null && !local.plannedTime.isNullOrBlank()) {
-                    return@withContext kotlin.Result.success(listOf(local))
+                    return@withContext kotlin.Result.success(listOf(enrichActivity(local)))
                 }
 
                 val resp = apiService.getAppointmentById("eq.$id")
                 if (resp.isSuccessful && resp.body() != null) {
                     val data = resp.body()!!
                     if (data.isNotEmpty()) activityDao.insertActivities(data)
-                    kotlin.Result.success(data)
+                    kotlin.Result.success(data.map { enrichActivity(it) })
                 } else {
-                    if (local != null) kotlin.Result.success(listOf(local))
+                    if (local != null) kotlin.Result.success(listOf(enrichActivity(local)))
                     else kotlin.Result.success(emptyList())
                 }
             } catch (e: Exception) {
                 val local = activityDao.getActivityById(id)
-                if (local != null) kotlin.Result.success(listOf(local))
+                if (local != null) kotlin.Result.success(listOf(enrichActivity(local)))
                 else kotlin.Result.failure(e)
             }
         }
@@ -366,56 +373,59 @@ class ActivityRepository @Inject constructor(
     suspend fun getActivityResult(activityId: String): ActivityResult? {
         return withContext(Dispatchers.IO) {
             try {
-                // ✅ ดึงจาก API ก่อนเสมอ เพื่อให้ได้ข้อมูลล่าสุดจากทุกอุปกรณ์
                 val resp = apiService.getActivityResult("eq.$activityId")
                 if (resp.isSuccessful && !resp.body().isNullOrEmpty()) {
                     val result = resp.body()!!.first()
-                    resultDao.insertResult(result)  // อัปเดต local
+                    resultDao.insertResult(result)
                     return@withContext result
                 }
-                // fallback local ถ้า API ไม่ตอบ
                 resultDao.getResultByActivityId(activityId)
             } catch (e: Exception) {
-                // offline fallback
                 resultDao.getResultByActivityId(activityId)
             }
         }
     }
 
-    // ✅ Mode 1: บันทึกหลัง appointment
+    // ✅ เพิ่มใหม่ — ดึงข้อมูลบันทึกด้วย Result ID โดยตรง
+    suspend fun getResultById(resultId: String): ActivityResult? {
+        return withContext(Dispatchers.IO) {
+            try {
+                val local = resultDao.getResultById(resultId)
+                if (local != null) return@withContext local
+
+                val resp = apiService.getActivityResult("eq.$resultId")
+                if (resp.isSuccessful && !resp.body().isNullOrEmpty()) {
+                    val result = resp.body()!!.first()
+                    resultDao.insertResult(result)
+                    return@withContext result
+                }
+                null
+            } catch (e: Exception) {
+                null
+            }
+        }
+    }
+
     suspend fun saveActivityResult(result: ActivityResult): kotlin.Result<Unit> {
         return withContext(Dispatchers.IO) {
-            Log.d("ActivityRepository", "=== saveActivityResult: ${result.activityId} ===")
             try {
-                // 1. บันทึก Local เสมอ
                 resultDao.insertResult(result)
-
-                // 2. Build body
                 val body = buildResultBody(result)
-                Log.d("ActivityRepository", "body: $body")
-
-                // 3. ✅ ใช้ Upsert ด้วย on_conflict แทน GET→POST/PATCH
-                //    PostgREST รองรับ: Header "Prefer: resolution=merge-duplicates"
                 val apiResp = apiService.upsertActivityResult(result = body)
 
                 if (apiResp.isSuccessful) {
-                    // ✅ ถ้า sync สำเร็จ ให้เช็คว่าต้องอัปเดตสถานะ Project หรือไม่
                     syncProjectStatus(result)
-                    Log.d("ActivityRepository", "Sync SUCCESS")
                     kotlin.Result.success(Unit)
                 } else {
                     val err = apiResp.errorBody()?.string() ?: "Unknown"
-                    Log.e("ActivityRepository", "Sync FAILED: ${apiResp.code()} - $err")
                     kotlin.Result.failure(Exception("HTTP ${apiResp.code()}: $err"))
                 }
             } catch (e: Exception) {
-                Log.e("ActivityRepository", "Exception: ${e.message}")
-                kotlin.Result.failure(Exception("Sync ไม่สำเร็จ: ${e.message}"))
+                kotlin.Result.failure(e)
             }
         }
     }
 
-    // ✅ Mode 2: บันทึกอิสระจาก project โดยตรง
     suspend fun saveStandaloneResult(
         projectId: String,
         result: ActivityResult
@@ -423,20 +433,15 @@ class ActivityRepository @Inject constructor(
         return withContext(Dispatchers.IO) {
             try {
                 val resultWithProject = result.copy(
-                    resultId   = "RES-" + java.util.UUID.randomUUID().toString().take(8).uppercase(),
+                    resultId   = java.util.UUID.randomUUID().toString(),
                     projectId  = projectId,
-                    activityId = null  // ✅ ไม่มี appointment
+                    activityId = null
                 )
-
-                // บันทึก Local
                 resultDao.insertResult(resultWithProject)
-
-                // POST ขึ้น API
                 val body = buildResultBody(resultWithProject)
-                val apiResp = apiService.insertActivityResultMap(body)
+                val apiResp = apiService.upsertActivityResult(body)
 
                 if (apiResp.isSuccessful) {
-                    // ✅ อัปเดตสถานะ Project
                     syncProjectStatus(resultWithProject)
                     kotlin.Result.success(Unit)
                 } else {
@@ -449,7 +454,6 @@ class ActivityRepository @Inject constructor(
         }
     }
 
-    // ✅ ฟังก์ชันช่วยอัปเดตสถานะ Project ตามผลที่ระบุในบันทึก
     private suspend fun syncProjectStatus(result: ActivityResult) {
         val pid = result.projectId ?: result.activityId?.let { 
             activityDao.getActivityById(it)?.projectId 
@@ -461,7 +465,6 @@ class ActivityRepository @Inject constructor(
             val project = projectDao.getProjectById(pid)
             if (project != null && project.projectStatus != newStatus) {
                 val updated = project.copy(projectStatus = newStatus)
-                // เรียกใช้ updateProject ของ Repo เพื่อส่งขึ้น Server และ Firebase
                 projectRepo.updateProject(updated, result.createdBy ?: "")
             }
         } catch (e: Exception) {
@@ -469,11 +472,11 @@ class ActivityRepository @Inject constructor(
         }
     }
 
-    // ✅ Extract body building ออกมาเป็น private fun เพื่อใช้ร่วมกัน
     private fun buildResultBody(result: ActivityResult): MutableMap<String, Any?> {
         val body = mutableMapOf<String, Any?>()
+        body["result_id"]      = result.resultId
         body["appointment_id"]   = result.activityId
-        result.projectId?.let    { body["project_id"]       = it } // ✅ เพิ่ม projectId เข้าไปใน body ด้วย
+        result.projectId?.let    { body["project_id"]       = it }
         result.createdBy?.let    { body["created_by"]       = it }
         result.reportDate?.let   { body["report_date"]      = it }
         result.newStatus?.let    { body["new_status"]        = it }
@@ -521,17 +524,15 @@ class ActivityRepository @Inject constructor(
     suspend fun enrichActivity(activity: SalesActivity): SalesActivity {
         return withContext(Dispatchers.IO) {
             try {
-                // 1. ดึง customer
-                val customerList: List<Customer> = customerDao.getAllCustomers().first()
-                val customer: Customer? = customerList.find { it.custId == activity.customerId }
+                // 1. ดึงชื่อบริษัทจาก Local
+                val customer = customerDao.getCustomerById(activity.customerId)
+                val companyName = customer?.companyName ?: activity.companyName
 
-                // 2. ดึง project
-                val projectList: List<Project> = projectDao.getAllProjects().first()
-                val project: Project? = activity.projectId?.let { pid: String ->
-                    projectList.find { it.projectId == pid }
-                }
+                // 2. ดึงชื่อโครงการจาก Local
+                val project = activity.projectId?.let { projectDao.getProjectById(it) }
+                val projectName = project?.projectName ?: activity.projectName
 
-                // 3. ดึงชื่อผู้ติดต่อหลายคนจาก AppointmentContact
+                // 3. ดึงชื่อผู้ติดต่อ
                 val contactIds = appointmentContactDao.getContactsByAppointmentId(activity.activityId).map { it.contactId }
                 val allContacts = contactDao.getContactsByCustomerId(activity.customerId)
                 val selectedContacts = allContacts.filter { it.contactId in contactIds }
@@ -539,17 +540,26 @@ class ActivityRepository @Inject constructor(
                 val namesString = if (selectedContacts.isNotEmpty()) {
                     selectedContacts.joinToString(", ") { it.fullName ?: it.nickname ?: "Unknown" }
                 } else {
-                    // Fallback หาคนแรกถ้าไม่มีข้อมูลในตารางความสัมพันธ์
                     allContacts.firstOrNull()?.let { it.fullName ?: it.nickname }
                 }
 
                 activity.copy(
-                    companyName = customer?.companyName ?: activity.companyName,
-                    projectName = project?.projectName ?: activity.projectName,
+                    companyName = companyName,
+                    projectName = projectName,
                     contactName = namesString ?: activity.contactName
                 )
             } catch (e: Exception) {
                 activity
+            }
+        }
+    }
+
+    suspend fun getActivitiesByProjectId(projectId: String): List<SalesActivity> {
+        return withContext(Dispatchers.IO) {
+            try {
+                activityDao.getActivitiesByProject(projectId).first().map { enrichActivity(it) }
+            } catch (e: Exception) {
+                emptyList()
             }
         }
     }

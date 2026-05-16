@@ -38,7 +38,7 @@ data class SalesResultUiState(
     val isProposalSent: Boolean = false,
     val proposalDate: String? = null,
     val competitorCount: Int = 0,
-    val dmInvolved: Boolean = false, // ✅ Added
+    val dmInvolved: Boolean = false,
     val visitSummary: String = "",
     val isLoading: Boolean = false,
     val isSaving: Boolean = false,
@@ -48,7 +48,6 @@ data class SalesResultUiState(
     val photoUrl: String? = null,
     val isUploadingPhoto: Boolean = false,
     val isPhotoLocationValid: Boolean? = null,
-    // EXIF data
     val photoTakenAt: String? = null,
     val photoLat: Double? = null,
     val photoLng: Double? = null,
@@ -59,8 +58,8 @@ data class SalesResultUiState(
 )
 
 enum class ResultMode {
-    FROM_APPOINTMENT,  // มาจาก check-in/finish
-    STANDALONE         // สร้างอิสระจาก ProjectDetail
+    FROM_APPOINTMENT,
+    STANDALONE
 }
 
 @HiltViewModel
@@ -85,37 +84,107 @@ class SalesResultViewModel @Inject constructor(
 
     init {
         val pId = savedStateHandle.get<String>("projectId")
-        val aId = savedStateHandle.get<String>("activityId")
+        val idParam = savedStateHandle.get<String>("activityId")
 
-        // ✅ ตัดสิน mode จาก activityId
-        val mode = if (aId.isNullOrBlank()) ResultMode.STANDALONE else ResultMode.FROM_APPOINTMENT
+        if (idParam.isNullOrBlank()) {
+            // กรณีเปิดจาก FAB (สร้างใหม่)
+            _uiState.update { it.copy(projectId = pId, mode = ResultMode.STANDALONE) }
+            pId?.let { loadProjectData(it) }
+        } else {
+            // กรณีดูรายงาน หรือบันทึกต่อนัดหมาย
+            loadInitialData(idParam)
+        }
+    }
 
-        _uiState.update { it.copy(projectId = pId, activityId = aId, mode = mode) }
+    private fun loadInitialData(id: String) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoading = true) }
+            
+            // 1. ลองหาว่าเป็นนัดหมายหรือไม่
+            val actResult = activityRepo.getActivityById(id)
+            val activity = actResult.getOrNull()?.firstOrNull()
+            
+            if (activity != null) {
+                // ✅ เป็นการบันทึกต่อนัดหมาย
+                _uiState.update { it.copy(
+                    activityId = id, 
+                    projectId = activity.projectId, 
+                    mode = ResultMode.FROM_APPOINTMENT,
+                    reportDate = activity.activityDate
+                ) }
+                activity.projectId?.let { loadProjectData(it) }
+                
+                // โหลดผลที่เคยบันทึกไว้ (ถ้ามี)
+                activityRepo.getActivityResult(id)?.let { applyResultToState(it) }
+            } else {
+                // 2. ถ้าไม่ใช่นัดหมาย ลองหาว่าเป็น ResultId (Standalone) หรือไม่
+                val result = activityRepo.getResultById(id)
+                if (result != null) {
+                    // ✅ เป็นการดูรายงาน Standalone
+                    _uiState.update { it.copy(
+                        projectId = result.projectId, 
+                        mode = ResultMode.STANDALONE,
+                        reportDate = result.reportDate ?: LocalDate.now().toString()
+                    ) }
+                    applyResultToState(result)
+                    result.projectId?.let { loadProjectData(it) }
+                }
+            }
+            _uiState.update { it.copy(isLoading = false) }
+        }
+    }
 
-        when (mode) {
-            ResultMode.STANDALONE        -> pId?.let { loadProjectData(it) }
-            ResultMode.FROM_APPOINTMENT  -> aId?.let { loadActivityData(it) }
+    private fun applyResultToState(result: ActivityResult) {
+        val existingReason = result.lossReason ?: ""
+        val (reason, other) = if (existingReason in lossReasonOptions) {
+            existingReason to ""
+        } else if (existingReason.isNotBlank()) {
+            "อื่น ๆ" to existingReason
+        } else {
+            "" to ""
+        }
+
+        _uiState.update {
+            it.copy(
+                reportDate             = result.reportDate ?: it.reportDate,
+                newStatus              = STATUS_REVERSE[result.newStatus] ?: result.newStatus ?: "",
+                isStatusUpdateEnabled  = !result.newStatus.isNullOrBlank(),
+                opportunityScore       = OPPORTUNITY_REVERSE[result.opportunityScore] ?: result.opportunityScore ?: it.opportunityScore,
+                dealPosition           = DEAL_POSITION_REVERSE[result.dealPosition] ?: result.dealPosition ?: "",
+                previousSolution       = SOLUTION_REVERSE[result.previousSolution] ?: result.previousSolution ?: "",
+                counterpartyMultiplier = COUNTERPARTY_REVERSE[result.counterpartyMultiplier] ?: result.counterpartyMultiplier ?: "",
+                responseSpeed          = RESPONSE_SPEED_REVERSE[result.responseSpeed] ?: result.responseSpeed ?: "",
+                isProposalSent         = result.isProposalSent,
+                proposalDate           = result.proposalDate,
+                competitorCount        = result.competitorCount,
+                dmInvolved             = result.dmInvolved,
+                visitSummary           = result.summary ?: "",
+                photoUrl               = result.photoUrl,
+                photoTakenAt           = result.photoTakenAt,
+                photoLat               = result.photoLat,
+                photoLng               = result.photoLng,
+                photoDeviceModel       = result.photoDeviceModel,
+                lossReason             = reason,
+                otherLossReason        = other
+            )
         }
     }
 
     private fun loadProjectData(pId: String) {
         viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true, error = null) }
             projectRepo.getProjectById(pId).onSuccess { p ->
                 custId = p.custId
                 _uiState.update {
                     it.copy(
                         project = p,
                         currentStatus = p.projectStatus ?: "",
-                        opportunityScore = p.opportunityScore,
-                        isLoading = false
+                        opportunityScore = if (it.opportunityScore.isNullOrBlank()) p.opportunityScore else it.opportunityScore
                     )
                 }
-            }.onFailure { e ->
-                _uiState.update { it.copy(error = "โหลดข้อมูลโครงการไม่สำเร็จ: ${e.message}", isLoading = false) }
             }
         }
     }
+
     companion object {
         val DEAL_POSITION_MAP = mapOf(
             "ลูกค้าใช้เราอยู่แล้ว การต่อสัญญามีโอกาสสูงมาก" to "incumbent",
@@ -137,89 +206,19 @@ class SalesResultViewModel @Inject constructor(
             "ปกติ"           to "normal",
             "ช้าหรือเงียบ"   to "slow_silent"
         )
-
         val STATUS_MAP = mapOf(
-            "Lead"             to "Lead",
-            "New Project"     to "New Project",
-            "Quotation"         to "Quotation",
-            "Bidding"         to "Bidding",
-            "Decision Making"  to "Make a Decision",
-            "Assured"        to "Assured",
-            "PO"           to "PO",
-            "Lost"              to "Lost",
-            "Failed"        to "Failed"
+            "Lead" to "Lead", "New Project" to "New Project", "Quotation" to "Quotation",
+            "Bidding" to "Bidding", "Decision Making" to "Make a Decision", "Assured" to "Assured",
+            "PO" to "PO", "Lost" to "Lost", "Failed" to "Failed"
         )
-
-        val OPPORTUNITY_MAP = mapOf(
-            "สูง (HOT)"  to "HOT",
-            "กลาง (WARM)" to "WARM",
-            "ต่ำ (COLD)"  to "COLD"
-        )
+        val OPPORTUNITY_MAP = mapOf("สูง (HOT)" to "HOT", "กลาง (WARM)" to "WARM", "ต่ำ (COLD)" to "COLD")
 
         val DEAL_POSITION_REVERSE    = DEAL_POSITION_MAP.entries.associate { (k, v) -> v to k }
         val SOLUTION_REVERSE         = SOLUTION_MAP.entries.associate { (k, v) -> v to k }
         val COUNTERPARTY_REVERSE     = COUNTERPARTY_MAP.entries.associate { (k, v) -> v to k }
         val RESPONSE_SPEED_REVERSE   = RESPONSE_SPEED_MAP.entries.associate { (k, v) -> v to k }
-        
         val STATUS_REVERSE           = STATUS_MAP.entries.associate { (k, v) -> v to k }
         val OPPORTUNITY_REVERSE      = OPPORTUNITY_MAP.entries.associate { (k, v) -> v to k }
-    }
-
-    private fun loadActivityData(aId: String) {
-        viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true) }
-
-            activityRepo.getActivityById(aId).onSuccess { list ->
-                list.firstOrNull()?.let { act ->
-                    _uiState.update {
-                        it.copy(
-                            activityId = aId,
-                            projectId  = act.projectId,
-                            reportDate = act.activityDate ?: LocalDate.now().toString()
-                        )
-                    }
-                    act.projectId?.let { loadProjectData(it) }
-                }
-            }
-
-            val result = activityRepo.getActivityResult(aId)
-            if (result != null) {
-                val existingReason = result.lossReason ?: ""
-                val (reason, other) = if (existingReason in lossReasonOptions) {
-                    existingReason to ""
-                } else if (existingReason.isNotBlank()) {
-                    "อื่น ๆ" to existingReason
-                } else {
-                    "" to ""
-                }
-
-                _uiState.update {
-                    it.copy(
-                        reportDate             = result.reportDate ?: it.reportDate,
-                        newStatus              = STATUS_REVERSE[result.newStatus] ?: result.newStatus ?: "",
-                        isStatusUpdateEnabled  = !result.newStatus.isNullOrBlank(),
-                        opportunityScore       = OPPORTUNITY_REVERSE[result.opportunityScore] ?: result.opportunityScore ?: it.opportunityScore,
-                        dealPosition           = DEAL_POSITION_REVERSE[result.dealPosition] ?: result.dealPosition ?: "",
-                        previousSolution       = SOLUTION_REVERSE[result.previousSolution] ?: result.previousSolution ?: "",
-                        counterpartyMultiplier = COUNTERPARTY_REVERSE[result.counterpartyMultiplier] ?: result.counterpartyMultiplier ?: "",
-                        responseSpeed          = RESPONSE_SPEED_REVERSE[result.responseSpeed] ?: result.responseSpeed ?: "",
-                        isProposalSent         = result.isProposalSent,
-                        proposalDate           = result.proposalDate,
-                        competitorCount        = result.competitorCount,
-                        dmInvolved             = result.dmInvolved,
-                        visitSummary           = result.summary ?: "",
-                        photoUrl               = result.photoUrl,
-                        photoTakenAt           = result.photoTakenAt,
-                        photoLat               = result.photoLat,
-                        photoLng               = result.photoLng,
-                        photoDeviceModel       = result.photoDeviceModel,
-                        lossReason             = reason,
-                        otherLossReason        = other
-                    )
-                }
-            }
-            _uiState.update { it.copy(isLoading = false) }
-        }
     }
 
     fun onReportDateChanged(date: String)         { _uiState.update { it.copy(reportDate = date) } }
@@ -237,7 +236,6 @@ class SalesResultViewModel @Inject constructor(
 
     fun onPhotoPicked(context: Context, uri: Uri) {
         _uiState.update { it.copy(photoUri = uri, photoUrl = null) }
-
         extractExifData(context, uri)
     }
 
@@ -247,34 +245,20 @@ class SalesResultViewModel @Inject constructor(
                 val exif = ExifInterface(inputStream)
                 val dateTaken = exif.getAttribute(ExifInterface.TAG_DATETIME)
                 val deviceModel = exif.getAttribute(ExifInterface.TAG_MODEL)
-
                 val latLong = FloatArray(2)
                 val hasGps = exif.getLatLong(latLong)
                 val lat = if (hasGps) latLong[0].toDouble() else null
                 val lng = if (hasGps) latLong[1].toDouble() else null
 
-                // ✅ เพิ่มตรงนี้ — คำนวณว่าพิกัดรูปตรงกับสถานที่นัดไหม
                 val isLocationValid: Boolean? = if (hasGps) {
                     val plannedLat = _uiState.value.project?.projectLat?.toDouble()
                     val plannedLng = _uiState.value.project?.projectLong?.toDouble()
                     if (plannedLat != null && plannedLng != null) {
-                        val distance = calculateHaversine(
-                            plannedLat, plannedLng,
-                            latLong[0].toDouble(), latLong[1].toDouble()
-                        )
-                        distance <= 500.0
+                        calculateHaversine(plannedLat, plannedLng, latLong[0].toDouble(), latLong[1].toDouble()) <= 500.0
                     } else null
                 } else null
 
-                _uiState.update {
-                    it.copy(
-                        photoTakenAt         = dateTaken,
-                        photoLat             = lat,
-                        photoLng             = lng,
-                        photoDeviceModel     = deviceModel,
-                        isPhotoLocationValid = isLocationValid  // ✅ เพิ่ม
-                    )
-                }
+                _uiState.update { it.copy(photoTakenAt = dateTaken, photoLat = lat, photoLng = lng, photoDeviceModel = deviceModel, isPhotoLocationValid = isLocationValid) }
             }
         } catch (e: Exception) {
             Log.e("SalesResult", "Error extracting EXIF: ${e.message}")
@@ -282,85 +266,46 @@ class SalesResultViewModel @Inject constructor(
     }
 
     private fun calculateHaversine(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
-        val r = 6371e3 // Earth radius in meters
-        val phi1 = lat1 * PI / 180
-        val phi2 = lat2 * PI / 180
-        val deltaPhi = (lat2 - lat1) * PI / 180
-        val deltaLambda = (lon2 - lon1) * PI / 180
-
-        val a = sin(deltaPhi / 2).pow(2) +
-                cos(phi1) * cos(phi2) *
-                sin(deltaLambda / 2).pow(2)
-        val c = 2 * atan2(sqrt(a), sqrt(1 - a))
-
-        return r * c
+        val r = 6371e3
+        val phi1 = lat1 * PI / 180; val phi2 = lat2 * PI / 180
+        val deltaPhi = (lat2 - lat1) * PI / 180; val deltaLambda = (lon2 - lon1) * PI / 180
+        val a = sin(deltaPhi / 2).pow(2) + cos(phi1) * cos(phi2) * sin(deltaLambda / 2).pow(2)
+        return r * 2 * atan2(sqrt(a), sqrt(1 - a))
     }
 
     fun onProposalDateChanged(date: String)       { _uiState.update { it.copy(proposalDate = date) } }
-    fun onCompetitorCountChanged(delta: Int)      {
-        _uiState.update { it.copy(competitorCount = (it.competitorCount + delta).coerceAtLeast(0)) }
-    }
+    fun onCompetitorCountChanged(delta: Int)      { _uiState.update { it.copy(competitorCount = (it.competitorCount + delta).coerceAtLeast(0)) } }
     fun onSummaryChanged(text: String)            { _uiState.update { it.copy(visitSummary = text) } }
 
     fun uploadPhoto(context: Context) {
-        val s = _uiState.value
-        val aId = s.activityId
-        val uri = s.photoUri
+        val s = _uiState.value; val aId = s.activityId; val uri = s.photoUri
         if (uri == null || aId == null) return
-
         viewModelScope.launch {
             _uiState.update { it.copy(isUploadingPhoto = true, error = null) }
-            
-            val bytes = try {
-                context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
-            } catch (e: Exception) {
-                null
-            }
-
-            if (bytes == null) {
-                _uiState.update { it.copy(error = "ไม่สามารถอ่านไฟล์รูปภาพได้", isUploadingPhoto = false) }
-                return@launch
-            }
-
-            activityRepo.uploadVisitPhoto(aId, bytes).onSuccess { url ->
-                _uiState.update { it.copy(photoUrl = url, isUploadingPhoto = false) }
-            }.onFailure { e ->
-                _uiState.update { it.copy(error = "อัปโหลดรูปไม่สำเร็จ: ${e.message}", isUploadingPhoto = false) }
-            }
+            val bytes = try { context.contentResolver.openInputStream(uri)?.use { it.readBytes() } } catch (e: Exception) { null }
+            if (bytes == null) { _uiState.update { it.copy(error = "ไม่สามารถอ่านไฟล์รูปภาพได้", isUploadingPhoto = false) }; return@launch }
+            activityRepo.uploadVisitPhoto(aId, bytes).onSuccess { url -> _uiState.update { it.copy(photoUrl = url, isUploadingPhoto = false) } }
+                .onFailure { e -> _uiState.update { it.copy(error = "อัปโหลดรูปไม่สำเร็จ: ${e.message}", isUploadingPhoto = false) } }
         }
     }
 
     fun save() {
         val s = _uiState.value
-
-        if (s.visitSummary.isBlank()) {
-            _uiState.update { it.copy(error = "กรุณากรอกสรุปการเข้าพบ") }
-            return
-        }
-
-        // Validate Loss Reason if status is Lost or Failed
+        if (s.visitSummary.isBlank()) { _uiState.update { it.copy(error = "กรุณากรอกสรุปการเข้าพบ") }; return }
         if (s.isStatusUpdateEnabled && (s.newStatus == "Lost" || s.newStatus == "Failed")) {
-            if (s.lossReason.isBlank()) {
-                _uiState.update { it.copy(lossReasonError = "กรุณาเลือกหรือระบุเหตุผลที่ไม่ได้งาน", error = "กรุณาระบุเหตุผลที่ไม่ได้งาน") }
-                return
-            } else if (s.lossReason == "อื่น ๆ" && s.otherLossReason.isBlank()) {
-                _uiState.update { it.copy(lossReasonError = "กรุณาระบุเหตุผลอื่น ๆ", error = "กรุณาระบุเหตุผลอื่น ๆ") }
-                return
-            }
+            if (s.lossReason.isBlank()) { _uiState.update { it.copy(lossReasonError = "กรุณาระบุเหตุผลที่ไม่ได้งาน", error = "กรุณาระบุเหตุผลที่ไม่ได้งาน") }; return }
         }
 
         viewModelScope.launch {
             _uiState.update { it.copy(isSaving = true, error = null) }
-
             val user = authRepo.currentUser()
-
             try {
                 val finalLossReason = if (s.isStatusUpdateEnabled && (s.newStatus == "Lost" || s.newStatus == "Failed")) {
                     if (s.lossReason == "อื่น ๆ") s.otherLossReason else s.lossReason
                 } else null
 
                 val resultToSave = ActivityResult(
-                    resultId               = "RES-" + java.util.UUID.randomUUID().toString().take(8).uppercase(),
+                    resultId               = java.util.UUID.randomUUID().toString(),
                     activityId             = if (s.mode == ResultMode.FROM_APPOINTMENT) s.activityId else null,
                     projectId              = s.projectId,
                     createdBy              = user?.userId,
@@ -374,9 +319,9 @@ class SalesResultViewModel @Inject constructor(
                     isProposalSent         = s.isProposalSent,
                     proposalDate           = s.proposalDate,
                     competitorCount        = s.competitorCount,
-                    dmInvolved             = s.dmInvolved, // ✅ Added
+                    dmInvolved             = s.dmInvolved,
                     summary                = s.visitSummary,
-                    photoUrl               = s.photoUrl,   // ✅ Added
+                    photoUrl               = s.photoUrl,
                     photoTakenAt           = s.photoTakenAt,
                     photoLat               = s.photoLat,
                     photoLng               = s.photoLng,
@@ -385,32 +330,13 @@ class SalesResultViewModel @Inject constructor(
                 )
                 
                 val saveResult = when (s.mode) {
-                    ResultMode.FROM_APPOINTMENT -> {
-                        if (s.activityId.isNullOrBlank()) {
-                            _uiState.update { it.copy(isSaving = false, error = "ไม่พบรหัสนัดหมาย") }
-                            return@launch
-                        }
-                        activityRepo.saveActivityResult(resultToSave)
-                    }
-                    ResultMode.STANDALONE -> {
-                        if (s.projectId.isNullOrBlank()) {
-                            _uiState.update { it.copy(isSaving = false, error = "ไม่พบรหัสโครงการ") }
-                            return@launch
-                        }
-                        activityRepo.saveStandaloneResult(s.projectId!!, resultToSave)
-                    }
+                    ResultMode.FROM_APPOINTMENT -> activityRepo.saveActivityResult(resultToSave)
+                    ResultMode.STANDALONE -> activityRepo.saveStandaloneResult(s.projectId!!, resultToSave)
                 }
 
-                if (saveResult.isSuccess) {
-                    _uiState.update { it.copy(isSaving = false, isSaved = true) }
-                } else {
-                    _uiState.update {
-                        it.copy(isSaving = false, error = saveResult.exceptionOrNull()?.message)
-                    }
-                }
-            } catch (e: Exception) {
-                _uiState.update { it.copy(isSaving = false, error = e.message) }
-            }
+                if (saveResult.isSuccess) { _uiState.update { it.copy(isSaving = false, isSaved = true) } }
+                else { _uiState.update { it.copy(isSaving = false, error = saveResult.exceptionOrNull()?.message) } }
+            } catch (e: Exception) { _uiState.update { it.copy(isSaving = false, error = e.message) } }
         }
     }
 }

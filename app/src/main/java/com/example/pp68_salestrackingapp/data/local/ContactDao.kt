@@ -22,6 +22,9 @@ interface ContactDao {
     @Query("SELECT * FROM contact_person WHERE fullName LIKE '%' || :searchQuery || '%' OR nickname LIKE '%' || :searchQuery || '%'")
     fun searchContacts(searchQuery: String): Flow<List<ContactPerson>>
 
+    @Query("SELECT * FROM contact_person WHERE contactId = :contactId LIMIT 1")
+    suspend fun getContactById(contactId: String): ContactPerson?
+
     // 4. ดึงตาม ID ลูกค้า (ใช้ custId ให้ตรงกับใน Model)
     @Query("SELECT * FROM contact_person WHERE custId = :customerId")
     fun getContactsByCustomer(customerId: String): Flow<List<ContactPerson>>

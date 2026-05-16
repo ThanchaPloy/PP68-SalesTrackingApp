@@ -55,6 +55,34 @@ class ContactRepository @Inject constructor(
         }
     }
 
+    suspend fun updateContact(contactId: String, contact: ContactPerson): kotlin.Result<Unit> {
+        return withContext(Dispatchers.IO) {
+            contactDao.insertAll(listOf(contact)) // upsert local
+            try {
+                val updates = buildMap<String, Any?> {
+                    put("full_name", contact.fullName)
+                    put("nickname", contact.nickname)
+                    put("position", contact.position)
+                    put("phone_number", contact.phoneNumber)
+                    put("email", contact.email)
+                    put("line", contact.line)
+                    put("is_active", contact.isActive)
+                    put("is_dm_confirmed", contact.isDmConfirmed)
+                }
+                val response = apiService.updateContact("eq.$contactId", updates)
+                if (response.isSuccessful) kotlin.Result.success(Unit)
+                else kotlin.Result.failure(Exception(response.errorBody()?.string()))
+            } catch (e: IOException) {
+                kotlin.Result.success(Unit)
+            } catch (e: Exception) {
+                kotlin.Result.failure(e)
+            }
+        }
+    }
+
+    suspend fun getContactById(id: String): ContactPerson? =
+        contactDao.getContactById(id)
+
     fun getContactsByUserFlow(userId: String): Flow<List<ContactPerson>> =
         contactDao.getContactsByUser(userId)
 
