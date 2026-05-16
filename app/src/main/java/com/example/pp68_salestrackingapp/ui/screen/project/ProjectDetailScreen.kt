@@ -20,6 +20,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -29,6 +30,7 @@ import com.example.pp68_salestrackingapp.data.model.Project
 import com.example.pp68_salestrackingapp.ui.components.AppTopBar
 import com.example.pp68_salestrackingapp.ui.components.ProjectProgressBar
 import com.example.pp68_salestrackingapp.ui.screen.auth.BorderGray
+import com.example.pp68_salestrackingapp.ui.theme.AppColors
 import com.example.pp68_salestrackingapp.ui.theme.SalesTrackingTheme
 
 // นำเข้า ViewModel และ Data Classes
@@ -319,7 +321,6 @@ private fun TimelineTaskRow(
     onFinish: () -> Unit,
     isLast: Boolean
 ) {
-    // ... logic remains same as provided in prompt ...
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -647,7 +648,14 @@ private fun HistoryCard(item: HistoryItem, onClick: () -> Unit, onFinish: () -> 
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Column(modifier = Modifier.weight(1f)) {
-                    Text(item.title, fontWeight = FontWeight.Bold, fontSize = 15.sp, color = TextDark)
+                    Text(
+                        text = item.title, 
+                        fontWeight = FontWeight.Bold, 
+                        fontSize = 15.sp, 
+                        color = TextDark,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
                     Text(item.plannedDate ?: "-", fontSize = 12.sp, color = TextGray)
                 }
                 Surface(
@@ -662,6 +670,18 @@ private fun HistoryCard(item: HistoryItem, onClick: () -> Unit, onFinish: () -> 
                     )
                 }
             }
+
+            // ✅ แสดงบันทึกผลจริงๆ (Summary) ใต้หัวข้อ
+            if (!item.description.isNullOrBlank()) {
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    text = item.description,
+                    fontSize = 13.sp,
+                    color = TextDark.copy(alpha = 0.8f),
+                    lineHeight = 18.sp
+                )
+            }
+
             Row(modifier = Modifier.padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                 Icon(
                     when(item.activityType.lowercase()){

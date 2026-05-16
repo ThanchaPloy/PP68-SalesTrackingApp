@@ -9,6 +9,7 @@ import com.example.pp68_salestrackingapp.data.repository.ProjectRepository
 import com.example.pp68_salestrackingapp.data.model.ActivityMaster
 import com.example.pp68_salestrackingapp.data.model.SalesActivity
 import com.example.pp68_salestrackingapp.data.model.ActivityPlanItem
+import com.example.pp68_salestrackingapp.data.remote.ApiService
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -90,7 +91,8 @@ class CreateAppointmentViewModel @Inject constructor(
     private val activityRepo: ActivityRepository,
     private val projectRepo:  ProjectRepository,
     private val customerRepo: CustomerRepository,
-    private val authRepo:     AuthRepository
+    private val authRepo:     AuthRepository,
+    private val apiService:   ApiService
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(CreateAppointmentUiState())
@@ -104,12 +106,18 @@ class CreateAppointmentViewModel @Inject constructor(
 
     private fun loadAllContacts() {
         viewModelScope.launch {
-            customerRepo.getAllContacts().collect { list ->
-                val options = list.map { ContactOption(it.contactId, it.fullName ?: it.nickname ?: it.contactId) }
+            val userId = authRepo.currentUser()?.userId ?: return@launch
+            // ดึงทั้งหมดของ user จาก API ไม่ผ่าน Room filter
+            val resp = apiService.getContactPersons(createdBy = "eq.$userId")
+            if (resp.isSuccessful) {
+                val options = resp.body()?.map {
+                    ContactOption(it.contactId, it.fullName ?: it.contactId)
+                } ?: emptyList()
                 _uiState.update { it.copy(allContactOptions = options) }
             }
         }
     }
+
 
     private fun loadMasterObjectives() {
         viewModelScope.launch {

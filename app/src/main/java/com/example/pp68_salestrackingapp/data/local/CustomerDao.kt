@@ -22,6 +22,9 @@ interface CustomerDao {
     @Query("SELECT * FROM customer WHERE companyName LIKE '%' || :searchQuery || '%'")
     fun searchCustomers(searchQuery: String): Flow<List<Customer>>
 
+    @Query("SELECT * FROM customer WHERE custId = :customerId")
+    suspend fun getCustomerById(customerId: String): Customer?
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertCustomers(customers: List<Customer>)
 

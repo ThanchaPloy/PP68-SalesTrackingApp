@@ -68,6 +68,10 @@ data class Project(
     @SerializedName("created_at")
     val createdAt: String? = null,
 
+    @ColumnInfo(name = "updatedAt")
+    @SerializedName("updated_at")
+    val updatedAt: String? = null,
+
     @ColumnInfo(name = "lossReason")
     @SerializedName("loss_reason")
     val lossReason: String? = null

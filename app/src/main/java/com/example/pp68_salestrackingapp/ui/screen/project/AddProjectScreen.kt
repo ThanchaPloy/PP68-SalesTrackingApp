@@ -18,6 +18,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -182,17 +184,17 @@ fun AddProjectContent(
 
             // ── Billing Branch * ──────────────────────────────
             FormField("สาขาที่เปิดบิล", required = true) {
-                if (uiState.isLoadingTeams) LoadingFieldProject()
+                if (uiState.isLoadingBillingBranches) LoadingFieldProject()
                 else DropdownField(
                     value       = uiState.selectedBillingBranchName ?: "",
                     placeholder = "เลือกสาขาที่เปิดบิล",
-                    options     = uiState.teamOptions.map { it.second },
+                    options     = uiState.billingBranchOptions.map { it.second },
                     isError     = uiState.billingBranchError != null,
                     errorMsg    = uiState.billingBranchError,
                     onSelect    = { idx ->
                         onEvent(AddProjectEvent.BillingBranchSelected(
-                            uiState.teamOptions[idx].first,
-                            uiState.teamOptions[idx].second
+                            uiState.billingBranchOptions[idx].first,
+                            uiState.billingBranchOptions[idx].second
                         ))
                     }
                 )
@@ -345,6 +347,7 @@ fun AddProjectContent(
 }
 
 // ── Member chip grid ────────────────────────────────────────
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun MemberChipGrid(
     options:     List<Pair<String, String>>,
@@ -359,27 +362,46 @@ private fun MemberChipGrid(
             .background(Color.White)
             .padding(12.dp)
     ) {
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            options.chunked(3).forEach { row ->
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    row.forEach { (id, name) ->
-                        val selected = id in selectedIds
-                        FilterChip(
-                            selected = selected,
-                            onClick  = { onToggle(id) },
-                            label    = { Text(name, fontSize = 12.sp, maxLines = 1) },
-                            colors   = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor   = AppColors.Primary,
-                                selectedLabelColor       = Color.White,
-                                selectedLeadingIconColor = Color.White
-                            ),
-                            leadingIcon = if (selected) {
-                                { Icon(Icons.Default.Check, null,
-                                    modifier = Modifier.size(14.dp)) }
-                            } else null
-                        )
-                    }
-                }
+        FlowRow(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement   = Arrangement.spacedBy(8.dp)
+        ) {
+            options.forEach { (id, name) ->
+                val selected = id in selectedIds
+                FilterChip(
+                    modifier = Modifier.widthIn(max = 150.dp), // จำกัดความกว้างเพื่อไม่ให้ตกขอบ
+                    selected = selected,
+                    onClick  = { onToggle(id) },
+                    label    = { 
+                        Text(
+                            text = name, 
+                            fontSize = 11.sp,
+                            lineHeight = 14.sp,
+                            maxLines = 2, // ยอมให้ขึ้นบรรทัดใหม่ได้ 2 บรรทัด
+                            overflow = TextOverflow.Ellipsis,
+                            textAlign = TextAlign.Start
+                        ) 
+                    },
+                    colors   = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor   = AppColors.Primary,
+                        selectedLabelColor       = Color.White,
+                        selectedLeadingIconColor = Color.White,
+                        containerColor           = Color.White,
+                        labelColor               = AppColors.TextPrimary
+                    ),
+                    leadingIcon = if (selected) {
+                        { Icon(Icons.Default.Check, null,
+                            modifier = Modifier.size(14.dp)) }
+                    } else null,
+                    border = FilterChipDefaults.filterChipBorder(
+                        enabled = true,
+                        selected = selected,
+                        borderColor = AppColors.Border,
+                        selectedBorderColor = AppColors.Primary,
+                        borderWidth = 1.dp
+                    )
+                )
             }
         }
     }

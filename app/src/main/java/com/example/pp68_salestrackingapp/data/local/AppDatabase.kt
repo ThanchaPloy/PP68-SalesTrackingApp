@@ -18,7 +18,7 @@ import com.example.pp68_salestrackingapp.data.model.*
         ProjectContact::class,
         AppointmentContact::class
     ],
-    version = 29,          // ✅ เพิ่มจาก 28 → 29
+    version = 30,          // ✅ เพิ่มจาก 29 → 30
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -70,6 +70,12 @@ abstract class AppDatabase : RoomDatabase() {
                 """)
                 db.execSQL("DROP TABLE project")
                 db.execSQL("ALTER TABLE project_new RENAME TO project")
+            }
+        }
+
+        val MIGRATION_29_30 = object : Migration(29, 30) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL("ALTER TABLE project ADD COLUMN updatedAt TEXT")
             }
         }
     }
