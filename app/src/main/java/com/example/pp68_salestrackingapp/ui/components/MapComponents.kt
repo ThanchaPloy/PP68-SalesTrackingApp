@@ -65,21 +65,33 @@ fun GoogleMapPickerField(
     var showSuggestions   by remember { mutableStateOf(false) }
     var searchJob:  Job?  = remember { null }
 
-    val markerPosition    = remember { mutableStateOf(LatLng(lat, lng)) }
+    val currentLatLng = LatLng(if (lat == 0.0) 13.7563 else lat, if (lng == 0.0) 100.5018 else lng)
+
     val cameraPositionState = rememberCameraPositionState {
-        position = CameraPosition.fromLatLngZoom(LatLng(lat, lng), 15f)
+        position = CameraPosition.fromLatLngZoom(currentLatLng, 15f)
     }
-    val markerState = rememberMarkerState(position = markerPosition.value)
+    val markerState = rememberMarkerState(position = currentLatLng)
+
+    // Sync camera if lat/lng changes from outside
+    LaunchedEffect(lat, lng) {
+        val newPoint = LatLng(lat, lng)
+        if (lat != 0.0 && lng != 0.0) {
+            markerState.position = newPoint
+            cameraPositionState.position = CameraPosition.fromLatLngZoom(newPoint, 15f)
+        }
+    }
 
     // ── Places Client ────────────────────────────────────────
-    // Skip initialization in Preview mode to avoid "Unsupported Service: dropbox" error
     val placesClient = remember {
         if (isPreview) null else {
-            if (!Places.isInitialized()) {
-                // ✅ Use key from BuildConfig instead of hardcoded string
-                Places.initialize(context, BuildConfig.MAPS_API_KEY)
+            try {
+                if (!Places.isInitialized()) {
+                    Places.initialize(context, BuildConfig.MAPS_API_KEY)
+                }
+                Places.createClient(context)
+            } catch (e: Exception) {
+                null
             }
-            Places.createClient(context)
         }
     }
 
@@ -98,7 +110,7 @@ fun GoogleMapPickerField(
             try {
                 val request = FindAutocompletePredictionsRequest.builder()
                     .setQuery(query)
-                    .setCountries("TH")  // จำกัดเฉพาะไทย
+                    .setCountries("TH")
                     .build()
 
                 client.findAutocompletePredictions(request)
@@ -106,15 +118,11 @@ fun GoogleMapPickerField(
                         suggestions     = response.autocompletePredictions
                         showSuggestions = suggestions.isNotEmpty()
                         isSearching     = false
-                        // ✅ เพิ่ม log
-                        android.util.Log.d("Places", "Found ${suggestions.size} predictions")
                     }
-                    .addOnFailureListener { exception ->
+                    .addOnFailureListener {
                         suggestions     = emptyList()
                         showSuggestions = false
                         isSearching     = false
-                        // ✅ เพิ่ม log
-                        android.util.Log.e("Places", "Error: ${exception.message}", exception)
                     }
             } catch (e: Exception) {
                 isSearching = false
@@ -122,7 +130,6 @@ fun GoogleMapPickerField(
         }
     }
 
-    // ── Select place from suggestion ──────────────────────────
     fun selectPlace(prediction: AutocompletePrediction) {
         val client = placesClient ?: return
         val placeFields = listOf(Place.Field.LAT_LNG, Place.Field.NAME)
@@ -133,20 +140,12 @@ fun GoogleMapPickerField(
                 val place  = response.place
                 val latLng = place.latLng ?: return@addOnSuccessListener
 
-                // อัปเดต marker และกล้อง
-                markerPosition.value = latLng
                 markerState.position = latLng
-
                 scope.launch {
-                    cameraPositionState.animate(
-                        CameraUpdateFactory.newLatLngZoom(latLng, 16f)
-                    )
+                    cameraPositionState.animate(CameraUpdateFactory.newLatLngZoom(latLng, 16f))
                 }
-
-                // callback
                 onLocationPicked(latLng.latitude, latLng.longitude)
 
-                // ปิด suggestion
                 searchQuery     = place.name ?: prediction.getPrimaryText(null).toString()
                 showSuggestions = false
                 suggestions     = emptyList()
@@ -154,9 +153,7 @@ fun GoogleMapPickerField(
             }
     }
 
-    // ── UI ────────────────────────────────────────────────────
     Column(verticalArrangement = Arrangement.spacedBy(0.dp)) {
-
         // Search Bar
         OutlinedTextField(
             value         = searchQuery,
@@ -164,16 +161,10 @@ fun GoogleMapPickerField(
                 searchQuery = it
                 searchPlaces(it)
             },
-            placeholder = {
-                Text("ค้นหาสถานที่...", color = TextGray, fontSize = 14.sp)
-            },
+            placeholder = { Text("ค้นหาสถานที่...", color = TextGray, fontSize = 14.sp) },
             leadingIcon = {
                 if (isSearching) {
-                    CircularProgressIndicator(
-                        color    = RedPrimary,
-                        modifier = Modifier.size(18.dp),
-                        strokeWidth = 2.dp
-                    )
+                    CircularProgressIndicator(color = RedPrimary, modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
                 } else {
                     Icon(Icons.Default.Search, null, tint = RedPrimary)
                 }
@@ -181,81 +172,50 @@ fun GoogleMapPickerField(
             trailingIcon = {
                 if (searchQuery.isNotBlank()) {
                     IconButton(onClick = {
-                        searchQuery     = ""
-                        suggestions     = emptyList()
-                        showSuggestions = false
-                    }) {
-                        Icon(Icons.Default.Clear, null, tint = TextGray)
-                    }
+                        searchQuery = ""; suggestions = emptyList(); showSuggestions = false
+                    }) { Icon(Icons.Default.Clear, null, tint = TextGray) }
                 }
             },
             modifier = Modifier.fillMaxWidth(),
             shape    = RoundedCornerShape(
-                topStart    = 10.dp,
-                topEnd      = 10.dp,
+                topStart = 10.dp, topEnd = 10.dp,
                 bottomStart = if (showSuggestions) 0.dp else 10.dp,
-                bottomEnd   = if (showSuggestions) 0.dp else 10.dp
+                bottomEnd = if (showSuggestions) 0.dp else 10.dp
             ),
             colors = OutlinedTextFieldDefaults.colors(
-                unfocusedBorderColor    = BorderGray,
-                focusedBorderColor      = RedPrimary,
+                unfocusedBorderColor = BorderGray,
+                focusedBorderColor = RedPrimary,
                 unfocusedContainerColor = BgField,
-                focusedContainerColor   = Color.White
+                focusedContainerColor = Color.White
             ),
-            singleLine    = true,
+            singleLine = true,
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-            keyboardActions = KeyboardActions(
-                onSearch = {
-                    focusManager.clearFocus()
-                    showSuggestions = false
-                }
-            )
+            keyboardActions = KeyboardActions(onSearch = { focusManager.clearFocus(); showSuggestions = false })
         )
 
         // Suggestion Dropdown
         if (showSuggestions && suggestions.isNotEmpty()) {
             Surface(
-                modifier      = Modifier.fillMaxWidth(),
-                shape         = RoundedCornerShape(bottomStart = 10.dp, bottomEnd = 10.dp),
-                color         = Color.White,
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(bottomStart = 10.dp, bottomEnd = 10.dp),
+                color = Color.White,
                 shadowElevation = 4.dp,
-                border        = androidx.compose.foundation.BorderStroke(1.dp, BorderGray)
+                border = androidx.compose.foundation.BorderStroke(1.dp, BorderGray)
             ) {
                 LazyColumn(modifier = Modifier.heightIn(max = 200.dp)) {
                     items(suggestions) { prediction ->
                         Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { selectPlace(prediction) }
-                                .padding(horizontal = 16.dp, vertical = 12.dp),
-                            verticalAlignment     = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth().clickable { selectPlace(prediction) }.padding(horizontal = 16.dp, vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
-                            Icon(
-                                Icons.Default.LocationOn,
-                                null,
-                                tint     = RedPrimary,
-                                modifier = Modifier.size(18.dp)
-                            )
+                            Icon(Icons.Default.LocationOn, null, tint = RedPrimary, modifier = Modifier.size(18.dp))
                             Column {
-                                Text(
-                                    prediction.getPrimaryText(null).toString(),
-                                    fontSize   = 14.sp,
-                                    fontWeight = FontWeight.Medium,
-                                    color      = TextDark,
-                                    maxLines   = 1
-                                )
-                                Text(
-                                    prediction.getSecondaryText(null).toString(),
-                                    fontSize = 12.sp,
-                                    color    = TextGray,
-                                    maxLines = 1
-                                )
+                                Text(prediction.getPrimaryText(null).toString(), fontSize = 14.sp, fontWeight = FontWeight.Medium, color = TextDark, maxLines = 1)
+                                Text(prediction.getSecondaryText(null).toString(), fontSize = 12.sp, color = TextGray, maxLines = 1)
                             }
                         }
-                        if (suggestions.last() != prediction) {
-                            HorizontalDivider(color = BorderGray, thickness = 0.5.dp)
-                        }
+                        if (suggestions.last() != prediction) HorizontalDivider(color = BorderGray, thickness = 0.5.dp)
                     }
                 }
             }
@@ -272,20 +232,22 @@ fun GoogleMapPickerField(
                 .border(1.dp, BorderGray, RoundedCornerShape(10.dp))
         ) {
             if (isPreview) {
-                // Show a placeholder in Preview to avoid potential map rendering issues
-                Box(
-                    modifier = Modifier.fillMaxSize().background(Color.LightGray),
-                    contentAlignment = Alignment.Center
-                ) {
+                Box(modifier = Modifier.fillMaxSize().background(Color.LightGray), contentAlignment = Alignment.Center) {
                     Text("Map Preview Not Available", color = Color.DarkGray)
                 }
             } else {
                 GoogleMap(
-                    modifier            = Modifier.fillMaxSize(),
+                    modifier = Modifier.fillMaxSize(),
                     cameraPositionState = cameraPositionState,
-                    onMapClick          = { latLng ->
-                        // แแตะแผนที่เพื่อปักหมุด
-                        markerPosition.value = latLng
+                    properties = MapProperties(
+                        isMyLocationEnabled = false, // ตั้งเป็น true หากขอ permission แล้ว
+                        mapType = MapType.NORMAL
+                    ),
+                    uiSettings = MapUiSettings(
+                        zoomControlsEnabled = true,
+                        myLocationButtonEnabled = false
+                    ),
+                    onMapClick = { latLng ->
                         markerState.position = latLng
                         onLocationPicked(latLng.latitude, latLng.longitude)
                         focusManager.clearFocus()
@@ -293,8 +255,8 @@ fun GoogleMapPickerField(
                     }
                 ) {
                     Marker(
-                        state   = markerState,
-                        title   = "Site Location",
+                        state = markerState,
+                        title = "Location",
                         snippet = "${"%.4f".format(markerState.position.latitude)}, ${"%.4f".format(markerState.position.longitude)}"
                     )
                 }
@@ -302,26 +264,19 @@ fun GoogleMapPickerField(
 
             // hint overlay
             Surface(
-                modifier      = Modifier.align(Alignment.TopCenter).padding(8.dp),
-                shape         = RoundedCornerShape(16.dp),
-                color         = Color.White.copy(alpha = 0.85f),
+                modifier = Modifier.align(Alignment.TopCenter).padding(8.dp),
+                shape = RoundedCornerShape(16.dp),
+                color = Color.White.copy(alpha = 0.85f),
                 shadowElevation = 2.dp
             ) {
-                Text(
-                    "ค้นหาหรือแตะแผนที่เพื่อปักหมุด",
-                    fontSize = 11.sp,
-                    color    = TextGray,
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp)
-                )
+                Text("ค้นหาหรือแตะแผนที่เพื่อปักหมุด", fontSize = 11.sp, color = TextGray, modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp))
             }
         }
 
-        // แสดง coordinates ที่เลือก
+        // Selected coordinates
         Text(
-            "📍 ${"%.6f".format(markerPosition.value.latitude)}, ${"%.6f".format(markerPosition.value.longitude)}",
-            fontSize = 11.sp,
-            color    = TextGray,
-            modifier = Modifier.padding(top = 4.dp, start = 4.dp)
+            "📍 ${"%.6f".format(markerState.position.latitude)}, ${"%.6f".format(markerState.position.longitude)}",
+            fontSize = 11.sp, color = TextGray, modifier = Modifier.padding(top = 4.dp, start = 4.dp)
         )
     }
 }

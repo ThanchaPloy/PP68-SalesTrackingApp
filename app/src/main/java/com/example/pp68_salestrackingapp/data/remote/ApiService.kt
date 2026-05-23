@@ -18,6 +18,14 @@ interface ApiService {
         @Query("limit") limit: Int = 1
     ): Response<List<UserDto>>
 
+    // ✅ เพิ่มใหม่: ดึงรายชื่อ User แบบชุด (Batch)
+    @GET("user")
+    suspend fun getUsersByIds(
+        @Query("user_id") userIds: String,
+        @Query("select") select: String = "user_id,full_name",
+        @Query("limit") limit: Int = 1000
+    ): Response<List<UserDto>>
+
     @GET("user")
     suspend fun getUsersByBranch(
         @Query("branch_id") branchId: String,
@@ -42,7 +50,7 @@ interface ApiService {
     suspend fun deleteProjectMembers(@Query("project_id") projectId: String): Response<Unit>
 
     @GET("project_sales_member")
-    suspend fun getProjectMembers(@Query("project_id") projectId: String, @Query("select") select: String = "user_id,sale_role"): Response<List<ProjectMemberDto>>
+    suspend fun getProjectMembers(@Query("project_id") projectId: String, @Query("select") select: String = "user_id,sales_role"): Response<List<ProjectMemberDto>>
 
     // ── Branch ───────────────────────────────────────────────────
     @GET("branch")
@@ -208,6 +216,9 @@ interface ApiService {
 
     @GET("activity_result")
     suspend fun getActivityResult(@Query("appointment_id") appointmentId: String, @Query("limit") limit: Int = 1): Response<List<ActivityResult>>
+
+    @GET("activity_result")
+    suspend fun getResultsByUser(@Query("created_by") userId: String, @Query("limit") limit: Int = 1000): Response<List<ActivityResult>>
 
     // ✅ เพิ่มใหม่: ดึงข้อมูลบันทึกด้วยรหัสบันทึก (Result ID) โดยตรง
     @GET("activity_result")

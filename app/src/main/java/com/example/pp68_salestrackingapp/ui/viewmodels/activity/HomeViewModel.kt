@@ -75,12 +75,12 @@ class HomeViewModel @Inject constructor(
 
     private fun observeActivities() {
         viewModelScope.launch {
-            // Observe multiple flows to update UI when any relevant data changes
+            // ✅ Observe ทั้งการเปลี่ยนแปลงของนัดหมายและบันทึกผล
             combine(
                 activityRepo.getAllActivitiesFlow(),
+                activityRepo.getAllResultIdsFlow(),
                 customerRepo.getAllCustomersFlow(),
-                projectRepo.getAllProjectsFlow(),
-                activityRepo.getAllResultIdsFlow()
+                projectRepo.getAllProjectsFlow()
             ) { _, _, _, _ -> 
                 loadActivities()
             }.collect()
@@ -91,6 +91,7 @@ class HomeViewModel @Inject constructor(
         viewModelScope.launch {
             val currentMonth = _uiState.value.selectedMonth
 
+            // ✅ ดึง Result IDs ล่าสุดจาก Local DB เพื่อเช็คว่าอันไหนบันทึกผลแล้ว
             val resultIds = activityRepo.getAllResultIdsFlow().first().toSet()
 
             activityRepo.getMyActivitiesWithDetails().fold(
@@ -136,9 +137,10 @@ class HomeViewModel @Inject constructor(
                 return@launch
             }
             
-            // Refresh all relevant data from remote
             try {
+                // ✅ เพิ่มการ refreshResults เพื่อดึงสถานะการบันทึกผลล่าสุดจาก Server
                 activityRepo.refreshActivities(userId)
+                activityRepo.refreshResults(userId)
                 customerRepo.refreshCustomers(userId)
                 projectRepo.refreshProjects(userId)
             } catch (e: Exception) {

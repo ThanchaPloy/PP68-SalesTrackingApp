@@ -51,7 +51,7 @@ data class AddProjectUiState(
     val billingBranchError:     String? = null,
     val isLoading:              Boolean = false,
     val isSaved:                Boolean = false,
-    val saveError:              String? = null,
+    val saveError:    String? = null,
     val lossReason:             String  = "",
     val otherLossReason:        String  = "",
     val lossReasonError:        String? = null
@@ -414,10 +414,6 @@ class AddProjectViewModel @Inject constructor(
             }
         }
         if (s.selectedTeamId.isNullOrBlank()) valid = false
-        if (s.selectedBillingBranchId.isNullOrBlank()) {
-            _uiState.update { it.copy(billingBranchError = "กรุณาเลือกสาขาที่เปิดบิล") }
-            valid = false
-        }
         return valid
     }
 
@@ -450,7 +446,8 @@ class AddProjectViewModel @Inject constructor(
                     projectLat            = s.siteLat,
                     projectLong           = s.siteLong,
                     opportunityScore      = null,
-                    lossReason            = finalLossReason
+                    lossReason            = finalLossReason,
+                    createdBy             = userId // ✅ ระบุเจ้าของโครงการรายบุคคล
                 )
 
                 val result = if (s.projectId != null) {

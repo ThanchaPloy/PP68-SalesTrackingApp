@@ -253,7 +253,7 @@ fun AddProductContent(
                 modifier = Modifier.fillMaxWidth().height(52.dp),
                 shape = RoundedCornerShape(12.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = AppColors.Primary),
-                enabled = !s.isSaving && s.selectedProductName.isNotBlank() && s.quantity.isNotBlank() && s.selectedShippingBranchId != null
+                enabled = !s.isSaving && s.selectedProductName.isNotBlank() && s.quantity.isNotBlank()
             ) {
                 if (s.isSaving) {
                     CircularProgressIndicator(

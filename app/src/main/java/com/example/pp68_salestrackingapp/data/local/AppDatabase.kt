@@ -18,7 +18,7 @@ import com.example.pp68_salestrackingapp.data.model.*
         ProjectContact::class,
         AppointmentContact::class
     ],
-    version = 30,          // ✅ เพิ่มจาก 29 → 30
+    version = 33,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -74,8 +74,45 @@ abstract class AppDatabase : RoomDatabase() {
         }
 
         val MIGRATION_29_30 = object : Migration(29, 30) {
-            override fun migrate(database: SupportSQLiteDatabase) {
-                database.execSQL("ALTER TABLE project ADD COLUMN updatedAt TEXT")
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE project ADD COLUMN updatedAt TEXT")
+            }
+        }
+
+        val MIGRATION_31_32 = object : Migration(31, 32) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("""
+                    CREATE TABLE customer_new (
+                        custId TEXT PRIMARY KEY NOT NULL,
+                        companyName TEXT NOT NULL,
+                        branchId TEXT,
+                        branch TEXT,
+                        custType TEXT,
+                        companyAddr TEXT,
+                        companyLat REAL,
+                        companyLong REAL,
+                        companyStatus TEXT,
+                        createdAt TEXT
+                    )
+                """)
+                db.execSQL("""
+                    INSERT INTO customer_new (
+                        custId, companyName, branchId, branch, custType,
+                        companyAddr, companyLat, companyLong, companyStatus, createdAt
+                    ) SELECT 
+                        custId, companyName, branchId, branch, custType,
+                        companyAddr, companyLat, companyLong, companyStatus, firstCustomerDate
+                    FROM customer
+                """)
+                db.execSQL("DROP TABLE customer")
+                db.execSQL("ALTER TABLE customer_new RENAME TO customer")
+            }
+        }
+
+        val MIGRATION_32_33 = object : Migration(32, 33) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE customer ADD COLUMN user_id TEXT")
+                db.execSQL("ALTER TABLE project ADD COLUMN user_id TEXT")
             }
         }
     }

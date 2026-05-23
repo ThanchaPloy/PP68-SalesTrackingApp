@@ -13,7 +13,8 @@ class AuthRepository @Inject constructor(
     private val apiService: ApiService,
     private val authService: AuthService,
     private val tokenManager: TokenManager,
-    private val database: AppDatabase
+    private val database: AppDatabase,
+    private val syncManager: SyncManager
 ) {
     suspend fun login(email: String, password: String): kotlin.Result<LoginResponse> {
         return withContext(Dispatchers.IO) {
@@ -21,12 +22,12 @@ class AuthRepository @Inject constructor(
                 val response = authService.login(LoginRequest(email, password))
                 if (response.isSuccessful && response.body() != null) {
                     val loginResp = response.body()!!
+                    
+                    // 1. บันทึก Token และล้างข้อมูลเก่าในเครื่อง (เพื่อให้ข้อมูลใหม่ที่ Sync มาสะอาด)
                     tokenManager.saveToken(loginResp.token)
-
-                    // ✅ ล้างข้อมูลทั้งหมดในเครื่องก่อนบันทึกของคนใหม่
                     database.clearAllTables()
 
-                    // ✅ ดึงข้อมูล user เพิ่มเติมจาก PostgREST
+                    // 2. ดึงข้อมูล Profile เพิ่มเติมจาก PostgREST เพื่อเอา branchId/fullName มาใช้
                     val userDetail = fetchUserDetail(loginResp.userId)
 
                     val authUser = AuthUser(
@@ -39,17 +40,15 @@ class AuthRepository @Inject constructor(
                     )
                     tokenManager.saveUserData(authUser)
 
-                    val fcmToken = tokenManager.getFcmToken()
-                    if (!fcmToken.isNullOrBlank()) {
-                        try {
-                            apiService.updateFcmToken(
-                                userId  = "eq.${loginResp.userId}",
-                                updates = mapOf("fcm_token" to fcmToken)
-                            )
-                        } catch (e: Exception) {
-                            // ถ้าไม่สำเร็จก็ไม่เป็นไร
-                        }
-                    }
+                    // 3. เริ่มกระบวนการ Sync ข้อมูลทั้งหมด (รอให้เสร็จเพื่อให้หน้าแรกมีข้อมูลครบถ้วน)
+                    // syncAll จะดึง โครงการ, ลูกค้า, นัดหมาย และ บันทึกผล จาก Server
+                    syncManager.syncAll(
+                        userId   = loginResp.userId,
+                        branchId = userDetail?.branchId ?: ""
+                    )
+
+                    // 4. อัปเดต FCM Token สำหรับการแจ้งเตือน
+                    updateFcmTokenOnServer(loginResp.userId)
 
                     kotlin.Result.success(loginResp)
                 } else {
@@ -78,9 +77,8 @@ class AuthRepository @Inject constructor(
                 val response = authService.register(request)
                 if (response.isSuccessful && response.body() != null) {
                     val loginResp = response.body()!!
-                    tokenManager.saveToken(loginResp.token)
                     
-                    // ✅ ล้างข้อมูลเก่า
+                    tokenManager.saveToken(loginResp.token)
                     database.clearAllTables()
 
                     val userDetail = fetchUserDetail(loginResp.userId)
@@ -93,6 +91,16 @@ class AuthRepository @Inject constructor(
                         branchName = userDetail?.branchName
                     )
                     tokenManager.saveUserData(authUser)
+
+                    // Sync ข้อมูลเริ่มต้นหลังสมัครสมาชิก
+                    syncManager.syncAll(
+                        userId   = loginResp.userId,
+                        branchId = userDetail?.branchId ?: branchId
+                    )
+
+                    // อัปเดต FCM Token สำหรับผู้ใช้ใหม่
+                    updateFcmTokenOnServer(loginResp.userId)
+
                     kotlin.Result.success(loginResp)
                 } else {
                     val errBody = response.errorBody()?.string() ?: ""
@@ -103,6 +111,20 @@ class AuthRepository @Inject constructor(
                 }
             } catch (e: Exception) {
                 kotlin.Result.failure(e)
+            }
+        }
+    }
+
+    private suspend fun updateFcmTokenOnServer(userId: String) {
+        val fcmToken = tokenManager.getFcmToken()
+        if (!fcmToken.isNullOrBlank()) {
+            try {
+                apiService.updateFcmToken(
+                    userId  = "eq.$userId",
+                    updates = mapOf("fcm_token" to fcmToken)
+                )
+            } catch (e: Exception) {
+                // หากอัปเดตไม่สำเร็จก็ให้ทำงานส่วนหลักต่อไปได้
             }
         }
     }
@@ -137,13 +159,9 @@ class AuthRepository @Inject constructor(
         }
     }
 
-    fun isUserLoggedIn(): Boolean {
-        return !tokenManager.getToken().isNullOrEmpty()
-    }
+    fun isUserLoggedIn(): Boolean = !tokenManager.getToken().isNullOrEmpty()
 
-    fun currentUser(): AuthUser? {
-        return tokenManager.getUserData()
-    }
+    fun currentUser(): AuthUser? = tokenManager.getUserData()
 
     fun updateLocalUser(user: AuthUser) {
         tokenManager.saveUserData(user)

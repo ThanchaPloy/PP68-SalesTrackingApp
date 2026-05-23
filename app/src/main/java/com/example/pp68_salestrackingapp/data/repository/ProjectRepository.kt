@@ -91,26 +91,28 @@ class ProjectRepository @Inject constructor(
         }
     }
 
+    // ✅ TC-FIX: เปลี่ยนเป็น Batch call ครั้งเดียว แทน loop (แก้ปัญหา N+1)
     suspend fun getProjectMembersDetailed(projectId: String): List<Pair<String, String>> {
         return withContext(Dispatchers.IO) {
             try {
                 val resp = apiService.getProjectMembers("eq.$projectId")
-                if (resp.isSuccessful) {
-                    val members = resp.body() ?: emptyList()
-                    val resultList = mutableListOf<Pair<String, String>>()
-                    for (m in members) {
-                        val mUserId = m.userId ?: continue
-                        val uResp = apiService.getUserById("eq.$mUserId")
-                        if (uResp.isSuccessful) {
-                            val user = uResp.body()?.firstOrNull()
-                            if (user != null) {
-                                resultList.add(user.userId to (user.fullName ?: user.userId))
-                            }
-                        }
-                    }
-                    resultList
-                } else emptyList()
-            } catch (e: Exception) { emptyList() }
+                if (!resp.isSuccessful) return@withContext emptyList()
+
+                val members = resp.body() ?: return@withContext emptyList()
+                val userIds = members.mapNotNull { it.userId }
+                if (userIds.isEmpty()) return@withContext emptyList()
+
+                // ✅ Batch call ครั้งเดียวเพื่อดึงข้อมูล User ทั้งทีม
+                val idsParam = "in.(${userIds.joinToString(",")})"
+                val uResp = apiService.getUsersByIds(userIds = idsParam)
+                if (uResp.isSuccessful && !uResp.body().isNullOrEmpty()) {
+                    uResp.body()!!.map { it.userId to (it.fullName ?: it.userId) }
+                } else {
+                    emptyList()
+                }
+            } catch (e: Exception) {
+                emptyList()
+            }
         }
     }
 
@@ -145,16 +147,28 @@ class ProjectRepository @Inject constructor(
 
     private suspend fun generateNewProjectNumber(branchId: String): String {
         return try {
-            val prefix = branchId.take(2).uppercase().ifBlank { "PJ" }
+            // bb: 2 chars of branchId
+            val bb = branchId.take(2).uppercase().ifBlank { "PJ" }
+            
             val now = LocalDate.now()
+            // yy: last 2 digits of Buddhist Year
             val beYear = (now.year + 543) % 100
-            val yearStr = "%02d".format(beYear)
-            val monthStr = "%02d".format(now.monthValue)
-            val count = projectDao.getProjectCountByBranch(branchId)
-            val seqStr = "%03d".format(count + 1)
-            "$prefix-$yearStr-$monthStr-$seqStr"
+            val yy = "%02d".format(beYear)
+            
+            // mm: month
+            val mm = "%02d".format(now.monthValue)
+            
+            // Prefix to search existing count: bbyymm
+            val prefix = "$bb$yy$mm"
+            
+            // xxx: sequence number in that month/year/branch
+            val count = projectDao.getProjectCountByPrefix(prefix)
+            val xxx = "%03d".format(count + 1)
+            
+            // Final format: bbyymmxxx
+            "$prefix$xxx"
         } catch (e: Exception) {
-            "PJ-" + System.currentTimeMillis().toString().takeLast(7)
+            "PJ" + System.currentTimeMillis().toString().takeLast(7)
         }
     }
 
@@ -294,8 +308,8 @@ class ProjectRepository @Inject constructor(
     }
 
     suspend fun countProjectsByPrefix(prefix: String): Int {
-        val projects = projectDao.getAllProjects().first()
-        return projects.count { it.projectId.startsWith(prefix) }
+        // ✅ ปรับปรุงให้เรียกผ่าน DAO เพื่อประสิทธิภาพและความถูกต้องตาม Format ใหม่
+        return projectDao.getProjectCountByPrefix(prefix)
     }
 
     suspend fun getMembersByBranch(branchId: String): Result<List<Pair<String, String>>> {

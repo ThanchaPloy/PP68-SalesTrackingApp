@@ -1,13 +1,15 @@
-package com.example.pp68_salestrackingapp.ui.screen.dashboard
+package com.example.pp68_salestrackingapp.ui.viewmodels.dashboard
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.pp68_salestrackingapp.data.repository.ActivityRepository
 import com.example.pp68_salestrackingapp.data.repository.ProjectRepository
 import com.example.pp68_salestrackingapp.data.repository.AuthRepository
+import com.example.pp68_salestrackingapp.data.repository.CustomerRepository
 import com.example.pp68_salestrackingapp.data.model.AuthUser
 import com.example.pp68_salestrackingapp.data.model.Project
 import com.example.pp68_salestrackingapp.data.model.SalesActivity
+import com.example.pp68_salestrackingapp.data.model.Customer
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -33,6 +35,7 @@ data class StatsUiState(
     val totalActiveValue:   Double = 0.0,
     val totalProjectValue:  Double = 0.0,
     val monthlyNewLeads:    Int    = 0,
+    val monthlyNewProjects: Int    = 0,
     val activeProjects:     Int    = 0,
     val closingThisMonth:   Int    = 0,
 
@@ -51,6 +54,7 @@ data class StatsUiState(
 class StatsViewModel @Inject constructor(
     private val projectRepo:  ProjectRepository,
     private val activityRepo: ActivityRepository,
+    private val customerRepo: CustomerRepository,
     private val authRepo:     AuthRepository
 ) : ViewModel() {
 
@@ -76,11 +80,13 @@ class StatsViewModel @Inject constructor(
 
     private fun observeData() {
         viewModelScope.launch {
+            val user = authRepo.currentUser()
             combine(
                 projectRepo.getAllProjectsFlow(),
-                activityRepo.getAllActivitiesFlow()
-            ) { projects, activities ->
-                calculateStats(projects, activities)
+                activityRepo.getAllActivitiesFlow(),
+                customerRepo.getAllCustomersFlow()
+            ) { projects, activities, customers ->
+                calculateStats(projects, activities, customers, user?.userId ?: "")
             }.collect { updatedStats ->
                 _uiState.update { current ->
                     updatedStats.copy(
@@ -97,61 +103,71 @@ class StatsViewModel @Inject constructor(
         viewModelScope.launch {
             val user = authRepo.currentUser() ?: return@launch
             
-            // แสดง Loading เฉพาะถ้ายังไม่มีข้อมูลใน Pipeline
             if (_uiState.value.pipelineStages.isEmpty()) {
                 _uiState.update { it.copy(isLoading = true, error = null) }
             }
 
             try {
-                // Refresh ข้อมูลจาก Server ใน Background เพื่อให้ Database อัปเดต
-                // เมื่อ Database อัปเดต Flow จะปล่อยข้อมูลใหม่มาเองผ่าน observeData()
                 projectRepo.refreshProjects(user.userId)
                 activityRepo.refreshActivities(user.userId)
+                customerRepo.refreshCustomers(user.teamId ?: "")
             } catch (e: Exception) {
-                // _uiState.update { it.copy(error = e.message) }
+                // error handling
             } finally {
                 _uiState.update { it.copy(isLoading = false) }
             }
         }
     }
 
-    private fun calculateStats(projects: List<Project>, activities: List<SalesActivity>): StatsUiState {
+    private fun calculateStats(
+        projects: List<Project>,
+        activities: List<SalesActivity>,
+        customers: List<Customer>,
+        currentUserId: String
+    ): StatsUiState {
+        // ✅ กรองเฉพาะข้อมูลที่เป็นของ User คนนี้ (Lead/Customer)
+        val myCustomers = customers.filter { it.createdBy == currentUserId }
+        
+        // สำหรับ Project ปกติ Repository กรองตาม User ให้อยู่แล้วจาก member table 
+        // แต่เพื่อความชัวร์ กรองเอาเฉพาะโครงการที่เราดูแลอยู่ (ถ้าต้องการเข้มงวดขึ้น)
+        val myProjects = projects 
+
         // ── Weekly ────────────────────────────────────────────────────
-        val weeklyLeads = projects.count { p ->
-            p.projectStatus == "Lead" &&
-                    isInRange(p.createdAt?.take(10), weekStart, weekEnd)
+        val weeklyLeads = myCustomers.count { c ->
+            isInRange(c.createdAt?.take(10), weekStart, weekEnd)
         }
 
-        val weeklyNewProj = projects.count { p ->
-            p.projectStatus !in listOf("Lead", "Completed", "Lost", "Failed") &&
-                    isInRange(p.createdAt?.take(10), weekStart, weekEnd)
+        val weeklyNewProj = myProjects.count { p ->
+            isInRange(p.createdAt?.take(10), weekStart, weekEnd)
         }
 
-        // จำนวน Visit
         val weeklyVisit = activities.count { a ->
             a.status == "completed" && isInRange(a.activityDate, weekStart, weekEnd)
         }
 
         // ── Monthly ───────────────────────────────────
-        val closedSales = projects
+        val closedSales = myProjects
             .filter { it.projectStatus in listOf("PO", "Completed") &&
                     isInRange(it.closingDate ?: it.startDate, monthStart, monthEnd) }
             .sumOf { it.expectedValue ?: 0.0 }
 
-        val activeProjectsList = projects.filter {
+        val activeProjectsList = myProjects.filter {
             it.projectStatus !in listOf("Completed", "Lost", "Failed")
         }
         val activeValue = activeProjectsList.sumOf { it.expectedValue ?: 0.0 }
 
-        val totalValue = projects.filter { it.projectStatus !in listOf("Lost", "Failed") }
+        val totalValue = myProjects.filter { it.projectStatus !in listOf("Lost", "Failed") }
             .sumOf { it.expectedValue ?: 0.0 }
 
-        val monthlyLeads = projects.count { p ->
-            p.projectStatus == "Lead" &&
-                    isInRange(p.createdAt?.take(10), monthStart, monthEnd)
+        val monthlyLeads = myCustomers.count { c ->
+            isInRange(c.createdAt?.take(10), monthStart, monthEnd)
         }
 
-        val closingMonthCount = projects.count { p ->
+        val monthlyNewProj = myProjects.count { p ->
+            isInRange(p.createdAt?.take(10), monthStart, monthEnd)
+        }
+
+        val closingMonthCount = myProjects.count { p ->
             p.projectStatus !in listOf("Completed", "Lost", "Failed") &&
                     isSameMonth(p.closingDate, currentMonth)
         }
@@ -162,7 +178,7 @@ class StatsViewModel @Inject constructor(
             "Make a Decision", "Assured", "PO", "Completed", "Lost", "Failed"
         )
         val stageCounts = stageOrder.map { stage ->
-            val stageProjects = projects.filter { it.projectStatus == stage }
+            val stageProjects = myProjects.filter { it.projectStatus == stage }
             PipelineStageCount(
                 stage      = stage,
                 count      = stageProjects.size,
@@ -173,7 +189,7 @@ class StatsViewModel @Inject constructor(
         // ── Opportunity HOT/WARM/COLD ─────────────────
         val scoreOrder = listOf("HOT", "WARM", "COLD")
         val oppGroups = scoreOrder.map { score ->
-            val scored = projects.filter {
+            val scored = myProjects.filter {
                 it.opportunityScore?.uppercase() == score &&
                         it.projectStatus !in listOf("Completed", "Lost", "Failed")
             }
@@ -192,6 +208,7 @@ class StatsViewModel @Inject constructor(
             totalActiveValue   = activeValue,
             totalProjectValue  = totalValue,
             monthlyNewLeads    = monthlyLeads,
+            monthlyNewProjects = monthlyNewProj,
             activeProjects     = activeProjectsList.size,
             closingThisMonth   = closingMonthCount,
             pipelineStages     = stageCounts,

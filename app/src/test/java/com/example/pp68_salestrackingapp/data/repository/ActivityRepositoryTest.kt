@@ -58,8 +58,16 @@ class ActivityRepositoryTest {
     )
     private val sampleCustomers = listOf(
         Customer(
-            "CST-001", "บริษัท แสนสิริ", null, "Developer",
-            null, null, null, "customer", null
+            custId = "CST-001",
+            companyName = "บริษัท แสนสิริ",
+            branchId = null,
+            branch = "Developer",
+            custType = null,
+            companyAddr = null,
+            companyLat = null,
+            companyLong = null,
+            companyStatus = "customer",
+            firstCustomerDate = null
         )
     )
 

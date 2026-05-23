@@ -24,6 +24,10 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.pp68_salestrackingapp.ui.components.AppTopBar
 import com.example.pp68_salestrackingapp.ui.components.BottomNavBar
 import com.example.pp68_salestrackingapp.ui.theme.SalesTrackingTheme
+import com.example.pp68_salestrackingapp.ui.viewmodels.dashboard.OpportunityGroup
+import com.example.pp68_salestrackingapp.ui.viewmodels.dashboard.PipelineStageCount
+import com.example.pp68_salestrackingapp.ui.viewmodels.dashboard.StatsUiState
+import com.example.pp68_salestrackingapp.ui.viewmodels.dashboard.StatsViewModel
 
 // ── Colors ────────────────────────────────────────────────────
 private val White        = Color.White
@@ -156,12 +160,23 @@ fun DashboardScreenContent(
 
             // ── รายสัปดาห์ ────────────────────────────────────────
             SectionBlock(label = "รายสัปดาห์") {
-                StatCard(
-                    value = "${s.weeklyNewLeads}",
-                    label = "ลูกค้ามุ่งหวังใหม่",
-                    icon = Icons.Default.PersonAdd,
-                    modifier = Modifier.fillMaxWidth().clickable { onWeeklyClick() }
-                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    StatCard(
+                        value = "${s.weeklyNewLeads}",
+                        label = "ลูกค้าใหม่",
+                        icon = Icons.Default.PersonAdd,
+                        modifier = Modifier.weight(1f).clickable { onWeeklyClick() }
+                    )
+                    StatCard(
+                        value = "${s.weeklyNewProjects}",
+                        label = "โครงการใหม่",
+                        icon = Icons.Default.Assignment,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
                 Spacer(Modifier.height(4.dp))
                 // Visit count full width
                 VisitCountCard(count = s.weeklyVisitCount)
@@ -180,16 +195,23 @@ fun DashboardScreenContent(
                         modifier = Modifier.weight(1f),
                         valueFontSize = 20
                     )
-                    StatCard("${s.monthlyNewLeads}", "ลูกค้ามุ่งหวังใหม่", Icons.Default.PersonAdd, Modifier.weight(1f))
+                    StatCard("${s.monthlyNewLeads}", "ลูกค้าใหม่", Icons.Default.PersonAdd, Modifier.weight(1f))
                 }
                 Spacer(Modifier.height(4.dp))
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    StatCard("${s.activeProjects}",     "โครงการที่ดำเนินการอยู่",          Icons.Default.Pending,    Modifier.weight(1f))
-                    StatCard("${s.closingThisMonth}", "คาดว่าจะปิดในเดือนนี้", Icons.Default.Event, Modifier.weight(1f))
+                    StatCard("${s.monthlyNewProjects}", "โครงการใหม่", Icons.Default.Assignment, Modifier.weight(1f))
+                    StatCard("${s.activeProjects}", "โครงการที่ดำเนินการอยู่", Icons.Default.Pending, Modifier.weight(1f))
                 }
+                Spacer(Modifier.height(4.dp))
+                StatCard(
+                    value = "${s.closingThisMonth}",
+                    label = "คาดว่าจะปิดในเดือนนี้",
+                    icon = Icons.Default.Event,
+                    modifier = Modifier.fillMaxWidth()
+                )
             }
 
             // ── สถานะ PIPELINE โครงการ ───────────────────────

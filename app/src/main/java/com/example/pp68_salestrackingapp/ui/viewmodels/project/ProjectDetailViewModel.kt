@@ -1,4 +1,4 @@
-package com.example.pp68_salestrackingapp.ui.viewmodels
+package com.example.pp68_salestrackingapp.ui.viewmodels.project
 
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
@@ -89,31 +89,21 @@ class ProjectDetailViewModel @Inject constructor(
             projectRepo.getProjectByIdFlow(id).collectLatest { project ->
                 if (project != null) {
                     // ✅ อัปเดตข้อมูลโครงการหลักทันที
-                    _uiState.update { state ->
-                        state.copy(
-                            isLoading = false,
-                            project = project,
-                            error = null
-                        )
-                    }
+                    _uiState.update { it.copy(isLoading = false, project = project, error = null) }
 
                     // ✅ ดึงชื่อบริษัท (ไม่ block UI)
                     launch {
-                        val company = customerRepo.getCustomerById(project.custId).getOrNull()?.companyName ?: ""
+                        val company = customerRepo.getCustomerById(project.custId)
+                            .getOrNull()?.companyName ?: ""
                         _uiState.update { it.copy(companyName = company) }
                     }
 
-                    // ✅ ดึงรายชื่อสมาชิก (ไม่ block UI)
+                    // ✅ TC-FIX: อัปเดตรายชื่อสมาชิกเสมอ ไม่ว่าจะ Empty หรือไม่ (รองรับการ Sync ที่เสถียรขึ้น)
                     launch {
-                        val members = projectRepo.getProjectMembersDetailed(id).map { 
-                            TeamMember(it.first, it.second)
-                        }
-                        if (members.isNotEmpty()) {
-                            _uiState.update { it.copy(teamMembers = members) }
-                        }
+                        val members = projectRepo.getProjectMembersDetailed(id)
+                            .map { TeamMember(it.first, it.second) }
+                        _uiState.update { it.copy(teamMembers = members) }
                     }
-                } else {
-                    projectRepo.getProjectById(id)
                 }
             }
         }
@@ -125,19 +115,13 @@ class ProjectDetailViewModel @Inject constructor(
                 activityRepo.getActivitiesByProjectFlow(id),
                 activityRepo.getResultsByProjectFlow(id)
             ) { activities, results ->
-                // 1. กองงานที่กำลังจะมาถึง (กรองเฉพาะที่ยังไม่เสร็จ)
                 val tasks = activities
                     .filter { it.status.lowercase() != "completed" }
                     .map { TaskItem(it.activityId, it.activityType, it.detail, it.activityDate) }
 
-                // 2. ประวัติกิจกรรม (อ้างอิงจากตาราง ActivityResult เป็นหลัก)
                 val actMap = activities.associateBy { it.activityId }
                 val history = results.map { res ->
                     val act = res.activityId?.let { actMap[it] }
-                    
-                    // ✅ ปรับหัวข้อตามเงื่อนไข: 
-                    // ถ้ามาจากนัดหมาย (activityId != null) ให้ใช้ "นัดหมาย"
-                    // ถ้าสร้างอิสระจาก FAB (standalone) ให้ใช้สรุปย่อเป็นหัวข้อ
                     val title = if (res.activityId != null) {
                         "นัดหมาย"
                     } else {
@@ -148,7 +132,7 @@ class ProjectDetailViewModel @Inject constructor(
                     HistoryItem(
                         activityId   = res.activityId ?: res.resultId,
                         title        = title,
-                        description  = res.summary, // บันทึกผลจริงๆ จะอยู่ในนี้
+                        description  = res.summary,
                         plannedDate  = res.reportDate ?: act?.activityDate,
                         planStatus   = "completed",
                         activityType = act?.activityType ?: "visit",
