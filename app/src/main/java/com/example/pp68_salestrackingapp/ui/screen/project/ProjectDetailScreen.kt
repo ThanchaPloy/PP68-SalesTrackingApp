@@ -34,11 +34,11 @@ import com.example.pp68_salestrackingapp.ui.theme.AppColors
 import com.example.pp68_salestrackingapp.ui.theme.SalesTrackingTheme
 
 // นำเข้า ViewModel และ Data Classes
-import com.example.pp68_salestrackingapp.ui.viewmodels.ProjectDetailViewModel
-import com.example.pp68_salestrackingapp.ui.viewmodels.ProjectDetailUiState
-import com.example.pp68_salestrackingapp.ui.viewmodels.TaskItem
-import com.example.pp68_salestrackingapp.ui.viewmodels.TeamMember
-import com.example.pp68_salestrackingapp.ui.viewmodels.HistoryItem
+import com.example.pp68_salestrackingapp.ui.viewmodels.project.ProjectDetailViewModel
+import com.example.pp68_salestrackingapp.ui.viewmodels.project.ProjectDetailUiState
+import com.example.pp68_salestrackingapp.ui.viewmodels.project.TaskItem
+import com.example.pp68_salestrackingapp.ui.viewmodels.project.TeamMember
+import com.example.pp68_salestrackingapp.ui.viewmodels.project.HistoryItem
 
 // ── Colors ────────────────────────────────────────────────────
 private val White      = Color.White

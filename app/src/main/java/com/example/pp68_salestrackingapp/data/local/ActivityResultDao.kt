@@ -9,7 +9,6 @@ interface ActivityResultDao {
     @Query("SELECT * FROM activity_result WHERE appointment_id = :id LIMIT 1")
     suspend fun getResultByActivityId(id: String): ActivityResult?
 
-    // ✅ เพิ่มใหม่ — ดึงข้อมูลด้วย Result ID โดยตรง
     @Query("SELECT * FROM activity_result WHERE result_id = :resultId LIMIT 1")
     suspend fun getResultById(resultId: String): ActivityResult?
 
@@ -27,6 +26,18 @@ interface ActivityResultDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertResult(result: ActivityResult)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAll(results: List<ActivityResult>)
+
+    @Query("DELETE FROM activity_result")
+    suspend fun deleteAll()
+
+    @Transaction
+    suspend fun clearAndInsert(results: List<ActivityResult>) {
+        deleteAll()
+        insertAll(results)
+    }
 
     @Query("SELECT appointment_id FROM activity_result WHERE appointment_id IS NOT NULL")
     fun getAllResultIdsFlow(): Flow<List<String>>

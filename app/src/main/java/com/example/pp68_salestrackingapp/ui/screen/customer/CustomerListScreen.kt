@@ -225,7 +225,7 @@ fun CustomerListScreenPreview() {
             companyLat = 0.0,
             companyLong = 0.0,
             companyStatus = "customer",
-            firstCustomerDate = "2024-01-01"
+            createdAt = "2024-01-01"
         ),
         Customer(
             custId = "C002",
@@ -236,7 +236,7 @@ fun CustomerListScreenPreview() {
             companyLat = 0.0,
             companyLong = 0.0,
             companyStatus = "new lead",
-            firstCustomerDate = null
+            createdAt = null
         )
     )
     SalesTrackingTheme {

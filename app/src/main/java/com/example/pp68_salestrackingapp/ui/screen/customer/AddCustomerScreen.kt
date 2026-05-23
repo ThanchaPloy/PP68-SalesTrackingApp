@@ -219,15 +219,6 @@ fun AddCustomerContent(
                 }
             }
 
-            // ── First Customer Date (Optional) ───────────────────
-            FormField("วันที่เริ่มเป็นลูกค้า (ไม่บังคับ)") {
-                DatePickerField(
-                    selectedDate  = uiState.firstCustomerDate,
-                    placeholder   = "เลือกวันที่",
-                    onDateSelected = { onEvent(AddCustomerEvent.FirstCustomerDateChanged(it)) }
-                )
-            }
-
             Spacer(Modifier.height(4.dp))
 
             // ── Error ─────────────────────────────────────────
@@ -249,7 +240,7 @@ fun AddCustomerContent(
                     )
                 } else {
                     Text(if (uiState.custId != null) "อัปเดตข้อมูลลูกค้า" else "บันทึกข้อมูลลูกค้า", fontSize = 16.sp,
-                        fontWeight = FontWeight.SemiBold, color = Color.White)
+                        fontWeight = FontWeight.Bold, color = Color.White)
                 }
             }
 

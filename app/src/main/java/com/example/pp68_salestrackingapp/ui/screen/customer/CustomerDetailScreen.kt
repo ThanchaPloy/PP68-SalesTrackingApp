@@ -511,7 +511,7 @@ fun CustomerDetailScreenPreview() {
         companyLat = 13.7563,
         companyLong = 100.5018,
         companyStatus = "customer",
-        firstCustomerDate = "2024-01-01"
+        createdAt = "2024-01-01"
     )
 
     val sampleContacts = listOf(

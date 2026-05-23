@@ -60,6 +60,23 @@ class ActivityRepository @Inject constructor(
         }
     }
 
+    // ✅ ดึงบันทึกผลทั้งหมดของ User
+    suspend fun refreshResults(userId: String): kotlin.Result<Unit> {
+        return withContext(Dispatchers.IO) {
+            try {
+                val resp = apiService.getResultsByUser("eq.$userId")
+                if (resp.isSuccessful && resp.body() != null) {
+                    resultDao.clearAndInsert(resp.body()!!)
+                    kotlin.Result.success(Unit)
+                } else {
+                    kotlin.Result.failure(Exception("API error: ${resp.code()}"))
+                }
+            } catch (e: Exception) {
+                kotlin.Result.failure(e)
+            }
+        }
+    }
+
     suspend fun addActivity(activity: SalesActivity): kotlin.Result<Unit> {
         return withContext(Dispatchers.IO) {
             try {

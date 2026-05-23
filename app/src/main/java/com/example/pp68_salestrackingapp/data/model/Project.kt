@@ -74,5 +74,9 @@ data class Project(
 
     @ColumnInfo(name = "lossReason")
     @SerializedName("loss_reason")
-    val lossReason: String? = null
+    val lossReason: String? = null,
+
+    @ColumnInfo(name = "user_id")
+    @SerializedName("user_id")
+    val createdBy: String? = null
 )

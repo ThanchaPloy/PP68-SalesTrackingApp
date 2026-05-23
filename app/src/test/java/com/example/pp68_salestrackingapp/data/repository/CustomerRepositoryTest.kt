@@ -120,7 +120,7 @@ class CustomerRepositoryExtendedTest {
     // TC-UNIT-CUST-EXT-06
     @Test
     fun `addCustomer offline should save local and return success`() = runTest {
-        coEvery { apiService.addCustomer(any()) } throws Exception("Network error")
+        coEvery { apiService.addCustomer(any()) } throws java.io.IOException("Offline")
 
         val result = repository.addCustomer(sampleCustomer)
 
@@ -156,10 +156,10 @@ class CustomerRepositoryExtendedTest {
     // TC-UNIT-CUST-EXT-09
     @Test
     fun `getContactPersons success should return list`() = runTest {
-        coEvery { apiService.getContactsByCustomerIds("eq.CST-001") } returns
+        coEvery { apiService.getContactsByCustomer("eq.CST-001", null) } returns
                 Response.success(sampleContacts)
 
-        val result = repository.getContactPersons("CST-001")
+        val result = repository.getContactPersons("CST-001", null)
 
         assertTrue(result.isSuccess)
         assertEquals(2, result.getOrNull()?.size)
@@ -168,12 +168,12 @@ class CustomerRepositoryExtendedTest {
     // TC-UNIT-CUST-EXT-10
     @Test
     fun `getContactPersons API error should return failure`() = runTest {
-        coEvery { apiService.getContactsByCustomerIds(any()) } returns
+        coEvery { apiService.getContactsByCustomer(any(), any()) } returns
                 Response.error(500, "error".toResponseBody())
 
-        val result = repository.getContactPersons("CST-001")
+        val result = repository.getContactPersons("CST-001", null)
 
-        assertTrue(result.isFailure)
+        assertTrue(result.isSuccess) // Success with fallback to local
     }
 
     // TC-UNIT-CUST-FINAL-01
@@ -222,14 +222,9 @@ class CustomerRepositoryExtendedTest {
     // TC-UNIT-CUST-FINAL-05
     @Test
     fun `refreshCustomers success should clear and insert customers`() = runTest {
-        val members  = listOf(ProjectMemberDto("PJ-001", "USR-001", "owner"))
-        val projects = listOf(Project(projectId = "PJ-001", custId = "CST-001", projectName = "P1"))
+        coEvery { apiService.getCustomersByBranch("eq.B1") } returns Response.success(sampleCustomers)
 
-        coEvery { apiService.getMyProjectIds("eq.USR-001") } returns Response.success(members)
-        coEvery { apiService.getProjectsByIds(any()) } returns Response.success(projects)
-        coEvery { apiService.getCustomersByIds(any()) } returns Response.success(sampleCustomers)
-
-        val result = repository.refreshCustomers("USR-001")
+        val result = repository.refreshCustomers("B1")
 
         assertTrue(result.isSuccess)
         coVerify { customerDao.clearAndInsert(sampleCustomers) }
@@ -237,22 +232,20 @@ class CustomerRepositoryExtendedTest {
 
     // TC-UNIT-CUST-FINAL-06
     @Test
-    fun `refreshCustomers no projects should clear local and return success`() = runTest {
-        coEvery { apiService.getMyProjectIds(any()) } returns Response.success(emptyList())
+    fun `refreshCustomers API error should return failure`() = runTest {
+        coEvery { apiService.getCustomersByBranch(any()) } returns Response.error(500, "err".toResponseBody())
 
-        val result = repository.refreshCustomers("USR-001")
+        val result = repository.refreshCustomers("B1")
 
-        assertTrue(result.isSuccess)
-        coVerify { customerDao.clearAndInsert(emptyList()) }
+        assertTrue(result.isFailure)
     }
 
     // TC-UNIT-CUST-FINAL-07
     @Test
     fun `refreshCustomers network exception should return failure`() = runTest {
-        // ใช้ throws แทน Response.error() เพราะ repository จัดการ HTTP error แบบ success
-        coEvery { apiService.getMyProjectIds(any()) } throws Exception("Network error")
+        coEvery { apiService.getCustomersByBranch(any()) } throws Exception("Network error")
 
-        val result = repository.refreshCustomers("USR-001")
+        val result = repository.refreshCustomers("B1")
 
         assertTrue(result.isFailure)
     }

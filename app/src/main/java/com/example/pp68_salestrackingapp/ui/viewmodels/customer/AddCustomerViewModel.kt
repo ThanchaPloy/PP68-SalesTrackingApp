@@ -27,7 +27,6 @@ data class AddCustomerUiState(
     val companyStatus:       String  = "customer",
     val selectedProjectId:   String? = null,
     val selectedProjectName: String? = null,
-    val firstCustomerDate:   String? = null,
     val projectOptions:      List<Pair<String, String>> = emptyList(),
 
     // validation
@@ -51,7 +50,6 @@ sealed class AddCustomerEvent {
     data class CustTypeChanged(val value: String)    : AddCustomerEvent()
     data class StatusChanged(val value: String)      : AddCustomerEvent()
     data class ProjectSelected(val id: String, val name: String) : AddCustomerEvent()
-    data class FirstCustomerDateChanged(val value: String) : AddCustomerEvent()
     object UseCurrentLocation : AddCustomerEvent()
     object Save               : AddCustomerEvent()
 }
@@ -61,7 +59,7 @@ sealed class AddCustomerEvent {
 class AddCustomerViewModel @Inject constructor(
     private val customerRepo: CustomerRepository,
     private val projectRepo:  ProjectRepository,
-    private val authRepo:     AuthRepository          // ✅ เพิ่ม AuthRepository
+    private val authRepo:     AuthRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(AddCustomerUiState())
@@ -95,7 +93,6 @@ class AddCustomerViewModel @Inject constructor(
                             selectedLng       = customer.companyLong,
                             custType          = customer.custType,
                             companyStatus     = customer.companyStatus ?: "customer",
-                            firstCustomerDate = customer.firstCustomerDate,
                             isLoading         = false
                         )
                     }
@@ -132,9 +129,6 @@ class AddCustomerViewModel @Inject constructor(
 
             is AddCustomerEvent.ProjectSelected ->
                 _uiState.update { it.copy(selectedProjectId = event.id, selectedProjectName = event.name) }
-
-            is AddCustomerEvent.FirstCustomerDateChanged ->
-                _uiState.update { it.copy(firstCustomerDate = event.value.ifBlank { null }) }
 
             is AddCustomerEvent.UseCurrentLocation ->
                 _uiState.update { it.copy(selectedLat = 13.7563, selectedLng = 100.5018) }
@@ -176,7 +170,7 @@ class AddCustomerViewModel @Inject constructor(
                 companyLat        = s.selectedLat,
                 companyLong       = s.selectedLng,
                 companyStatus     = s.companyStatus,
-                firstCustomerDate = s.firstCustomerDate
+                createdAt         = null // ✅ ให้ Server หรือ Database จัดการ Timestamp อัตโนมัติ
             )
 
             // ✅ Create = POST, Edit = PATCH

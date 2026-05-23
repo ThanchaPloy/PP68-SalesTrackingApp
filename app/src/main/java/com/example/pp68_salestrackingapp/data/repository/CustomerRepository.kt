@@ -119,7 +119,7 @@ class CustomerRepository @Inject constructor(
                     put("company_lat", customer.companyLat)
                     put("company_long", customer.companyLong)
                     put("company_status", customer.companyStatus)
-                    put("first_customer_date", customer.firstCustomerDate)
+                    put("created_at", customer.createdAt)
                 }
                 val response = apiService.updateCustomer("eq.$custId", updates)
                 if (response.isSuccessful) {
@@ -162,7 +162,7 @@ class CustomerRepository @Inject constructor(
     }
 
     // ✅ ดึง Contact ของ Customer — กรองเฉพาะที่ user คนนี้สร้าง (user_id)
-    suspend fun getContactPersons(customerId: String, userId: String?): kotlin.Result<List<ContactPerson>> {
+    suspend fun getContactPersons(customerId: String, userId: String? = null): kotlin.Result<List<ContactPerson>> {
         return withContext(Dispatchers.IO) {
             try {
                 val response = apiService.getContactsByCustomer(

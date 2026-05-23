@@ -41,6 +41,9 @@ interface ProjectDao {
     @Query("SELECT COUNT(*) FROM project WHERE branchId = :branchId")
     suspend fun getProjectCountByBranch(branchId: String): Int
 
+    @Query("SELECT COUNT(*) FROM project WHERE projectId LIKE :prefix || '%'")
+    suspend fun getProjectCountByPrefix(prefix: String): Int
+
     // ✅ เปลี่ยนเป็นลบข้อมูลเก่าก่อนเพื่อป้องกันข้อมูลค้างจาก User อื่น หรือโครงการที่ไม่อยู่ในความดูแลแล้ว
     @Transaction
     suspend fun clearAndInsert(projects: List<Project>) {
