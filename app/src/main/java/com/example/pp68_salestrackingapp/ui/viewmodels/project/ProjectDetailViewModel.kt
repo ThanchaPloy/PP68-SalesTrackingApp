@@ -83,22 +83,30 @@ class ProjectDetailViewModel @Inject constructor(
         }
     }
 
+    /**
+     * ✅ บังคับโหลดข้อมูลสมาชิกและโปรเจคจาก Server ใหม่
+     */
+    fun refresh() {
+        val id = projectId ?: return
+        viewModelScope.launch {
+            projectRepo.syncProject(id)
+            val members = projectRepo.getProjectMembersDetailed(id)
+                .map { TeamMember(it.first, it.second) }
+            _uiState.update { it.copy(teamMembers = members) }
+        }
+    }
+
     private fun observeProject(id: String) {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
             projectRepo.getProjectByIdFlow(id).collectLatest { project ->
                 if (project != null) {
-                    // ✅ อัปเดตข้อมูลโครงการหลักทันที
                     _uiState.update { it.copy(isLoading = false, project = project, error = null) }
-
-                    // ✅ ดึงชื่อบริษัท (ไม่ block UI)
                     launch {
                         val company = customerRepo.getCustomerById(project.custId)
                             .getOrNull()?.companyName ?: ""
                         _uiState.update { it.copy(companyName = company) }
                     }
-
-                    // ✅ TC-FIX: อัปเดตรายชื่อสมาชิกเสมอ ไม่ว่าจะ Empty หรือไม่ (รองรับการ Sync ที่เสถียรขึ้น)
                     launch {
                         val members = projectRepo.getProjectMembersDetailed(id)
                             .map { TeamMember(it.first, it.second) }
@@ -115,30 +123,50 @@ class ProjectDetailViewModel @Inject constructor(
                 activityRepo.getActivitiesByProjectFlow(id),
                 activityRepo.getResultsByProjectFlow(id)
             ) { activities, results ->
+                // 1. งานที่กำลังจะมาถึง
                 val tasks = activities
                     .filter { it.status.lowercase() != "completed" }
                     .map { TaskItem(it.activityId, it.activityType, it.detail, it.activityDate) }
 
                 val actMap = activities.associateBy { it.activityId }
-                val history = results.map { res ->
-                    val act = res.activityId?.let { actMap[it] }
-                    val title = if (res.activityId != null) {
-                        "นัดหมาย"
-                    } else {
-                        res.summary?.take(40)?.let { if (it.length == 40) "$it..." else it } 
-                            ?: "บันทึกสรุปการเข้าพบ"
-                    }
 
-                    HistoryItem(
-                        activityId   = res.activityId ?: res.resultId,
-                        title        = title,
-                        description  = res.summary,
-                        plannedDate  = res.reportDate ?: act?.activityDate,
-                        planStatus   = "completed",
-                        activityType = act?.activityType ?: "visit",
-                        contactName  = act?.contactName ?: "ไม่ระบุชื่อผู้ติดต่อ"
+                // 2. ประวัติกิจกรรม (History)
+                // ✅ กรองรายการที่ซ้ำซ้อนอย่างรัดกุมที่สุด
+                val history = results
+                    .sortedWith(
+                        compareByDescending<com.example.pp68_salestrackingapp.data.model.ActivityResult> { it.reportDate ?: "" }
+                            .thenByDescending { it.resultId }
                     )
-                }
+                    .map { res ->
+                        val act = res.activityId?.let { actMap[it] }
+                        val summaryText = res.summary?.trim() ?: ""
+                        val titleSnippet = summaryText.take(40).let { if (it.length == 40) "$it..." else it }
+                        val title = if (!res.activityId.isNullOrBlank()) "นัดหมาย" else (if (titleSnippet.isBlank()) "บันทึกสรุปการเข้าพบ" else titleSnippet)
+
+                        HistoryItem(
+                            activityId   = res.activityId ?: res.resultId,
+                            title        = title,
+                            description  = summaryText,
+                            plannedDate  = (res.reportDate?.take(10) ?: act?.activityDate?.take(10)) ?: "",
+                            planStatus   = "completed",
+                            activityType = act?.activityType ?: "visit",
+                            contactName  = act?.contactName ?: "ไม่ระบุชื่อผู้ติดต่อ"
+                        )
+                    }
+                    .distinctBy { item ->
+                        // กุญแจในการยุบรวม:
+                        // - ถ้ามีนัดหมาย (ActivityId) จะแสดงแค่อันเดียวต่อนัดหมายนั้น
+                        // - ถ้าเป็นบันทึก Standalone จะยุบรวมด้วย วันที่ + หัวข้อ + เนื้อหาที่ลบช่องว่างออกทั้งหมด
+                        val isActivity = actMap.containsKey(item.activityId)
+                        if (isActivity) {
+                            item.activityId
+                        } else {
+                            val normalizedContent = (item.description ?: "").replace("\\s".toRegex(), "")
+                            "${item.plannedDate}_${item.title}_$normalizedContent"
+                        }
+                    }
+                    .sortedByDescending { it.plannedDate }
+
                 tasks to history
             }.collect { (tasks, history) ->
                 _uiState.update { it.copy(upcomingTasks = tasks, history = history) }

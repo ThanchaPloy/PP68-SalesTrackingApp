@@ -107,8 +107,8 @@ class ProjectInventoryViewModel @Inject constructor(
                 val product = productsMap[pp.productId] ?: return@mapNotNull null
                 InventoryItem(
                     productId   = pp.productId,
-                    productName = product.productGroup ?: pp.productId,
-                    category    = product.productType ?: "ทั่วไป",
+                    productName = product.productGroup?.productGroupName ?: pp.productId,
+                    category    = product.productType?.typeName ?: "ทั่วไป",
                     quantity    = pp.quantity ?: 0.0,
                     unit        = product.unit ?: "ชิ้น",
                     desiredDate = pp.desiredDate,

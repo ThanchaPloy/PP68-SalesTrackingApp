@@ -403,14 +403,14 @@ class ActivityRepository @Inject constructor(
         }
     }
 
-    // ✅ เพิ่มใหม่ — ดึงข้อมูลบันทึกด้วย Result ID โดยตรง
+    // ✅ ดึงข้อมูลบันทึกด้วย Result ID โดยตรง
     suspend fun getResultById(resultId: String): ActivityResult? {
         return withContext(Dispatchers.IO) {
             try {
                 val local = resultDao.getResultById(resultId)
                 if (local != null) return@withContext local
 
-                val resp = apiService.getActivityResult("eq.$resultId")
+                val resp = apiService.getResultById("eq.$resultId")
                 if (resp.isSuccessful && !resp.body().isNullOrEmpty()) {
                     val result = resp.body()!!.first()
                     resultDao.insertResult(result)
@@ -449,8 +449,13 @@ class ActivityRepository @Inject constructor(
     ): kotlin.Result<Unit> {
         return withContext(Dispatchers.IO) {
             try {
+                // ✅ TC-FIX: ใช้ resultId เดิมถ้ามี (กรณีแก้ไข) ไม่สร้าง UUID ใหม่พร่ำเพรื่อ
+                val finalResultId = if (result.resultId.isBlank()) {
+                    java.util.UUID.randomUUID().toString()
+                } else result.resultId
+
                 val resultWithProject = result.copy(
-                    resultId   = java.util.UUID.randomUUID().toString(),
+                    resultId   = finalResultId,
                     projectId  = projectId,
                     activityId = null
                 )
@@ -481,7 +486,10 @@ class ActivityRepository @Inject constructor(
         try {
             val project = projectDao.getProjectById(pid)
             if (project != null && project.projectStatus != newStatus) {
-                val updated = project.copy(projectStatus = newStatus)
+                val updated = project.copy(
+                    projectStatus = newStatus,
+                    lossReason    = result.lossReason // ✅ ซิงค์สาเหตุที่ไม่ได้งานไปด้วย
+                )
                 projectRepo.updateProject(updated, result.createdBy ?: "")
             }
         } catch (e: Exception) {
@@ -507,6 +515,7 @@ class ActivityRepository @Inject constructor(
         result.previousSolution?.let { body["current_solution"]  = it }
         result.counterpartyMultiplier?.let { body["counterparty_type"] = it }
         result.summary?.let          { body["note_summary"]      = it }
+        result.lossReason?.let       { body["loss_reason"]       = it } // ✅ เพิ่มฟิลด์สาเหตุที่ไม่ได้งาน
         if (!result.photoUrl.isNullOrBlank())         body["photo_url"]          = result.photoUrl
         if (!result.photoTakenAt.isNullOrBlank())     body["photo_taken_at"]     = result.photoTakenAt
         if (result.photoLat != null)                  body["photo_lat"]          = result.photoLat

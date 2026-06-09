@@ -125,12 +125,11 @@ class StatsViewModel @Inject constructor(
         customers: List<Customer>,
         currentUserId: String
     ): StatsUiState {
-        // ✅ กรองเฉพาะข้อมูลที่เป็นของ User คนนี้ (Lead/Customer)
+        // ✅ กรองข้อมูล Lead/Customer ให้เป็นของ User ปัจจุบันรายบุคคล
         val myCustomers = customers.filter { it.createdBy == currentUserId }
         
-        // สำหรับ Project ปกติ Repository กรองตาม User ให้อยู่แล้วจาก member table 
-        // แต่เพื่อความชัวร์ กรองเอาเฉพาะโครงการที่เราดูแลอยู่ (ถ้าต้องการเข้มงวดขึ้น)
-        val myProjects = projects 
+        // ✅ ใช้ข้อมูล Project ทั้งหมดใน DB (ซึ่งถูกกรองมาแล้วว่า User เป็นสมาชิกของโครงการนั้น)
+        val myProjects = projects
 
         // ── Weekly ────────────────────────────────────────────────────
         val weeklyLeads = myCustomers.count { c ->
@@ -190,7 +189,8 @@ class StatsViewModel @Inject constructor(
         val scoreOrder = listOf("HOT", "WARM", "COLD")
         val oppGroups = scoreOrder.map { score ->
             val scored = myProjects.filter {
-                it.opportunityScore?.uppercase() == score &&
+                val pScore = it.opportunityScore?.uppercase() ?: ""
+                pScore.contains(score) &&
                         it.projectStatus !in listOf("Completed", "Lost", "Failed")
             }
             OpportunityGroup(

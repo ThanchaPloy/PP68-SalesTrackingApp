@@ -91,7 +91,7 @@ class ProjectRepository @Inject constructor(
         }
     }
 
-    // ✅ TC-FIX: เปลี่ยนเป็น Batch call ครั้งเดียว แทน loop (แก้ปัญหา N+1)
+    // ✅ TC-FIX: ปรับปรุงให้แสดงชื่อ ID หากหาชื่อจริงไม่พบ เพื่อป้องกันข้อมูล "หาย" ใน UI
     suspend fun getProjectMembersDetailed(projectId: String): List<Pair<String, String>> {
         return withContext(Dispatchers.IO) {
             try {
@@ -99,16 +99,19 @@ class ProjectRepository @Inject constructor(
                 if (!resp.isSuccessful) return@withContext emptyList()
 
                 val members = resp.body() ?: return@withContext emptyList()
-                val userIds = members.mapNotNull { it.userId }
+                val userIds = members.mapNotNull { it.userId?.trim() }.filter { it.isNotBlank() }
                 if (userIds.isEmpty()) return@withContext emptyList()
 
                 // ✅ Batch call ครั้งเดียวเพื่อดึงข้อมูล User ทั้งทีม
                 val idsParam = "in.(${userIds.joinToString(",")})"
                 val uResp = apiService.getUsersByIds(userIds = idsParam)
-                if (uResp.isSuccessful && !uResp.body().isNullOrEmpty()) {
-                    uResp.body()!!.map { it.userId to (it.fullName ?: it.userId) }
+                
+                if (uResp.isSuccessful && uResp.body() != null) {
+                    val nameMap = uResp.body()!!.associate { it.userId.trim() to (it.fullName ?: it.userId) }
+                    userIds.map { id -> id to (nameMap[id] ?: id) }
                 } else {
-                    emptyList()
+                    // หากดึงชื่อไม่ได้ ให้แสดง ID ไปก่อน ดีกว่าแสดงเป็นรายการว่าง
+                    userIds.map { it to it }
                 }
             } catch (e: Exception) {
                 emptyList()
@@ -122,24 +125,30 @@ class ProjectRepository @Inject constructor(
             val projectToSave = project.copy(
                 projectId = generatedId
             )
-            projectDao.insertProject(projectToSave)
-
+            // ยังไม่ insert local ทันที เพื่อให้ API เป็น source of truth
+            
             try {
                 val response = apiService.addProject(projectToSave)
                 if (response.isSuccessful) {
+                    // สร้างเจ้าของโครงการในตาราง member
                     val member = ProjectMemberInsertDto(
                         projectId = generatedId,
                         userId = userId,
                         saleRole = "owner"
                     )
                     apiService.addProjectMembers(listOf(member))
+                    
+                    projectDao.insertProject(projectToSave)
                     Result.success(projectToSave)
                 } else {
                     val errBody = response.errorBody()?.string() ?: ""
                     Result.failure(Exception("Server Rejected: $errBody"))
                 }
             } catch (e: Exception) {
-                if (e is IOException) Result.success(projectToSave)
+                if (e is IOException) {
+                    projectDao.insertProject(projectToSave)
+                    Result.success(projectToSave)
+                }
                 else Result.failure(e)
             }
         }
@@ -147,25 +156,14 @@ class ProjectRepository @Inject constructor(
 
     private suspend fun generateNewProjectNumber(branchId: String): String {
         return try {
-            // bb: 2 chars of branchId
             val bb = branchId.take(2).uppercase().ifBlank { "PJ" }
-            
             val now = LocalDate.now()
-            // yy: last 2 digits of Buddhist Year
             val beYear = (now.year + 543) % 100
             val yy = "%02d".format(beYear)
-            
-            // mm: month
             val mm = "%02d".format(now.monthValue)
-            
-            // Prefix to search existing count: bbyymm
             val prefix = "$bb$yy$mm"
-            
-            // xxx: sequence number in that month/year/branch
             val count = projectDao.getProjectCountByPrefix(prefix)
             val xxx = "%03d".format(count + 1)
-            
-            // Final format: bbyymmxxx
             "$prefix$xxx"
         } catch (e: Exception) {
             "PJ" + System.currentTimeMillis().toString().takeLast(7)
@@ -175,36 +173,25 @@ class ProjectRepository @Inject constructor(
     suspend fun updateProject(project: Project, updatedBy: String = ""): kotlin.Result<Unit> {
         return withContext(Dispatchers.IO) {
             try {
-                val progressPct = when (project.projectStatus) {
-                    "Lead"            -> 10
-                    "New Project"     -> 20
-                    "Quotation"       -> 40
-                    "Bidding"         -> 50
-                    "Make a Decision" -> 70
-                    "Assured"         -> 80
-                    "PO"              -> 100
-                    else              -> 0
-                }
-
                 val updates = mutableMapOf<String, Any?>(
                     "project_name"      to project.projectName,
                     "project_status"    to project.projectStatus,
                     "expected_value"    to project.expectedValue,
                     "branch_id"         to project.branchId,
                     "billing_branch_id" to project.billingBranchId,
+                    "opportunity_score" to project.opportunityScore,
                     "loss_reason"       to project.lossReason,
                     "start_date"        to project.startDate,
                     "closing_date"      to project.closingDate,
-                    "progress_pct"      to progressPct,
+                    "progress_pct"      to project.progressPct,
                     "updated_at"        to java.time.Instant.now().toString()
                 )
                 project.projectLat?.let { updates["project_lat"] = it }
                 project.projectLong?.let { updates["project_long"] = it }
 
-                projectDao.insertProject(project.copy(progressPct = progressPct))
-
                 val response = apiService.updateProject("eq.${project.projectId}", updates)
                 if (response.isSuccessful) {
+                    projectDao.insertProject(project)
                     firebaseService.updateProjectStatus(
                         projectId   = project.projectId,
                         newStatus   = project.projectStatus ?: "",
@@ -217,7 +204,10 @@ class ProjectRepository @Inject constructor(
                     kotlin.Result.failure(Exception("Server Rejected: $errBody"))
                 }
             } catch (e: Exception) {
-                if (e is IOException) kotlin.Result.success(Unit)
+                if (e is IOException) {
+                    projectDao.insertProject(project)
+                    kotlin.Result.success(Unit)
+                }
                 else kotlin.Result.failure(e)
             }
         }
@@ -248,6 +238,7 @@ class ProjectRepository @Inject constructor(
     ): Result<Unit> {
         return withContext(Dispatchers.IO) {
             try {
+                // ลบสมาชิกเดิมออกก่อน (Sync สมาชิกใหม่เข้าไปแทน)
                 apiService.deleteProjectMembers("eq.$projectId")
                 if (userIds.isEmpty()) return@withContext Result.success(Unit)
 
@@ -308,7 +299,6 @@ class ProjectRepository @Inject constructor(
     }
 
     suspend fun countProjectsByPrefix(prefix: String): Int {
-        // ✅ ปรับปรุงให้เรียกผ่าน DAO เพื่อประสิทธิภาพและความถูกต้องตาม Format ใหม่
         return projectDao.getProjectCountByPrefix(prefix)
     }
 

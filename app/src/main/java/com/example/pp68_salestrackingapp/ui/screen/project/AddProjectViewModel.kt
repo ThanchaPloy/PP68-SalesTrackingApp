@@ -24,6 +24,7 @@ data class AddProjectUiState(
     val startDate:              String? = null,
     val closeDate:              String? = null,
     val projectStatus:          String? = null,
+    val opportunityScore:       String? = null, // ✅ เพิ่มฟิลด์ระดับความสำคัญ
     val locationText:           String  = "",
     val siteLat:                Double? = null,
     val siteLong:               Double? = null,
@@ -67,6 +68,7 @@ sealed class AddProjectEvent {
     data class StartDateChanged(val value: String)                : AddProjectEvent()
     data class CloseDateChanged(val value: String)                : AddProjectEvent()
     data class StatusChanged(val value: String)                   : AddProjectEvent()
+    data class OpportunityScoreChanged(val value: String)         : AddProjectEvent() // ✅ เพิ่ม Event
     data class TeamSelected(val id: String, val name: String)     : AddProjectEvent()
     data class BillingBranchSelected(val id: String, val name: String) : AddProjectEvent()
     data class MemberToggled(val userId: String)                  : AddProjectEvent()
@@ -94,6 +96,8 @@ class AddProjectViewModel @Inject constructor(
         "สู้ราคาไม่ไหว",
         "อื่น ๆ"
     )
+
+    val opportunityOptions = listOf("HOT", "WARM", "COLD") // ✅ ตัวเลือกโอกาสการขาย
 
     init {
         loadCustomers()
@@ -207,6 +211,7 @@ class AddProjectViewModel @Inject constructor(
                             displayProjectId       = project.projectId,
                             projectName            = project.projectName,
                             projectStatus          = project.projectStatus,
+                            opportunityScore      = project.opportunityScore, // ✅ Load opportunity score
                             expectedValue          = project.expectedValue?.toString() ?: "",
                             startDate              = project.startDate,
                             closeDate              = project.closingDate,
@@ -348,6 +353,8 @@ class AddProjectViewModel @Inject constructor(
                 _uiState.update { it.copy(closeDate = event.value.ifBlank { null }) }
             is AddProjectEvent.StatusChanged ->
                 _uiState.update { it.copy(projectStatus = event.value, statusError = null) }
+            is AddProjectEvent.OpportunityScoreChanged -> // ✅ อัปเดตฟิลด์ใหม่
+                _uiState.update { it.copy(opportunityScore = event.value) }
             is AddProjectEvent.TeamSelected -> {
                 _uiState.update {
                     it.copy(
@@ -414,6 +421,7 @@ class AddProjectViewModel @Inject constructor(
             }
         }
         if (s.selectedTeamId.isNullOrBlank()) valid = false
+        // ❌ เอาการเช็ค billingBranch ออก เพื่อให้ไม่บังคับกรอกตามที่ผู้ใช้แจ้ง
         return valid
     }
 
@@ -440,14 +448,14 @@ class AddProjectViewModel @Inject constructor(
                     projectName           = s.projectName,
                     expectedValue         = s.expectedValue.replace(",", "").toDoubleOrNull(),
                     projectStatus         = s.projectStatus,
+                    opportunityScore      = s.opportunityScore, // ✅ บันทึกค่าโอกาสการขาย
                     startDate             = s.startDate,
                     closingDate           = s.closeDate,
                     desiredCompletionDate = null,
                     projectLat            = s.siteLat,
                     projectLong           = s.siteLong,
-                    opportunityScore      = null,
                     lossReason            = finalLossReason,
-                    createdBy             = userId // ✅ ระบุเจ้าของโครงการรายบุคคล
+                    createdBy             = userId 
                 )
 
                 val result = if (s.projectId != null) {
@@ -455,7 +463,6 @@ class AddProjectViewModel @Inject constructor(
                 } else {
                     projectRepo.createProject(projectToSave, userId).fold(
                         onSuccess = { createdProject ->
-                            // อัปเดต ID เพื่อใช้ในการเพิ่มสมาชิก/ติดต่อ
                             _uiState.update { it.copy(projectId = createdProject.projectId) }
                             kotlin.Result.success(Unit)
                         },
@@ -467,7 +474,6 @@ class AddProjectViewModel @Inject constructor(
                     val finalProjectId = _uiState.value.projectId ?: ""
                     val memberIds = s.selectedMemberIds.map { it.trim() }.ifEmpty { listOf(userId.trim()) }
                     
-                    // ✅ ในตาราง project_sales_member ไม่มี project_number แล้ว
                     projectRepo.addProjectMembers(
                         projectId = finalProjectId,
                         userIds   = memberIds,

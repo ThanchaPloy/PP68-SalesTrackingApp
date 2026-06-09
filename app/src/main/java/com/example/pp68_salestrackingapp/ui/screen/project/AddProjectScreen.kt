@@ -182,8 +182,8 @@ fun AddProjectContent(
                 }
             }
 
-            // ── Billing Branch * ──────────────────────────────
-            FormField("สาขาที่เปิดบิล", required = true) {
+            // ── Billing Branch (ไม่บังคับ) ──────────────────────
+            FormField("สาขาที่เปิดบิล", required = false) {
                 if (uiState.isLoadingBillingBranches) LoadingFieldProject()
                 else DropdownField(
                     value       = uiState.selectedBillingBranchName ?: "",
@@ -407,6 +407,7 @@ private fun MemberChipGrid(
     }
 }
 
+// ── Loading state for a field ───────────────────────────────
 @Composable
 private fun LoadingFieldProject() {
     Box(

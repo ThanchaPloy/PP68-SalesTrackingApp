@@ -1,5 +1,8 @@
 package com.example.pp68_salestrackingapp.ui.screen.customer
 
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
 import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -35,6 +38,14 @@ import com.example.pp68_salestrackingapp.ui.components.AppTopBar
 import com.example.pp68_salestrackingapp.ui.components.BottomNavBar
 import com.example.pp68_salestrackingapp.ui.theme.SalesTrackingTheme
 import com.example.pp68_salestrackingapp.ui.viewmodels.customer.CustomerDetailViewModel
+
+// ✅ Helper function สำหรับเปิด Google Maps
+fun openMap(context: Context, lat: Double?, lng: Double?, label: String = "Location") {
+    if (lat == null || lng == null || lat == 0.0 || lng == 0.0) return
+    val uri = Uri.parse("geo:$lat,$lng?q=$lat,$lng($label)")
+    val intent = Intent(Intent.ACTION_VIEW, uri)
+    context.startActivity(intent)
+}
 
 @Composable
 fun CustomerDetailScreen(
@@ -262,15 +273,30 @@ fun CustomerDetailContent(
 
 @Composable
 private fun InfoTab(customer: Customer?, projects: List<Project>, onProjectClick: (String) -> Unit) {
+    val context = LocalContext.current
+
     LazyColumn(modifier = Modifier
         .fillMaxSize()
         .padding(16.dp)) {
         item {
             Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = White)) {
-                Column(modifier = Modifier.padding(16.dp)) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("ประเภทธุรกิจ: ${customer?.custType ?: "-"}", fontWeight = FontWeight.Bold)
-                    Spacer(Modifier.height(8.dp))
                     Text(customer?.companyAddr ?: "ไม่พบข้อมูลที่อยู่")
+                    
+                    // ✅ ลิงก์แผนที่
+                    if (customer?.companyLat != null && customer.companyLong != null && customer.companyLat != 0.0) {
+                        Row(
+                            modifier = Modifier
+                                .clickable { openMap(context, customer.companyLat, customer.companyLong, customer.companyName) }
+                                .padding(vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(Icons.Default.Map, null, tint = RedPrimary, modifier = Modifier.size(20.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text("ดูตำแหน่งบนแผนที่", color = RedPrimary, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                        }
+                    }
                 }
             }
         }

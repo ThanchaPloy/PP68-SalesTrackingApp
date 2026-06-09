@@ -42,13 +42,25 @@ object NetworkModule {
         return Interceptor { chain ->
             val originalRequest = chain.request()
             val requestBuilder = originalRequest.newBuilder()
-                .header("Content-Type", "application/json")
 
-            if (!originalRequest.url.encodedPath.contains("login-api") &&
-                !originalRequest.url.encodedPath.contains("register-api")) {
-                requestBuilder
-                    .header("Accept-Profile", "public")
-                    .header("Content-Profile", "public")
+            // ✅ แก้ไข: ตรวจสอบ Content-Type เพื่อไม่ให้ทับ Multipart (อัปโหลดรูป)
+            val body = originalRequest.body
+            val contentType = body?.contentType()
+            val isMultipart = contentType?.type == "multipart"
+
+            if (!isMultipart && originalRequest.header("Content-Type") == null) {
+                requestBuilder.header("Content-Type", "application/json")
+            }
+
+            val path = originalRequest.url.encodedPath
+            if (!path.contains("login-api") && !path.contains("register-api")) {
+                
+                // ✅ ส่ง PostgREST headers เฉพาะเมื่อเรียก PostgREST URL
+                if (originalRequest.url.host.contains("postgrest")) {
+                    requestBuilder
+                        .header("Accept-Profile", "public")
+                        .header("Content-Profile", "public")
+                }
 
                 val token = tokenManager.getToken()
                 if (!token.isNullOrEmpty()) {
@@ -69,9 +81,9 @@ object NetworkModule {
         return OkHttpClient.Builder()
             .addInterceptor(logging)
             .addInterceptor(authInterceptor)
-            .connectTimeout(30, TimeUnit.SECONDS)
-            .readTimeout(30, TimeUnit.SECONDS)
-            .writeTimeout(30, TimeUnit.SECONDS)
+            .connectTimeout(60, TimeUnit.SECONDS)
+            .readTimeout(60, TimeUnit.SECONDS)
+            .writeTimeout(60, TimeUnit.SECONDS)
             .build()
     }
 
@@ -125,9 +137,10 @@ object NetworkModule {
     @Provides
     @Singleton
     @Named("upload")
-    fun provideUploadRetrofit(): Retrofit {
+    fun provideUploadRetrofit(okHttpClient: OkHttpClient): Retrofit {
         return Retrofit.Builder()
-            .baseUrl("https://asia-southeast1-algebraic-ratio-490214-r0.cloudfunctions.net/")
+            .baseUrl(LOGIN_URL)
+            .client(okHttpClient)
             .addConverterFactory(GsonConverterFactory.create())
             .build()
     }

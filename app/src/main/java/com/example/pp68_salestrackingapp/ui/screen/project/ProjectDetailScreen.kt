@@ -1,7 +1,11 @@
 package com.example.pp68_salestrackingapp.ui.screen.project
 
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -19,12 +23,16 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 
 import com.example.pp68_salestrackingapp.data.model.Project
 import com.example.pp68_salestrackingapp.ui.components.AppTopBar
@@ -57,6 +65,14 @@ private val avatarColors = listOf(
     Color(0xFFFF7043), Color(0xFFAB47BC)
 )
 
+// ✅ Helper function สำหรับเปิด Google Maps
+fun openMap(context: Context, lat: Double?, lng: Double?, label: String = "Location") {
+    if (lat == null || lng == null || lat == 0.0 || lng == 0.0) return
+    val uri = Uri.parse("geo:$lat,$lng?q=$lat,$lng($label)")
+    val intent = Intent(Intent.ACTION_VIEW, uri)
+    context.startActivity(intent)
+}
+
 // ═══════════════════════════════════════════════════════════════
 @Composable
 fun ProjectDetailScreen(
@@ -75,6 +91,18 @@ fun ProjectDetailScreen(
     viewModel:           ProjectDetailViewModel = hiltViewModel()
 ) {
     val s by viewModel.uiState.collectAsState()
+    val lifecycleOwner = LocalLifecycleOwner.current
+
+    // ✅ รีเฟรชข้อมูลสมาชิกและโปรเจคทุกครั้งที่หน้าจอกลับมา Active
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                viewModel.refresh()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
 
     LaunchedEffect(s.deleteSuccess) {
         if (s.deleteSuccess) {
@@ -401,6 +429,8 @@ private fun ProjectHeaderCard(
     onEdit:      () -> Unit,
     onDelete:    () -> Unit
 ) {
+    val context = LocalContext.current
+
     Surface(
         color    = White,
         modifier = Modifier.fillMaxWidth(),
@@ -446,6 +476,21 @@ private fun ProjectHeaderCard(
             }
 
             Spacer(Modifier.height(16.dp))
+
+            // ✅ เพิ่มลิงก์แผนที่ (ถ้ามีพิกัด)
+            if (project.projectLat != null && project.projectLong != null && project.projectLat != 0.0) {
+                Row(
+                    modifier = Modifier
+                        .clickable { openMap(context, project.projectLat, project.projectLong, project.projectName) }
+                        .padding(vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Default.Map, null, tint = RedPrimary, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("ดูที่ตั้งโครงการบนแผนที่", color = RedPrimary, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                }
+                Spacer(Modifier.height(12.dp))
+            }
 
             Row(
                 modifier              = Modifier.fillMaxWidth(),
@@ -746,7 +791,7 @@ private fun SalesTeamRow(members: List<TeamMember>) {
 
 @Preview(showBackground = true)
 @Composable
-fun ProjectDetailPreview() {
+private fun ProjectDetailPreview() {
     SalesTrackingTheme {
         ProjectDetailContent(
             s = ProjectDetailUiState(

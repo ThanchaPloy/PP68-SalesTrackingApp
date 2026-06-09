@@ -29,14 +29,17 @@ class ProductRepository @Inject constructor(
     suspend fun getAllProducts(): Result<List<ProductSimpleDto>> {
         return withContext(Dispatchers.IO) {
             try {
+                // เรียก API ดึงข้อมูลสินค้าพร้อมข้อมูล Type และ Group ที่ Join มาแล้ว
                 val response = apiService.getProductMaster()
                 if (response.isSuccessful && response.body() != null) {
                     val list = response.body()!!.map {
                         ProductSimpleDto(
                             productId   = it.productId,
-                            productName = it.productGroup ?: it.productId,
+                            // ✅ ใช้ชื่อกลุ่มสินค้า (Group Name) เป็นชื่อสินค้าแสดงผล (หรือ fallback เป็นรหัส)
+                            productName = it.productGroup?.productGroupName ?: it.productGroupCode ?: it.productId,
                             brand       = it.brand?.trim()?.ifBlank { "ไม่ระบุแบรนด์" } ?: "ไม่ระบุแบรนด์",
-                            category    = it.productType ?: "ทั่วไป",
+                            // ✅ ใช้ชื่อประเภทสินค้า (Type Name) แทนรหัส
+                            category    = it.productType?.typeName ?: it.productTypeCode ?: "ทั่วไป",
                             subCategory = it.productSubgroup ?: "",
                             unit        = it.unit ?: "ชิ้น",
                             color       = it.color,

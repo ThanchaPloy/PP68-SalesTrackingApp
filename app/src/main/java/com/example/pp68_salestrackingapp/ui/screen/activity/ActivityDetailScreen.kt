@@ -1,5 +1,8 @@
 package com.example.pp68_salestrackingapp.ui.screen.activity
 
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -10,7 +13,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.Label
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -18,8 +20,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -37,6 +39,14 @@ private val TextDark   = Color(0xFF1A1A1A)
 private val TextGray   = Color(0xFF888888)
 private val BgField    = Color(0xFFF8F8F8)
 private val White      = Color.White
+
+// ✅ Helper function สำหรับเปิด Google Maps
+fun openMap(context: Context, lat: Double?, lng: Double?, label: String = "Location") {
+    if (lat == null || lng == null || lat == 0.0 || lng == 0.0) return
+    val uri = Uri.parse("geo:$lat,$lng?q=$lat,$lng($label)")
+    val intent = Intent(Intent.ACTION_VIEW, uri)
+    context.startActivity(intent)
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -273,6 +283,8 @@ private fun StatusBadge(status: String) {
 @Composable
 private fun InfoCard(s: ActivityDetailUiState) {
     val act = s.activity ?: return
+    val context = LocalContext.current
+
     Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = BgField), shape = RoundedCornerShape(16.dp)) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -299,6 +311,21 @@ private fun InfoCard(s: ActivityDetailUiState) {
             DetailRow(Icons.Default.AccessTime, "เวลา", timeRange)
             
             DetailRow(Icons.Default.Category, "ประเภท", act.activityType)
+
+            // ✅ เพิ่มลิงก์แผนที่
+            if (act.plannedLat != null && act.plannedLong != null && act.plannedLat != 0.0) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { openMap(context, act.plannedLat, act.plannedLong, act.companyName ?: "Activity") }
+                        .padding(vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Default.Map, null, tint = RedPrimary, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("ดูตำแหน่งบนแผนที่", color = RedPrimary, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                }
+            }
         }
     }
 }
