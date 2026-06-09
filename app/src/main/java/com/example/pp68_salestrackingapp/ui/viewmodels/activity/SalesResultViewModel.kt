@@ -23,6 +23,7 @@ import kotlin.math.*
 
 data class SalesResultUiState(
     val mode: ResultMode = ResultMode.FROM_APPOINTMENT,
+    val resultId: String? = null, // ✅ เพิ่มเพื่อรองรับการแก้ไขบันทึกเดิม
     val projectId: String? = null,
     val activityId: String? = null,
     val project: Project? = null,
@@ -87,11 +88,9 @@ class SalesResultViewModel @Inject constructor(
         val idParam = savedStateHandle.get<String>("activityId")
 
         if (idParam.isNullOrBlank()) {
-            // กรณีเปิดจาก FAB (สร้างใหม่)
             _uiState.update { it.copy(projectId = pId, mode = ResultMode.STANDALONE) }
             pId?.let { loadProjectData(it) }
         } else {
-            // กรณีดูรายงาน หรือบันทึกต่อนัดหมาย
             loadInitialData(idParam)
         }
     }
@@ -100,12 +99,11 @@ class SalesResultViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
             
-            // 1. ลองหาว่าเป็นนัดหมายหรือไม่
+            // 1. ลองหาว่าเป็น Appointment ID หรือไม่
             val actResult = activityRepo.getActivityById(id)
             val activity = actResult.getOrNull()?.firstOrNull()
             
             if (activity != null) {
-                // ✅ เป็นการบันทึกต่อนัดหมาย
                 _uiState.update { it.copy(
                     activityId = id, 
                     projectId = activity.projectId, 
@@ -113,17 +111,17 @@ class SalesResultViewModel @Inject constructor(
                     reportDate = activity.activityDate
                 ) }
                 activity.projectId?.let { loadProjectData(it) }
-                
-                // โหลดผลที่เคยบันทึกไว้ (ถ้ามี)
+                // ดึงผลลัพธ์ล่าสุดที่ผูกกับ Appointment นี้ (ถ้ามี)
                 activityRepo.getActivityResult(id)?.let { applyResultToState(it) }
             } else {
-                // 2. ถ้าไม่ใช่นัดหมาย ลองหาว่าเป็น ResultId (Standalone) หรือไม่
+                // 2. ถ้าไม่ใช่ อาจเป็น Result ID โดยตรง (กรณี Standalone หรือคลิกจาก History)
                 val result = activityRepo.getResultById(id)
                 if (result != null) {
-                    // ✅ เป็นการดูรายงาน Standalone
                     _uiState.update { it.copy(
+                        resultId = result.resultId,
                         projectId = result.projectId, 
-                        mode = ResultMode.STANDALONE,
+                        mode = if (result.activityId != null) ResultMode.FROM_APPOINTMENT else ResultMode.STANDALONE,
+                        activityId = result.activityId,
                         reportDate = result.reportDate ?: LocalDate.now().toString()
                     ) }
                     applyResultToState(result)
@@ -146,6 +144,7 @@ class SalesResultViewModel @Inject constructor(
 
         _uiState.update {
             it.copy(
+                resultId               = result.resultId,
                 reportDate             = result.reportDate ?: it.reportDate,
                 newStatus              = STATUS_REVERSE[result.newStatus] ?: result.newStatus ?: "",
                 isStatusUpdateEnabled  = !result.newStatus.isNullOrBlank(),
@@ -208,7 +207,7 @@ class SalesResultViewModel @Inject constructor(
         )
         val STATUS_MAP = mapOf(
             "Lead" to "Lead", "New Project" to "New Project", "Quotation" to "Quotation",
-            "Bidding" to "Bidding", "Decision Making" to "Make a Decision", "Assured" to "Assured",
+            "Bidding" to "Bidding", "Make a Decision" to "Make a Decision", "Assured" to "Assured",
             "PO" to "PO", "Lost" to "Lost", "Failed" to "Failed"
         )
         val OPPORTUNITY_MAP = mapOf("สูง (HOT)" to "HOT", "กลาง (WARM)" to "WARM", "ต่ำ (COLD)" to "COLD")
@@ -222,7 +221,7 @@ class SalesResultViewModel @Inject constructor(
     }
 
     fun onReportDateChanged(date: String)         { _uiState.update { it.copy(reportDate = date) } }
-    fun onStatusToggle(enabled: Boolean)          { _uiState.update { it.copy(isStatusUpdateEnabled = enabled) } }
+    fun onStatusToggle(enabled: Boolean)          { _uiState.update { it.copy(isStatusUpdateEnabled = enabled, lossReasonError = null) } }
     fun onNewStatusSelected(status: String)       { _uiState.update { it.copy(newStatus = status, lossReasonError = null) } }
     fun onOpportunitySelected(score: String)      { _uiState.update { it.copy(opportunityScore = score) } }
     fun onDealPositionChanged(value: String)      { _uiState.update { it.copy(dealPosition = value) } }
@@ -278,22 +277,48 @@ class SalesResultViewModel @Inject constructor(
     fun onSummaryChanged(text: String)            { _uiState.update { it.copy(visitSummary = text) } }
 
     fun uploadPhoto(context: Context) {
-        val s = _uiState.value; val aId = s.activityId; val uri = s.photoUri
-        if (uri == null || aId == null) return
+        val s = _uiState.value
+        val uri = s.photoUri
+        val uploadId = s.activityId ?: s.projectId 
+        
+        if (uri == null || uploadId == null) return
+        
         viewModelScope.launch {
             _uiState.update { it.copy(isUploadingPhoto = true, error = null) }
             val bytes = try { context.contentResolver.openInputStream(uri)?.use { it.readBytes() } } catch (e: Exception) { null }
-            if (bytes == null) { _uiState.update { it.copy(error = "ไม่สามารถอ่านไฟล์รูปภาพได้", isUploadingPhoto = false) }; return@launch }
-            activityRepo.uploadVisitPhoto(aId, bytes).onSuccess { url -> _uiState.update { it.copy(photoUrl = url, isUploadingPhoto = false) } }
-                .onFailure { e -> _uiState.update { it.copy(error = "อัปโหลดรูปไม่สำเร็จ: ${e.message}", isUploadingPhoto = false) } }
+            if (bytes == null) { 
+                _uiState.update { it.copy(error = "ไม่สามารถอ่านไฟล์รูปภาพได้", isUploadingPhoto = false) }
+                return@launch 
+            }
+            
+            activityRepo.uploadVisitPhoto(uploadId, bytes).onSuccess { url -> 
+                _uiState.update { it.copy(photoUrl = url, isUploadingPhoto = false) } 
+            }.onFailure { e -> 
+                _uiState.update { it.copy(error = "อัปโหลดรูปไม่สำเร็จ: ${e.message}", isUploadingPhoto = false) } 
+            }
         }
     }
 
     fun save() {
         val s = _uiState.value
         if (s.visitSummary.isBlank()) { _uiState.update { it.copy(error = "กรุณากรอกสรุปการเข้าพบ") }; return }
-        if (s.isStatusUpdateEnabled && (s.newStatus == "Lost" || s.newStatus == "Failed")) {
-            if (s.lossReason.isBlank()) { _uiState.update { it.copy(lossReasonError = "กรุณาระบุเหตุผลที่ไม่ได้งาน", error = "กรุณาระบุเหตุผลที่ไม่ได้งาน") }; return }
+
+        if (s.isStatusUpdateEnabled) {
+            if (s.newStatus.isBlank()) {
+                _uiState.update { it.copy(error = "กรุณาเลือกสถานะใหม่") }
+                return
+            }
+            
+            if (s.newStatus == "Lost" || s.newStatus == "Failed") {
+                if (s.lossReason.isBlank()) { 
+                    _uiState.update { it.copy(lossReasonError = "กรุณาระบุเหตุผลที่ไม่ได้งาน", error = "กรุณาระบุเหตุผลที่ไม่ได้งาน") }
+                    return 
+                }
+                if (s.lossReason == "อื่น ๆ" && s.otherLossReason.isBlank()) {
+                    _uiState.update { it.copy(lossReasonError = "กรุณาระบุเหตุผลอื่น ๆ", error = "กรุณาระบุเหตุผลอื่น ๆ") }
+                    return
+                }
+            }
         }
 
         viewModelScope.launch {
@@ -304,8 +329,12 @@ class SalesResultViewModel @Inject constructor(
                     if (s.lossReason == "อื่น ๆ") s.otherLossReason else s.lossReason
                 } else null
 
+                // ✅ หากมี resultId เดิม ให้ใช้ ID เดิมเพื่อทำ Upsert (แก้ไขรายการเดิม)
+                // ✅ หากไม่มี ให้สร้าง UUID ใหม่ (รายการใหม่)
+                val finalResultId = s.resultId ?: java.util.UUID.randomUUID().toString()
+
                 val resultToSave = ActivityResult(
-                    resultId               = java.util.UUID.randomUUID().toString(),
+                    resultId               = finalResultId,
                     activityId             = if (s.mode == ResultMode.FROM_APPOINTMENT) s.activityId else null,
                     projectId              = s.projectId,
                     createdBy              = user?.userId,

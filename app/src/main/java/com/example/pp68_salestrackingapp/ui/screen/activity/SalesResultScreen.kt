@@ -51,7 +51,6 @@ fun SalesResultScreen(
     val s by viewModel.uiState.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
     val context = LocalContext.current
-    
 
     LaunchedEffect(s.isSaved) {
         if (s.isSaved) onSaved()
@@ -78,6 +77,9 @@ fun SalesResultScreen(
         onCompetitorCountChanged        = viewModel::onCompetitorCountChanged,
         onDmToggle                      = viewModel::onDmToggle,
         onSummaryChanged                = viewModel::onSummaryChanged,
+        onLossReasonChanged             = viewModel::onLossReasonChanged,
+        onOtherLossReasonChanged        = viewModel::onOtherLossReasonChanged,
+        lossReasonOptions               = viewModel.lossReasonOptions,
         onPhotoPicked                   = { uri -> viewModel.onPhotoPicked(context, uri) },
         onUploadPhoto                   = { viewModel.uploadPhoto(context) },
         onSave                          = viewModel::save,
@@ -103,11 +105,13 @@ private fun SalesResultContent(
     onCompetitorCountChanged: (Int) -> Unit,
     onDmToggle: (Boolean) -> Unit,
     onSummaryChanged: (String) -> Unit,
+    onLossReasonChanged: (String) -> Unit,
+    onOtherLossReasonChanged: (String) -> Unit,
+    lossReasonOptions: List<String>,
     onPhotoPicked: (Uri) -> Unit,
     onUploadPhoto: () -> Unit,
     onSave: () -> Unit
 ) {
-    // แยกสถานะการเปิด-ปิดของแต่ละแท็บย่อย
     var expandSolution by remember { mutableStateOf(false) }
     var expandContract by remember { mutableStateOf(false) }
     var expandProposal by remember { mutableStateOf(false) }
@@ -140,7 +144,6 @@ private fun SalesResultContent(
                     .padding(20.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                // วันที่บันทึกผล
                 SectionCard(title = "วันที่บันทึกผล", icon = Icons.Default.CalendarToday) {
                     DatePickerField(
                         selectedDate  = s.reportDate,
@@ -149,7 +152,6 @@ private fun SalesResultContent(
                     )
                 }
 
-                // 1. สถานะโครงการ
                 SectionCard(title = "1. สถานะโครงการ", icon = Icons.Default.Info) {
                     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -176,15 +178,8 @@ private fun SalesResultContent(
                         }
                         if (s.isStatusUpdateEnabled) {
                             val statusList = listOf(
-                                "Lead",
-                                "New Project",
-                                "Quotation",
-                                "Bidding",
-                                "Decision Making",
-                                "Assured",
-                                "PO",
-                                "Lost",
-                                "Failed"
+                                "Lead", "New Project", "Quotation", "Bidding",
+                                "Make a Decision", "Assured", "PO", "Lost", "Failed"
                             )
                             DropdownField(
                                 value       = s.newStatus,
@@ -193,10 +188,44 @@ private fun SalesResultContent(
                                 onSelect    = { onNewStatusSelected(statusList[it]) }
                             )
                         }
+
+                        // ✅ สาเหตุที่ไม่ได้งาน (แสดงเมื่อเป็น Lost หรือ Failed)
+                        AnimatedVisibility(
+                            visible = s.isStatusUpdateEnabled && (s.newStatus == "Lost" || s.newStatus == "Failed")
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(top = 12.dp),
+                                verticalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                Text("เหตุผลที่ไม่ได้งาน *", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = RedPrimary)
+                                DropdownField(
+                                    value       = s.lossReason,
+                                    placeholder = "เลือกเหตุผล",
+                                    options     = lossReasonOptions,
+                                    isError     = s.lossReasonError != null,
+                                    errorMsg    = s.lossReasonError,
+                                    onSelect    = { onLossReasonChanged(lossReasonOptions[it]) }
+                                )
+
+                                if (s.lossReason == "อื่น ๆ") {
+                                    OutlinedTextField(
+                                        value         = s.otherLossReason,
+                                        onValueChange = onOtherLossReasonChanged,
+                                        placeholder   = { Text("ระบุเหตุผลอื่น ๆ...", fontSize = 14.sp) },
+                                        modifier      = Modifier.fillMaxWidth(),
+                                        shape         = RoundedCornerShape(10.dp),
+                                        isError       = s.lossReasonError != null,
+                                        colors = OutlinedTextFieldDefaults.colors(
+                                            focusedBorderColor = RedPrimary,
+                                            unfocusedBorderColor = BorderGray
+                                        )
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
 
-                // 2. โอกาสในการสำเร็จ
                 SectionCard(title = "2. โอกาสในการสำเร็จ", icon = Icons.AutoMirrored.Filled.TrendingUp) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -208,7 +237,6 @@ private fun SalesResultContent(
                     }
                 }
 
-                // 3. สรุปการเข้าพบ
                 SectionCard(title = "3. สรุปการเข้าพบ", icon = Icons.AutoMirrored.Filled.Notes) {
                     OutlinedTextField(
                         value         = s.visitSummary,
@@ -221,7 +249,6 @@ private fun SalesResultContent(
                     )
                 }
 
-                // ✅ รูปยืนยันการเข้าพบ (ย้ายมาหลังข้อ 3)
                 SectionCard(title = "รูปภาพยืนยันการเข้าพบ", icon = Icons.Default.PhotoCamera) {
                     PhotoUploadSection(
                         photoUri = s.photoUri,
@@ -237,7 +264,6 @@ private fun SalesResultContent(
                     )
                 }
 
-                // ✅ ผู้มีอำนาจตัดสินใจ (DM) - ย้ายมาหลังรูป
                 SectionCard(title = "ผู้มีอำนาจตัดสินใจ (DM)", icon = Icons.Default.Person) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -257,9 +283,8 @@ private fun SalesResultContent(
                 HorizontalDivider(color = BorderGray)
                 Text("วิเคราะห์ข้อมูลเพิ่มเติม(ถ้ามี)", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = RedPrimary)
 
-                // 📂 แท็บย่อย 1: Solution (ข้อ 4-5)
                 CollapsibleSection(
-                    title = "แท็บ Solution & ตำแหน่งดีล",
+                    title = "Tab Solution & ตำแหน่งดีล",
                     icon = Icons.Default.SettingsSuggest,
                     isExpanded = expandSolution,
                     onToggle = { expandSolution = !expandSolution }
@@ -290,9 +315,8 @@ private fun SalesResultContent(
                     }
                 }
 
-                // 📂 แท็บย่อย 2: สัญญาและการตอบรับ (ข้อ 6-7)
                 CollapsibleSection(
-                    title = "แท็บ สัญญา & การตอบรับ",
+                    title = "Tap สัญญา & การตอบรับ",
                     icon = Icons.Default.Handshake,
                     isExpanded = expandContract,
                     onToggle = { expandContract = !expandContract }
@@ -319,9 +343,8 @@ private fun SalesResultContent(
                     }
                 }
 
-                // 📂 แท็บย่อย 3: ใบเสนอราคาและคู่แข่ง (ข้อ 8-9)
                 CollapsibleSection(
-                    title = "แท็บ ใบเสนอราคา & คู่แข่ง",
+                    title = "Tab ใบเสนอราคา & คู่แข่ง",
                     icon = Icons.Default.Description,
                     isExpanded = expandProposal,
                     onToggle = { expandProposal = !expandProposal }
@@ -508,7 +531,6 @@ private fun PhotoUploadSection(
     photoUri: Uri?,
     photoUrl: String?,
     isUploading: Boolean,
-    // ✅ เพิ่ม EXIF parameters
     photoTakenAt: String?,
     photoLat: Double?,
     photoLng: Double?,
@@ -525,7 +547,6 @@ private fun PhotoUploadSection(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier.fillMaxWidth()
     ) {
-        // แสดงรูป
         if (photoUrl != null || photoUri != null ) {
             AsyncImage(
                 model = photoUrl ?: photoUri,
@@ -539,7 +560,6 @@ private fun PhotoUploadSection(
             )
             Spacer(Modifier.height(12.dp))
 
-            // ✅ แสดง EXIF Info
             if (photoTakenAt != null || photoLat != null || photoDeviceModel != null) {
                 Surface(
                     color    = Color(0xFFF5F5F5),
@@ -550,32 +570,20 @@ private fun PhotoUploadSection(
                         modifier = Modifier.padding(10.dp),
                         verticalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        // เวลาถ่ายรูป
                         photoTakenAt?.let {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(6.dp)
-                            ) {
-                                Icon(Icons.Default.AccessTime, null,
-                                    modifier = Modifier.size(14.dp), tint = TextGray)
-                                Text("ถ่ายเมื่อ: $it",
-                                    fontSize = 12.sp, color = TextGray)
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Icon(Icons.Default.AccessTime, null, modifier = Modifier.size(14.dp), tint = TextGray)
+                                Text("ถ่ายเมื่อ: $it", fontSize = 12.sp, color = TextGray)
                             }
                         }
-
-                        // พิกัดและสถานะ
                         if (photoLat != null && photoLng != null) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(6.dp)
-                            ) {
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                 val iconTint = when (isPhotoLocationValid) {
                                     true  -> Color(0xFF2E7D32)
                                     false -> Color(0xFFC62828)
                                     null  -> TextGray
                                 }
-                                Icon(Icons.Default.LocationOn, null,
-                                    modifier = Modifier.size(14.dp), tint = iconTint)
+                                Icon(Icons.Default.LocationOn, null, modifier = Modifier.size(14.dp), tint = iconTint)
                                 Text(
                                     text = when (isPhotoLocationValid) {
                                         true  -> "พิกัดตรงกับสถานที่นัด ✅"
@@ -591,27 +599,15 @@ private fun PhotoUploadSection(
                                 )
                             }
                         } else {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(6.dp)
-                            ) {
-                                Icon(Icons.Default.LocationOff, null,
-                                    modifier = Modifier.size(14.dp), tint = TextGray)
-                                Text("ไม่พบพิกัดในรูป",
-                                    fontSize = 12.sp, color = TextGray)
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Icon(Icons.Default.LocationOff, null, modifier = Modifier.size(14.dp), tint = TextGray)
+                                Text("ไม่พบพิกัดในรูป", fontSize = 12.sp, color = TextGray)
                             }
                         }
-
-                        // รุ่นมือถือ
                         photoDeviceModel?.let {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(6.dp)
-                            ) {
-                                Icon(Icons.Default.PhoneAndroid, null,
-                                    modifier = Modifier.size(14.dp), tint = TextGray)
-                                Text("อุปกรณ์: $it",
-                                    fontSize = 12.sp, color = TextGray)
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Icon(Icons.Default.PhoneAndroid, null, modifier = Modifier.size(14.dp), tint = TextGray)
+                                Text("อุปกรณ์: $it", fontSize = 12.sp, color = TextGray)
                             }
                         }
                     }
@@ -620,7 +616,6 @@ private fun PhotoUploadSection(
             }
         }
 
-        // ปุ่มเลือกรูปและอัปโหลด (เหมือนเดิม)
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             OutlinedButton(
                 onClick = { launcher.launch("image/*") },
@@ -681,6 +676,9 @@ private fun SalesResultScreenPreview() {
             onCompetitorCountChanged = {},
             onDmToggle = {},
             onSummaryChanged = {},
+            onLossReasonChanged = {},
+            onOtherLossReasonChanged = {},
+            lossReasonOptions = listOf("ผลิตไม่ได้/ผลิตไม่ทัน", "เทคโนโลยีไม่ผ่าน", "สู้ราคาไม่ไหว", "อื่น ๆ"),
             onPhotoPicked = {},
             onUploadPhoto = {},
             onSave = {}

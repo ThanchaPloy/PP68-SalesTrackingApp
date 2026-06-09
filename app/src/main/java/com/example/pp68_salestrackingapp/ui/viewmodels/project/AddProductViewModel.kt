@@ -35,6 +35,7 @@ data class AddProductUiState(
     val isLoadingBranches: Boolean = false,
     
     val filteredNames: List<String> = emptyList(),
+    val filteredBrands: List<String> = emptyList(),
     
     val isLoading: Boolean = false,
     val isSaving: Boolean = false,
@@ -65,14 +66,12 @@ class AddProductViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
             
-            // 1. Load Branches
             loadBranches()
             
-            // 2. Load Product Master
             productRepo.getAllProducts().onSuccess { list ->
                 _uiState.update { it.copy(products = list) }
+                updateFilters("", "")
                 
-                // 3. If Edit Mode, Load existing data
                 if (editProductId != null && projectId != null) {
                     loadExistingProjectProduct(projectId, editProductId)
                 }
@@ -120,19 +119,46 @@ class AddProductViewModel @Inject constructor(
         } catch (e: Exception) {}
     }
 
-    fun onBrandSelected(brand: String) {
-        val filtered = _uiState.value.products.filter { it.brand == brand }
+    private fun updateFilters(currentBrand: String, currentName: String) {
+        val allProducts = _uiState.value.products
+        
+        val brands = if (currentName.isNotBlank()) {
+            allProducts.filter { it.productName == currentName }.map { it.brand }.distinct()
+        } else {
+            allProducts.map { it.brand }.distinct()
+        }.filter { it.isNotBlank() }.sorted()
+
+        val names = if (currentBrand.isNotBlank()) {
+            allProducts.filter { it.brand == currentBrand }.map { it.productName }.distinct()
+        } else {
+            allProducts.map { it.productName }.distinct()
+        }.filter { it.isNotBlank() }.sorted()
+
         _uiState.update { it.copy(
-            selectedBrand = brand,
-            selectedProductName = "",
-            filteredNames = filtered.map { it.productName }.distinct()
+            filteredBrands = brands,
+            filteredNames = names
         ) }
     }
 
-    fun onNameSelected(name: String) {
-        val product = _uiState.value.products.find { 
-            it.productName == name && (it.brand == _uiState.value.selectedBrand || _uiState.value.selectedBrand.isBlank())
+    fun onBrandSelected(brand: String) {
+        val currentState = _uiState.value
+        _uiState.update { it.copy(selectedBrand = brand) }
+        updateFilters(brand, currentState.selectedProductName)
+        
+        val stillValid = _uiState.value.filteredNames.contains(currentState.selectedProductName)
+        if (!stillValid && currentState.selectedProductName.isNotBlank()) {
+            onNameSelected("")
+        } else if (brand.isNotBlank() && currentState.selectedProductName.isNotBlank()) {
+            onNameSelected(currentState.selectedProductName)
         }
+    }
+
+    fun onNameSelected(name: String) {
+        val currentState = _uiState.value
+        val product = currentState.products.find { 
+            it.productName == name && (it.brand == currentState.selectedBrand || currentState.selectedBrand.isBlank())
+        }
+        
         _uiState.update { it.copy(
             selectedProductName = name,
             selectedGroup = product?.category ?: "",
@@ -144,6 +170,15 @@ class AddProductViewModel @Inject constructor(
             dimensionUnit = product?.dimensionUnit,
             unit = product?.unit ?: ""
         ) }
+
+        updateFilters(currentState.selectedBrand, name)
+
+        if (name.isNotBlank() && currentState.selectedBrand.isBlank()) {
+            val possibleBrands = _uiState.value.filteredBrands
+            if (possibleBrands.size == 1) {
+                onBrandSelected(possibleBrands[0])
+            }
+        }
     }
 
     fun onQuantityChange(qty: String) {
@@ -172,7 +207,6 @@ class AddProductViewModel @Inject constructor(
             _uiState.update { it.copy(isSaving = true, error = null) }
             
             if (state.isEditMode && editProductId != null) {
-                // UPDATE
                 val updates = mapOf(
                     "quantity" to qty,
                     "desired_date" to state.wantedDate,
@@ -183,7 +217,6 @@ class AddProductViewModel @Inject constructor(
                     onFailure = { e -> _uiState.update { it.copy(isSaving = false, error = "แก้ไขไม่สำเร็จ: ${e.message}") } }
                 )
             } else {
-                // INSERT
                 val product = state.products.find { it.productName == state.selectedProductName && it.brand == state.selectedBrand }
                 if (product == null) {
                     _uiState.update { it.copy(isSaving = false, error = "กรุณาเลือกสินค้า") }

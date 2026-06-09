@@ -112,24 +112,23 @@ fun AddProductContent(
             }
 
             // Form Fields
-            val brands = s.products.map { it.brand }.distinct().filter { it.isNotBlank() }
             FormField(label = "แบรนด์สินค้า") {
                 DropdownField(
                     value = s.selectedBrand,
                     placeholder = if (s.isLoading) "กำลังโหลด..." else "เลือกแบรนด์สินค้า",
-                    options = brands,
-                    onSelect = { onBrandSelected(brands[it]) },
-                    enabled = !s.isEditMode // ปิดการเปลี่ยนแบรนด์ตอนแก้ไข (ถ้าต้องการ)
+                    options = s.filteredBrands,
+                    onSelect = { onBrandSelected(s.filteredBrands[it]) },
+                    enabled = !s.isEditMode
                 )
             }
 
             FormField(label = "ชื่อสินค้า") {
                 DropdownField(
                     value = s.selectedProductName,
-                    placeholder = if (s.selectedBrand.isBlank()) "กรุณาเลือกแบรนด์ก่อน" else "เลือกชื่อสินค้า",
+                    placeholder = if (s.isLoading) "กำลังโหลด..." else "เลือกชื่อสินค้า",
                     options = s.filteredNames,
                     onSelect = { onNameSelected(s.filteredNames[it]) },
-                    enabled = !s.isEditMode // ปิดการเปลี่ยนสินค้าตอนแก้ไข
+                    enabled = !s.isEditMode
                 )
             }
 
@@ -344,6 +343,7 @@ fun AddProductScreenPreview() {
                 quantity = "5",
                 unit = "ชิ้น",
                 filteredNames = listOf("Product A"),
+                filteredBrands = listOf("Brand X"),
                 shippingBranchOptions = listOf("B1" to "Bangkok Branch"),
                 selectedShippingBranchId = "B1",
                 selectedShippingBranchName = "Bangkok Branch"

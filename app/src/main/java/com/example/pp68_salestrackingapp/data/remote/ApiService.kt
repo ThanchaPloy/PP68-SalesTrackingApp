@@ -18,7 +18,6 @@ interface ApiService {
         @Query("limit") limit: Int = 1
     ): Response<List<UserDto>>
 
-    // ✅ เพิ่มใหม่: ดึงรายชื่อ User แบบชุด (Batch)
     @GET("user")
     suspend fun getUsersByIds(
         @Query("user_id") userIds: String,
@@ -162,7 +161,10 @@ interface ApiService {
 
     // ── Products ─────────────────────────────────────────────────
     @GET("products")
-    suspend fun getProductMaster(@Query("limit") limit: Int = 1000): Response<List<ProductMasterDto>>
+    suspend fun getProductMaster(
+        @Query("select") select: String = "*,product_type_data:product_type(product_type_name),product_group_data:product_group(product_group_name)",
+        @Query("limit") limit: Int = 1000
+    ): Response<List<ProductMasterDto>>
 
     @GET("project_product")
     suspend fun getProjectProducts(@Query("project_id") projectId: String, @Query("limit") limit: Int = 100): Response<List<ProjectProductDto>>
@@ -174,6 +176,9 @@ interface ApiService {
     @PATCH("project_product")
     @Headers("Prefer: return=representation", "Content-Profile: public")
     suspend fun updateProjectProduct(@Query("project_id") projectId: String, @Query("product_id") productId: String, @Body updates: @JvmSuppressWildcards Map<String, Any?>): Response<List<ProjectProductDto>>
+
+    @GET("project_product")
+    suspend fun getProjectProductsByStatus(@Query("project_id") projectId: String, @Query("status") status: String): Response<List<ProjectProductDto>>
 
     @DELETE("project_product")
     suspend fun deleteProjectProduct(@Query("project_id") projectId: String, @Query("product_id") productId: String): Response<Unit>
@@ -220,7 +225,6 @@ interface ApiService {
     @GET("activity_result")
     suspend fun getResultsByUser(@Query("created_by") userId: String, @Query("limit") limit: Int = 1000): Response<List<ActivityResult>>
 
-    // ✅ เพิ่มใหม่: ดึงข้อมูลบันทึกด้วยรหัสบันทึก (Result ID) โดยตรง
     @GET("activity_result")
     suspend fun getResultById(@Query("result_id") resultId: String, @Query("limit") limit: Int = 1): Response<List<ActivityResult>>
 
@@ -248,10 +252,20 @@ interface ApiService {
     suspend fun setAppContext(@Body body: @JvmSuppressWildcards Map<String, String>): Response<Unit>
 }
 
+data class ProductTypeData(
+    @SerializedName("product_type_name") val typeName: String?
+)
+
+data class ProductGroupData(
+    @SerializedName("product_group_name") val productGroupName: String?
+)
+
 data class ProductMasterDto(
     @SerializedName("product_id")       val productId:       String,
-    @SerializedName("product_group")    val productGroup:    String? = null,
-    @SerializedName("product_type")     val productType:     String? = null,
+    @SerializedName("product_group")    val productGroupCode: String? = null,
+    @SerializedName("product_type")     val productTypeCode:  String? = null,
+    @SerializedName("product_group_data") val productGroup:   ProductGroupData? = null,
+    @SerializedName("product_type_data")  val productType:    ProductTypeData? = null,
     @SerializedName("product_subgroup") val productSubgroup: String? = null,
     @SerializedName("product_brand")    val brand:           String? = null,
     @SerializedName("unit")             val unit:            String? = null,
