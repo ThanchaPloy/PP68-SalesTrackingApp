@@ -30,7 +30,10 @@ class ProjectRepository @Inject constructor(
         return withContext(Dispatchers.IO) {
             try {
                 val memberResp = apiService.getMyProjectIds(userId = "eq.$userId")
-                if (!memberResp.isSuccessful || memberResp.body().isNullOrEmpty()) {
+                if (!memberResp.isSuccessful) {
+                    return@withContext Result.failure(Exception("HTTP ${memberResp.code()}"))
+                }
+                if (memberResp.body().isNullOrEmpty()) {
                     projectDao.clearAndInsert(emptyList())
                     return@withContext Result.success(Unit)
                 }
@@ -177,7 +180,7 @@ class ProjectRepository @Inject constructor(
                     "project_name"      to project.projectName,
                     "project_status"    to project.projectStatus,
                     "expected_value"    to project.expectedValue,
-                    "branch_id"         to project.branchId,
+                    "branch_code"       to project.branchId,
                     "billing_branch_id" to project.billingBranchId,
                     "opportunity_score" to project.opportunityScore,
                     "loss_reason"       to project.lossReason,
