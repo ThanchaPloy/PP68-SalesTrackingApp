@@ -7,6 +7,7 @@ import com.example.pp68_salestrackingapp.data.repository.BranchRepository
 import com.example.pp68_salestrackingapp.data.repository.ProductRepository
 import com.example.pp68_salestrackingapp.data.repository.ProductSimpleDto
 import com.example.pp68_salestrackingapp.data.remote.ApiService
+import com.example.pp68_salestrackingapp.data.remote.ProductMasterDto
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -177,13 +178,49 @@ class AddProductViewModel @Inject constructor(
         val currentName = _uiState.value.selectedProductName
 
         _uiState.update { it.copy(selectedBrand = brand, selectedBrandNo = brandNo) }
-        updateFilters(brand, brandNo, currentName)
 
-        val stillValid = _uiState.value.filteredNames.contains(currentName)
-        if (!stillValid && currentName.isNotBlank()) {
-            onNameSelected("")
+        if (brand.isBlank()) {
+            updateFilters("", null, currentName)
+            if (currentName.isNotBlank() && !_uiState.value.filteredNames.contains(currentName))
+                onNameSelected("")
+            return
+        }
+
+        // Fetch products for this brand from API so filteredNames is always complete
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoading = true) }
+            try {
+                val filter = if (brandNo != null) "eq.$brandNo" else "eq.$brand"
+                val resp = apiService.getProductsByBrand(filter, limit = 2000)
+                if (resp.isSuccessful) {
+                    val brandProducts = resp.body()!!.map { it.toProductSimpleDto() }
+                    val merged = (_uiState.value.products + brandProducts).distinctBy { it.productId }
+                    val names = brandProducts.map { it.productName }
+                        .distinct().filter { it.isNotBlank() }.sorted()
+                    _uiState.update { s -> s.copy(products = merged, filteredNames = names, isLoading = false) }
+                    if (currentName.isNotBlank() && !names.contains(currentName)) onNameSelected("")
+                } else {
+                    updateFilters(brand, brandNo, currentName)
+                    _uiState.update { it.copy(isLoading = false) }
+                }
+            } catch (e: Exception) {
+                updateFilters(brand, brandNo, currentName)
+                _uiState.update { it.copy(isLoading = false) }
+            }
         }
     }
+
+    private fun ProductMasterDto.toProductSimpleDto() = ProductSimpleDto(
+        productId   = productId,
+        productName = description ?: productId,
+        brand       = brandName?.trim()?.ifBlank { null } ?: productBrandNo ?: "ไม่ระบุแบรนด์",
+        brandNo     = productBrandNo,
+        category    = groupName ?: productGroupNo ?: "ทั่วไป",
+        subCategory = subgroupName ?: productSubgroupNo ?: "",
+        unit        = unit ?: "ชิ้น",
+        color       = colorName ?: productColorNo,
+        thickness   = null, width = null, length = null, dimensionUnit = null
+    )
 
     fun onNameSelected(name: String) {
         val currentState = _uiState.value
