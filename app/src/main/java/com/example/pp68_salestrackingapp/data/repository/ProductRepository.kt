@@ -72,6 +72,20 @@ class ProductRepository @Inject constructor(
         }
     }
 
+    suspend fun getUnits(): Result<List<String>> {
+        return withContext(Dispatchers.IO) {
+            try {
+                val resp = apiService.getUnitOfMeasures()
+                if (resp.isSuccessful)
+                    Result.success(resp.body()!!.map { it.code }.distinct().filter { it.isNotBlank() }.sorted())
+                else
+                    Result.failure(Exception("HTTP ${resp.code()}"))
+            } catch (e: Exception) {
+                Result.failure(e)
+            }
+        }
+    }
+
     suspend fun addProductToProject(
         projectId: String,
         productId: String,

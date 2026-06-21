@@ -37,6 +37,7 @@ data class AddProductUiState(
     val filteredNames: List<String> = emptyList(),
     val filteredBrands: List<String> = emptyList(),
     val allBrandNames: List<String> = emptyList(),
+    val allUnits: List<String> = emptyList(),
     
     val isLoading: Boolean = false,
     val isSaving: Boolean = false,
@@ -72,6 +73,10 @@ class AddProductViewModel @Inject constructor(
             // Load master brand list first (all brands, not just those in item_silver)
             productRepo.getBrands().onSuccess { brands ->
                 _uiState.update { it.copy(allBrandNames = brands) }
+            }
+
+            productRepo.getUnits().onSuccess { units ->
+                _uiState.update { it.copy(allUnits = units) }
             }
 
             productRepo.getAllProducts().onSuccess { list ->
@@ -188,6 +193,10 @@ class AddProductViewModel @Inject constructor(
                 onBrandSelected(possibleBrands[0])
             }
         }
+    }
+
+    fun onUnitSelected(unit: String) {
+        _uiState.update { it.copy(unit = unit) }
     }
 
     fun onQuantityChange(qty: String) {

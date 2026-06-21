@@ -50,6 +50,7 @@ fun AddProductScreen(
         onQuantityChange = { viewModel.onQuantityChange(it) },
         onDateSelected = { viewModel.onDateSelected(it) },
         onShippingBranchSelected = { id, name -> viewModel.onShippingBranchSelected(id, name) },
+        onUnitSelected = { viewModel.onUnitSelected(it) },
         onSave = { viewModel.save() }
     )
 }
@@ -64,6 +65,7 @@ fun AddProductContent(
     onQuantityChange: (String) -> Unit,
     onDateSelected: (String) -> Unit,
     onShippingBranchSelected: (String, String) -> Unit,
+    onUnitSelected: (String) -> Unit,
     onSave: () -> Unit
 ) {
     val title = if (s.isEditMode) "Edit Product" else "Add Product"
@@ -215,11 +217,11 @@ fun AddProductContent(
                     )
                 }
                 FormField(label = "หน่วยนับ", modifier = Modifier.weight(1f)) {
-                    FormTextField(
+                    DropdownField(
                         value = s.unit,
-                        onValueChange = {},
                         placeholder = "หน่วย",
-                        readOnly = true
+                        options = s.allUnits,
+                        onSelect = { onUnitSelected(s.allUnits[it]) }
                     )
                 }
             }
@@ -354,6 +356,7 @@ fun AddProductScreenPreview() {
             onQuantityChange = {},
             onDateSelected = {},
             onShippingBranchSelected = { _, _ -> },
+            onUnitSelected = {},
             onSave = {}
         )
     }
