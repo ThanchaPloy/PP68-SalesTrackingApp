@@ -3,9 +3,12 @@ package com.example.pp68_salestrackingapp.ui.screen.contact
 import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -17,6 +20,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
@@ -29,19 +33,35 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.pp68_salestrackingapp.data.model.AuthUser
-
 import com.example.pp68_salestrackingapp.data.model.ContactPerson
 import com.example.pp68_salestrackingapp.ui.components.AddFloatingActionButton
 import com.example.pp68_salestrackingapp.ui.components.AppTopBar
 import com.example.pp68_salestrackingapp.ui.components.BottomNavBar
 import com.example.pp68_salestrackingapp.ui.theme.SalesTrackingTheme
 import com.example.pp68_salestrackingapp.ui.viewmodels.contact.ContactListViewModel
+import kotlinx.coroutines.launch
 
-// สีที่ใช้ในหน้าจอ
 private val BgLight      = Color(0xFFF5F5F5)
 private val TextDark     = Color(0xFF1A1A1A)
 private val TextGray     = Color(0xFF888888)
 private val AccentIndigo = Color(0xFFF5406A)
+
+private fun String.stripThaiPrefix(): String {
+    val prefixes = listOf(
+        "นางสาว ", "นาง ", "นาย ", "ด.ช. ", "ด.ญ. ", "คุณ ",
+        "บริษัท ", "ห้างหุ้นส่วนจำกัด ", "ห้างหุ้นส่วน ", "หจก. ", "บจก. ", "กิจการร่วมค้า "
+    )
+    val t = this.trim()
+    return prefixes.firstOrNull { t.startsWith(it) }?.let { t.removePrefix(it) } ?: t
+}
+
+private val THAI_CONSONANTS = listOf(
+    "ก","ข","ค","ง","จ","ฉ","ช","ซ","ญ","ด",
+    "ต","ถ","ท","น","บ","ป","ผ","ฝ","พ","ฟ",
+    "ภ","ม","ย","ร","ล","ว","ส","ห","อ","ฮ"
+)
+private val ALL_SIDEBAR_LETTERS =
+    listOf("#") + THAI_CONSONANTS + ('A'..'Z').map { it.toString() }
 
 @Composable
 fun ContactListScreen(
@@ -99,6 +119,23 @@ fun ContactListScreenContent(
     currentTab: Int,
     onTabChange: (Int) -> Unit
 ) {
+    val listState = rememberLazyListState()
+    val scope = rememberCoroutineScope()
+
+    val sortedContacts = remember(contacts) {
+        contacts.sortedBy { (it.fullName ?: "").stripThaiPrefix() }
+    }
+    val letterIndex = remember(sortedContacts) {
+        val map = linkedMapOf<String, Int>()
+        sortedContacts.forEachIndexed { i, c ->
+            val ch = (c.fullName ?: "").stripThaiPrefix().firstOrNull()?.toString() ?: "#"
+            if (!map.containsKey(ch)) map[ch] = i
+        }
+        map
+    }
+
+    var activeLetter by remember { mutableStateOf<String?>(null) }
+
     Scaffold(
         topBar = {
             AppTopBar(
@@ -126,17 +163,92 @@ fun ContactListScreenContent(
             Spacer(Modifier.height(16.dp))
 
             if (isLoading) {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator()
+                }
             } else {
-                LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    items(contacts, key = { it.contactId }) { contact ->
-                        ContactCard(
-                            contact = contact,
-                            onClick = { onContactClick(contact) },
-                            onEdit = { onEditClick(contact.contactId) }
-                        )
+                Box(modifier = Modifier.fillMaxSize()) {
+                    LazyColumn(
+                        state = listState,
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                        modifier = Modifier.fillMaxSize().padding(end = 20.dp)
+                    ) {
+                        items(sortedContacts, key = { it.contactId }) { contact ->
+                            ContactCard(
+                                contact = contact,
+                                onClick = { onContactClick(contact) },
+                                onEdit = { onEditClick(contact.contactId) }
+                            )
+                        }
+                        item { Spacer(Modifier.height(80.dp)) }
                     }
-                    item { Spacer(Modifier.height(80.dp)) }
+
+                    // Letter bubble popup while dragging
+                    if (activeLetter != null) {
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.CenterEnd)
+                                .offset(x = (-32).dp)
+                                .size(44.dp)
+                                .background(AccentIndigo, CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                activeLetter!!,
+                                color = Color.White,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 20.sp
+                            )
+                        }
+                    }
+
+                    // Alphabetical index sidebar
+                    if (searchQuery.isBlank()) {
+                        Column(
+                            modifier = Modifier
+                                .align(Alignment.CenterEnd)
+                                .fillMaxHeight()
+                                .width(20.dp)
+                                .padding(vertical = 8.dp)
+                                .pointerInput(Unit) {
+                                    awaitEachGesture {
+                                        awaitFirstDown(requireUnconsumed = false)
+                                        do {
+                                            val event = awaitPointerEvent()
+                                            val y = event.changes.firstOrNull()?.position?.y ?: 0f
+                                            val idx = ((y / size.height) * ALL_SIDEBAR_LETTERS.size)
+                                                .toInt().coerceIn(0, ALL_SIDEBAR_LETTERS.lastIndex)
+                                            val letter = ALL_SIDEBAR_LETTERS.getOrNull(idx)
+                                            if (letter != null && letter != activeLetter) {
+                                                activeLetter = letter
+                                                letterIndex[letter]?.let { itemIdx ->
+                                                    scope.launch { listState.scrollToItem(itemIdx) }
+                                                }
+                                            }
+                                        } while (event.changes.any { it.pressed })
+                                        activeLetter = null
+                                    }
+                                },
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center
+                        ) {
+                            ALL_SIDEBAR_LETTERS.forEach { letter ->
+                                Text(
+                                    text = letter,
+                                    fontSize = 10.sp,
+                                    fontWeight = if (letter == activeLetter) FontWeight.Bold else FontWeight.Normal,
+                                    color = when {
+                                        letter == activeLetter -> AccentIndigo
+                                        letterIndex.containsKey(letter) -> TextGray
+                                        else -> TextGray.copy(alpha = 0.3f)
+                                    },
+                                    textAlign = TextAlign.Center,
+                                    lineHeight = 14.sp,
+                                    modifier = Modifier.padding(vertical = 1.dp)
+                                )
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -153,10 +265,13 @@ private fun ContactCard(contact: ContactPerson, onClick: () -> Unit, onEdit: () 
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                // Avatar
-                Box(modifier = Modifier.size(44.dp).clip(CircleShape).background(AccentIndigo.copy(alpha = 0.1f)), contentAlignment = Alignment.Center) {
+                Box(
+                    modifier = Modifier.size(44.dp).clip(CircleShape)
+                        .background(AccentIndigo.copy(alpha = 0.1f)),
+                    contentAlignment = Alignment.Center
+                ) {
                     Text(
-                        text = (contact.fullName ?: "?").take(1).uppercase(),
+                        text = (contact.fullName ?: "?").stripThaiPrefix().take(1).uppercase(),
                         color = AccentIndigo,
                         fontWeight = FontWeight.Bold,
                         fontSize = 18.sp
@@ -167,9 +282,11 @@ private fun ContactCard(contact: ContactPerson, onClick: () -> Unit, onEdit: () 
                     Text(contact.fullName ?: "ไม่ระบุชื่อ", fontWeight = FontWeight.Bold, fontSize = 16.sp)
                     Text(contact.position ?: "ไม่มีตำแหน่ง", color = TextGray, fontSize = 13.sp)
                 }
-                IconButton(onClick = onEdit) { Icon(Icons.Default.Edit, null, modifier = Modifier.size(18.dp), tint = TextGray) }
+                IconButton(onClick = onEdit) {
+                    Icon(Icons.Default.Edit, null, modifier = Modifier.size(18.dp), tint = TextGray)
+                }
             }
-            
+
             Spacer(Modifier.height(12.dp))
             HorizontalDivider(color = Color.LightGray.copy(alpha = 0.3f))
             Spacer(Modifier.height(12.dp))
@@ -212,15 +329,22 @@ fun ContactDetailOverlay(contact: ContactPerson, onDismiss: () -> Unit) {
                 modifier = Modifier.padding(24.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Box(modifier = Modifier.size(64.dp).clip(CircleShape).background(AccentIndigo.copy(alpha = 0.1f)), contentAlignment = Alignment.Center) {
-                    Text((contact.fullName ?: "?").take(1).uppercase(), color = AccentIndigo, fontWeight = FontWeight.Bold, fontSize = 24.sp)
+                Box(
+                    modifier = Modifier.size(64.dp).clip(CircleShape)
+                        .background(AccentIndigo.copy(alpha = 0.1f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        (contact.fullName ?: "?").stripThaiPrefix().take(1).uppercase(),
+                        color = AccentIndigo, fontWeight = FontWeight.Bold, fontSize = 24.sp
+                    )
                 }
                 Spacer(Modifier.height(16.dp))
                 Text(contact.fullName ?: "ไม่ระบุชื่อ", fontSize = 20.sp, fontWeight = FontWeight.Bold)
                 Text(contact.position ?: "-", color = TextGray, fontSize = 14.sp)
-                
+
                 Spacer(Modifier.height(24.dp))
-                
+
                 DetailRow(Icons.Default.Phone, "เบอร์โทรศัพท์", contact.phoneNumber ?: "-") {
                     contact.phoneNumber?.let {
                         clipboardManager?.setText(AnnotatedString(it))
@@ -246,9 +370,7 @@ fun ContactDetailOverlay(contact: ContactPerson, onDismiss: () -> Unit) {
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(12.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = AccentIndigo)
-                ) {
-                    Text("ปิด")
-                }
+                ) { Text("ปิด") }
             }
         }
     }
@@ -280,30 +402,14 @@ fun ContactListScreenPreview() {
     SalesTrackingTheme {
         ContactListScreenContent(
             contacts = listOf(
-                ContactPerson(
-                    contactId = "1",
-                    custId = "C001",
-                    fullName = "John Doe",
-                    nickname = "John",
-                    position = "Manager",
-                    phoneNumber = "081-234-5678",
-                    email = "john.doe@example.com",
-                    line = "john_line"
-                )
+                ContactPerson(contactId = "1", custId = "C001", fullName = "กิจการร่วมค้า ABC", phoneNumber = "081-234-5678"),
+                ContactPerson(contactId = "2", custId = "C002", fullName = "คุณสมชาย ใจดี", email = "somchai@example.com"),
+                ContactPerson(contactId = "3", custId = "C003", fullName = "นายบพิตร ธนสาร", phoneNumber = "089-123-4567")
             ),
-            isLoading = false,
-            searchQuery = "",
-            error = null,
-            authUser = null,
-            onSearchChange = {},
-            onContactClick = {},
-            onAddClick = {},
-            onEditClick = {},
-            onNotificationClick = {},
-            onSettingsClick = {},
-            onLogoutClick = {},
-            currentTab = 2,
-            onTabChange = {}
+            isLoading = false, searchQuery = "", error = null, authUser = null,
+            onSearchChange = {}, onContactClick = {}, onAddClick = {}, onEditClick = {},
+            onNotificationClick = {}, onSettingsClick = {}, onLogoutClick = {},
+            currentTab = 2, onTabChange = {}
         )
     }
 }

@@ -46,10 +46,10 @@ interface ApiService {
     suspend fun addProjectMembers(@Body members: List<ProjectMemberInsertDto>): Response<List<ProjectMemberInsertDto>>
 
     @DELETE("project_sales_member")
-    suspend fun deleteProjectMembers(@Query("project_id") projectId: String): Response<Unit>
+    suspend fun deleteProjectMembers(@Query("project_code") projectId: String): Response<Unit>
 
     @GET("project_sales_member")
-    suspend fun getProjectMembers(@Query("project_id") projectId: String, @Query("select") select: String = "user_id,sales_role"): Response<List<ProjectMemberDto>>
+    suspend fun getProjectMembers(@Query("project_code") projectId: String, @Query("select") select: String = "emp_code,sales_role"): Response<List<ProjectMemberDto>>
 
     // ── Branch ───────────────────────────────────────────────────
     @GET("branch")
@@ -66,9 +66,29 @@ interface ApiService {
     suspend fun getCustomersByIds(@Query("cust_id") custIds: String, @Query("limit") limit: Int = 1000): Response<List<Customer>>
 
     @GET("customer")
-    suspend fun getCustomersByBranch(
-        @Query("branch_id") branchId: String,
-        @Query("limit") limit: Int = 1000
+    suspend fun getCustomersBySalespersonCodes(
+        @Query("salesperson_code") codes: String,   // format: in.(code1,code2,...)
+        @Query("limit") limit: Int = 2000
+    ): Response<List<Customer>>
+
+    @GET("employee")
+    suspend fun getEmployeeCodesByBranch(
+        @Query("emp_brch_code") branchCode: String,  // format: eq.90HO
+        @Query("select") select: String = "emp_code",
+        @Query("stat") stat: String = "eq.1"
+    ): Response<List<Map<String, String>>>
+
+    @GET("employee")
+    suspend fun getProjectEmployeeCodes(
+        @Query("emp_type") empType: String = "eq.Project",
+        @Query("select") select: String = "emp_code",
+        @Query("stat") stat: String = "eq.1"
+    ): Response<List<Map<String, String>>>
+
+    @GET("customer")
+    suspend fun getCustomersWithEmptySalesperson(
+        @Query("salesperson_code") code: String = "eq.",
+        @Query("limit") limit: Int = 5000
     ): Response<List<Customer>>
 
     @GET("customer")
@@ -91,23 +111,20 @@ interface ApiService {
     // ── Contact Person ───────────────────────────────────────────
     @GET("contact_person")
     suspend fun getContactPersons(
-        @Query("cust_id") custId: String? = null,
-        @Query("user_id") createdBy: String? = null,
+        @Query("customer_code") custId: String? = null,
         @Query("limit") limit: Int = 1000
     ): Response<List<ContactPerson>>
 
     @GET("contact_person")
     suspend fun getContactsByCustomer(
-        @Query("cust_id") custId: String,
-        @Query("user_id") createdBy: String? = null,
+        @Query("customer_code") custId: String,
         @Query("limit") limit: Int = 1000
     ): Response<List<ContactPerson>>
 
     @GET("contact_person")
     suspend fun getContactsByCustomerIds(
-        @Query("cust_id") custIds: String,
-        @Query("user_id") createdBy: String? = null,
-        @Query("limit") limit: Int = 1000
+        @Query("customer_code") custIds: String,
+        @Query("limit") limit: Int = 2000
     ): Response<List<ContactPerson>>
 
     @POST("contact_person")
@@ -129,10 +146,10 @@ interface ApiService {
 
     // ── Project ──────────────────────────────────────────────────
     @GET("project")
-    suspend fun getProjectsByIds(@Query("project_id") projectIds: String, @Query("limit") limit: Int = 1000): Response<List<Project>>
+    suspend fun getProjectsByIds(@Query("project_code") projectIds: String, @Query("limit") limit: Int = 1000): Response<List<Project>>
 
     @GET("project")
-    suspend fun getProjectById(@Query("project_id") projectId: String, @Query("limit") limit: Int = 1): Response<List<Project>>
+    suspend fun getProjectById(@Query("project_code") projectId: String, @Query("limit") limit: Int = 1): Response<List<Project>>
 
     @POST("project")
     @Headers("Prefer: return=representation", "Content-Profile: public")
@@ -140,13 +157,13 @@ interface ApiService {
 
     @PATCH("project")
     @Headers("Prefer: return=representation", "Content-Profile: public")
-    suspend fun updateProject(@Query("project_id") projectId: String, @Body updates: @JvmSuppressWildcards Map<String, Any?>): Response<List<Project>>
+    suspend fun updateProject(@Query("project_code") projectId: String, @Body updates: @JvmSuppressWildcards Map<String, Any?>): Response<List<Project>>
 
     @DELETE("project")
-    suspend fun deleteProject(@Query("project_id") projectId: String): Response<Unit>
+    suspend fun deleteProject(@Query("project_code") projectId: String): Response<Unit>
 
     @DELETE("project")
-    suspend fun deleteProjectsByCustomer(@Query("cust_id") custId: String): Response<Unit>
+    suspend fun deleteProjectsByCustomer(@Query("customer_code") custId: String): Response<Unit>
 
     // ── Project Contact ──────────────────────────────────────────
     @GET("project_contact")
@@ -208,7 +225,7 @@ interface ApiService {
     suspend fun getMasterActivities(@Query("is_active") isActive: String = "eq.true", @Query("limit") limit: Int = 100): Response<List<ActivityMasterDto>>
 
     @GET("project_sales_member")
-    suspend fun getMyProjectIds(@Query("user_id") userId: String, @Query("select") select: String = "project_id", @Query("limit") limit: Int = 1000): Response<List<ProjectMemberDto>>
+    suspend fun getMyProjectIds(@Query("emp_code") userId: String, @Query("select") select: String = "project_code", @Query("limit") limit: Int = 1000): Response<List<ProjectMemberDto>>
 
     // ── Activity Result ──────────────────────────────────────────
     @POST("activity_result")

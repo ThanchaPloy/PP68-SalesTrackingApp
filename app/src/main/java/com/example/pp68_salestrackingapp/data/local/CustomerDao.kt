@@ -14,15 +14,13 @@ interface CustomerDao {
     @Query("SELECT * FROM customer")
     fun getAllCustomersFlow(): Flow<List<Customer>>
 
-    // ✅ นำเงื่อนไข companyStatus = 'customer' ออกเพื่อให้แสดงข้อมูลทุกสถานะ (รวมถึง New Lead)
-    @Query("SELECT * FROM customer ORDER BY companyName ASC")
+    @Query("SELECT * FROM customer ORDER BY company_name ASC")
     fun getAllCustomers(): Flow<List<Customer>>
 
-    // ✅ นำเงื่อนไข companyStatus = 'customer' ออกเพื่อให้ค้นหาเจอทุกสถานะ
-    @Query("SELECT * FROM customer WHERE companyName LIKE '%' || :searchQuery || '%'")
+    @Query("SELECT * FROM customer WHERE company_name LIKE '%' || :searchQuery || '%' ORDER BY company_name ASC")
     fun searchCustomers(searchQuery: String): Flow<List<Customer>>
 
-    @Query("SELECT * FROM customer WHERE custId = :customerId")
+    @Query("SELECT * FROM customer WHERE cust_id = :customerId")
     suspend fun getCustomerById(customerId: String): Customer?
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
@@ -31,7 +29,7 @@ interface CustomerDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertCustomer(customer: Customer)
 
-    @Query("DELETE FROM customer WHERE custId = :customerId")
+    @Query("DELETE FROM customer WHERE cust_id = :customerId")
     suspend fun deleteCustomerById(customerId: String)
 
     @Query("DELETE FROM customer")
@@ -39,6 +37,9 @@ interface CustomerDao {
 
     @Query("DELETE FROM customer")
     suspend fun deleteAll()
+
+    @Query("SELECT cust_id FROM customer")
+    suspend fun getAllCustomerIds(): List<String>
 
     @Transaction
     suspend fun clearAndInsert(customers: List<Customer>) {
