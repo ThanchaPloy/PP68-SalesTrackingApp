@@ -41,6 +41,9 @@ interface CustomerDao {
     @Query("SELECT cust_id FROM customer")
     suspend fun getAllCustomerIds(): List<String>
 
+    @Query("SELECT cust_id FROM customer WHERE user_id = :userId")
+    suspend fun getCustomerIdsByUserId(userId: String): List<String>
+
     @Transaction
     suspend fun clearAndInsert(customers: List<Customer>) {
         // ❌ ไม่ใช้ deleteAll() เพื่อป้องกันข้อมูลที่บันทึกใหม่แต่ยังไม่ได้ผูกโปรเจกต์หายไปตอนรีเฟรช

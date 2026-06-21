@@ -1,32 +1,43 @@
 package com.example.pp68_salestrackingapp.data.repository
 
 import com.example.pp68_salestrackingapp.data.local.ContactDao
+import com.example.pp68_salestrackingapp.data.local.CustomerDao
 import com.example.pp68_salestrackingapp.data.model.ContactPerson
 import com.example.pp68_salestrackingapp.data.remote.ApiService
+import com.example.pp68_salestrackingapp.di.TokenManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import java.io.IOException
 
 class ContactRepository @Inject constructor(
     private val apiService: ApiService,
-    private val contactDao: ContactDao
+    private val contactDao: ContactDao,
+    private val customerDao: CustomerDao,
+    private val tokenManager: TokenManager
 ) {
     fun getAllContactsFlow(): Flow<List<ContactPerson>> = contactDao.getAllContacts()
-    fun searchContactsFlow(query: String): Flow<List<ContactPerson>> = contactDao.searchContacts("%$query%")
+    fun searchContactsFlow(query: String): Flow<List<ContactPerson>> = contactDao.searchContactsWithCompany("%$query%")
 
-    // ContactRepository.kt
-    suspend fun refreshContacts(userId: String): kotlin.Result<Unit> {
+    suspend fun refreshContacts(): kotlin.Result<Unit> {
         return withContext(Dispatchers.IO) {
             try {
-                val contactResp = apiService.getContactPersons(createdBy = "eq.$userId")
-                if (contactResp.isSuccessful && contactResp.body() != null) {
-                    contactDao.insertAll(contactResp.body()!!)  // ✅ upsert แทน clearAndInsert
+                val userId = tokenManager.getUserData()?.userId
+                val customerIds = if (!userId.isNullOrBlank())
+                    customerDao.getCustomerIdsByUserId(userId)
+                else
+                    customerDao.getAllCustomerIds()
+
+                if (customerIds.isEmpty()) return@withContext kotlin.Result.success(Unit)
+
+                val codesParam = "in.(${customerIds.joinToString(",")})"
+                val resp = apiService.getContactsByCustomerIds(custIds = codesParam)
+                if (resp.isSuccessful && resp.body() != null) {
+                    contactDao.clearAndInsert(resp.body()!!)
                     kotlin.Result.success(Unit)
                 } else {
-                    kotlin.Result.failure(Exception("โหลด Contact ไม่สำเร็จ: HTTP ${contactResp.code()}"))
+                    kotlin.Result.failure(Exception("โหลด Contact ไม่สำเร็จ: HTTP ${resp.code()}"))
                 }
             } catch (e: Exception) {
                 kotlin.Result.failure(Exception("Network Error: ${e.message}"))
@@ -36,38 +47,27 @@ class ContactRepository @Inject constructor(
 
     suspend fun addContact(contact: ContactPerson): kotlin.Result<Unit> {
         return withContext(Dispatchers.IO) {
-            // 1. บันทึกลงเครื่องทันที
             contactDao.insertAll(listOf(contact))
             try {
-                // 2. พยายามส่งขึ้น Server
                 val response = apiService.addContact(contact)
-                if (response.isSuccessful) {
-                    kotlin.Result.success(Unit)
-                } else {
-                    val errBody = response.errorBody()?.string() ?: ""
-                    kotlin.Result.failure(Exception("Server Rejected: $errBody"))
-                }
+                if (response.isSuccessful) kotlin.Result.success(Unit)
+                else kotlin.Result.failure(Exception(response.errorBody()?.string()))
+            } catch (e: IOException) {
+                kotlin.Result.success(Unit)
             } catch (e: Exception) {
-                // 3. ถ้า Error เพราะ Network (Timeout/Offline) ให้ผ่าน
-                if (e is IOException) kotlin.Result.success(Unit)
-                else kotlin.Result.failure(e)
+                kotlin.Result.failure(e)
             }
         }
     }
 
     suspend fun updateContact(contactId: String, contact: ContactPerson): kotlin.Result<Unit> {
         return withContext(Dispatchers.IO) {
-            contactDao.insertAll(listOf(contact)) // upsert local
+            contactDao.insertAll(listOf(contact))
             try {
                 val updates = buildMap<String, Any?> {
-                    put("full_name", contact.fullName)
-                    put("nickname", contact.nickname)
-                    put("position", contact.position)
-                    put("phone_number", contact.phoneNumber)
+                    put("contact_name", contact.fullName)
+                    put("mobile_phone", contact.phoneNumber)
                     put("email", contact.email)
-                    put("line", contact.line)
-                    put("is_active", contact.isActive)
-                    put("is_dm_confirmed", contact.isDmConfirmed)
                 }
                 val response = apiService.updateContact("eq.$contactId", updates)
                 if (response.isSuccessful) kotlin.Result.success(Unit)
@@ -80,12 +80,5 @@ class ContactRepository @Inject constructor(
         }
     }
 
-    suspend fun getContactById(id: String): ContactPerson? =
-        contactDao.getContactById(id)
-
-    fun getContactsByUserFlow(userId: String): Flow<List<ContactPerson>> =
-        contactDao.getContactsByUser(userId)
-
-    fun searchContactsByUserFlow(query: String, userId: String): Flow<List<ContactPerson>> =
-        contactDao.searchContactsByUser("%$query%", userId)
+    suspend fun getContactById(id: String): ContactPerson? = contactDao.getContactById(id)
 }
