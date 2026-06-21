@@ -36,6 +36,7 @@ data class AddProductUiState(
     
     val filteredNames: List<String> = emptyList(),
     val filteredBrands: List<String> = emptyList(),
+    val allBrandNames: List<String> = emptyList(),
     
     val isLoading: Boolean = false,
     val isSaving: Boolean = false,
@@ -65,20 +66,25 @@ class AddProductViewModel @Inject constructor(
     private fun loadData() {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
-            
+
             loadBranches()
-            
+
+            // Load master brand list first (all brands, not just those in item_silver)
+            productRepo.getBrands().onSuccess { brands ->
+                _uiState.update { it.copy(allBrandNames = brands) }
+            }
+
             productRepo.getAllProducts().onSuccess { list ->
                 _uiState.update { it.copy(products = list) }
                 updateFilters("", "")
-                
+
                 if (editProductId != null && projectId != null) {
                     loadExistingProjectProduct(projectId, editProductId)
                 }
             }.onFailure { e ->
                 _uiState.update { it.copy(error = "โหลดสินค้าไม่สำเร็จ: ${e.message}") }
             }
-            
+
             _uiState.update { it.copy(isLoading = false) }
         }
     }
@@ -121,12 +127,18 @@ class AddProductViewModel @Inject constructor(
 
     private fun updateFilters(currentBrand: String, currentName: String) {
         val allProducts = _uiState.value.products
-        
+        val masterBrands = _uiState.value.allBrandNames
+
         val brands = if (currentName.isNotBlank()) {
-            allProducts.filter { it.productName == currentName }.map { it.brand }.distinct()
+            // When a product name is selected, narrow to brands that carry it
+            allProducts.filter { it.productName == currentName }.map { it.brand }
+                .distinct().filter { it.isNotBlank() }.sorted()
         } else {
-            allProducts.map { it.brand }.distinct()
-        }.filter { it.isNotBlank() }.sorted()
+            // Use the complete brand master list; fall back to product-derived list if not loaded yet
+            masterBrands.ifEmpty {
+                allProducts.map { it.brand }.distinct().filter { it.isNotBlank() }.sorted()
+            }
+        }
 
         val names = if (currentBrand.isNotBlank()) {
             allProducts.filter { it.brand == currentBrand }.map { it.productName }.distinct()
@@ -134,10 +146,7 @@ class AddProductViewModel @Inject constructor(
             allProducts.map { it.productName }.distinct()
         }.filter { it.isNotBlank() }.sorted()
 
-        _uiState.update { it.copy(
-            filteredBrands = brands,
-            filteredNames = names
-        ) }
+        _uiState.update { it.copy(filteredBrands = brands, filteredNames = names) }
     }
 
     fun onBrandSelected(brand: String) {

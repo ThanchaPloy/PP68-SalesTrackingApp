@@ -35,18 +35,16 @@ class ProductRepository @Inject constructor(
                     val list = response.body()!!.map {
                         ProductSimpleDto(
                             productId   = it.productId,
-                            // ✅ ใช้ชื่อกลุ่มสินค้า (Group Name) เป็นชื่อสินค้าแสดงผล (หรือ fallback เป็นรหัส)
-                            productName = it.productGroup?.productGroupName ?: it.productGroupCode ?: it.productId,
-                            brand       = it.brand?.trim()?.ifBlank { "ไม่ระบุแบรนด์" } ?: "ไม่ระบุแบรนด์",
-                            // ✅ ใช้ชื่อประเภทสินค้า (Type Name) แทนรหัส
-                            category    = it.productType?.typeName ?: it.productTypeCode ?: "ทั่วไป",
-                            subCategory = it.productSubgroup ?: "",
+                            productName = it.description ?: it.productId,
+                            brand       = it.brandName?.trim()?.ifBlank { null } ?: it.productBrandNo ?: "ไม่ระบุแบรนด์",
+                            category    = it.groupName ?: it.productGroupNo ?: "ทั่วไป",
+                            subCategory = it.subgroupName ?: it.productSubgroupNo ?: "",
                             unit        = it.unit ?: "ชิ้น",
-                            color       = it.color,
-                            thickness   = it.thickness,
-                            width       = it.width,
-                            length      = it.length,
-                            dimensionUnit = it.dimensionUnit
+                            color       = it.colorName ?: it.productColorNo,
+                            thickness   = null,
+                            width       = null,
+                            length      = null,
+                            dimensionUnit = null
                         )
                     }
                     Result.success(list)
@@ -54,6 +52,20 @@ class ProductRepository @Inject constructor(
                     val errorBody = response.errorBody()?.string() ?: ""
                     Result.failure(Exception("HTTP ${response.code()}: $errorBody"))
                 }
+            } catch (e: Exception) {
+                Result.failure(e)
+            }
+        }
+    }
+
+    suspend fun getBrands(): Result<List<String>> {
+        return withContext(Dispatchers.IO) {
+            try {
+                val resp = apiService.getProductBrands()
+                if (resp.isSuccessful)
+                    Result.success(resp.body()!!.map { it.name }.filter { it.isNotBlank() }.sorted())
+                else
+                    Result.failure(Exception("HTTP ${resp.code()}"))
             } catch (e: Exception) {
                 Result.failure(e)
             }
