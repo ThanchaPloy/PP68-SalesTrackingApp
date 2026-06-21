@@ -11,6 +11,7 @@ data class ProductSimpleDto(
     val productId: String,
     val productName: String,
     val brand: String,
+    val brandNo: String?,
     val category: String?,
     val subCategory: String?,
     val unit: String?,
@@ -37,6 +38,7 @@ class ProductRepository @Inject constructor(
                             productId   = it.productId,
                             productName = it.description ?: it.productId,
                             brand       = it.brandName?.trim()?.ifBlank { null } ?: it.productBrandNo ?: "ไม่ระบุแบรนด์",
+                            brandNo     = it.productBrandNo,
                             category    = it.groupName ?: it.productGroupNo ?: "ทั่วไป",
                             subCategory = it.subgroupName ?: it.productSubgroupNo ?: "",
                             unit        = it.unit ?: "ชิ้น",
@@ -58,12 +60,17 @@ class ProductRepository @Inject constructor(
         }
     }
 
-    suspend fun getBrands(): Result<List<String>> {
+    suspend fun getBrands(): Result<List<Pair<String, String>>> {
         return withContext(Dispatchers.IO) {
             try {
                 val resp = apiService.getProductBrands()
                 if (resp.isSuccessful)
-                    Result.success(resp.body()!!.map { it.name }.filter { it.isNotBlank() }.sorted())
+                    Result.success(
+                        resp.body()!!
+                            .filter { it.name.isNotBlank() }
+                            .map { it.code to it.name }
+                            .sortedBy { it.second }
+                    )
                 else
                     Result.failure(Exception("HTTP ${resp.code()}"))
             } catch (e: Exception) {

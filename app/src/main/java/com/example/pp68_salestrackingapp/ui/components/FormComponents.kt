@@ -15,6 +15,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
@@ -152,6 +153,74 @@ fun DropdownField(
                 errorMsg, color = AppColors.Error, fontSize = 12.sp,
                 modifier = Modifier.padding(start = 4.dp, top = 2.dp)
             )
+        }
+    }
+}
+
+@Composable
+fun SearchableDropdownField(
+    value: String,
+    placeholder: String,
+    options: List<String>,
+    onSelect: (String) -> Unit,
+    onClear: () -> Unit = {},
+    enabled: Boolean = true
+) {
+    var query by remember(value) { mutableStateOf(value) }
+    var expanded by remember { mutableStateOf(false) }
+
+    val filtered = remember(query, options) {
+        val q = query.trim()
+        if (q.isBlank()) options.take(80)
+        else options.filter { it.contains(q, ignoreCase = true) }.take(80)
+    }
+
+    Column {
+        OutlinedTextField(
+            value = query,
+            onValueChange = { query = it; expanded = true },
+            placeholder = { Text(placeholder, color = AppColors.TextHint, fontSize = 14.sp) },
+            trailingIcon = {
+                if (query.isNotBlank()) {
+                    IconButton(onClick = { query = ""; onClear(); expanded = false }) {
+                        Icon(Icons.Default.Close, null, tint = AppColors.TextHint, modifier = Modifier.size(18.dp))
+                    }
+                } else {
+                    Icon(Icons.Default.KeyboardArrowDown, null, tint = AppColors.TextHint, modifier = Modifier.size(20.dp))
+                }
+            },
+            singleLine = true,
+            enabled = enabled,
+            modifier = Modifier
+                .fillMaxWidth()
+                .onFocusChanged { if (it.isFocused) expanded = true },
+            shape = RoundedCornerShape(10.dp),
+            colors = OutlinedTextFieldDefaults.colors(
+                unfocusedBorderColor = AppColors.Border,
+                focusedBorderColor = AppColors.Primary,
+                unfocusedContainerColor = Color.White,
+                focusedContainerColor = Color.White,
+                unfocusedTextColor = AppColors.TextPrimary,
+                focusedTextColor = AppColors.TextPrimary,
+                cursorColor = AppColors.Primary,
+                disabledContainerColor = Color(0xFFF5F5F5),
+                disabledTextColor = AppColors.TextPrimary
+            )
+        )
+        DropdownMenu(
+            expanded = expanded && filtered.isNotEmpty(),
+            onDismissRequest = { expanded = false },
+            modifier = Modifier
+                .fillMaxWidth(0.9f)
+                .background(Color.White)
+                .heightIn(max = 300.dp)
+        ) {
+            filtered.forEach { option ->
+                DropdownMenuItem(
+                    text = { Text(option, fontSize = 14.sp, color = AppColors.TextPrimary) },
+                    onClick = { query = option; onSelect(option); expanded = false }
+                )
+            }
         }
     }
 }

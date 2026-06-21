@@ -23,6 +23,7 @@ import com.example.pp68_salestrackingapp.data.repository.ProductSimpleDto
 import com.example.pp68_salestrackingapp.ui.components.DatePickerField
 import com.example.pp68_salestrackingapp.ui.components.DropdownField
 import com.example.pp68_salestrackingapp.ui.components.FormTextField
+import com.example.pp68_salestrackingapp.ui.components.SearchableDropdownField
 import com.example.pp68_salestrackingapp.ui.theme.AppColors
 import com.example.pp68_salestrackingapp.ui.theme.SalesTrackingTheme
 import com.example.pp68_salestrackingapp.ui.viewmodels.project.AddProductUiState
@@ -115,22 +116,24 @@ fun AddProductContent(
 
             // Form Fields
             FormField(label = "แบรนด์สินค้า") {
-                DropdownField(
+                SearchableDropdownField(
                     value = s.selectedBrand,
-                    placeholder = if (s.isLoading) "กำลังโหลด..." else "เลือกแบรนด์สินค้า",
+                    placeholder = if (s.isLoading) "กำลังโหลด..." else "พิมพ์เพื่อค้นหาแบรนด์",
                     options = s.filteredBrands,
-                    onSelect = { onBrandSelected(s.filteredBrands[it]) },
-                    enabled = !s.isEditMode
+                    onSelect = { onBrandSelected(it) },
+                    onClear  = { onBrandSelected("") },
+                    enabled  = !s.isEditMode
                 )
             }
 
             FormField(label = "ชื่อสินค้า") {
-                DropdownField(
+                SearchableDropdownField(
                     value = s.selectedProductName,
-                    placeholder = if (s.isLoading) "กำลังโหลด..." else "เลือกชื่อสินค้า",
+                    placeholder = if (s.isLoading) "กำลังโหลด..." else "พิมพ์เพื่อค้นหาชื่อสินค้า",
                     options = s.filteredNames,
-                    onSelect = { onNameSelected(s.filteredNames[it]) },
-                    enabled = !s.isEditMode
+                    onSelect = { onNameSelected(it) },
+                    onClear  = { onNameSelected("") },
+                    enabled  = !s.isEditMode
                 )
             }
 
@@ -323,6 +326,7 @@ fun AddProductScreenPreview() {
                         productId = "1",
                         productName = "Product A",
                         brand = "Brand X",
+                        brandNo = "BX01",
                         category = "Category 1",
                         subCategory = "Subcategory 1",
                         unit = "ชิ้น",
