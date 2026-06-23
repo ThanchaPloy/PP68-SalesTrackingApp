@@ -72,13 +72,12 @@ fun DashboardScreen(
 ) {
     val s by viewModel.uiState.collectAsState()
 
-    // ✅ reload ทุกครั้งที่หน้านี้ resume
+    // reload ทุกครั้งที่ composable enter (tab switch + Activity resume)
+    LaunchedEffect(Unit) { viewModel.load() }
     val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
         val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
-            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
-                viewModel.load()
-            }
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) viewModel.load()
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
@@ -147,6 +146,16 @@ fun DashboardScreenContent(
                 .padding(horizontal = 16.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
+            if (s.error != null) {
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .background(Color(0xFFFFEBEE), RoundedCornerShape(8.dp))
+                        .padding(horizontal = 12.dp, vertical = 8.dp)
+                ) {
+                    Text("โหลดข้อมูลไม่สำเร็จ: ${s.error}", color = RedPrimary, fontSize = 13.sp)
+                }
+            }
             // ── ภาพรวมทั้งหมด ──────────────────────────
             SectionBlock(label = "ภาพรวมทั้งหมด") {
                 StatCard(

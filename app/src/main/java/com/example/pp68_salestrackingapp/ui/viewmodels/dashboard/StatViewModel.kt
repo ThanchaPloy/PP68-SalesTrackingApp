@@ -102,17 +102,21 @@ class StatsViewModel @Inject constructor(
     fun load() {
         viewModelScope.launch {
             val user = authRepo.currentUser() ?: return@launch
-            
-            if (_uiState.value.pipelineStages.isEmpty()) {
-                _uiState.update { it.copy(isLoading = true, error = null) }
-            }
-
+            val hasData = _uiState.value.pipelineStages.isNotEmpty() ||
+                    _uiState.value.activeProjects > 0 ||
+                    _uiState.value.weeklyVisitCount > 0
+            if (!hasData) _uiState.update { it.copy(isLoading = true, error = null) }
+            else _uiState.update { it.copy(error = null) }
             try {
-                projectRepo.refreshProjects(user.userId)
-                activityRepo.refreshActivities(user.userId)
-                customerRepo.refreshCustomers(user.teamId ?: "")
+                val r1 = projectRepo.refreshProjects(user.userId)
+                val r2 = activityRepo.refreshActivities(user.userId)
+                val r3 = customerRepo.refreshCustomers(user.teamId ?: "")
+                val err = listOf(r1, r2, r3).firstOrNull { it.isFailure }
+                if (err != null) {
+                    _uiState.update { it.copy(error = err.exceptionOrNull()?.message) }
+                }
             } catch (e: Exception) {
-                // error handling
+                _uiState.update { it.copy(error = e.message) }
             } finally {
                 _uiState.update { it.copy(isLoading = false) }
             }
@@ -141,7 +145,7 @@ class StatsViewModel @Inject constructor(
         }
 
         val weeklyVisit = activities.count { a ->
-            a.status == "completed" && isInRange(a.activityDate, weekStart, weekEnd)
+            a.status.lowercase() == "completed" && isInRange(a.activityDate, weekStart, weekEnd)
         }
 
         // ── Monthly ───────────────────────────────────
