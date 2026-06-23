@@ -16,35 +16,34 @@ class AuthRepository @Inject constructor(
     private val database: AppDatabase,
     private val syncManager: SyncManager
 ) {
-    suspend fun login(email: String, password: String): kotlin.Result<LoginResponse> {
+    suspend fun login(username: String, password: String): kotlin.Result<LoginResponse> {
         return withContext(Dispatchers.IO) {
             try {
-                val response = authService.login(LoginRequest(email, password))
+                val response = authService.login(LoginRequest(username, password))
                 if (response.isSuccessful && response.body() != null) {
                     val loginResp = response.body()!!
-                    
-                    // 1. บันทึก Token และล้างข้อมูลเก่าในเครื่อง (เพื่อให้ข้อมูลใหม่ที่ Sync มาสะอาด)
+
+                    // 1. บันทึก Token และล้างข้อมูลเก่าในเครื่อง
                     tokenManager.saveToken(loginResp.token)
                     database.clearAllTables()
 
-                    // 2. ดึงข้อมูล Profile เพิ่มเติมจาก PostgREST เพื่อเอา branchId/fullName มาใช้
-                    val userDetail = fetchUserDetail(loginResp.userId)
-
+                    // 2. ใช้ข้อมูลจาก login response โดยตรง (Ktor backend ส่ง branch_id / full_name มาแล้ว)
+                    val branchId = loginResp.branchId ?: ""
                     val authUser = AuthUser(
                         userId     = loginResp.userId,
-                        email      = email,
+                        email      = username,
                         role       = loginResp.role,
-                        teamId     = userDetail?.branchId,
-                        fullName   = userDetail?.fullName,
-                        branchName = userDetail?.branchName
+                        teamId     = branchId,
+                        fullName   = loginResp.fullName,
+                        branchName = null,
+                        empType    = loginResp.empType
                     )
                     tokenManager.saveUserData(authUser)
 
-                    // 3. เริ่มกระบวนการ Sync ข้อมูลทั้งหมด (รอให้เสร็จเพื่อให้หน้าแรกมีข้อมูลครบถ้วน)
-                    // syncAll จะดึง โครงการ, ลูกค้า, นัดหมาย และ บันทึกผล จาก Server
+                    // 3. Sync ข้อมูลทั้งหมดตามสาขาของผู้ใช้
                     syncManager.syncAll(
                         userId   = loginResp.userId,
-                        branchId = userDetail?.branchId ?: ""
+                        branchId = branchId
                     )
 
                     // 4. อัปเดต FCM Token สำหรับการแจ้งเตือน
@@ -52,7 +51,7 @@ class AuthRepository @Inject constructor(
 
                     kotlin.Result.success(loginResp)
                 } else {
-                    kotlin.Result.failure(Exception("อีเมลหรือรหัสผ่านไม่ถูกต้อง"))
+                    kotlin.Result.failure(Exception("รหัสพนักงานหรือรหัสผ่านไม่ถูกต้อง"))
                 }
             } catch (e: Exception) {
                 kotlin.Result.failure(e)
@@ -177,7 +176,7 @@ class AuthRepository @Inject constructor(
                 val userId = userData.userId
 
                 val response = authService.changePassword(
-                    ChangePasswordRequest(userId, oldPassword, newPassword)
+                    ChangePasswordRequest(userId, oldPassword, newPassword)  // userId == empCode
                 )
 
                 if (response.isSuccessful && response.body() != null) {

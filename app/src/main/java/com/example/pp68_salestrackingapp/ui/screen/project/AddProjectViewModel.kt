@@ -6,6 +6,7 @@ import com.example.pp68_salestrackingapp.data.model.Project
 import com.example.pp68_salestrackingapp.data.remote.ApiService
 import com.example.pp68_salestrackingapp.data.repository.AuthRepository
 import com.example.pp68_salestrackingapp.data.repository.BranchRepository
+import com.example.pp68_salestrackingapp.data.repository.ContactRepository
 import com.example.pp68_salestrackingapp.data.repository.CustomerRepository
 import com.example.pp68_salestrackingapp.data.repository.ProjectRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -82,6 +83,7 @@ sealed class AddProjectEvent {
 class AddProjectViewModel @Inject constructor(
     private val projectRepo:  ProjectRepository,
     private val customerRepo: CustomerRepository,
+    private val contactRepo:  ContactRepository,
     private val authRepo:     AuthRepository,
     private val branchRepo:   BranchRepository,
     private val apiService:   ApiService
@@ -171,7 +173,17 @@ class AddProjectViewModel @Inject constructor(
 
                     if (filteredBranches.size == 1) {
                         val b = filteredBranches.first()
-                        onEvent(AddProjectEvent.TeamSelected(b.branchId, b.branchName))
+                        val editMode = _uiState.value.projectId != null
+                        _uiState.update { current ->
+                            current.copy(
+                                selectedTeamId    = b.branchId,
+                                selectedTeamName  = b.branchName,
+                                // ponytail: preserve members in edit mode — TeamSelected would clear them
+                                selectedMemberIds = if (editMode) current.selectedMemberIds else emptySet(),
+                                teamMemberOptions = emptyList()
+                            )
+                        }
+                        loadMembersForTeam(b.branchId)
                     } else if (userBranch != null && _uiState.value.projectId == null) {
                         onEvent(AddProjectEvent.TeamSelected(userBranch.branchId, userBranch.branchName))
                     }
@@ -183,11 +195,12 @@ class AddProjectViewModel @Inject constructor(
     }
 
     private suspend fun loadContactsAndReturn(custId: String): List<Pair<String, String>> {
+        val local = contactRepo.getContactsByCustomerId(custId)
+        if (local.isNotEmpty()) return local.map { it.contactId.trim() to (it.fullName ?: "") }
         return try {
             val resp = apiService.getContactsByCustomerIds("eq.$custId")
-            if (resp.isSuccessful && resp.body() != null) {
-                resp.body()!!.map { c -> c.contactId.trim() to (c.fullName ?: "") }
-            } else emptyList()
+            if (resp.isSuccessful) resp.body().orEmpty().map { it.contactId.trim() to (it.fullName ?: "") }
+            else emptyList()
         } catch (e: Exception) { emptyList() }
     }
 
@@ -289,33 +302,28 @@ class AddProjectViewModel @Inject constructor(
     private fun loadContacts(custId: String) {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoadingContacts = true) }
-            try {
-                val resp = apiService.getContactsByCustomerIds("eq.$custId")
-                if (resp.isSuccessful && resp.body() != null) {
-                    val options = resp.body()!!.map { c -> c.contactId.trim() to (c.fullName ?: "") }
-                    _uiState.update { it.copy(contactOptions = options, isLoadingContacts = false) }
-                } else {
-                    _uiState.update { it.copy(contactOptions = emptyList(), isLoadingContacts = false) }
-                }
-            } catch (e: Exception) {
-                _uiState.update { it.copy(isLoadingContacts = false) }
-            }
+            val options = loadContactsAndReturn(custId)
+            _uiState.update { it.copy(contactOptions = options, isLoadingContacts = false) }
         }
     }
 
     private fun loadMembersForTeam(teamId: String) {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoadingMembers = true) }
+            val currentUser = authRepo.currentUser()
             projectRepo.getMembersByBranch(teamId).fold(
                 onSuccess = { list ->
-                    _uiState.update {
-                        it.copy(
-                            teamMemberOptions = list.map { it.first.trim() to it.second },
-                            isLoadingMembers  = false
-                        )
-                    }
+                    val members = if (list.isEmpty() && currentUser != null) {
+                        listOf(currentUser.userId.trim() to (currentUser.fullName ?: currentUser.userId))
+                    } else list.map { it.first.trim() to it.second }
+                    _uiState.update { it.copy(teamMemberOptions = members, isLoadingMembers = false) }
                 },
-                onFailure = { _uiState.update { it.copy(isLoadingMembers = false) } }
+                onFailure = {
+                    val fallback = if (currentUser != null)
+                        listOf(currentUser.userId.trim() to (currentUser.fullName ?: currentUser.userId))
+                    else emptyList()
+                    _uiState.update { it.copy(teamMemberOptions = fallback, isLoadingMembers = false) }
+                }
             )
         }
     }
@@ -420,7 +428,10 @@ class AddProjectViewModel @Inject constructor(
                 valid = false
             }
         }
-        if (s.selectedTeamId.isNullOrBlank()) valid = false
+        if (s.selectedTeamId.isNullOrBlank()) {
+            _uiState.update { it.copy(saveError = "กรุณาเลือกสาขาที่รับผิดชอบ") }
+            valid = false
+        }
         // ❌ เอาการเช็ค billingBranch ออก เพื่อให้ไม่บังคับกรอกตามที่ผู้ใช้แจ้ง
         return valid
     }
@@ -455,7 +466,7 @@ class AddProjectViewModel @Inject constructor(
                     projectLat            = s.siteLat,
                     projectLong           = s.siteLong,
                     lossReason            = finalLossReason,
-                    createdBy             = userId 
+                    requestBy             = userId
                 )
 
                 val result = if (s.projectId != null) {
@@ -472,8 +483,9 @@ class AddProjectViewModel @Inject constructor(
 
                 result.onSuccess {
                     val finalProjectId = _uiState.value.projectId ?: ""
-                    val memberIds = s.selectedMemberIds.map { it.trim() }.ifEmpty { listOf(userId.trim()) }
-                    
+                    // always include own userId so getMyProjectIds can find this project after sync
+                    val memberIds = (s.selectedMemberIds.map { it.trim() } + userId.trim()).distinct()
+
                     projectRepo.addProjectMembers(
                         projectId = finalProjectId,
                         userIds   = memberIds,

@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import java.time.LocalDate
 import java.util.UUID
 import javax.inject.Inject
 
@@ -92,7 +93,11 @@ class AddCustomerViewModel @Inject constructor(
                             selectedLat       = customer.companyLat,
                             selectedLng       = customer.companyLong,
                             custType          = customer.custType,
-                            companyStatus     = customer.companyStatus ?: "customer",
+                            companyStatus     = when (customer.companyStatus) {
+                                0    -> "new lead"
+                                2    -> "inactive"
+                                else -> "customer"
+                            },
                             isLoading         = false
                         )
                     }
@@ -157,20 +162,26 @@ class AddCustomerViewModel @Inject constructor(
             _uiState.update { it.copy(isLoading = true, saveError = null) }
             val s = _uiState.value
 
-            // ✅ ดึง branchId จาก user ที่ล็อกอินอยู่
-            val userBranchId = authRepo.currentUser()?.teamId
+            val currentUser   = authRepo.currentUser()
+            val userBranchId  = currentUser?.teamId
+            val userEmpCode   = currentUser?.userId
 
             val customer = Customer(
-                custId            = s.custId ?: "CUST-${UUID.randomUUID().toString().take(8).uppercase()}",
-                companyName       = s.companyName,
-                branchId          = userBranchId,        // ✅ set branchId เพื่อให้คนในสาขาเดียวกันเห็น
-                branch            = s.branch.ifBlank { null },
-                custType          = s.custType,
-                companyAddr       = s.address.ifBlank { null },
-                companyLat        = s.selectedLat,
-                companyLong       = s.selectedLng,
-                companyStatus     = s.companyStatus,
-                createdAt         = null // ✅ ให้ Server หรือ Database จัดการ Timestamp อัตโนมัติ
+                custId        = s.custId ?: "CUST-${UUID.randomUUID().toString().take(8).uppercase()}",
+                companyName   = s.companyName,
+                branchId      = userBranchId,
+                branch        = s.branch.ifBlank { null },
+                custType      = s.custType,
+                companyAddr   = s.address.ifBlank { null },
+                companyLat    = s.selectedLat,
+                companyLong   = s.selectedLng,
+                companyStatus = when (s.companyStatus) {
+                    "new lead" -> 0
+                    "inactive" -> 2
+                    else       -> 1
+                },
+                createdBy     = userEmpCode,
+                createdAt     = s.custId?.let { null } ?: LocalDate.now().toString()
             )
 
             // ✅ Create = POST, Edit = PATCH

@@ -54,4 +54,10 @@ interface ActivityDao {
 
     @Query("DELETE FROM activity_table WHERE cust_id = :customerId")
     suspend fun deleteActivitiesByCustomerId(customerId: String)
+
+    @Query("SELECT * FROM activity_table WHERE is_synced = 0")
+    suspend fun getUnsyncedActivities(): List<SalesActivity>
+
+    @Query("UPDATE activity_table SET is_synced = :isSynced WHERE appointment_id = :activityId")
+    suspend fun updateSyncStatus(activityId: String, isSynced: Boolean)
 }

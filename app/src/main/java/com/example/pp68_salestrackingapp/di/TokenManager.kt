@@ -29,6 +29,7 @@ class TokenManager @Inject constructor(
             putString("user_team", user.teamId)
             putString("user_name",   user.fullName)
             putString("user_branch", user.branchName)
+            putString("emp_type",    user.empType)
         }.apply()
     }
 
@@ -40,10 +41,12 @@ class TokenManager @Inject constructor(
             role       = prefs.getString("user_role",   "sale") ?: "sale",
             teamId     = prefs.getString("user_team",   null),
             fullName   = prefs.getString("user_name",   null),
-            branchName = prefs.getString("user_branch", null)
+            branchName = prefs.getString("user_branch", null),
+            empType    = prefs.getString("emp_type",    null)
         )
-
     }
+
+    fun getEmpType(): String? = prefs.getString("emp_type", null)
 
     fun clearToken() {
         prefs.edit().clear().apply()

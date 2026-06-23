@@ -421,6 +421,15 @@ fun ProjectListItem(project: Project, onClick: () -> Unit) {
                         fontSize = 12.sp,
                         color = TextGray
                     )
+                    if (!project.customerName.isNullOrBlank()) {
+                        Text(
+                            text = project.customerName,
+                            fontSize = 12.sp,
+                            color = TextGray,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
                 }
                 Text(
                     text = formatValue(project.expectedValue),

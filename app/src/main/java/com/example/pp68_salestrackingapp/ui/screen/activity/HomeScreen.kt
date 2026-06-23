@@ -313,7 +313,7 @@ fun ActivityCard(
                         InfoRow(Icons.Default.AccessTime, timeText, color = BlueBtn, fontWeight = FontWeight.Medium)
                     }
                     card.companyName?.let { InfoRow(Icons.Default.Business, it) }
-                    card.contactName?.let { InfoRow(Icons.Default.Person, it) }
+
                     card.objective?.let {
                         InfoRow(Icons.AutoMirrored.Filled.Chat, it, color = TextGray)
                     }

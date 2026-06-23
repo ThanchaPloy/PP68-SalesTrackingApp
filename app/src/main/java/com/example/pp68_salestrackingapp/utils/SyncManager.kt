@@ -24,8 +24,8 @@ class SyncManager @Inject constructor(
             .setConstraints(constraints)
             .setBackoffCriteria(
                 BackoffPolicy.EXPONENTIAL,
-                OneTimeWorkRequest.MIN_BACKOFF_MILLIS,
-                TimeUnit.MILLISECONDS
+                10L,
+                TimeUnit.SECONDS
             )
             .addTag("data_sync_tag")
             .build()

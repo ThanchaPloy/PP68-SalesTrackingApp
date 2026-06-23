@@ -59,8 +59,8 @@ class ProjectRepository @Inject constructor(
     suspend fun createProject(project: Project, userId: String): Result<Project> {
         return withContext(Dispatchers.IO) {
             val generatedId = generateNewProjectNumber(project.branchId ?: "")
-            val now = java.time.Instant.now().toString()
-            val projectToSave = project.copy(projectId = generatedId, isSynced = false, createdAt = project.createdAt ?: now)
+            val today = java.time.LocalDate.now().toString()
+            val projectToSave = project.copy(projectId = generatedId, isSynced = false, createdAt = project.createdAt ?: today)
             projectDao.insertProject(projectToSave)
             
             try {
@@ -245,8 +245,11 @@ class ProjectRepository @Inject constructor(
             val bb = branchId.take(2).uppercase().ifBlank { "PJ" }
             val now = LocalDate.now()
             val beYear = (now.year + 543) % 100
-            val count = projectDao.getProjectCountByPrefix("$bb%02d%02d".format(beYear, now.monthValue))
-            "$bb%02d%02d%03d".format(beYear, now.monthValue, count + 1)
+            val prefix = "$bb%02d%02d".format(beYear, now.monthValue)
+            var seq = projectDao.getProjectCountByPrefix(prefix) + 1
+            // skip IDs that already exist in Room to avoid primary key collision
+            while (projectDao.getProjectById("$prefix%03d".format(seq)) != null) seq++
+            "$prefix%03d".format(seq)
         } catch (e: Exception) { "PJ" + System.currentTimeMillis().toString().takeLast(7) }
     }
 

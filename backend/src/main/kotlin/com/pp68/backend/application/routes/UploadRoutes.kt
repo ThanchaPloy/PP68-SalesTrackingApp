@@ -14,7 +14,6 @@ fun Route.uploadRoutes() {
     authenticate("jwt-auth") {
         post("/upload-visit-photo") {
             val uploadDir = application.environment.config.property("upload.dir").getString()
-            File(uploadDir).mkdirs()
 
             var photoUrl: String? = null
             val multipart = call.receiveMultipart()

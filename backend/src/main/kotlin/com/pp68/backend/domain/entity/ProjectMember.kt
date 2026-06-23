@@ -1,7 +1,11 @@
 package com.pp68.backend.domain.entity
 
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
+
+@Serializable
 data class ProjectMember(
-    val projectId: String,
-    val userId: String,
-    val salesRole: String?
+    @SerialName("project_id")  val projectId:  String,
+    @SerialName("user_id")     val userId:     String,
+    @SerialName("sales_role")  val salesRole:  String?
 )

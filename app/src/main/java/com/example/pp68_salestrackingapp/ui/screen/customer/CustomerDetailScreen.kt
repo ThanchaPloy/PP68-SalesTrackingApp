@@ -281,7 +281,10 @@ private fun InfoTab(customer: Customer?, projects: List<Project>, onProjectClick
         item {
             Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = White)) {
                 Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("ประเภทธุรกิจ: ${customer?.custType ?: "-"}", fontWeight = FontWeight.Bold)
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("ประเภทธุรกิจ: ${customer?.custType ?: "-"}", fontWeight = FontWeight.Bold)
+                        BizGroupBadge(customer?.branchId)
+                    }
                     Text(customer?.companyAddr ?: "ไม่พบข้อมูลที่อยู่")
                     
                     // ✅ ลิงก์แผนที่
@@ -536,7 +539,7 @@ fun CustomerDetailScreenPreview() {
         companyAddr = "123 Sukhumvit Road",
         companyLat = 13.7563,
         companyLong = 100.5018,
-        companyStatus = "customer",
+        companyStatus = 1,
         createdAt = "2024-01-01"
     )
 

@@ -6,12 +6,15 @@ import io.ktor.server.http.content.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 
-fun Application.configureRouting() {
+fun Application.configureRouting(jwt: JwtConfig) {
     routing {
         get("/health") { call.respond(mapOf("status" to "ok", "service" to "pp68-backend")) }
 
+// PostgREST compatibility stub — Android calls this to set JWT context, no-op in Ktor
+        post("/rpc/set_app_context") { call.respond(io.ktor.http.HttpStatusCode.OK) }
+
         // Auth — no prefix (matches Cloud Functions URL pattern)
-        authRoutes()
+        authRoutes(jwt)
 
         // All protected API routes
         branchRoutes()

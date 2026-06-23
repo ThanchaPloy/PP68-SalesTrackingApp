@@ -139,19 +139,21 @@ fun AddProjectContent(
             // ── Customer/Company * ────────────────────────────
             FormField("ลูกค้า/บริษัท", required = true) {
                 if (uiState.isLoadingCustomers) LoadingFieldProject()
-                else DropdownField(
-                    value       = uiState.selectedCustomerName ?: "",
-                    placeholder = "เลือกลูกค้า",
-                    options     = uiState.customerOptions.map { it.second },
-                    isError     = uiState.customerError != null,
-                    errorMsg    = uiState.customerError,
-                    onSelect    = { idx ->
-                        onEvent(AddProjectEvent.CustomerSelected(
-                            uiState.customerOptions[idx].first,
-                            uiState.customerOptions[idx].second
-                        ))
-                    }
-                )
+                else Column {
+                    SearchableDropdownField(
+                        value       = uiState.selectedCustomerName ?: "",
+                        placeholder = "เลือกลูกค้า",
+                        options     = uiState.customerOptions.map { it.second },
+                        onSelect    = { name ->
+                            val found = uiState.customerOptions.firstOrNull { it.second == name }
+                            found?.let { onEvent(AddProjectEvent.CustomerSelected(it.first, it.second)) }
+                        },
+                        onClear     = { onEvent(AddProjectEvent.CustomerSelected("", "")) }
+                    )
+                    if (uiState.customerError != null)
+                        Text(uiState.customerError, color = AppColors.Error, fontSize = 12.sp,
+                            modifier = Modifier.padding(start = 4.dp, top = 2.dp))
+                }
             }
 
             // ── Contact Person (กรองตาม customer) ────────────

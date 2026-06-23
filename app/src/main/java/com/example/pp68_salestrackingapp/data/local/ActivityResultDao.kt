@@ -44,4 +44,10 @@ interface ActivityResultDao {
 
     @Query("SELECT * FROM activity_result")
     fun getAllResultsFlow(): Flow<List<ActivityResult>>
+
+    @Query("SELECT * FROM activity_result WHERE is_synced = 0")
+    suspend fun getUnsyncedResults(): List<ActivityResult>
+
+    @Query("UPDATE activity_result SET is_synced = :isSynced WHERE result_id = :resultId")
+    suspend fun updateSyncStatus(resultId: String, isSynced: Boolean)
 }

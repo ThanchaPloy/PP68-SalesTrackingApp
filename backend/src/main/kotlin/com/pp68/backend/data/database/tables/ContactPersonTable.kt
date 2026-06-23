@@ -4,15 +4,17 @@ import org.jetbrains.exposed.sql.Table
 import org.jetbrains.exposed.sql.javatime.timestamp
 
 object ContactPersonTable : Table("contact_person") {
-    val contactId = varchar("contact_id", 64)
-    val custId    = varchar("cust_id", 64).nullable()
-    val userId    = varchar("user_id", 64).nullable()
-    val fullName  = varchar("full_name", 255)
-    val role      = varchar("role", 100).nullable()
-    val phone     = varchar("phone", 50).nullable()
-    val email     = varchar("email", 255).nullable()
-    val lineId    = varchar("line_id", 100).nullable()
-    val createdAt = timestamp("created_at").nullable()
+    val contactId    = long("contact_id").autoIncrement()
+    val customerCode = varchar("customer_code", 64)
+    val contactName  = varchar("contact_name", 255).nullable()
+    val phone        = varchar("phone", 50).nullable()
+    val mobilePhone  = varchar("mobile_phone", 50).nullable()
+    val email        = varchar("email", 255).nullable()
+    val fax          = varchar("fax", 50).nullable()
+    val telexNo      = varchar("telex_no", 50).nullable()
+    val isPrimary    = bool("is_primary").default(true)
+    val createdAt    = timestamp("created_at").nullable()
+    val updatedAt    = timestamp("updated_at").nullable()
 
     override val primaryKey = PrimaryKey(contactId)
 }

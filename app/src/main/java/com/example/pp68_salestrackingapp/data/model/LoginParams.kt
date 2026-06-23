@@ -3,20 +3,17 @@ package com.example.pp68_salestrackingapp.data.model
 import com.google.gson.annotations.SerializedName
 
 data class LoginRequest(
-    @SerializedName("email") val email: String,
-    @SerializedName("password_hash") val passwordHash: String
+    @SerializedName("emp_code") val empCode: String,
+    @SerializedName("password") val password: String
 )
 
-// แก้ให้ตรงกับโครงสร้าง JSON จริงๆ
 data class LoginResponse(
-    @SerializedName("token")
-    val token: String,
-
-    @SerializedName("user_id")
-    val userId: String,
-
-    @SerializedName("role")
-    val role: String
+    @SerializedName("token")     val token:    String,
+    @SerializedName("user_id")   val userId:   String,
+    @SerializedName("full_name") val fullName: String?,
+    @SerializedName("role")      val role:     String,
+    @SerializedName("branch_id") val branchId: String?,
+    @SerializedName("emp_type")  val empType:  String?  = null
 )
 
 // สร้างกล่องมารับข้อมูลที่อยู่ข้างใน "user"

@@ -37,7 +37,7 @@ android {
         val jwtSecret    = project.findProperty("JWT_SECRET")    as String? ?: ""
         buildConfigField("String", "POSTGREST_URL", "\"$postgrestUrl\"")
         buildConfigField("String", "JWT_SECRET",    "\"$jwtSecret\"")
-        buildConfigField("String", "GCP_ENDPOINT", "\"https://postgrest-451670558907.asia-southeast1.run.app\"")
+        buildConfigField("String", "GCP_ENDPOINT", "\"https://postgrest-279493695905.asia-southeast1.run.app\"")
         
         buildConfigField("String", "MAPS_API_KEY", "\"$mapsApiKey\"")
         manifestPlaceholders["MAPS_API_KEY"] = mapsApiKey
@@ -95,6 +95,8 @@ dependencies {
     implementation(libs.hilt.android)
     ksp(libs.hilt.compiler)
     implementation(libs.hilt.navigation.compose)
+    implementation("androidx.hilt:hilt-work:1.2.0")
+    ksp("androidx.hilt:hilt-compiler:1.2.0")
 
     // Retrofit + OkHttp
     implementation(libs.retrofit)
@@ -118,6 +120,9 @@ dependencies {
 
     // Coroutines
     implementation(libs.kotlinx.coroutines.android)
+
+    // WorkManager
+    implementation("androidx.work:work-runtime-ktx:2.9.0")
 
     // Testing
     testImplementation(libs.junit)

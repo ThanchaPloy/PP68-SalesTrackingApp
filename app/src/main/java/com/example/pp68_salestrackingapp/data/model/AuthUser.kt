@@ -6,5 +6,6 @@ data class AuthUser(
     val role: String,
     val teamId: String? = null,
     val fullName:   String? = null,
-    val branchName: String? = null
+    val branchName: String? = null,
+    val empType:    String? = null
 )

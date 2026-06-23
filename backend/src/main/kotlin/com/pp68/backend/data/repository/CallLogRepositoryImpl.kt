@@ -2,38 +2,36 @@ package com.pp68.backend.data.repository
 
 import com.pp68.backend.data.database.tables.CallLogTable
 import com.pp68.backend.domain.entity.CallLog
-import com.pp68.backend.domain.repository.CallLogRepository
-import kotlinx.coroutines.Dispatchers
 import org.jetbrains.exposed.sql.insert
 import org.jetbrains.exposed.sql.select
-import org.jetbrains.exposed.sql.transactions.experimental.newSuspendedTransaction
 
-class CallLogRepositoryImpl : CallLogRepository {
+class CallLogRepositoryImpl {
 
-    private suspend fun <T> dbQuery(block: suspend () -> T): T =
-        newSuspendedTransaction(Dispatchers.IO) { block() }
-
-    override suspend fun create(callLog: CallLog): CallLog = dbQuery {
+    suspend fun create(callLog: CallLog): CallLog = dbQuery {
         CallLogTable.insert {
-            it[callLogId]    = callLog.callLogId
-            it[userId]       = callLog.userId
-            it[custId]       = callLog.custId
-            it[calledNumber] = callLog.calledNumber
-            it[callDate]     = callLog.callDate
-            it[duration]     = callLog.duration
+            it[logId]       = callLog.logId
+            it[userId]      = callLog.userId
+            it[custId]      = callLog.custId
+            it[phoneNumber] = callLog.phoneNumber
+            it[startTime]   = callLog.startTime
+            it[endTime]     = callLog.endTime
+            it[duration]    = callLog.duration
+            it[isSync]      = callLog.isSync
         }
         callLog
     }
 
-    override suspend fun findByUserId(userId: String): List<CallLog> = dbQuery {
+    suspend fun findByUserId(userId: String): List<CallLog> = dbQuery {
         CallLogTable.select { CallLogTable.userId eq userId }.map {
             CallLog(
-                callLogId    = it[CallLogTable.callLogId],
-                userId       = it[CallLogTable.userId],
-                custId       = it[CallLogTable.custId],
-                calledNumber = it[CallLogTable.calledNumber],
-                callDate     = it[CallLogTable.callDate],
-                duration     = it[CallLogTable.duration]
+                logId       = it[CallLogTable.logId],
+                userId      = it[CallLogTable.userId]!!,
+                custId      = it[CallLogTable.custId],
+                phoneNumber = it[CallLogTable.phoneNumber],
+                startTime   = it[CallLogTable.startTime],
+                endTime     = it[CallLogTable.endTime],
+                duration    = it[CallLogTable.duration],
+                isSync      = it[CallLogTable.isSync]
             )
         }
     }

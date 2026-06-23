@@ -3,21 +3,23 @@ package com.example.pp68_salestrackingapp.data.model
 import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.PrimaryKey
+import com.google.gson.annotations.JsonAdapter
 import com.google.gson.annotations.SerializedName
 
 @Entity(tableName = "contact_person")
 data class ContactPerson(
     @PrimaryKey
     @ColumnInfo(name = "contactId")
+    @JsonAdapter(IntOrStringTypeAdapter::class)
     @SerializedName("contact_id")
     val contactId: String,
 
     @ColumnInfo(name = "custId")
-    @SerializedName("cust_id")
+    @SerializedName("customer_code")
     val custId: String,
 
     @ColumnInfo(name = "fullName")
-    @SerializedName("full_name")
+    @SerializedName("contact_name")
     val fullName: String? = null,
 
     @ColumnInfo(name = "nickname")
@@ -29,7 +31,7 @@ data class ContactPerson(
     val position: String? = null,
 
     @ColumnInfo(name = "phoneNumber")
-    @SerializedName("phone_number")
+    @SerializedName("mobile_phone")
     val phoneNumber: String? = null,
 
     @ColumnInfo(name = "email")
@@ -49,6 +51,9 @@ data class ContactPerson(
     val isDmConfirmed: Boolean? = false,
 
     @ColumnInfo(name = "createdBy")
-    @SerializedName("user_id")   // ✅ แก้จาก "created_by" → "user_id" ให้ตรงกับ DB column จริง
-    val createdBy: String? = null
+    @SerializedName("created_by")
+    val createdBy: String? = null,
+
+    @ColumnInfo(name = "is_synced")
+    val isSynced: Boolean = true
 )

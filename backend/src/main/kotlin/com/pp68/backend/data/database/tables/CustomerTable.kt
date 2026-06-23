@@ -4,17 +4,16 @@ import org.jetbrains.exposed.sql.Table
 import org.jetbrains.exposed.sql.javatime.timestamp
 
 object CustomerTable : Table("customer") {
-    val custId        = varchar("cust_id", 64)
-    val companyName   = varchar("company_name", 255)
-    val branchId      = varchar("branch_id", 64).nullable()
-    val branch        = varchar("branch", 255).nullable()
-    val custType      = varchar("cust_type", 100).nullable()
-    val companyAddr   = text("company_addr").nullable()
-    val companyLat    = double("company_lat").nullable()
-    val companyLong   = double("company_long").nullable()
-    val companyStatus = varchar("company_status", 100).nullable()
-    val createdAt     = timestamp("created_at").nullable()
-    val userId        = varchar("user_id", 64).nullable()
+    val customerCode      = varchar("customer_code", 64)
+    val customerName      = varchar("customer_name", 255)
+    val createBy          = varchar("create_by", 64).nullable()
+    val address           = text("address").nullable()
+    val salespersonCode   = varchar("salesperson_code", 50).nullable()
+    val createDate        = varchar("create_date", 32).nullable()
+    val genBusPostingGroup = varchar("gen_bus_posting_group", 100).nullable()
+    val customerStatus    = integer("customer_status").nullable()
+    val grade             = integer("grade").nullable()
+    val updatedAt         = timestamp("updated_at").nullable()
 
-    override val primaryKey = PrimaryKey(custId)
+    override val primaryKey = PrimaryKey(customerCode)
 }

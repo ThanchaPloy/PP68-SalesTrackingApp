@@ -110,8 +110,8 @@ class CustomerRepository @Inject constructor(
 
     suspend fun addCustomer(customer: Customer): kotlin.Result<Unit> {
         return withContext(Dispatchers.IO) {
-            val now = java.time.Instant.now().toString()
-            val localCustomer = customer.copy(isSynced = false, createdAt = customer.createdAt ?: now)
+            val today = java.time.LocalDate.now().toString()
+            val localCustomer = customer.copy(isSynced = false, createdAt = customer.createdAt ?: today)
             customerDao.insertCustomer(localCustomer)
             try {
                 val response = apiService.addCustomer(localCustomer)

@@ -111,19 +111,22 @@ fun AddContactContent(
                 if (uiState.isLoadingCompanies) {
                     LoadingField()
                 } else {
-                    DropdownField(
-                        value       = uiState.selectedCompanyName ?: "",
-                        placeholder = "เลือกบริษัทลูกค้า",
-                        options     = uiState.companyOptions.map { it.second },
-                        isError     = uiState.companyError != null,
-                        errorMsg    = uiState.companyError,
-                        onSelect    = { idx ->
-                            onEvent(AddContactEvent.CompanySelected(
-                                uiState.companyOptions[idx].first,
-                                uiState.companyOptions[idx].second
-                            ))
-                        }
-                    )
+                    Column {
+                        SearchableDropdownField(
+                            value       = uiState.selectedCompanyName ?: "",
+                            placeholder = "เลือกบริษัทลูกค้า",
+                            options     = uiState.companyOptions.map { it.second },
+                            onSelect    = { name ->
+                                val found = uiState.companyOptions.firstOrNull { it.second == name }
+                                found?.let { onEvent(AddContactEvent.CompanySelected(it.first, it.second)) }
+                            },
+                            onClear     = { onEvent(AddContactEvent.CompanySelected("", "")) }
+                        )
+                        if (uiState.companyError != null)
+                            Text(uiState.companyError, color = MaterialTheme.colorScheme.error,
+                                fontSize = 12.sp,
+                                modifier = Modifier.padding(start = 4.dp, top = 2.dp))
+                    }
                 }
             }
 

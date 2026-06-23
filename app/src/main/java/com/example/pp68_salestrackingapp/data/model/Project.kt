@@ -9,15 +9,19 @@ import com.google.gson.annotations.SerializedName
 data class Project(
     @PrimaryKey
     @ColumnInfo(name = "projectId")
-    @SerializedName("project_id")
+    @SerializedName("project_code")
     val projectId: String,
 
     @ColumnInfo(name = "custId")
-    @SerializedName("cust_id")
+    @SerializedName("customer_code")
     val custId: String,
 
+    @ColumnInfo(name = "customerName")
+    @SerializedName("customer_name")
+    val customerName: String? = null,
+
     @ColumnInfo(name = "branchId")
-    @SerializedName("branch_id")
+    @SerializedName("branch_code")
     val branchId: String? = null,
 
     @ColumnInfo(name = "billingBranchId")
@@ -27,6 +31,10 @@ data class Project(
     @ColumnInfo(name = "projectName")
     @SerializedName("project_name")
     val projectName: String,
+
+    @ColumnInfo(name = "remark")
+    @SerializedName("remark")
+    val remark: String? = null,
 
     @ColumnInfo(name = "expectedValue")
     @SerializedName("expected_value")
@@ -77,6 +85,13 @@ data class Project(
     val lossReason: String? = null,
 
     @ColumnInfo(name = "user_id")
-    @SerializedName("user_id")
-    val createdBy: String? = null
+    @SerializedName("request_by")
+    val requestBy: String? = null,
+
+    @ColumnInfo(name = "create_by")
+    @SerializedName("create_by")
+    val createBy: String? = null,
+
+    @ColumnInfo(name = "is_synced")
+    val isSynced: Boolean = true
 )

@@ -26,7 +26,7 @@
 
         <meta-data
             android:name="com.google.android.geo.API_KEY"
-            android:value="AIzaSyAM5_FQ66C5ALdPA2XM1rtHwE8VW3eAkOs" />
+            android:value="REDACTED_MAPS_API_KEY" />
 
         <activity
             android:name=".MainActivity"
@@ -46,6 +46,12 @@
                 <action android:name="com.google.firebase.MESSAGING_EVENT" />
             </intent-filter>
         </service>
+
+        <provider
+            android:name="androidx.work.impl.WorkManagerInitializer"
+            android:authorities="${applicationId}.workmanager-init"
+            android:exported="false"
+            tools:node="remove" />
 
         <provider
             android:name="androidx.core.content.FileProvider"

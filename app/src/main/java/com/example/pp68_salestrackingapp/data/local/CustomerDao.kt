@@ -46,10 +46,14 @@ interface CustomerDao {
 
     @Transaction
     suspend fun clearAndInsert(customers: List<Customer>) {
-        // ❌ ไม่ใช้ deleteAll() เพื่อป้องกันข้อมูลที่บันทึกใหม่แต่ยังไม่ได้ผูกโปรเจกต์หายไปตอนรีเฟรช
-        // ใช้ insertCustomers ซึ่งมี OnConflictStrategy.REPLACE เพื่ออัปเดตข้อมูลที่มีอยู่แล้ว
         if (customers.isNotEmpty()) {
             insertCustomers(customers)
         }
     }
+
+    @Query("SELECT * FROM customer WHERE is_synced = 0")
+    suspend fun getUnsyncedCustomers(): List<Customer>
+
+    @Query("UPDATE customer SET is_synced = :isSynced WHERE cust_id = :customerId")
+    suspend fun updateSyncStatus(customerId: String, isSynced: Boolean)
 }

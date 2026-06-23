@@ -25,7 +25,7 @@ import com.google.gson.annotations.SerializedName
     indices = [Index("project_id"), Index("contact_id")]
 )
 data class ProjectContact(
-    @SerializedName("project_id")
+    @SerializedName("project_code")
     val project_id: String,
     
     @SerializedName("contact_id")

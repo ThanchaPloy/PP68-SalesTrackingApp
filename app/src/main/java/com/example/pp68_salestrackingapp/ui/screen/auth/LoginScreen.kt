@@ -8,7 +8,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Email
+import androidx.compose.material.icons.filled.Badge
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
@@ -47,18 +47,18 @@ fun LoginScreen(
     viewModel: LoginViewModel = hiltViewModel()
 ) {
     val uiState  by viewModel.uiState.collectAsState()
-    val email    by viewModel.email.collectAsState()
+    val username by viewModel.username.collectAsState()
     val password by viewModel.password.collectAsState()
 
     LoginScreenContent(
-        uiState = uiState,
-        email = email,
-        password = password,
-        onEmailChange = viewModel::onEmailChange,
+        uiState          = uiState,
+        username         = username,
+        password         = password,
+        onUsernameChange = viewModel::onUsernameChange,
         onPasswordChange = viewModel::onPasswordChange,
-        onLoginClick = viewModel::login,
-        onRegisterClick = onRegisterClick,
-        onLoginSuccess = {
+        onLoginClick     = viewModel::login,
+        onRegisterClick  = onRegisterClick,
+        onLoginSuccess   = {
             onLoginSuccess(it)
             viewModel.resetState()
         }
@@ -68,9 +68,9 @@ fun LoginScreen(
 @Composable
 fun LoginScreenContent(
     uiState: LoginUiState,
-    email: String,
+    username: String,
     password: String,
-    onEmailChange: (String) -> Unit,
+    onUsernameChange: (String) -> Unit,
     onPasswordChange: (String) -> Unit,
     onLoginClick: () -> Unit,
     onRegisterClick: () -> Unit,
@@ -128,13 +128,13 @@ fun LoginScreenContent(
                 modifier = Modifier.padding(top = 4.dp, bottom = 40.dp)
             )
 
-            // ── Email Field ────────────────────────────────────
+            // ── Username (EMP Code) Field ──────────────────────
             OutlinedTextField(
-                value = email,
-                onValueChange = onEmailChange,
-                label = { Text("อีเมล", color = TextGray) },
+                value = username,
+                onValueChange = onUsernameChange,
+                label = { Text("รหัสพนักงาน (EMP Code)", color = TextGray) },
                 leadingIcon = {
-                    Icon(Icons.Default.Email, contentDescription = null, tint = BrandRed)
+                    Icon(Icons.Default.Badge, contentDescription = null, tint = BrandRed)
                 },
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(12.dp),
@@ -150,7 +150,7 @@ fun LoginScreenContent(
                     unfocusedContainerColor = BgGray
                 ),
                 keyboardOptions = KeyboardOptions(
-                    keyboardType = KeyboardType.Email,
+                    keyboardType = KeyboardType.Ascii,
                     imeAction    = ImeAction.Next
                 ),
                 keyboardActions = KeyboardActions(
@@ -275,14 +275,14 @@ fun LoginScreenContent(
 fun LoginScreenPreview() {
     SalesTrackingTheme {
         LoginScreenContent(
-            uiState = LoginUiState.Idle,
-            email = "",
-            password = "",
-            onEmailChange = {},
+            uiState          = LoginUiState.Idle,
+            username         = "",
+            password         = "",
+            onUsernameChange = {},
             onPasswordChange = {},
-            onLoginClick = {},
-            onRegisterClick = {},
-            onLoginSuccess = {}
+            onLoginClick     = {},
+            onRegisterClick  = {},
+            onLoginSuccess   = {}
         )
     }
 }

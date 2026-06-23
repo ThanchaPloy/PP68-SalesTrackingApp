@@ -1,6 +1,7 @@
 package com.pp68.backend.data.database.tables
 
 import org.jetbrains.exposed.sql.Table
+import org.jetbrains.exposed.sql.javatime.timestamp
 
 object AppointmentTable : Table("appointment") {
     val appointmentId      = varchar("appointment_id", 64)
@@ -10,7 +11,7 @@ object AppointmentTable : Table("appointment") {
     val activityType       = varchar("type", 100)
     val isAppointment      = bool("is_appointment").default(false)
     val topic              = text("topic").nullable()
-    val plannedDate        = varchar("planned_date", 32)
+    val plannedDate        = varchar("planned_date", 32).nullable()
     val plannedTime        = varchar("planned_time", 16).nullable()
     val plannedEndTime     = varchar("planned_end_time", 16).nullable()
     val plannedLat         = double("planned_lat").nullable()
@@ -20,8 +21,9 @@ object AppointmentTable : Table("appointment") {
     val checkInLong        = double("check_in_long").nullable()
     val distanceDeviation  = double("distance_deviation").nullable()
     val isLocationVerified = bool("is_location_verified").default(false)
-    val status             = varchar("plan_status", 50)
+    val status             = varchar("plan_status", 50).nullable()
     val note               = text("note").nullable()
+    val createdAt          = timestamp("created_at").nullable()
 
     override val primaryKey = PrimaryKey(appointmentId)
 }

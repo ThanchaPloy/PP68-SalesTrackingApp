@@ -3,7 +3,7 @@ package com.pp68.backend.data.database
 import com.pp68.backend.data.database.tables.*
 import com.zaxxer.hikari.HikariConfig
 import com.zaxxer.hikari.HikariDataSource
-import io.ktor.server.application.*
+import io.ktor.server.config.ApplicationConfig
 import org.jetbrains.exposed.sql.Database
 import org.jetbrains.exposed.sql.SchemaUtils
 import org.jetbrains.exposed.sql.transactions.transaction
@@ -30,8 +30,8 @@ object DatabaseFactory {
         Database.connect(HikariDataSource(hikariConfig))
 
         transaction {
-            SchemaUtils.createMissingTablesAndColumns(
-                UserTable,
+            SchemaUtils.create(
+                EmployeeTable,
                 BranchTable,
                 CustomerTable,
                 ContactPersonTable,
@@ -42,7 +42,7 @@ object DatabaseFactory {
                 ChecklistTable,
                 ProjectContactTable,
                 AppointmentContactTable,
-                ProductTable,
+                ItemSilverTable,
                 ProjectProductTable,
                 ProjectMemberTable,
                 CallLogTable

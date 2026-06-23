@@ -9,11 +9,11 @@ import com.google.gson.annotations.SerializedName
 data class Branch(
     @PrimaryKey
     @ColumnInfo(name = "branch_id")
-    @SerializedName("branch_id")
+    @SerializedName("branch_code")
     val branchId: String,
 
     @ColumnInfo(name = "branch_name")
-    @SerializedName("branch_name")
+    @SerializedName("name")
     val branchName: String,
 
     @ColumnInfo(name = "region")

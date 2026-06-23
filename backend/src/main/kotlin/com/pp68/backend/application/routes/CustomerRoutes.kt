@@ -1,8 +1,8 @@
 package com.pp68.backend.application.routes
 
-import com.pp68.backend.application.dto.CreateCustomerRequest
+import com.pp68.backend.data.repository.CustomerRepositoryImpl
 import com.pp68.backend.domain.entity.Customer
-import com.pp68.backend.domain.repository.CustomerRepository
+import com.pp68.backend.domain.exception.NotFoundException
 import io.ktor.http.*
 import io.ktor.server.application.*
 import io.ktor.server.auth.*
@@ -12,54 +12,47 @@ import io.ktor.server.routing.*
 import org.koin.ktor.ext.inject
 
 fun Route.customerRoutes() {
-    val repo: CustomerRepository by inject()
+    val customerRepo: CustomerRepositoryImpl by inject()
 
     authenticate("jwt-auth") {
         route("/customer") {
 
             get {
-                val custId   = call.request.queryParameters["cust_id"]
-                val branchId = call.request.queryParameters["branch_id"]
-                val limit    = call.request.queryParameters["limit"]?.toIntOrNull() ?: 1000
+                val custCodeRaw      = call.request.queryParameters["customer_code"]
+                    ?: call.request.queryParameters["cust_id"]
+                val salespersonCode  = call.request.queryParameters["salesperson_code"].stripEq()
+                val limit            = call.request.queryParameters["limit"]?.toIntOrNull() ?: 1000
 
                 when {
-                    custId != null && custId.startsWith("in.") -> {
-                        val ids = custId.removePrefix("in.(").removeSuffix(")").split(",")
-                        call.respond(repo.findByIds(ids))
+                    custCodeRaw != null && custCodeRaw.startsWith("in.") -> {
+                        val codes = custCodeRaw.removePrefix("in.(").removeSuffix(")").split(",")
+                        call.respond<List<Customer>>(customerRepo.findByIds(codes))
                     }
-                    custId != null -> {
-                        val c = repo.findById(custId) ?: return@get call.respond(HttpStatusCode.NotFound)
-                        call.respond(listOf(c))
-                    }
-                    branchId != null -> call.respond(repo.findByBranch(branchId))
-                    else -> call.respond(repo.findAll(limit))
+                    custCodeRaw     != null -> call.respond<List<Customer>>(listOf(customerRepo.findById(custCodeRaw.stripEq()!!) ?: throw NotFoundException("Customer not found: $custCodeRaw")))
+                    salespersonCode != null -> call.respond<List<Customer>>(customerRepo.findBySalesperson(salespersonCode))
+                    else                   -> call.respond<List<Customer>>(customerRepo.findAll(limit))
                 }
             }
 
             post {
-                val req = call.receive<CreateCustomerRequest>()
-                val customer = repo.create(
-                    Customer(req.custId, req.companyName, req.branchId, req.branch,
-                        req.custType, req.companyAddr, req.companyLat, req.companyLong,
-                        req.companyStatus, null, req.userId)
-                )
-                call.respond(HttpStatusCode.Created, listOf(customer))
+                val customer = customerRepo.create(call.receive<Customer>())
+                call.respond<List<Customer>>(HttpStatusCode.Created, listOf(customer))
             }
 
             patch {
-                val custId = call.request.queryParameters["cust_id"]
+                val customerCode = call.request.queryParameters["customer_code"].stripEq()
+                    ?: call.request.queryParameters["cust_id"].stripEq()
                     ?: return@patch call.respond(HttpStatusCode.BadRequest)
                 val updates = call.receive<Map<String, String?>>()
-                val updated = repo.update(custId, updates) ?: return@patch call.respond(HttpStatusCode.NotFound)
-                call.respond(listOf(updated))
+                call.respond<List<Customer>>(listOf(customerRepo.update(customerCode, updates) ?: throw NotFoundException("Customer not found: $customerCode")))
             }
 
             delete {
-                val custId = call.request.queryParameters["cust_id"]
+                val customerCode = call.request.queryParameters["customer_code"].stripEq()
+                    ?: call.request.queryParameters["cust_id"].stripEq()
                     ?: return@delete call.respond(HttpStatusCode.BadRequest)
-                val deleted = repo.delete(custId)
-                if (deleted) call.respond(HttpStatusCode.NoContent)
-                else call.respond(HttpStatusCode.NotFound)
+                if (!customerRepo.delete(customerCode)) throw NotFoundException("Customer not found: $customerCode")
+                call.respond(HttpStatusCode.NoContent)
             }
         }
     }

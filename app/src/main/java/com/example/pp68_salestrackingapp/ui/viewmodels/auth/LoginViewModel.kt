@@ -1,6 +1,5 @@
 package com.example.pp68_salestrackingapp.ui.viewmodels.auth
 
-import android.util.Patterns
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.pp68_salestrackingapp.data.model.AuthUser
@@ -12,7 +11,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
-// 1. สร้าง Sealed Interface สำหรับจัดการ State ของหน้าจอ (LoginScreen ถามหาตัวนี้อยู่)
 sealed interface LoginUiState {
     object Idle : LoginUiState
     object Loading : LoginUiState
@@ -25,23 +23,17 @@ class LoginViewModel @Inject constructor(
     private val authRepository: AuthRepository
 ) : ViewModel() {
 
-    // 2. รวม State ตามที่ LoginScreen.kt คาดหวัง
     private val _uiState = MutableStateFlow<LoginUiState>(LoginUiState.Idle)
     val uiState: StateFlow<LoginUiState> = _uiState.asStateFlow()
 
-    private val _email = MutableStateFlow("")
-    val email: StateFlow<String> = _email.asStateFlow()
+    private val _username = MutableStateFlow("")
+    val username: StateFlow<String> = _username.asStateFlow()
 
     private val _password = MutableStateFlow("")
     val password: StateFlow<String> = _password.asStateFlow()
 
-    init {
-        // เช็คว่าเคยล็อกอินไว้แล้วหรือยัง
-    }
-
-    // 3. ฟังก์ชันอัปเดตช่องกรอกข้อมูล
-    fun onEmailChange(newValue: String) {
-        _email.value = newValue
+    fun onUsernameChange(newValue: String) {
+        _username.value = newValue
         clearError()
     }
 
@@ -50,42 +42,22 @@ class LoginViewModel @Inject constructor(
         clearError()
     }
 
-    private fun isValidEmail(email: String): Boolean {
-        return Patterns.EMAIL_ADDRESS.matcher(email).matches()
-    }
-
-    // 4. ฟังก์ชัน login ดึงค่าจาก StateFlow โดยตรง (หน้าจอจะได้ไม่ต้องส่ง Parameter มา)
     fun login() {
-        val currentEmail = _email.value.trim()
+        val currentUsername = _username.value.trim()
         val currentPassword = _password.value
 
-        if (currentEmail.isBlank() || currentPassword.isBlank()) {
+        if (currentUsername.isBlank() || currentPassword.isBlank()) {
             _uiState.value = LoginUiState.Error("กรุณากรอกข้อมูลให้ครบถ้วน")
-            return
-        }
-
-        if (!isValidEmail(currentEmail)) {
-            _uiState.value = LoginUiState.Error("รูปแบบอีเมลไม่ถูกต้อง")
             return
         }
 
         viewModelScope.launch {
             _uiState.value = LoginUiState.Loading
-
-            // ส่งข้อมูลไปที่ Repository
-            val result = authRepository.login(currentEmail, currentPassword)
-
+            val result = authRepository.login(currentUsername, currentPassword)
             result.onSuccess { response ->
-                // สร้าง AuthUser จากข้อมูลที่ได้จาก API และ Email ที่ผู้ใช้กรอก
-                val authUser = AuthUser(
-                    userId = response.userId,
-                    email = currentEmail,
-                    role = response.role,
-                    teamId = "" // ถ้า API ยังไม่ส่ง teamId มาให้ใส่ค่าว่างไปก่อนครับ
+                _uiState.value = LoginUiState.Success(
+                    AuthUser(userId = response.userId, email = currentUsername, role = response.role)
                 )
-
-                // ส่ง AuthUser เข้าไปให้ UI
-                _uiState.value = LoginUiState.Success(authUser)
             }
             result.onFailure { exception ->
                 _uiState.value = LoginUiState.Error(exception.message ?: "เกิดข้อผิดพลาดในการเข้าสู่ระบบ")
@@ -93,16 +65,13 @@ class LoginViewModel @Inject constructor(
         }
     }
 
-    // 5. ฟังก์ชันล้างค่ากลับเป็นค่าเริ่มต้น
     fun resetState() {
         _uiState.value = LoginUiState.Idle
-        _email.value = ""
+        _username.value = ""
         _password.value = ""
     }
 
     private fun clearError() {
-        if (_uiState.value is LoginUiState.Error) {
-            _uiState.value = LoginUiState.Idle
-        }
+        if (_uiState.value is LoginUiState.Error) _uiState.value = LoginUiState.Idle
     }
 }

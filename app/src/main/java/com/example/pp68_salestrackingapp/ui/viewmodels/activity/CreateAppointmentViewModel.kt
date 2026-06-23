@@ -108,7 +108,7 @@ class CreateAppointmentViewModel @Inject constructor(
         viewModelScope.launch {
             val userId = authRepo.currentUser()?.userId ?: return@launch
             // ดึงทั้งหมดของ user จาก API ไม่ผ่าน Room filter
-            val resp = apiService.getContactPersons(createdBy = "eq.$userId")
+            val resp = apiService.getContactPersons()
             if (resp.isSuccessful) {
                 val options = resp.body()?.map {
                     ContactOption(it.contactId, it.fullName ?: it.contactId)

@@ -27,74 +27,88 @@ class SyncWorker @AssistedInject constructor(
 
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
         try {
-            Log.d("SyncWorker", "Starting sync process...")
+            Log.d("SyncWorker", "Starting background sync...")
 
-            // 1. Sync Customers ก่อน (สำคัญที่สุด เพื่อเลี่ยง Error 23503)
+            // 1. Sync Customers (ลำดับที่ 1: แม่ของข้อมูลอื่น)
             val unsyncedCustomers = customerDao.getUnsyncedCustomers()
             for (customer in unsyncedCustomers) {
                 val response = apiService.addCustomer(customer)
-                if (response.isSuccessful) {
-                    customerDao.updateSyncStatus(customer.custId, true)
-                }
+                if (response.isSuccessful) customerDao.updateSyncStatus(customer.custId, true)
             }
 
             // 2. Sync Contacts
             val unsyncedContacts = contactDao.getUnsyncedContacts()
             for (contact in unsyncedContacts) {
-                val response = apiService.addContact(contact)
-                if (response.isSuccessful) {
-                    contactDao.updateSyncStatus(contact.contactId, true)
+                val fields = buildMap<String, Any?> {
+                    put("customer_code", contact.custId)
+                    contact.fullName?.let { put("contact_name", it) }
+                    contact.phoneNumber?.let { put("mobile_phone", it) }
+                    contact.email?.let { put("email", it) }
                 }
+                val response = apiService.addContact(fields)
+                if (response.isSuccessful) contactDao.updateSyncStatus(contact.contactId, true)
             }
 
             // 3. Sync Projects
             val unsyncedProjects = projectDao.getUnsyncedProjects()
             for (project in unsyncedProjects) {
                 val response = apiService.addProject(project)
-                if (response.isSuccessful) {
-                    projectDao.updateSyncStatus(project.projectId, true)
-                }
+                if (response.isSuccessful) projectDao.updateSyncStatus(project.projectId, true)
             }
 
-            // 4. Sync Activities
+            // 4. Sync Activities (นัดหมาย)
             val unsyncedActivities = activityDao.getUnsyncedActivities()
             for (activity in unsyncedActivities) {
-                val response = apiService.addActivity(activity)
-                if (response.isSuccessful) {
-                    activityDao.updateSyncStatus(activity.activityId, true)
-                }
+                // ล้างฟิลด์ local-only ก่อนส่ง
+                val apiActivity = activity.copy(
+                    projectName = null,
+                    companyName = null,
+                    contactName = null,
+                    weeklyNote  = null
+                )
+                val response = apiService.addActivity(apiActivity)
+                if (response.isSuccessful) activityDao.updateSyncStatus(activity.activityId, true)
             }
 
-            // 5. Sync Activity Results
+            // 5. Sync Activity Results (รายงานผล)
             val unsyncedResults = resultDao.getUnsyncedResults()
             for (res in unsyncedResults) {
                 val body = buildResultBody(res)
                 val response = apiService.upsertActivityResult(body)
-                if (response.isSuccessful) {
-                    resultDao.updateSyncStatus(res.resultId, true)
-                }
+                if (response.isSuccessful) resultDao.updateSyncStatus(res.resultId, true)
             }
 
-            Log.d("SyncWorker", "Sync completed successfully")
+            Log.d("SyncWorker", "Sync process finished successfully")
             Result.success()
         } catch (e: Exception) {
-            Log.e("SyncWorker", "Sync failed: ${e.message}")
+            Log.e("SyncWorker", "Sync error: ${e.message}")
             if (runAttemptCount < 3) Result.retry() else Result.failure()
         }
     }
 
     private fun buildResultBody(result: ActivityResult): Map<String, Any?> {
         val body = mutableMapOf<String, Any?>()
-        body["result_id"]      = result.resultId
-        body["appointment_id"] = result.activityId
-        result.projectId?.let    { body["project_code"] = it }
-        result.createdBy?.let    { body["created_by"] = it }
-        result.reportDate?.let   { body["report_date"] = it }
-        result.newStatus?.let    { body["new_status"] = it }
-        result.opportunityScore?.let { body["opportunity_score"] = it }
-        body["dm_involved"]      = result.dmInvolved
-        body["is_proposal_sent"] = result.isProposalSent
-        result.summary?.let      { body["note_summary"] = it }
-        return body
+        body["result_id"]          = result.resultId
+        body["appointment_id"]     = result.activityId
+        body["project_code"]       = result.projectId
+        body["created_by"]         = result.createdBy
+        body["report_date"]        = result.reportDate
+        body["new_status"]         = result.newStatus
+        body["opportunity_score"]  = result.opportunityScore
+        body["dm_involved"]        = result.dmInvolved
+        body["is_proposal_sent"]   = result.isProposalSent
+        body["proposal_date"]      = result.proposalDate
+        body["competitor_count"]   = result.competitorCount
+        body["response_speed"]     = result.responseSpeed
+        body["deal_position"]      = result.dealPosition
+        body["current_solution"]   = result.previousSolution
+        body["counterparty_type"]  = result.counterpartyMultiplier
+        body["note_summary"]       = result.summary
+        body["photo_url"]          = result.photoUrl
+        body["photo_taken_at"]     = result.photoTakenAt
+        body["photo_lat"]          = result.photoLat
+        body["photo_lng"]          = result.photoLng
+        body["photo_device_model"] = result.photoDeviceModel
+        return body.filterValues { it != null }
     }
 }

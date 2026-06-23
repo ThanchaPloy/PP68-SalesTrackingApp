@@ -94,8 +94,12 @@ class ExportViewModel @Inject constructor(
                 val projectsMap = projectRepo.getAllProjectsFlow().first().associateBy { it.projectId }
                 val exportItems = mutableListOf<ExportActivityItem>()
 
+                // 1. ✅ ประมวลผลกิจกรรมที่มีนัดหมาย (เอาเฉพาะบันทึกสรุปล่าสุด)
                 filteredActivities.forEach { act ->
-                    val relatedResults = allResults.filter { it.activityId == act.activityId }
+                    val latestResult = allResults
+                        .filter { it.activityId == act.activityId }
+                        .maxByOrNull { it.reportDate ?: "" }
+
                     exportItems.add(
                         ExportActivityItem(
                             date = act.plannedDate ?: "",
@@ -104,13 +108,24 @@ class ExportViewModel @Inject constructor(
                             topic = act.objective,
                             note = act.weeklyNote ?: "", 
                             status = act.planStatus,
-                            results = relatedResults.mapNotNull { it.summary }
+                            results = if (latestResult?.summary != null) listOf(latestResult.summary) else emptyList()
                         )
                     )
                 }
 
+                // 2. ✅ ประมวลผลบันทึกที่ไม่มีนัดหมาย (ยุบรวมรายการซ้ำ)
                 val appIdsInWeek = filteredActivities.map { it.activityId }.toSet()
-                filteredResults.filter { it.activityId == null || it.activityId !in appIdsInWeek }.forEach { res ->
+                val standaloneResults = filteredResults
+                    .filter { it.activityId == null || it.activityId !in appIdsInWeek }
+                    .sortedByDescending { it.reportDate ?: "" }
+                    .distinctBy { res ->
+                        // ยุบรวมด้วยกุญแจ: โปรเจค + วันที่ + เนื้อหา (ลบช่องว่าง)
+                        val dateKey = res.reportDate?.take(10) ?: "no_date"
+                        val contentKey = res.summary?.replace("\\s".toRegex(), "") ?: ""
+                        "${res.projectId}_${dateKey}_$contentKey"
+                    }
+
+                standaloneResults.forEach { res ->
                     val project = projectsMap[res.projectId]
                     exportItems.add(
                         ExportActivityItem(

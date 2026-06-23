@@ -1,13 +1,10 @@
 package com.pp68.backend.application.routes
 
-import com.pp68.backend.domain.entity.Appointment
-import com.pp68.backend.domain.entity.ActivityResult
 import com.pp68.backend.domain.entity.ActivityMaster
+import com.pp68.backend.domain.entity.ActivityResult
+import com.pp68.backend.domain.entity.Appointment
 import com.pp68.backend.domain.entity.AppointmentChecklist
-import com.pp68.backend.domain.repository.ActivityMasterRepository
-import com.pp68.backend.domain.repository.ActivityResultRepository
-import com.pp68.backend.domain.repository.AppointmentRepository
-import com.pp68.backend.domain.repository.ChecklistRepository
+import com.pp68.backend.domain.usecase.AppointmentUseCase
 import io.ktor.http.*
 import io.ktor.server.application.*
 import io.ktor.server.auth.*
@@ -17,51 +14,41 @@ import io.ktor.server.routing.*
 import org.koin.ktor.ext.inject
 
 fun Route.appointmentRoutes() {
-    val appointmentRepo: AppointmentRepository by inject()
-    val resultRepo: ActivityResultRepository by inject()
-    val masterRepo: ActivityMasterRepository by inject()
-    val checklistRepo: ChecklistRepository by inject()
+    val appointmentUseCase: AppointmentUseCase by inject()
 
     authenticate("jwt-auth") {
 
         route("/appointment") {
             get {
-                val userId        = call.request.queryParameters["user_id"]
-                val appointmentId = call.request.queryParameters["appointment_id"]
+                val userId        = call.request.queryParameters["user_id"].stripEq()
+                val appointmentId = call.request.queryParameters["appointment_id"].stripEq()
                 val limit         = call.request.queryParameters["limit"]?.toIntOrNull() ?: 1000
 
                 when {
-                    appointmentId != null -> {
-                        val a = appointmentRepo.findById(appointmentId)
-                            ?: return@get call.respond(HttpStatusCode.NotFound)
-                        call.respond(listOf(a))
-                    }
-                    userId != null -> call.respond(appointmentRepo.findByUserId(userId, limit))
+                    appointmentId != null -> call.respond<List<Appointment>>(listOf(appointmentUseCase.findById(appointmentId)))
+                    userId        != null -> call.respond<List<Appointment>>(appointmentUseCase.findByUserId(userId, limit))
                     else -> call.respond(HttpStatusCode.BadRequest, mapOf("error" to "user_id or appointment_id required"))
                 }
             }
 
             post {
                 val appointment = call.receive<Appointment>()
-                call.respond(HttpStatusCode.Created, listOf(appointmentRepo.create(appointment)))
+                call.respond<List<Appointment>>(HttpStatusCode.Created, listOf(appointmentUseCase.create(appointment)))
             }
 
             patch {
-                val appointmentId = call.request.queryParameters["appointment_id"]
+                val appointmentId = call.request.queryParameters["appointment_id"].stripEq()
                     ?: return@patch call.respond(HttpStatusCode.BadRequest)
                 val updates = call.receive<Map<String, String?>>()
-                val updated = appointmentRepo.update(appointmentId, updates)
-                    ?: return@patch call.respond(HttpStatusCode.NotFound)
-                call.respond(listOf(updated))
+                call.respond<List<Appointment>>(listOf(appointmentUseCase.update(appointmentId, updates)))
             }
 
             delete {
-                val appointmentId = call.request.queryParameters["appointment_id"]
-                val custId        = call.request.queryParameters["cust_id"]
+                val appointmentId = call.request.queryParameters["appointment_id"].stripEq()
+                val custId        = call.request.queryParameters["cust_id"].stripEq()
                 when {
-                    appointmentId != null -> if (appointmentRepo.delete(appointmentId)) call.respond(HttpStatusCode.NoContent)
-                                             else call.respond(HttpStatusCode.NotFound)
-                    custId != null -> { appointmentRepo.deleteByCustId(custId); call.respond(HttpStatusCode.NoContent) }
+                    appointmentId != null -> { appointmentUseCase.delete(appointmentId); call.respond(HttpStatusCode.NoContent) }
+                    custId        != null -> { appointmentUseCase.deleteByCustId(custId); call.respond(HttpStatusCode.NoContent) }
                     else -> call.respond(HttpStatusCode.BadRequest)
                 }
             }
@@ -70,21 +57,21 @@ fun Route.appointmentRoutes() {
         route("/activity_master") {
             get {
                 val isActive = call.request.queryParameters["is_active"]
-                call.respond(if (isActive == "eq.true") masterRepo.findActive() else masterRepo.findAll())
+                call.respond<List<ActivityMaster>>(appointmentUseCase.getActivityMasters(activeOnly = isActive == "eq.true"))
             }
         }
 
         route("/activity_result") {
             get {
-                val appointmentId = call.request.queryParameters["appointment_id"]
-                val createdBy     = call.request.queryParameters["created_by"]
-                val resultId      = call.request.queryParameters["result_id"]
+                val appointmentId = call.request.queryParameters["appointment_id"].stripEq()
+                val createdBy     = call.request.queryParameters["created_by"].stripEq()
+                val resultId      = call.request.queryParameters["result_id"].stripEq()
                 val limit         = call.request.queryParameters["limit"]?.toIntOrNull() ?: 1000
 
                 when {
-                    resultId      != null -> call.respond(listOfNotNull(resultRepo.findById(resultId)))
-                    appointmentId != null -> call.respond(listOfNotNull(resultRepo.findByAppointmentId(appointmentId)))
-                    createdBy     != null -> call.respond(resultRepo.findByUserId(createdBy, limit))
+                    resultId      != null -> call.respond<List<ActivityResult>>(listOfNotNull(appointmentUseCase.findResultById(resultId)))
+                    appointmentId != null -> call.respond<List<ActivityResult>>(listOfNotNull(appointmentUseCase.findResultByAppointmentId(appointmentId)))
+                    createdBy     != null -> call.respond<List<ActivityResult>>(appointmentUseCase.findResultsByUserId(createdBy, limit))
                     else -> call.respond(HttpStatusCode.BadRequest)
                 }
             }
@@ -92,30 +79,28 @@ fun Route.appointmentRoutes() {
             post {
                 val prefer = call.request.headers["Prefer"] ?: ""
                 val result = call.receive<ActivityResult>()
-                val saved = if (prefer.contains("merge-duplicates")) resultRepo.upsert(result)
-                            else resultRepo.create(result)
-                call.respond(HttpStatusCode.Created, listOf(saved))
+                val saved = appointmentUseCase.saveResult(result, upsert = prefer.contains("merge-duplicates"))
+                call.respond<List<ActivityResult>>(HttpStatusCode.Created, listOf(saved))
             }
         }
 
         route("/appointment_checklist") {
             get {
-                val appointmentId = call.request.queryParameters["appointment_id"]
+                val appointmentId = call.request.queryParameters["appointment_id"].stripEq()
                     ?: return@get call.respond(HttpStatusCode.BadRequest)
-                call.respond(checklistRepo.findByAppointmentId(appointmentId))
+                call.respond<List<AppointmentChecklist>>(appointmentUseCase.findChecklist(appointmentId))
             }
             post {
                 val items = call.receive<List<AppointmentChecklist>>()
-                call.respond(HttpStatusCode.Created, checklistRepo.create(items))
+                call.respond<List<AppointmentChecklist>>(HttpStatusCode.Created, appointmentUseCase.createChecklist(items))
             }
             patch {
-                val appointmentId = call.request.queryParameters["appointment_id"]
+                val appointmentId = call.request.queryParameters["appointment_id"].stripEq()
                     ?: return@patch call.respond(HttpStatusCode.BadRequest)
-                val masterId = call.request.queryParameters["master_id"]
+                val masterId = call.request.queryParameters["master_id"].stripEq()
                     ?: return@patch call.respond(HttpStatusCode.BadRequest)
                 val body = call.receive<Map<String, Boolean>>()
-                val updated = checklistRepo.update(appointmentId, masterId, body["is_checked"] ?: false)
-                call.respond(listOfNotNull(updated))
+                call.respond<List<AppointmentChecklist>>(listOf(appointmentUseCase.updateChecklist(appointmentId, masterId, body["is_checked"] ?: false)))
             }
         }
     }

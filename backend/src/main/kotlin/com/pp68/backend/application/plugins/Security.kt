@@ -6,45 +6,40 @@ import io.ktor.server.application.*
 import io.ktor.server.auth.*
 import io.ktor.server.auth.jwt.*
 
-fun Application.configureSecurity() {
-    val jwtSecret   = environment.config.property("jwt.secret").getString()
-    val jwtIssuer   = environment.config.property("jwt.issuer").getString()
-    val jwtAudience = environment.config.property("jwt.audience").getString()
-    val jwtRealm    = environment.config.property("jwt.realm").getString()
+data class JwtConfig(val secret: String, val issuer: String, val audience: String, val realm: String, val expireHours: Long)
 
+fun Application.configureSecurity(): JwtConfig {
+    val cfg = JwtConfig(
+        secret      = environment.config.property("jwt.secret").getString(),
+        issuer      = environment.config.property("jwt.issuer").getString(),
+        audience    = environment.config.property("jwt.audience").getString(),
+        realm       = environment.config.property("jwt.realm").getString(),
+        expireHours = environment.config.property("jwt.expireHours").getString().toLong()
+    )
     install(Authentication) {
         jwt("jwt-auth") {
-            realm = jwtRealm
+            realm = cfg.realm
             verifier(
-                JWT.require(Algorithm.HMAC256(jwtSecret))
-                    .withAudience(jwtAudience)
-                    .withIssuer(jwtIssuer)
+                JWT.require(Algorithm.HMAC256(cfg.secret))
+                    .withAudience(cfg.audience)
+                    .withIssuer(cfg.issuer)
                     .build()
             )
             validate { credential ->
-                if (credential.payload.getClaim("userId").asString() != null)
+                if (credential.payload.getClaim("user_id").asString() != null)
                     JWTPrincipal(credential.payload)
                 else null
             }
         }
     }
+    return cfg
 }
 
-fun generateToken(
-    userId: String,
-    email: String,
-    role: String,
-    secret: String,
-    issuer: String,
-    audience: String,
-    expireHours: Long = 168
-): String {
-    return JWT.create()
-        .withAudience(audience)
-        .withIssuer(issuer)
-        .withClaim("userId", userId)
-        .withClaim("email", email)
-        .withClaim("role", role)
-        .withExpiresAt(java.util.Date(System.currentTimeMillis() + expireHours * 3600 * 1000))
-        .sign(Algorithm.HMAC256(secret))
-}
+fun generateToken(userId: String, jwt: JwtConfig): String =
+    JWT.create()
+        .withAudience(jwt.audience)
+        .withIssuer(jwt.issuer)
+        .withSubject(userId)
+        .withClaim("user_id", userId)
+        .withExpiresAt(java.util.Date(System.currentTimeMillis() + jwt.expireHours * 3600 * 1000))
+        .sign(Algorithm.HMAC256(jwt.secret))

@@ -11,7 +11,7 @@ import javax.inject.Singleton
 class FirebaseRealtimeService @Inject constructor() {
 
     private val db = Firebase.database(
-        "https://algebraic-ratio-490214-r0-default-rtdb.asia-southeast1.firebasedatabase.app"
+        "https://project-fdfd9e00-ddd6-4f-5c003-default-rtdb.asia-southeast1.firebasedatabase.app"
     ).reference
 
     // ✅ เขียน project status update ลง Firebase

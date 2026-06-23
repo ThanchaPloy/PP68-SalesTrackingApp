@@ -7,12 +7,23 @@ import io.ktor.server.application.*
 import io.ktor.server.netty.EngineMain
 import org.koin.ktor.plugin.Koin
 import org.koin.logger.slf4jLogger
+import java.io.File
 
-fun main(args: Array<String>) = EngineMain.main(args)
+fun main(args: Array<String>) {
+    loadDotenv()
+    EngineMain.main(args)
+}
+
+private fun loadDotenv() {
+    val f = File(".env"); if (!f.exists()) return
+    val props = java.util.Properties().apply { load(f.bufferedReader()) }
+    props.forEach { k, v -> if (System.getenv(k as String) == null) System.setProperty(k, v as String) }
+}
 
 fun Application.module() {
     // Database
     DatabaseFactory.init(environment.config)
+    File(environment.config.property("upload.dir").getString()).mkdirs()
 
     // DI
     install(Koin) {
@@ -23,9 +34,9 @@ fun Application.module() {
     // Plugins
     configureSerialization()
     configureHTTP()
-    configureSecurity()
+    val jwt = configureSecurity()
     configureStatusPages()
-    configureRouting()
+    configureRouting(jwt)
 
     log.info("PP68 Backend started on port ${environment.config.property("ktor.deployment.port").getString()}")
 }

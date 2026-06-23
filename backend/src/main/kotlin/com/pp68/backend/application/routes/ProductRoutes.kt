@@ -1,7 +1,9 @@
 package com.pp68.backend.application.routes
 
+import com.pp68.backend.data.repository.ProductRepositoryImpl
+import com.pp68.backend.domain.entity.Product
 import com.pp68.backend.domain.entity.ProjectProduct
-import com.pp68.backend.domain.repository.ProductRepository
+import com.pp68.backend.domain.exception.NotFoundException
 import io.ktor.http.*
 import io.ktor.server.application.*
 import io.ktor.server.auth.*
@@ -11,23 +13,23 @@ import io.ktor.server.routing.*
 import org.koin.ktor.ext.inject
 
 fun Route.productRoutes() {
-    val repo: ProductRepository by inject()
+    val productRepo: ProductRepositoryImpl by inject()
 
     authenticate("jwt-auth") {
 
         route("/products") {
-            get { call.respond(repo.findAllProducts()) }
+            get { call.respond<List<Product>>(productRepo.findAllProducts()) }
         }
 
         route("/project_product") {
             get {
                 val projectId = call.request.queryParameters["project_id"]
                     ?: return@get call.respond(HttpStatusCode.BadRequest)
-                call.respond(repo.findProjectProducts(projectId))
+                call.respond<List<ProjectProduct>>(productRepo.findProjectProducts(projectId))
             }
             post {
                 val item = call.receive<ProjectProduct>()
-                call.respond(HttpStatusCode.Created, listOf(repo.addProductToProject(item)))
+                call.respond<List<ProjectProduct>>(HttpStatusCode.Created, listOf(productRepo.addProductToProject(item)))
             }
             patch {
                 val projectId = call.request.queryParameters["project_id"]
@@ -35,17 +37,15 @@ fun Route.productRoutes() {
                 val productId = call.request.queryParameters["product_id"]
                     ?: return@patch call.respond(HttpStatusCode.BadRequest)
                 val updates = call.receive<Map<String, String?>>()
-                val updated = repo.updateProjectProduct(projectId, productId, updates)
-                    ?: return@patch call.respond(HttpStatusCode.NotFound)
-                call.respond(listOf(updated))
+                call.respond<List<ProjectProduct>>(listOf(productRepo.updateProjectProduct(projectId, productId, updates) ?: throw NotFoundException("Project product not found: $projectId / $productId")))
             }
             delete {
                 val projectId = call.request.queryParameters["project_id"]
                     ?: return@delete call.respond(HttpStatusCode.BadRequest)
                 val productId = call.request.queryParameters["product_id"]
                     ?: return@delete call.respond(HttpStatusCode.BadRequest)
-                if (repo.deleteProjectProduct(projectId, productId)) call.respond(HttpStatusCode.NoContent)
-                else call.respond(HttpStatusCode.NotFound)
+                if (!productRepo.deleteProjectProduct(projectId, productId)) throw NotFoundException("Project product not found: $projectId / $productId")
+                call.respond(HttpStatusCode.NoContent)
             }
         }
     }

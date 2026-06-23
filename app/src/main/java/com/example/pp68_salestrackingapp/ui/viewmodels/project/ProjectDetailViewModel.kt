@@ -79,17 +79,14 @@ class ProjectDetailViewModel @Inject constructor(
 
     private fun syncProjectFromServer(id: String) {
         viewModelScope.launch {
-            projectRepo.syncProject(id)
+            projectRepo.getProjectById(id)
         }
     }
 
-    /**
-     * ✅ บังคับโหลดข้อมูลสมาชิกและโปรเจคจาก Server ใหม่
-     */
     fun refresh() {
         val id = projectId ?: return
         viewModelScope.launch {
-            projectRepo.syncProject(id)
+            projectRepo.getProjectById(id)
             val members = projectRepo.getProjectMembersDetailed(id)
                 .map { TeamMember(it.first, it.second) }
             _uiState.update { it.copy(teamMembers = members) }

@@ -1,6 +1,10 @@
 package com.pp68.backend.domain.entity
 
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
+
+@Serializable
 data class ProjectContact(
-    val projectId: String,
-    val contactId: String
+    @SerialName("project_id") val projectId: String,
+    @SerialName("contact_id") val contactId: String
 )

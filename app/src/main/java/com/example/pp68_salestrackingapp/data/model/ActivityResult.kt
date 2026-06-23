@@ -24,7 +24,7 @@ data class ActivityResult(
     val activityId: String? = null,
 
     @ColumnInfo(name = "project_id")
-    @SerializedName("project_id")
+    @SerializedName("project_code")
     val projectId: String? = null,
 
     @ColumnInfo(name = "created_by")
@@ -101,5 +101,8 @@ data class ActivityResult(
 
     @ColumnInfo(name = "loss_reason")
     @SerializedName("loss_reason")
-    val lossReason: String? = null
+    val lossReason: String? = null,
+
+    @ColumnInfo(name = "is_synced")
+    val isSynced: Boolean = true
 )

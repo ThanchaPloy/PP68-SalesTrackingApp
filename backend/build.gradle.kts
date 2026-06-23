@@ -47,6 +47,10 @@ dependencies {
     implementation("org.postgresql:postgresql:42.7.1")
     implementation("com.zaxxer:HikariCP:5.1.0")
 
+    // Cloud SQL connector (socket factory for GCP Cloud Run)
+    implementation("com.google.cloud.sql:postgres-socket-factory:1.19.1")
+    implementation("com.google.auth:google-auth-library-oauth2-http:1.23.0")
+
     // Koin DI
     implementation("io.insert-koin:koin-ktor:$koin_version")
     implementation("io.insert-koin:koin-logger-slf4j:$koin_version")

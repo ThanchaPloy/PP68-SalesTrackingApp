@@ -2,15 +2,10 @@ package com.pp68.backend.data.repository
 
 import com.pp68.backend.data.database.tables.AppointmentTable
 import com.pp68.backend.domain.entity.Appointment
-import com.pp68.backend.domain.repository.AppointmentRepository
-import kotlinx.coroutines.Dispatchers
 import org.jetbrains.exposed.sql.*
-import org.jetbrains.exposed.sql.transactions.experimental.newSuspendedTransaction
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 
-class AppointmentRepositoryImpl : AppointmentRepository {
-
-    private suspend fun <T> dbQuery(block: suspend () -> T): T =
-        newSuspendedTransaction(Dispatchers.IO) { block() }
+class AppointmentRepositoryImpl {
 
     private fun ResultRow.toAppointment() = Appointment(
         appointmentId      = this[AppointmentTable.appointmentId],
@@ -31,10 +26,11 @@ class AppointmentRepositoryImpl : AppointmentRepository {
         distanceDeviation  = this[AppointmentTable.distanceDeviation],
         isLocationVerified = this[AppointmentTable.isLocationVerified],
         status             = this[AppointmentTable.status],
-        note               = this[AppointmentTable.note]
+        note               = this[AppointmentTable.note],
+        createdAt          = this[AppointmentTable.createdAt]?.toString()
     )
 
-    override suspend fun findByUserId(userId: String, limit: Int): List<Appointment> = dbQuery {
+    suspend fun findByUserId(userId: String, limit: Int): List<Appointment> = dbQuery {
         AppointmentTable
             .select { AppointmentTable.userId eq userId }
             .orderBy(AppointmentTable.plannedDate, SortOrder.DESC)
@@ -42,12 +38,12 @@ class AppointmentRepositoryImpl : AppointmentRepository {
             .map { it.toAppointment() }
     }
 
-    override suspend fun findById(appointmentId: String): Appointment? = dbQuery {
+    suspend fun findById(appointmentId: String): Appointment? = dbQuery {
         AppointmentTable.select { AppointmentTable.appointmentId eq appointmentId }
             .singleOrNull()?.toAppointment()
     }
 
-    override suspend fun create(appointment: Appointment): Appointment = dbQuery {
+    suspend fun create(appointment: Appointment): Appointment = dbQuery {
         AppointmentTable.insert {
             it[appointmentId]      = appointment.appointmentId
             it[userId]             = appointment.userId
@@ -68,7 +64,7 @@ class AppointmentRepositoryImpl : AppointmentRepository {
             .single().toAppointment()
     }
 
-    override suspend fun update(appointmentId: String, updates: Map<String, Any?>): Appointment? = dbQuery {
+    suspend fun update(appointmentId: String, updates: Map<String, Any?>): Appointment? = dbQuery {
         AppointmentTable.update({ AppointmentTable.appointmentId eq appointmentId }) { stmt ->
             updates["plan_status"]?.let          { v -> stmt[status]             = v as String }
             updates["check_in_time"]?.let        { v -> stmt[checkInTime]        = v as String }
@@ -83,11 +79,11 @@ class AppointmentRepositoryImpl : AppointmentRepository {
             .singleOrNull()?.toAppointment()
     }
 
-    override suspend fun delete(appointmentId: String): Boolean = dbQuery {
+    suspend fun delete(appointmentId: String): Boolean = dbQuery {
         AppointmentTable.deleteWhere { AppointmentTable.appointmentId eq appointmentId } > 0
     }
 
-    override suspend fun deleteByCustId(custId: String): Boolean = dbQuery {
+    suspend fun deleteByCustId(custId: String): Boolean = dbQuery {
         AppointmentTable.deleteWhere { AppointmentTable.customerId eq custId } > 0
     }
 }

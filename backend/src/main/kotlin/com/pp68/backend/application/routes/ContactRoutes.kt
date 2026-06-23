@@ -1,7 +1,8 @@
 package com.pp68.backend.application.routes
 
+import com.pp68.backend.data.repository.ContactPersonRepositoryImpl
 import com.pp68.backend.domain.entity.ContactPerson
-import com.pp68.backend.domain.repository.ContactPersonRepository
+import com.pp68.backend.domain.exception.NotFoundException
 import io.ktor.http.*
 import io.ktor.server.application.*
 import io.ktor.server.auth.*
@@ -11,49 +12,47 @@ import io.ktor.server.routing.*
 import org.koin.ktor.ext.inject
 
 fun Route.contactRoutes() {
-    val repo: ContactPersonRepository by inject()
+    val contactRepo: ContactPersonRepositoryImpl by inject()
 
     authenticate("jwt-auth") {
         route("/contact_person") {
+            fun custCode(params: io.ktor.http.Parameters) =
+                (params["customer_code"] ?: params["cust_id"]).stripEq()
 
             get {
-                val custId    = call.request.queryParameters["cust_id"]
-                val userId    = call.request.queryParameters["user_id"]
-                val contactId = call.request.queryParameters["contact_id"]
-                val limit     = call.request.queryParameters["limit"]?.toIntOrNull() ?: 1000
+                val custCodeRaw = call.request.queryParameters["customer_code"]
+                    ?: call.request.queryParameters["cust_id"]
+                val contactId = call.request.queryParameters["contact_id"]?.toLongOrNull()
 
                 when {
-                    custId != null && custId.startsWith("in.") -> {
-                        val ids = custId.removePrefix("in.(").removeSuffix(")").split(",")
-                        call.respond(repo.findByCustIds(ids))
+                    custCodeRaw != null && custCodeRaw.startsWith("in.") -> {
+                        val codes = custCodeRaw.removePrefix("in.(").removeSuffix(")").split(",")
+                        call.respond<List<ContactPerson>>(contactRepo.findByCustomerCodes(codes))
                     }
-                    custId    != null -> call.respond(repo.findByCustId(custId))
-                    userId    != null -> call.respond(repo.findByUserId(userId))
-                    contactId != null -> call.respond(listOfNotNull(repo.findById(contactId)))
+                    custCodeRaw != null -> call.respond<List<ContactPerson>>(contactRepo.findByCustomerCode(custCodeRaw.stripEq()!!))
+                    contactId   != null -> call.respond<List<ContactPerson>>(listOf(contactRepo.findById(contactId) ?: throw NotFoundException("Contact not found: $contactId")))
                     else -> call.respond(HttpStatusCode.BadRequest)
                 }
             }
 
             post {
                 val contact = call.receive<ContactPerson>()
-                call.respond(HttpStatusCode.Created, listOf(repo.create(contact)))
+                call.respond<List<ContactPerson>>(HttpStatusCode.Created, listOf(contactRepo.create(contact)))
             }
 
             patch {
-                val contactId = call.request.queryParameters["contact_id"]
+                val contactId = call.request.queryParameters["contact_id"]?.toLongOrNull()
                     ?: return@patch call.respond(HttpStatusCode.BadRequest)
                 val updates = call.receive<Map<String, String?>>()
-                val updated = repo.update(contactId, updates) ?: return@patch call.respond(HttpStatusCode.NotFound)
-                call.respond(listOf(updated))
+                call.respond<List<ContactPerson>>(listOf(contactRepo.update(contactId, updates) ?: throw NotFoundException("Contact not found: $contactId")))
             }
 
             delete {
-                val contactId = call.request.queryParameters["contact_id"]
-                val custId    = call.request.queryParameters["cust_id"]
+                val contactId    = call.request.queryParameters["contact_id"]?.toLongOrNull()
+                val customerCode = custCode(call.request.queryParameters)
                 when {
-                    contactId != null -> if (repo.delete(contactId)) call.respond(HttpStatusCode.NoContent)
-                                         else call.respond(HttpStatusCode.NotFound)
-                    custId    != null -> { repo.deleteByCustId(custId); call.respond(HttpStatusCode.NoContent) }
+                    contactId    != null -> { if (!contactRepo.delete(contactId)) throw NotFoundException("Contact not found: $contactId"); call.respond(HttpStatusCode.NoContent) }
+                    customerCode != null -> { contactRepo.deleteByCustomerCode(customerCode); call.respond(HttpStatusCode.NoContent) }
                     else -> call.respond(HttpStatusCode.BadRequest)
                 }
             }

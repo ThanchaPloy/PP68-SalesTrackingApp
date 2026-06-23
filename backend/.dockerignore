@@ -1,0 +1,7 @@
+﻿.env
+build/
+!build/libs/*.jar
+.idea/
+uploads/
+*.log
+cloud-sql-proxy.exe

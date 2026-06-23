@@ -36,27 +36,24 @@ class ContactListViewModel @Inject constructor(
         observeContacts()
     }
 
-    // ContactListViewModel.kt — แก้ observeContacts()
     private fun observeContacts() {
         viewModelScope.launch {
-            val userId = authRepo.currentUser()?.userId ?: return@launch  // ✅ ดึง userId ก่อน
             _uiState.map { it.searchQuery }
                 .distinctUntilChanged()
                 .debounce(300)
                 .flatMapLatest { query ->
-                    if (query.isBlank()) repo.getContactsByUserFlow(userId)       // ✅
-                    else repo.searchContactsByUserFlow(query, userId)              // ✅
+                    if (query.isBlank()) repo.getAllContactsFlow()
+                    else repo.searchContactsFlow(query)
                 }
                 .catch { e -> _uiState.update { it.copy(error = e.message) } }
-                .collect { resultList -> _uiState.update { it.copy(contacts = resultList) } }
+                .collect { list -> _uiState.update { it.copy(contacts = list) } }
         }
     }
 
     fun refreshData() {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, error = null) }
-            val userId = authRepo.currentUser()?.userId ?: return@launch
-            repo.refreshContacts(userId)  // ✅ ส่ง userId
+            repo.refreshContacts().onFailure { e -> _uiState.update { it.copy(error = e.message) } }
             _uiState.update { it.copy(isLoading = false) }
         }
     }
@@ -66,8 +63,6 @@ class ContactListViewModel @Inject constructor(
     }
 
     fun logout() {
-        viewModelScope.launch {
-            authRepo.logout()
-        }
+        viewModelScope.launch { authRepo.logout() }
     }
 }

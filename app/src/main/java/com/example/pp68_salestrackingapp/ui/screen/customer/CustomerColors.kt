@@ -45,6 +45,23 @@ fun StatusBadgeLight(status: String?) {
     }
 }
 
+// ─── Business Group Badge ─────────────────────────────────────
+@Composable
+fun BizGroupBadge(code: String?) {
+    if (code.isNullOrBlank()) return
+    val (label, bg) = when (code.uppercase()) {
+        "R" -> "Retail"     to Color(0xFF0891B2)
+        "W" -> "Wholesale"  to Color(0xFF7C3AED)
+        "I" -> "Industry"   to Color(0xFFEA580C)
+        "P" -> "Project"    to Color(0xFF059669)
+        else -> code        to Color(0xFF6B7280)
+    }
+    Surface(shape = RoundedCornerShape(6.dp), color = bg) {
+        Text(label, color = White, fontSize = 11.sp, fontWeight = FontWeight.Medium,
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp))
+    }
+}
+
 // ─── Customer Type Tag ────────────────────────────────────────
 @Composable
 fun TypeTag(type: String?) {

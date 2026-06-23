@@ -10,27 +10,39 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface ContactDao {
-    // 1. ดึงข้อมูลทั้งหมด เรียงตามชื่อ
-    @Query("SELECT * FROM contact_person ORDER BY fullName ASC")
+    @Query("""
+        SELECT cp.contactId, cp.custId,
+               COALESCE(cp.fullName, c.company_name) AS fullName,
+               cp.nickname, cp.position, cp.phoneNumber, cp.email,
+               cp.line, cp.isActive, cp.isDmConfirmed, cp.createdBy, cp.is_synced
+        FROM contact_person cp
+        LEFT JOIN customer c ON cp.custId = c.cust_id
+        ORDER BY fullName ASC
+    """)
     fun getAllContacts(): Flow<List<ContactPerson>>
 
-    // 2. ฟังก์ชันที่ Repository เรียกใช้ (ชื่อตารางต้องตรงกับ Entity)
-    @Query("SELECT * FROM contact_person")
-    fun getAllContactPersons(): Flow<List<ContactPerson>>
-
-    // 3. ค้นหาจากชื่อ และชื่อเล่น
-    @Query("SELECT * FROM contact_person WHERE fullName LIKE '%' || :searchQuery || '%' OR nickname LIKE '%' || :searchQuery || '%'")
-    fun searchContacts(searchQuery: String): Flow<List<ContactPerson>>
+    @Query("""
+        SELECT cp.contactId, cp.custId,
+               COALESCE(cp.fullName, c.company_name) AS fullName,
+               cp.nickname, cp.position, cp.phoneNumber, cp.email,
+               cp.line, cp.isActive, cp.isDmConfirmed, cp.createdBy, cp.is_synced
+        FROM contact_person cp
+        LEFT JOIN customer c ON cp.custId = c.cust_id
+        WHERE COALESCE(cp.fullName, c.company_name) LIKE :query
+           OR cp.nickname LIKE :query
+           OR c.company_name LIKE :query
+        ORDER BY fullName ASC
+    """)
+    fun searchContactsWithCompany(query: String): Flow<List<ContactPerson>>
 
     @Query("SELECT * FROM contact_person WHERE contactId = :contactId LIMIT 1")
     suspend fun getContactById(contactId: String): ContactPerson?
 
-    // 4. ดึงตาม ID ลูกค้า (ใช้ custId ให้ตรงกับใน Model)
     @Query("SELECT * FROM contact_person WHERE custId = :customerId")
     fun getContactsByCustomer(customerId: String): Flow<List<ContactPerson>>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertContacts(contacts: List<ContactPerson>)
+    suspend fun insertAll(contacts: List<ContactPerson>)
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertContact(contact: ContactPerson)
@@ -39,34 +51,23 @@ interface ContactDao {
     suspend fun deleteContactById(contactId: String)
 
     @Query("DELETE FROM contact_person")
-    suspend fun deleteAllContacts()
+    suspend fun deleteAll()
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertAll(contact: List<ContactPerson>)
+    @Query("DELETE FROM contact_person WHERE is_synced = 1")
+    suspend fun deleteAllSynced()
 
     @Query("SELECT * FROM contact_person WHERE custId = :custId")
     suspend fun getContactsByCustomerId(custId: String): List<ContactPerson>
 
-
-    @Query("DELETE FROM contact_person")
-    suspend fun deleteAll()
-
-    // ContactDao.kt
-    @Query("SELECT * FROM contact_person WHERE createdBy = :userId ORDER BY fullName ASC")
-    fun getContactsByUser(userId: String): Flow<List<ContactPerson>>
-
-    @Query("""
-        SELECT cp.* FROM contact_person cp
-        INNER JOIN customer c ON cp.custId = c.custId
-        WHERE cp.createdBy = :userId AND (cp.fullName LIKE :query OR cp.nickname LIKE :query OR c.companyName LIKE :query)
-    """)
-    fun searchContactsByUser(query: String, userId: String): Flow<List<ContactPerson>>
-
-
     @Transaction
     suspend fun clearAndInsert(contacts: List<ContactPerson>) {
-        deleteAll()
+        deleteAllSynced()   // คง row is_synced=0 (ออฟไลน์) ไว้
         insertAll(contacts)
     }
 
+    @Query("SELECT * FROM contact_person WHERE is_synced = 0")
+    suspend fun getUnsyncedContacts(): List<ContactPerson>
+
+    @Query("UPDATE contact_person SET is_synced = :isSynced WHERE contactId = :contactId")
+    suspend fun updateSyncStatus(contactId: String, isSynced: Boolean)
 }

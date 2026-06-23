@@ -13,13 +13,8 @@ class SyncManager @Inject constructor(
     private val projectRepo: ProjectRepository,
     private val activityRepo: ActivityRepository
 ) {
-    /**
-     * ดึงข้อมูลทั้งหมดจาก Server มาลง Local Database
-     * ใช้ supervisorScope เพื่อให้งานแต่ละส่วนทำงานแยกกัน ถ้าส่วนหนึ่งเสีย ส่วนอื่นต้องยังทำงานได้
-     */
     suspend fun syncAll(userId: String, branchId: String) {
         supervisorScope {
-            // 1. ดึงข้อมูลโครงการ (สำคัญที่สุด)
             launch {
                 try {
                     projectRepo.refreshProjects(userId)
@@ -28,26 +23,18 @@ class SyncManager @Inject constructor(
                 }
             }
 
-            // 2. ดึงรายชื่อลูกค้าและผู้ติดต่อ
+            // Customers then contacts — contacts are scoped to customer_codes in Room
             launch {
                 try {
                     if (branchId.isNotEmpty()) {
                         customerRepo.refreshCustomers(branchId)
                     }
+                    contactRepo.refreshContacts()
                 } catch (e: Exception) {
-                    Log.e("SyncManager", "Failed to sync customers: ${e.message}")
+                    Log.e("SyncManager", "Failed to sync customers/contacts: ${e.message}")
                 }
             }
 
-            launch {
-                try {
-                    contactRepo.refreshContacts(userId)
-                } catch (e: Exception) {
-                    Log.e("SyncManager", "Failed to sync contacts: ${e.message}")
-                }
-            }
-
-            // 3. ดึงข้อมูลงานนัดหมายและบันทึกผล (ส่วนที่ผู้ใช้แจ้งว่าหาย)
             launch {
                 try {
                     activityRepo.refreshActivities(userId)

@@ -1,7 +1,8 @@
 package com.pp68.backend.application.routes
 
-import com.pp68.backend.domain.repository.BranchRepository
-import io.ktor.http.*
+import com.pp68.backend.data.repository.BranchRepositoryImpl
+import com.pp68.backend.domain.entity.Branch
+import com.pp68.backend.domain.exception.NotFoundException
 import io.ktor.server.application.*
 import io.ktor.server.auth.*
 import io.ktor.server.response.*
@@ -9,17 +10,16 @@ import io.ktor.server.routing.*
 import org.koin.ktor.ext.inject
 
 fun Route.branchRoutes() {
-    val repo: BranchRepository by inject()
+    val branchRepo: BranchRepositoryImpl by inject()
 
     authenticate("jwt-auth") {
         route("/branch") {
             get {
-                val branchId = call.request.queryParameters["branch_id"]
+                val branchId = call.request.queryParameters["branch_id"].stripEq()
                 if (branchId != null) {
-                    val b = repo.findById(branchId) ?: return@get call.respond(HttpStatusCode.NotFound)
-                    call.respond(listOf(b))
+                    call.respond<List<Branch>>(listOf(branchRepo.findById(branchId) ?: throw NotFoundException("Branch not found: $branchId")))
                 } else {
-                    call.respond(repo.findAll())
+                    call.respond<List<Branch>>(branchRepo.findAll())
                 }
             }
         }

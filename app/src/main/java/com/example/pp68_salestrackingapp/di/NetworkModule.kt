@@ -1,5 +1,9 @@
 package com.example.pp68_salestrackingapp.di
 
+import com.google.gson.ExclusionStrategy
+import com.google.gson.FieldAttributes
+import com.google.gson.GsonBuilder
+import com.google.gson.annotations.SerializedName
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -33,8 +37,19 @@ annotation class LoginRetrofit
 @InstallIn(SingletonComponent::class)
 object NetworkModule {
 
-    private const val POSTGREST_URL = "https://postgrest-451670558907.asia-southeast1.run.app/"
-    private const val LOGIN_URL = "https://asia-southeast1-algebraic-ratio-490214-r0.cloudfunctions.net/"
+    private const val POSTGREST_URL = "https://postgrest-279493695905.asia-southeast1.run.app/"
+    private const val BASE_AUTH_URL = "https://pp68-backend-279493695905.asia-southeast1.run.app/"
+    private const val UPLOAD_URL    = "https://upload-visit-photo-279493695905.asia-southeast1.run.app/"
+
+    // Only serialize fields that have @SerializedName — local-only Room fields (isSynced,
+    // projectName, companyName, etc.) have no @SerializedName and must not reach PostgREST.
+    private val gson = GsonBuilder()
+        .addSerializationExclusionStrategy(object : ExclusionStrategy {
+            override fun shouldSkipField(f: FieldAttributes) =
+                f.getAnnotation(SerializedName::class.java) == null
+            override fun shouldSkipClass(clazz: Class<*>) = false
+        })
+        .create()
 
     @Provides
     @Singleton
@@ -43,7 +58,6 @@ object NetworkModule {
             val originalRequest = chain.request()
             val requestBuilder = originalRequest.newBuilder()
 
-            // ✅ แก้ไข: ตรวจสอบ Content-Type เพื่อไม่ให้ทับ Multipart (อัปโหลดรูป)
             val body = originalRequest.body
             val contentType = body?.contentType()
             val isMultipart = contentType?.type == "multipart"
@@ -53,9 +67,11 @@ object NetworkModule {
             }
 
             val path = originalRequest.url.encodedPath
-            if (!path.contains("login-api") && !path.contains("register-api")) {
+            // ✅ ไม่ใส่ Header สำหรับ API ที่เกี่ยวกับการยืนยันตัวตน
+            if (!path.contains("login-api") && 
+                !path.contains("register-api") && 
+                !path.contains("change-password-api")) {
                 
-                // ✅ ส่ง PostgREST headers เฉพาะเมื่อเรียก PostgREST URL
                 if (originalRequest.url.host.contains("postgrest")) {
                     requestBuilder
                         .header("Accept-Profile", "public")
@@ -94,7 +110,7 @@ object NetworkModule {
         return Retrofit.Builder()
             .baseUrl(POSTGREST_URL)
             .client(okHttpClient)
-            .addConverterFactory(GsonConverterFactory.create())
+            .addConverterFactory(GsonConverterFactory.create(gson))
             .build()
     }
 
@@ -103,9 +119,9 @@ object NetworkModule {
     @LoginRetrofit
     fun provideLoginRetrofit(okHttpClient: OkHttpClient): Retrofit {
         return Retrofit.Builder()
-            .baseUrl(LOGIN_URL)
+            .baseUrl(BASE_AUTH_URL)
             .client(okHttpClient)
-            .addConverterFactory(GsonConverterFactory.create())
+            .addConverterFactory(GsonConverterFactory.create(gson))
             .build()
     }
 
@@ -123,25 +139,12 @@ object NetworkModule {
 
     @Provides
     @Singleton
-    fun provideKtorHttpClient(okHttpClient: OkHttpClient): HttpClient {
-        return HttpClient(OkHttp) {
-            engine {
-                preconfigured = okHttpClient
-            }
-            install(ContentNegotiation) {
-                gson()
-            }
-        }
-    }
-
-    @Provides
-    @Singleton
     @Named("upload")
     fun provideUploadRetrofit(okHttpClient: OkHttpClient): Retrofit {
         return Retrofit.Builder()
-            .baseUrl(LOGIN_URL)
+            .baseUrl(UPLOAD_URL)
             .client(okHttpClient)
-            .addConverterFactory(GsonConverterFactory.create())
+            .addConverterFactory(GsonConverterFactory.create(gson))
             .build()
     }
 
