@@ -157,6 +157,7 @@ fun DropdownField(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SearchableDropdownField(
     value: String,
@@ -175,7 +176,10 @@ fun SearchableDropdownField(
         else options.filter { it.contains(q, ignoreCase = true) }.take(80)
     }
 
-    Column {
+    ExposedDropdownMenuBox(
+        expanded = expanded && filtered.isNotEmpty(),
+        onExpandedChange = { expanded = it }
+    ) {
         OutlinedTextField(
             value = query,
             onValueChange = { query = it; expanded = true },
@@ -192,8 +196,8 @@ fun SearchableDropdownField(
             singleLine = true,
             enabled = enabled,
             modifier = Modifier
-                .fillMaxWidth()
-                .onFocusChanged { if (it.isFocused) expanded = true },
+                .menuAnchor()
+                .fillMaxWidth(),
             shape = RoundedCornerShape(10.dp),
             colors = OutlinedTextFieldDefaults.colors(
                 unfocusedBorderColor = AppColors.Border,
@@ -207,13 +211,12 @@ fun SearchableDropdownField(
                 disabledTextColor = AppColors.TextPrimary
             )
         )
-        DropdownMenu(
+        ExposedDropdownMenu(
             expanded = expanded && filtered.isNotEmpty(),
             onDismissRequest = { expanded = false },
             modifier = Modifier
-                .fillMaxWidth(0.9f)
-                .background(Color.White)
                 .heightIn(max = 300.dp)
+                .background(Color.White)
         ) {
             filtered.forEach { option ->
                 DropdownMenuItem(
@@ -277,7 +280,16 @@ fun DatePickerField(
     }
 
     if (showPicker) {
-        val datePickerState = rememberDatePickerState()
+        val initialMillis = remember(selectedDate) {
+            selectedDate?.let { s ->
+                try {
+                    SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+                        .apply { timeZone = TimeZone.getTimeZone("UTC") }
+                        .parse(s)?.time
+                } catch (_: Exception) { null }
+            } ?: System.currentTimeMillis()
+        }
+        val datePickerState = rememberDatePickerState(initialSelectedDateMillis = initialMillis)
         DatePickerDialog(
             onDismissRequest = { showPicker = false },
             confirmButton = {

@@ -16,9 +16,10 @@ import com.example.pp68_salestrackingapp.data.model.*
         ActivityPlanItem::class,
         ActivityResult::class,
         ProjectContact::class,
-        AppointmentContact::class
+        AppointmentContact::class,
+        ProjectSalesMember::class
     ],
-    version = 33,
+    version = 39,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -31,6 +32,8 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun activityPlanItemDao(): ActivityPlanItemDao
     abstract fun activityResultDao(): ActivityResultDao
     abstract fun appointmentContactDao(): AppointmentContactDao
+    abstract fun projectContactDao(): ProjectContactDao
+    abstract fun projectSalesMemberDao(): ProjectSalesMemberDao
 
     fun clearAllData() {
         this.clearAllTables()
@@ -99,7 +102,7 @@ abstract class AppDatabase : RoomDatabase() {
                     INSERT INTO customer_new (
                         custId, companyName, branchId, branch, custType,
                         companyAddr, companyLat, companyLong, companyStatus, createdAt
-                    ) SELECT 
+                    ) SELECT
                         custId, companyName, branchId, branch, custType,
                         companyAddr, companyLat, companyLong, companyStatus, firstCustomerDate
                     FROM customer
@@ -113,6 +116,79 @@ abstract class AppDatabase : RoomDatabase() {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE customer ADD COLUMN user_id TEXT")
                 db.execSQL("ALTER TABLE project ADD COLUMN user_id TEXT")
+            }
+        }
+
+        val MIGRATION_34_35 = object : Migration(34, 35) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE project ADD COLUMN customerName TEXT")
+                db.execSQL("ALTER TABLE project ADD COLUMN remark TEXT")
+            }
+        }
+
+        val MIGRATION_33_34 = object : Migration(33, 34) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE customer ADD COLUMN grade INTEGER")
+                db.execSQL("""
+                    CREATE TABLE customer_new (
+                        cust_id TEXT PRIMARY KEY NOT NULL,
+                        company_name TEXT NOT NULL,
+                        branch_id TEXT,
+                        branch TEXT,
+                        cust_type TEXT,
+                        company_addr TEXT,
+                        company_lat REAL,
+                        company_long REAL,
+                        company_status INTEGER,
+                        created_at TEXT,
+                        user_id TEXT,
+                        grade INTEGER
+                    )
+                """.trimIndent())
+                db.execSQL("""
+                    INSERT INTO customer_new (cust_id, company_name, branch_id, branch, cust_type,
+                        company_addr, company_lat, company_long, created_at, user_id)
+                    SELECT cust_id, company_name, branch_id, branch, cust_type,
+                        company_addr, company_lat, company_long, created_at, user_id
+                    FROM customer
+                """.trimIndent())
+                db.execSQL("DROP TABLE customer")
+                db.execSQL("ALTER TABLE customer_new RENAME TO customer")
+            }
+        }
+
+        val MIGRATION_35_36 = object : Migration(35, 36) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE project ADD COLUMN create_by TEXT")
+            }
+        }
+
+        val MIGRATION_36_37 = object : Migration(36, 37) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE customer ADD COLUMN is_synced INTEGER NOT NULL DEFAULT 1")
+                db.execSQL("ALTER TABLE project ADD COLUMN is_synced INTEGER NOT NULL DEFAULT 1")
+                db.execSQL("ALTER TABLE contact_person ADD COLUMN is_synced INTEGER NOT NULL DEFAULT 1")
+                db.execSQL("ALTER TABLE activity_table ADD COLUMN is_synced INTEGER NOT NULL DEFAULT 1")
+                db.execSQL("ALTER TABLE activity_result ADD COLUMN is_synced INTEGER NOT NULL DEFAULT 1")
+            }
+        }
+
+        val MIGRATION_37_38 = object : Migration(37, 38) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS project_sales_member (
+                        project_code TEXT NOT NULL,
+                        emp_code TEXT NOT NULL,
+                        sales_role TEXT NOT NULL DEFAULT 'support',
+                        PRIMARY KEY(project_code, emp_code)
+                    )
+                """.trimIndent())
+            }
+        }
+
+        val MIGRATION_38_39 = object : Migration(38, 39) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE activity_table ADD COLUMN created_at TEXT")
             }
         }
     }

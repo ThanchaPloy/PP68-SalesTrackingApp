@@ -7,6 +7,8 @@ import com.example.pp68_salestrackingapp.data.local.ActivityPlanItemDao
 import com.example.pp68_salestrackingapp.data.local.ActivityResultDao
 import com.example.pp68_salestrackingapp.data.local.AppDatabase
 import com.example.pp68_salestrackingapp.data.local.AppointmentContactDao
+import com.example.pp68_salestrackingapp.data.local.ProjectContactDao
+import com.example.pp68_salestrackingapp.data.local.ProjectSalesMemberDao
 import com.example.pp68_salestrackingapp.data.local.BranchDao
 import com.example.pp68_salestrackingapp.data.local.CustomerDao
 import com.example.pp68_salestrackingapp.data.local.ProjectDao
@@ -31,7 +33,17 @@ object DatabaseModule {
             "sales_tracking_db"
         )
             .fallbackToDestructiveMigration()
-            .addMigrations(AppDatabase.MIGRATION_28_29, AppDatabase.MIGRATION_29_30)
+            .addMigrations(
+                AppDatabase.MIGRATION_28_29,
+                AppDatabase.MIGRATION_29_30,
+                AppDatabase.MIGRATION_32_33,
+                AppDatabase.MIGRATION_33_34,
+                AppDatabase.MIGRATION_34_35,
+                AppDatabase.MIGRATION_35_36,
+                AppDatabase.MIGRATION_36_37,
+                AppDatabase.MIGRATION_37_38,
+                AppDatabase.MIGRATION_38_39
+            )
             .build()
     }
 
@@ -78,4 +90,12 @@ object DatabaseModule {
     @Provides
     @Singleton
     fun provideAppointmentContactDao(db: AppDatabase): AppointmentContactDao = db.appointmentContactDao()
+
+    @Provides
+    @Singleton
+    fun provideProjectContactDao(db: AppDatabase): ProjectContactDao = db.projectContactDao()
+
+    @Provides
+    @Singleton
+    fun provideProjectSalesMemberDao(db: AppDatabase): ProjectSalesMemberDao = db.projectSalesMemberDao()
 }

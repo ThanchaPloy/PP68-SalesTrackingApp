@@ -13,15 +13,15 @@ data class SalesActivity(
     val activityId: String,
 
     @ColumnInfo(name = "user_id")
-    @SerializedName("user_id")
+    @SerializedName("emp_code")
     val userId: String,
 
     @ColumnInfo(name = "cust_id")
-    @SerializedName("cust_id")
+    @SerializedName("cust_code")
     val customerId: String,
 
     @ColumnInfo(name = "project_id")
-    @SerializedName("project_id")
+    @SerializedName("project_code")
     val projectId: String? = null,
 
     @ColumnInfo(name = "type")
@@ -84,7 +84,11 @@ data class SalesActivity(
     @SerializedName("note")
     val note: String? = null,
 
-    // Local-only fields ไม่ส่งขึ้น API
+    @ColumnInfo(name = "created_at")
+    @SerializedName("created_at")
+    val createdAt: String? = null,
+
+    // Local-only fields
     @ColumnInfo(name = "project_name")
     val projectName: String? = null,
     @ColumnInfo(name = "company_name")
@@ -92,5 +96,8 @@ data class SalesActivity(
     @ColumnInfo(name = "contact_name")
     val contactName: String? = null,
     @ColumnInfo(name = "weekly_note")
-    val weeklyNote: String? = null
+    val weeklyNote: String? = null,
+
+    @ColumnInfo(name = "is_synced")
+    val isSynced: Boolean = true
 )

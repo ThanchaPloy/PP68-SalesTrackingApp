@@ -85,33 +85,32 @@ class ProjectInventoryViewModel @Inject constructor(
 
     private suspend fun fetchProjectProducts(id: String): List<InventoryItem> {
         return try {
-            // ✅ ดึง project_product
+            // 1. ดึง project_product ของ project นี้ (จำนวนน้อย)
             val ppResp = apiService.getProjectProducts("eq.$id")
-            if (!ppResp.isSuccessful || ppResp.body().isNullOrEmpty()) {
-                return emptyList()
-            }
+            if (!ppResp.isSuccessful || ppResp.body().isNullOrEmpty()) return emptyList()
             val projectProducts = ppResp.body()!!
 
-            // ✅ ดึง product master ทั้งหมด
-            val productsResp = apiService.getProductMaster()
-            val productsMap  = productsResp.body()
-                ?.associateBy { it.productId }
-                ?: emptyMap()
-            
-            // ✅ ดึงสาขาทั้งหมด
+            // 2. ดึงเฉพาะ product ที่ใช้จริง ด้วย in.(...) filter — ไม่โหลด 3 แสนรายการ
+            val productIds = projectProducts.map { it.productId }.distinct()
+            val productsMap = if (productIds.isNotEmpty()) {
+                val resp = apiService.getProductsByIds("in.(${productIds.joinToString(",")})")
+                resp.body()?.associateBy { it.productId } ?: emptyMap()
+            } else emptyMap()
+
+            // 3. ดึงสาขา
             branchRepo.syncFromRemote()
             val branchesMap = branchRepo.observeBranches().associateBy { it.branchId }
 
-            // ✅ Map รวมกัน
-            projectProducts.mapNotNull { pp ->
-                val product = productsMap[pp.productId] ?: return@mapNotNull null
+            // 4. Map — fallback ชื่อเป็น productId ถ้า master ไม่มีข้อมูล
+            projectProducts.map { pp ->
+                val product = productsMap[pp.productId]
                 InventoryItem(
-                    productId   = pp.productId,
-                    productName = product.productGroup?.productGroupName ?: pp.productId,
-                    category    = product.productType?.typeName ?: "ทั่วไป",
-                    quantity    = pp.quantity ?: 0.0,
-                    unit        = product.unit ?: "ชิ้น",
-                    desiredDate = pp.desiredDate,
+                    productId          = pp.productId,
+                    productName        = product?.description ?: pp.productId,
+                    category           = product?.groupName ?: "ทั่วไป",
+                    quantity           = pp.quantity ?: 0.0,
+                    unit               = product?.unit ?: "ชิ้น",
+                    desiredDate        = pp.desiredDate,
                     shippingBranchName = branchesMap[pp.shippingBranchId]?.branchName
                 )
             }

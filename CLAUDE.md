@@ -18,8 +18,9 @@ This is a **frontend-only Android app** — there is no backend code in this rep
 
 | Service | URL | Purpose |
 |---|---|---|
-| PostgREST | `https://postgrest-451670558907.asia-southeast1.run.app/` | Main REST API (auto-generated from PostgreSQL) |
-| Cloud Functions | `https://asia-southeast1-algebraic-ratio-490214-r0.cloudfunctions.net/` | Auth (`login-api`, `register-api`, `change-password-api`) + `upload-visit-photo` |
+| PostgREST | `https://postgrest-279493695905.asia-southeast1.run.app/` | Main REST API (auto-generated from PostgreSQL) |
+| pp68-backend | `https://pp68-backend-279493695905.asia-southeast1.run.app/` | Auth (`login-api`, `register-api`, `change-password-api`) |
+| upload-visit-photo | `https://upload-visit-photo-279493695905.asia-southeast1.run.app/` | Visit photo upload |
 | Firebase Realtime DB | (configured via `google-services.json`) | Project status sync to web dashboard |
 | Firebase Messaging | FCM | Push notifications |
 
@@ -291,7 +292,7 @@ Keys loaded from `local.properties` or `gradle.properties`:
 - `MAPS_API_KEY` — Google Maps (also in `AndroidManifest.xml` meta-data)
 - `POSTGREST_URL` — via `BuildConfig.POSTGREST_URL`
 - `JWT_SECRET` — via `BuildConfig.JWT_SECRET`
-- `GCP_ENDPOINT` — hardcoded: `https://postgrest-451670558907.asia-southeast1.run.app`
+- `GCP_ENDPOINT` — hardcoded: `https://postgrest-279493695905.asia-southeast1.run.app`
 
 **Note**: `google-services.json` must be present in `app/` for Firebase to work.
 
@@ -368,4 +369,4 @@ Some models use `@ColumnInfo` with different names than the `@SerializedName` (e
 - **PostgREST `Prefer` headers**: `return=representation` makes API return the updated/inserted row; `resolution=merge-duplicates` enables upsert
 - **Multipart requests**: `AuthInterceptor` skips Content-Type header injection for multipart bodies to avoid corrupting file uploads
 - **Database version**: currently **33** — always write a migration when changing schema; do not bump version without one
-- **Firebase project**: `algebraic-ratio-490214-r0` (Google Cloud project ID visible in Cloud Functions URL)
+- **Firebase project**: `project-fdfd9e00-ddd6-4f28-a13` (new GCP project after migration)

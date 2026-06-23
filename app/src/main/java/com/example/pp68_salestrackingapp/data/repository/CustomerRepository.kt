@@ -7,6 +7,8 @@ import com.example.pp68_salestrackingapp.data.local.ActivityDao
 import com.example.pp68_salestrackingapp.data.model.ContactPerson
 import com.example.pp68_salestrackingapp.data.model.Customer
 import com.example.pp68_salestrackingapp.data.remote.ApiService
+import com.example.pp68_salestrackingapp.di.TokenManager
+import com.example.pp68_salestrackingapp.utils.SyncManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
@@ -19,7 +21,9 @@ class CustomerRepository @Inject constructor(
     private val customerDao: CustomerDao,
     private val contactDao: ContactDao,
     private val projectDao: ProjectDao,
-    private val activityDao: ActivityDao
+    private val activityDao: ActivityDao,
+    private val tokenManager: TokenManager,
+    private val syncManager: SyncManager
 ) {
     fun getAllCustomersFlow(): Flow<List<Customer>> = customerDao.getAllCustomers()
     fun searchCustomersFlow(query: String): Flow<List<Customer>> = customerDao.searchCustomers("%$query%")
@@ -37,17 +41,36 @@ class CustomerRepository @Inject constructor(
         }
     }
 
-    // ✅ ดึงลูกค้าทั้งหมดในสาขาเดียวกัน (filter by branch_id)
     suspend fun refreshCustomers(branchId: String): kotlin.Result<Unit> {
         return withContext(Dispatchers.IO) {
             try {
-                val custResp = apiService.getCustomersByBranch(branchId = "eq.$branchId")
-                if (custResp.isSuccessful && custResp.body() != null) {
-                    customerDao.clearAndInsert(custResp.body()!!)
-                    kotlin.Result.success(Unit)
+                val empType = tokenManager.getEmpType()
+                val branchSuffix = branchId.takeLast(2)
+
+                val empCodes: List<String> = if (empType == "Project") {
+                    val resp = apiService.getProjectEmployeeCodes()
+                    resp.body()?.mapNotNull { it["emp_code"] }?.filter { it.isNotBlank() } ?: emptyList()
                 } else {
-                    kotlin.Result.failure(Exception("โหลด Customer ไม่สำเร็จ: HTTP ${custResp.code()}"))
+                    val resp = apiService.getEmployeeCodesByBranch(branchCode = "eq.$branchId")
+                    resp.body()?.mapNotNull { it["emp_code"] }?.filter { it.isNotBlank() } ?: emptyList()
                 }
+
+                val customers = mutableListOf<Customer>()
+                if (empCodes.isNotEmpty()) {
+                    val codesParam = "in.(${empCodes.joinToString(",")})"
+                    val custResp = apiService.getCustomersBySalespersonCodes(codes = codesParam)
+                    customers.addAll(custResp.body() ?: emptyList())
+                }
+
+                val fallbackResp = apiService.getCustomersWithEmptySalesperson()
+                val fallback = fallbackResp.body()
+                    ?.filter { it.custId.takeLast(2).equals(branchSuffix, ignoreCase = true) }
+                    ?: emptyList()
+                customers.addAll(fallback)
+
+                val deduped = customers.distinctBy { it.custId }.map { it.copy(isSynced = true) }
+                customerDao.clearAndInsert(deduped)
+                kotlin.Result.success(Unit)
             } catch (e: Exception) {
                 kotlin.Result.failure(Exception("Network Error: ${e.message}"))
             }
@@ -57,12 +80,12 @@ class CustomerRepository @Inject constructor(
     suspend fun getCustomerById(id: String): kotlin.Result<Customer> {
         return withContext(Dispatchers.IO) {
             try {
-                val local = customerDao.getAllCustomers().first().find { it.custId == id }
+                val local = customerDao.getCustomerById(id)
                 if (local != null) return@withContext kotlin.Result.success(local)
 
                 val resp = apiService.getCustomerById("eq.$id")
                 if (resp.isSuccessful && !resp.body().isNullOrEmpty()) {
-                    val customer = resp.body()!!.first()
+                    val customer = resp.body()!!.first().copy(isSynced = true)
                     customerDao.insertCustomer(customer)
                     kotlin.Result.success(customer)
                 } else {
@@ -85,51 +108,54 @@ class CustomerRepository @Inject constructor(
         }
     }
 
-    // ✅ สร้าง Customer ใหม่ (POST) — ต้องส่ง branchId ด้วย
     suspend fun addCustomer(customer: Customer): kotlin.Result<Unit> {
         return withContext(Dispatchers.IO) {
-            customerDao.insertCustomer(customer)
+            val now = java.time.Instant.now().toString()
+            val localCustomer = customer.copy(isSynced = false, createdAt = customer.createdAt ?: now)
+            customerDao.insertCustomer(localCustomer)
             try {
-                val response = apiService.addCustomer(customer)
+                val response = apiService.addCustomer(localCustomer)
                 if (response.isSuccessful) {
+                    customerDao.updateSyncStatus(localCustomer.custId, true)
                     kotlin.Result.success(Unit)
                 } else {
-                    val errBody = response.errorBody()?.string() ?: ""
-                    kotlin.Result.failure(Exception("Server Error: $errBody"))
+                    syncManager.scheduleSync()
+                    kotlin.Result.success(Unit)
                 }
             } catch (e: IOException) {
-                kotlin.Result.success(Unit) // offline mode
+                syncManager.scheduleSync()
+                kotlin.Result.success(Unit)
             } catch (e: Exception) {
                 kotlin.Result.failure(e)
             }
         }
     }
 
-    // ✅ อัปเดต Customer (PATCH) — ใช้ตอน edit mode
     suspend fun updateCustomer(custId: String, customer: Customer): kotlin.Result<Unit> {
         return withContext(Dispatchers.IO) {
-            customerDao.insertCustomer(customer) // upsert local
+            val localCustomer = customer.copy(isSynced = false)
+            customerDao.insertCustomer(localCustomer)
             try {
                 val updates = buildMap<String, Any?> {
-                    put("company_name", customer.companyName)
-                    put("branch_id", customer.branchId)
-                    put("branch", customer.branch)
-                    put("cust_type", customer.custType)
-                    put("company_addr", customer.companyAddr)
-                    put("company_lat", customer.companyLat)
-                    put("company_long", customer.companyLong)
-                    put("company_status", customer.companyStatus)
-                    put("created_at", customer.createdAt)
-                }
+                    put("customer_name", customer.companyName)
+                    put("gen_bus_posting_group", customer.branchId)
+                    put("address", customer.companyAddr)
+                    put("customer_status", customer.companyStatus)
+                    put("create_date", customer.createdAt)
+                    put("salesperson_code", customer.createdBy)
+                    put("grade", customer.grade)
+                }.filterValues { it != null }
                 val response = apiService.updateCustomer("eq.$custId", updates)
                 if (response.isSuccessful) {
+                    customerDao.updateSyncStatus(custId, true)
                     kotlin.Result.success(Unit)
                 } else {
-                    val errBody = response.errorBody()?.string() ?: ""
-                    kotlin.Result.failure(Exception("Server Error: $errBody"))
+                    syncManager.scheduleSync()
+                    kotlin.Result.success(Unit)
                 }
             } catch (e: IOException) {
-                kotlin.Result.success(Unit) // offline mode
+                syncManager.scheduleSync()
+                kotlin.Result.success(Unit)
             } catch (e: Exception) {
                 kotlin.Result.failure(e)
             }
@@ -161,30 +187,16 @@ class CustomerRepository @Inject constructor(
         }
     }
 
-    // ✅ ดึง Contact ของ Customer — กรองเฉพาะที่ user คนนี้สร้าง (user_id)
     suspend fun getContactPersons(customerId: String, userId: String? = null): kotlin.Result<List<ContactPerson>> {
         return withContext(Dispatchers.IO) {
             try {
-                val response = apiService.getContactsByCustomer(
-                    custId    = "eq.$customerId",
-                    createdBy = userId?.let { "eq.$it" }  // ✅ ส่ง user_id=eq.X ไปให้ PostgREST filter
-                )
+                val response = apiService.getContactsByCustomer(custId = "eq.$customerId")
                 if (response.isSuccessful && response.body() != null) {
-                    val contacts = response.body()!!
-                    contactDao.insertContacts(contacts)
-                    kotlin.Result.success(contacts)
-                } else {
-                    // fallback local
-                    val local = contactDao.getContactsByCustomer(customerId).first()
-                    val filtered = if (userId != null) local.filter { it.createdBy == userId } else local
-                    kotlin.Result.success(filtered)
+                    contactDao.insertAll(response.body()!!.map { it.copy(isSynced = true) })
                 }
-            } catch (e: Exception) {
-                // fallback local
-                val local = contactDao.getContactsByCustomer(customerId).first()
-                val filtered = if (userId != null) local.filter { it.createdBy == userId } else local
-                kotlin.Result.success(filtered)
-            }
+            } catch (_: Exception) { /* offline — ใช้ local */ }
+            val all = contactDao.getContactsByCustomer(customerId).first()
+            kotlin.Result.success(all)
         }
     }
 
