@@ -78,29 +78,48 @@ class ActivityRepository @Inject constructor(
         }
     }
 
-    suspend fun addActivity(activity: SalesActivity): kotlin.Result<Unit> {
+    suspend fun addActivity(activity: SalesActivity): kotlin.Result<String> {
         return withContext(Dispatchers.IO) {
+            val tempId = "TEMP-${java.util.UUID.randomUUID().toString().take(8).uppercase()}"
             val now = java.time.Instant.now().toString()
-            val localActivity = activity.copy(isSynced = false, createdAt = activity.createdAt ?: now)
+            val localActivity = activity.copy(activityId = tempId, isSynced = false, createdAt = activity.createdAt ?: now)
             activityDao.insertActivity(localActivity)
             try {
-                val apiActivity = localActivity.copy(
-                    projectName = null,
-                    companyName = null,
-                    contactName = null,
-                    weeklyNote  = null
-                )
-                val response = apiService.addActivity(apiActivity)
+                val body = mutableMapOf<String, Any?>(
+                    "emp_code"         to activity.userId,
+                    "cust_code"        to activity.customerId,
+                    "project_code"     to activity.projectId,
+                    "type"             to activity.activityType,
+                    "is_appointment"   to activity.isAppointment,
+                    "topic"            to activity.detail,
+                    "planned_date"     to activity.activityDate,
+                    "planned_time"     to activity.plannedTime,
+                    "planned_end_time" to activity.plannedEndTime,
+                    "planned_lat"      to activity.plannedLat,
+                    "planned_long"     to activity.plannedLong,
+                    "plan_status"      to activity.status,
+                    "created_at"       to localActivity.createdAt
+                ).filterValues { it != null }
+                val response = apiService.addActivityMap(body)
                 if (response.isSuccessful) {
-                    activityDao.updateSyncStatus(localActivity.activityId, true)
-                    kotlin.Result.success(Unit)
+                    val realId = response.body()?.firstOrNull()?.activityId
+                    if (realId != null && realId != tempId) {
+                        activityDao.deleteActivityById(tempId)
+                        activityDao.insertActivity(localActivity.copy(activityId = realId, isSynced = true))
+                        kotlin.Result.success(realId)
+                    } else {
+                        activityDao.updateSyncStatus(tempId, true)
+                        kotlin.Result.success(tempId)
+                    }
                 } else {
                     syncManager.scheduleSync()
-                    kotlin.Result.success(Unit)
+                    kotlin.Result.success(tempId)
                 }
-            } catch (e: Exception) {
+            } catch (e: IOException) {
                 syncManager.scheduleSync()
-                kotlin.Result.success(Unit)
+                kotlin.Result.success(tempId)
+            } catch (e: Exception) {
+                kotlin.Result.failure(e)
             }
         }
     }
@@ -110,9 +129,16 @@ class ActivityRepository @Inject constructor(
             try {
                 activityDao.getActivityById(activityId)?.let { local ->
                     var updated = local.copy(isSynced = false)
-                    if (updates.containsKey("plan_status")) updated = updated.copy(status = updates["plan_status"] as String)
-                    if (updates.containsKey("note")) updated = updated.copy(weeklyNote = updates["note"] as? String)
-                    if (updates.containsKey("topic")) updated = updated.copy(detail = updates["topic"] as? String)
+                    if (updates.containsKey("plan_status"))    updated = updated.copy(status        = updates["plan_status"] as String)
+                    if (updates.containsKey("note"))           updated = updated.copy(weeklyNote    = updates["note"] as? String)
+                    if (updates.containsKey("topic"))          updated = updated.copy(detail        = updates["topic"] as? String)
+                    if (updates.containsKey("type"))           updated = updated.copy(activityType  = updates["type"] as String)
+                    if (updates.containsKey("planned_date"))   updated = updated.copy(activityDate  = updates["planned_date"] as String)
+                    if (updates.containsKey("planned_time"))   updated = updated.copy(plannedTime   = updates["planned_time"] as? String)
+                    if (updates.containsKey("planned_end_time")) updated = updated.copy(plannedEndTime = updates["planned_end_time"] as? String)
+                    if (updates.containsKey("planned_lat"))    updated = updated.copy(plannedLat    = updates["planned_lat"] as? Double)
+                    if (updates.containsKey("planned_long"))   updated = updated.copy(plannedLong   = updates["planned_long"] as? Double)
+                    if (updates.containsKey("is_appointment")) updated = updated.copy(isAppointment = updates["is_appointment"] as Boolean)
                     activityDao.insertActivity(updated)
                 }
 
@@ -322,13 +348,26 @@ class ActivityRepository @Inject constructor(
 
     suspend fun saveActivityResult(result: ActivityResult): kotlin.Result<Unit> {
         return withContext(Dispatchers.IO) {
-            val localResult = result.copy(isSynced = false)
+            val isNew = result.resultId.isBlank()
+            val tempId = if (isNew) "TEMP-${java.util.UUID.randomUUID().toString().take(8).uppercase()}" else result.resultId
+            val localResult = result.copy(resultId = tempId, isSynced = false)
             resultDao.insertResult(localResult)
             try {
                 val body = buildResultBody(localResult)
-                val apiResp = apiService.upsertActivityResult(result = body)
+                if (isNew) body.remove("result_id")
+                val apiResp = if (isNew) apiService.insertActivityResultMap(body) else apiService.upsertActivityResult(body)
                 if (apiResp.isSuccessful) {
-                    resultDao.updateSyncStatus(localResult.resultId, true)
+                    if (isNew) {
+                        val realId = apiResp.body()?.firstOrNull()?.resultId
+                        if (realId != null && realId != tempId) {
+                            resultDao.deleteResultById(tempId)
+                            resultDao.insertResult(localResult.copy(resultId = realId, isSynced = true))
+                        } else {
+                            resultDao.updateSyncStatus(tempId, true)
+                        }
+                    } else {
+                        resultDao.updateSyncStatus(tempId, true)
+                    }
                     syncProjectStatus(localResult)
                     kotlin.Result.success(Unit)
                 } else {
@@ -344,14 +383,26 @@ class ActivityRepository @Inject constructor(
 
     suspend fun saveStandaloneResult(projectId: String, result: ActivityResult): kotlin.Result<Unit> {
         return withContext(Dispatchers.IO) {
-            val finalResultId = if (result.resultId.isBlank()) java.util.UUID.randomUUID().toString() else result.resultId
-            val resultWithProject = result.copy(resultId = finalResultId, projectId = projectId, activityId = null, isSynced = false)
+            val isNew = result.resultId.isBlank()
+            val tempId = if (isNew) "TEMP-${java.util.UUID.randomUUID().toString().take(8).uppercase()}" else result.resultId
+            val resultWithProject = result.copy(resultId = tempId, projectId = projectId, activityId = null, isSynced = false)
             resultDao.insertResult(resultWithProject)
             try {
                 val body = buildResultBody(resultWithProject)
-                val apiResp = apiService.upsertActivityResult(body)
+                if (isNew) body.remove("result_id")
+                val apiResp = if (isNew) apiService.insertActivityResultMap(body) else apiService.upsertActivityResult(body)
                 if (apiResp.isSuccessful) {
-                    resultDao.updateSyncStatus(finalResultId, true)
+                    if (isNew) {
+                        val realId = apiResp.body()?.firstOrNull()?.resultId
+                        if (realId != null && realId != tempId) {
+                            resultDao.deleteResultById(tempId)
+                            resultDao.insertResult(resultWithProject.copy(resultId = realId, isSynced = true))
+                        } else {
+                            resultDao.updateSyncStatus(tempId, true)
+                        }
+                    } else {
+                        resultDao.updateSyncStatus(tempId, true)
+                    }
                     syncProjectStatus(resultWithProject)
                     kotlin.Result.success(Unit)
                 } else {

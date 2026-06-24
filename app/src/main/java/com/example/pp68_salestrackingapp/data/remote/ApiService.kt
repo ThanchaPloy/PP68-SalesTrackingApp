@@ -51,6 +51,19 @@ interface ApiService {
     @GET("project_sales_member")
     suspend fun getProjectMembers(@Query("project_code") projectId: String, @Query("select") select: String = "emp_code,sales_role"): Response<List<ProjectMemberDto>>
 
+    @GET("project_team_member")
+    suspend fun getProjectTeamMemberCodes(
+        @Query("select") select: String = "emp_code",
+        @Query("limit") limit: Int = 1000
+    ): Response<List<Map<String, String>>>
+
+    @GET("employee")
+    suspend fun getEmployeesByIds(
+        @Query("emp_code") empCodes: String,
+        @Query("select") select: String = "emp_code,emp_name",
+        @Query("limit") limit: Int = 1000
+    ): Response<List<Map<String, String>>>
+
     // ── Branch ───────────────────────────────────────────────────
     @GET("branch")
     suspend fun getBranches(@Query("limit") limit: Int = 100): Response<List<Branch>>
@@ -237,6 +250,10 @@ interface ApiService {
     @Headers("Prefer: return=representation", "Content-Profile: public")
     suspend fun addActivity(@Body activity: SalesActivity): Response<List<SalesActivity>>
 
+    @POST("appointment")
+    @Headers("Prefer: return=representation", "Content-Profile: public")
+    suspend fun addActivityMap(@Body fields: @JvmSuppressWildcards Map<String, Any?>): Response<List<SalesActivity>>
+
     @PATCH("appointment")
     @Headers("Prefer: return=representation", "Content-Profile: public")
     suspend fun updateActivity(@Query("appointment_id") appointmentId: String, @Body updates: @JvmSuppressWildcards Map<String, Any>): Response<List<SalesActivity>>
@@ -260,6 +277,10 @@ interface ApiService {
     @POST("activity_result")
     @Headers("Prefer: return=representation", "Content-Profile: public")
     suspend fun insertActivityResult(@Body result: ActivityResult): Response<List<ActivityResult>>
+
+    @POST("activity_result")
+    @Headers("Prefer: return=representation", "Content-Profile: public")
+    suspend fun insertActivityResultMap(@Body body: @JvmSuppressWildcards Map<String, Any?>): Response<List<ActivityResult>>
 
     @POST("activity_result")
     @Headers("Prefer: return=representation,resolution=merge-duplicates", "Content-Profile: public")
@@ -296,6 +317,12 @@ interface ApiService {
 
     @POST("rpc/set_app_context")
     suspend fun setAppContext(@Body body: @JvmSuppressWildcards Map<String, String>): Response<Unit>
+
+    @POST("rpc/get_branch_members")
+    @Headers("Content-Profile: public")
+    suspend fun getBranchMembers(
+        @Body body: @JvmSuppressWildcards Map<String, String>
+    ): Response<List<Map<String, String>>>
 }
 
 data class ProductMasterDto(

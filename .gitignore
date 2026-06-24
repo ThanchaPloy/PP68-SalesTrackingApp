@@ -15,5 +15,21 @@ app/google-services.json
 .cxx
 local.properties
 
+# Release artifacts
+*.apk
+*.aab
+*.jks
+*.keystore
+app/release/
+
 # Backend secrets
 backend/.env
+
+# Debug / temp files at project root
+*.png
+*.log
+*.sqlite
+*.xml
+ui*.xml
+backend/run_*.txt
+app/debug/

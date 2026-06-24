@@ -19,7 +19,6 @@ import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.Locale
-import java.util.UUID
 import javax.inject.Inject
 
 data class CreateAppointmentUiState(
@@ -456,9 +455,6 @@ class CreateAppointmentViewModel @Inject constructor(
             }
 
             val isEditMode = s.activityId != null
-            val appointmentId = s.activityId
-                ?: ("APT-" + UUID.randomUUID().toString().take(8).uppercase())
-
             val isoDate = s.plannedDate?.let { parseToIsoDate(it) } ?: LocalDate.now().toString()
 
             val selectedContactNames = s.allContactOptions
@@ -466,15 +462,14 @@ class CreateAppointmentViewModel @Inject constructor(
                 .joinToString(", ") { it.name }
 
             val activity = SalesActivity(
-                activityId     = appointmentId,
+                activityId     = s.activityId ?: "",
                 userId         = userId,
                 customerId     = customerId ?: "CST-UNKNOWN",
                 projectId      = s.selectedProjectId,
                 activityType   = s.activityType,
                 isAppointment  = true,
                 detail         = s.titleTopic,
-                activityDate   = s.plannedDate?.let { parseToIsoDate(it) }
-                    ?: LocalDate.now().toString(),
+                activityDate   = isoDate,
                 plannedTime    = s.startTime,
                 plannedEndTime = s.endTime,
                 plannedLat     = s.lat,
@@ -483,59 +478,52 @@ class CreateAppointmentViewModel @Inject constructor(
                 contactName    = selectedContactNames
             )
 
-
-            val result = if (isEditMode) {
+            val finalId: String
+            if (isEditMode) {
+                val appointmentId = s.activityId!!
                 val updates = mutableMapOf<String, Any>(
-                    "type" to s.activityType,
-                    "planned_date" to isoDate,
-                    "topic" to s.titleTopic,
-                    "planned_time" to (formatTimeToDb(s.startTime) ?: ""),
+                    "type"             to s.activityType,
+                    "planned_date"     to isoDate,
+                    "topic"            to s.titleTopic,
+                    "planned_time"     to (formatTimeToDb(s.startTime) ?: ""),
                     "planned_end_time" to (formatTimeToDb(s.endTime) ?: ""),
-                    "planned_lat" to (s.lat ?: 0.0),
-                    "planned_long" to (s.lng ?: 0.0),
-                    "is_appointment" to s.selectedContactIds.isNotEmpty()
+                    "planned_lat"      to (s.lat ?: 0.0),
+                    "planned_long"     to (s.lng ?: 0.0),
+                    "is_appointment"   to s.selectedContactIds.isNotEmpty()
                 )
-                activityRepo.updateActivity(appointmentId, updates).onSuccess {
-                    activityRepo.addActivity(activity)
-                }
+                activityRepo.updateActivity(appointmentId, updates)
+                finalId = appointmentId
             } else {
-                activityRepo.addActivity(activity)
-            }
-
-            if (result.isFailure) {
-                _uiState.update { 
-                    it.copy(
-                        isLoading = false, 
-                        saveError = result.exceptionOrNull()?.message ?: "บันทึกไม่สำเร็จ"
-                    ) 
+                val addResult = activityRepo.addActivity(activity)
+                if (addResult.isFailure) {
+                    _uiState.update {
+                        it.copy(isLoading = false, saveError = addResult.exceptionOrNull()?.message ?: "บันทึกไม่สำเร็จ")
+                    }
+                    return@launch
                 }
-                return@launch
+                finalId = addResult.getOrThrow()
             }
 
             // Save selected contacts
-            activityRepo.saveAppointmentContacts(appointmentId, s.selectedContactIds.toList())
+            activityRepo.saveAppointmentContacts(finalId, s.selectedContactIds.toList())
 
             // Checklist items
             val planItems = mutableListOf<ActivityPlanItem>()
-            
-            // Standard masters
             s.selectedMasterIds.forEach { mid ->
                 planItems.add(
                     ActivityPlanItem(
-                        appointmentId = appointmentId,
+                        appointmentId = finalId,
                         masterId      = mid,
                         isDone        = false,
                         actName       = s.allMasterOptions.find { it.masterId == mid }?.actName
                     )
                 )
             }
-            
-            // "Other" objective
             if (s.isOtherSelected && s.otherObjectiveText.isNotBlank()) {
                 planItems.add(
                     ActivityPlanItem(
-                        appointmentId = appointmentId,
-                        masterId      = 999, // Reserved for Other
+                        appointmentId = finalId,
+                        masterId      = 999,
                         isDone        = false,
                         actName       = s.otherObjectiveText
                     )
@@ -543,7 +531,7 @@ class CreateAppointmentViewModel @Inject constructor(
             }
 
             if (planItems.isNotEmpty()) {
-                activityRepo.savePlanItems(appointmentId, planItems)
+                activityRepo.savePlanItems(finalId, planItems)
             }
 
             _uiState.update { it.copy(isLoading = false, isSaved = true) }

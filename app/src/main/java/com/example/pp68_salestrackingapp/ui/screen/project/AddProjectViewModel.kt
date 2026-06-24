@@ -141,13 +141,12 @@ class AddProjectViewModel @Inject constructor(
             val currentUser  = authRepo.currentUser()
             val userBranchId = currentUser?.teamId ?: ""
 
-            if (userBranchId == "PJ-001") {
-                val branch = branchRepo.getBranchById(userBranchId)
+            if (currentUser?.empType == "Project") {
                 _uiState.update {
                     it.copy(
                         selectedTeamId   = userBranchId,
-                        selectedTeamName = branch?.branchName ?: "ทีมโปรเจค",
-                        teamOptions      = listOf(userBranchId to (branch?.branchName ?: "ทีมโปรเจค")),
+                        selectedTeamName = "ทีมโปรเจค",
+                        teamOptions      = listOf(userBranchId to "ทีมโปรเจค"),
                         isLoadingTeams   = false
                     )
                 }
@@ -311,7 +310,8 @@ class AddProjectViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.update { it.copy(isLoadingMembers = true) }
             val currentUser = authRepo.currentUser()
-            projectRepo.getMembersByBranch(teamId).fold(
+            val empCode = currentUser?.userId ?: return@launch
+            projectRepo.getBranchMembersRpc(empCode).fold(
                 onSuccess = { list ->
                     val members = if (list.isEmpty() && currentUser != null) {
                         listOf(currentUser.userId.trim() to (currentUser.fullName ?: currentUser.userId))

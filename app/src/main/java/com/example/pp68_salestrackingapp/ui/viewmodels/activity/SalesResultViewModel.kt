@@ -329,9 +329,7 @@ class SalesResultViewModel @Inject constructor(
                     if (s.lossReason == "อื่น ๆ") s.otherLossReason else s.lossReason
                 } else null
 
-                // ✅ หากมี resultId เดิม ให้ใช้ ID เดิมเพื่อทำ Upsert (แก้ไขรายการเดิม)
-                // ✅ หากไม่มี ให้สร้าง UUID ใหม่ (รายการใหม่)
-                val finalResultId = s.resultId ?: java.util.UUID.randomUUID().toString()
+                val finalResultId = s.resultId ?: ""
 
                 val resultToSave = ActivityResult(
                     resultId               = finalResultId,

@@ -50,4 +50,7 @@ interface ActivityResultDao {
 
     @Query("UPDATE activity_result SET is_synced = :isSynced WHERE result_id = :resultId")
     suspend fun updateSyncStatus(resultId: String, isSynced: Boolean)
+
+    @Query("DELETE FROM activity_result WHERE result_id = :resultId")
+    suspend fun deleteResultById(resultId: String)
 }

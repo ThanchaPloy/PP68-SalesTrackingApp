@@ -240,6 +240,21 @@ class ProjectRepository @Inject constructor(
 
     suspend fun countProjectsByPrefix(prefix: String): Int = projectDao.getProjectCountByPrefix(prefix)
 
+    suspend fun getBranchMembersRpc(empCode: String): Result<List<Pair<String, String>>> {
+        return withContext(Dispatchers.IO) {
+            try {
+                val resp = apiService.getBranchMembers(mapOf("p_emp_code" to empCode))
+                if (!resp.isSuccessful) return@withContext Result.failure(Exception("HTTP ${resp.code()}"))
+                val result = (resp.body() ?: emptyList()).mapNotNull { row ->
+                    val code = row["emp_code"]?.trim()?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
+                    val name = row["emp_name"]?.trim()?.takeIf { it.isNotBlank() } ?: code
+                    code to name
+                }
+                Result.success(result)
+            } catch (e: Exception) { Result.failure(e) }
+        }
+    }
+
     suspend fun getMembersByBranch(branchId: String): Result<List<Pair<String, String>>> {
         return withContext(Dispatchers.IO) {
             try {

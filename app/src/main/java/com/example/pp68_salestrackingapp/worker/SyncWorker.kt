@@ -115,23 +115,62 @@ class SyncWorker @AssistedInject constructor(
             // 4. Sync Activities (นัดหมาย)
             val unsyncedActivities = activityDao.getUnsyncedActivities()
             for (activity in unsyncedActivities) {
-                // ล้างฟิลด์ local-only ก่อนส่ง
-                val apiActivity = activity.copy(
-                    projectName = null,
-                    companyName = null,
-                    contactName = null,
-                    weeklyNote  = null
-                )
-                val response = apiService.addActivity(apiActivity)
-                if (response.isSuccessful) activityDao.updateSyncStatus(activity.activityId, true)
+                if (activity.activityId.startsWith("TEMP-")) {
+                    val body = mutableMapOf<String, Any?>(
+                        "emp_code"         to activity.userId,
+                        "cust_code"        to activity.customerId,
+                        "project_code"     to activity.projectId,
+                        "type"             to activity.activityType,
+                        "is_appointment"   to activity.isAppointment,
+                        "topic"            to activity.detail,
+                        "planned_date"     to activity.activityDate,
+                        "planned_time"     to activity.plannedTime,
+                        "planned_end_time" to activity.plannedEndTime,
+                        "planned_lat"      to activity.plannedLat,
+                        "planned_long"     to activity.plannedLong,
+                        "plan_status"      to activity.status,
+                        "created_at"       to activity.createdAt
+                    ).filterValues { it != null }
+                    val response = apiService.addActivityMap(body)
+                    if (response.isSuccessful) {
+                        val realId = response.body()?.firstOrNull()?.activityId
+                        if (realId != null && realId != activity.activityId) {
+                            activityDao.deleteActivityById(activity.activityId)
+                            activityDao.insertActivity(activity.copy(activityId = realId, isSynced = true))
+                        } else {
+                            activityDao.updateSyncStatus(activity.activityId, true)
+                        }
+                    }
+                } else {
+                    // Edited existing activity — re-send full object (trigger ignores appointment_id on conflict)
+                    val apiActivity = activity.copy(
+                        projectName = null, companyName = null, contactName = null, weeklyNote = null
+                    )
+                    val response = apiService.addActivity(apiActivity)
+                    if (response.isSuccessful) activityDao.updateSyncStatus(activity.activityId, true)
+                }
             }
 
             // 5. Sync Activity Results (รายงานผล)
             val unsyncedResults = resultDao.getUnsyncedResults()
             for (res in unsyncedResults) {
-                val body = buildResultBody(res)
-                val response = apiService.upsertActivityResult(body)
-                if (response.isSuccessful) resultDao.updateSyncStatus(res.resultId, true)
+                if (res.resultId.startsWith("TEMP-")) {
+                    val body = buildResultBody(res).filterKeys { it != "result_id" }
+                    val response = apiService.insertActivityResultMap(body)
+                    if (response.isSuccessful) {
+                        val realId = response.body()?.firstOrNull()?.resultId
+                        if (realId != null && realId != res.resultId) {
+                            resultDao.deleteResultById(res.resultId)
+                            resultDao.insertResult(res.copy(resultId = realId, isSynced = true))
+                        } else {
+                            resultDao.updateSyncStatus(res.resultId, true)
+                        }
+                    }
+                } else {
+                    val body = buildResultBody(res)
+                    val response = apiService.upsertActivityResult(body)
+                    if (response.isSuccessful) resultDao.updateSyncStatus(res.resultId, true)
+                }
             }
 
             Log.d("SyncWorker", "Sync process finished successfully")
