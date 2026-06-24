@@ -70,4 +70,7 @@ interface ContactDao {
 
     @Query("UPDATE contact_person SET is_synced = :isSynced WHERE contactId = :contactId")
     suspend fun updateSyncStatus(contactId: String, isSynced: Boolean)
+
+    @Query("UPDATE contact_person SET custId = :newCustId WHERE custId = :oldCustId")
+    suspend fun updateCustIdForContacts(oldCustId: String, newCustId: String)
 }

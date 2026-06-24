@@ -466,7 +466,7 @@ class AddProjectViewModel @Inject constructor(
                     projectLat            = s.siteLat,
                     projectLong           = s.siteLong,
                     lossReason            = finalLossReason,
-                    requestBy             = userId
+                    createBy              = userId
                 )
 
                 val result = if (s.projectId != null) {

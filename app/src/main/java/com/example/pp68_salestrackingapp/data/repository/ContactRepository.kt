@@ -9,6 +9,7 @@ import com.example.pp68_salestrackingapp.utils.SyncManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.withContext
+import android.util.Log
 import javax.inject.Inject
 import java.io.IOException
 
@@ -60,10 +61,12 @@ class ContactRepository @Inject constructor(
                     localContact.email?.let { put("email", it) }
                 }
                 val response = apiService.addContact(fields)
+                Log.d("ContactRepo", "POST contact → HTTP ${response.code()}, custId=${localContact.custId}")
                 if (response.isSuccessful) {
                     val serverContact = response.body()?.firstOrNull()
+                    Log.d("ContactRepo", "serverContactId=${serverContact?.contactId} localId=${localContact.contactId}")
                     if (serverContact != null && serverContact.contactId != localContact.contactId) {
-                        // PostgREST generated a numeric id — replace the local-id record in Room
+                        // server generated real contact_id — replace TEMP record
                         contactDao.deleteContactById(localContact.contactId)
                         contactDao.insertContact(serverContact.copy(isSynced = true))
                     } else {
@@ -71,6 +74,8 @@ class ContactRepository @Inject constructor(
                     }
                     kotlin.Result.success(Unit)
                 } else {
+                    val errBody = response.errorBody()?.string()
+                    Log.e("ContactRepo", "POST failed ${response.code()}: $errBody")
                     syncManager.scheduleSync()
                     kotlin.Result.success(Unit)
                 }

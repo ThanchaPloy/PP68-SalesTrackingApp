@@ -167,7 +167,7 @@ class AddCustomerViewModel @Inject constructor(
             val userEmpCode   = currentUser?.userId
 
             val customer = Customer(
-                custId        = s.custId ?: "CUST-${UUID.randomUUID().toString().take(8).uppercase()}",
+                custId        = s.custId ?: "TEMP-${UUID.randomUUID().toString().take(8).uppercase()}",
                 companyName   = s.companyName,
                 branchId      = userBranchId,
                 branch        = s.branch.ifBlank { null },

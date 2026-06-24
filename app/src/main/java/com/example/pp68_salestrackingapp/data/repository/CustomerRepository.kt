@@ -13,6 +13,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
+import android.util.Log
 import javax.inject.Inject
 import java.io.IOException
 
@@ -111,14 +112,39 @@ class CustomerRepository @Inject constructor(
     suspend fun addCustomer(customer: Customer): kotlin.Result<Unit> {
         return withContext(Dispatchers.IO) {
             val today = java.time.LocalDate.now().toString()
+            val tempId = customer.custId
             val localCustomer = customer.copy(isSynced = false, createdAt = customer.createdAt ?: today)
             customerDao.insertCustomer(localCustomer)
             try {
-                val response = apiService.addCustomer(localCustomer)
+                val body = mutableMapOf<String, Any?>(
+                    "customer_name"        to localCustomer.companyName,
+                    "gen_bus_posting_group" to localCustomer.branchId,
+                    "cust_type"            to localCustomer.custType,
+                    "address"              to localCustomer.companyAddr,
+                    "company_lat"          to localCustomer.companyLat,
+                    "company_long"         to localCustomer.companyLong,
+                    "customer_status"      to localCustomer.companyStatus,
+                    "create_date"          to localCustomer.createdAt,
+                    "salesperson_code"     to localCustomer.createdBy,
+                    "grade"                to localCustomer.grade
+                ).filterValues { it != null }
+                val response = apiService.addCustomer(body)
+                Log.d("CustomerRepo", "POST customer → HTTP ${response.code()}")
                 if (response.isSuccessful) {
-                    customerDao.updateSyncStatus(localCustomer.custId, true)
+                    val realCustId = response.body()?.firstOrNull()?.custId
+                    Log.d("CustomerRepo", "realCustId=$realCustId tempId=$tempId")
+                    if (realCustId != null && realCustId != tempId) {
+                        // server generated a new ID — replace TEMP record in Room
+                        contactDao.updateCustIdForContacts(tempId, realCustId)
+                        customerDao.deleteCustomerById(tempId)
+                        customerDao.insertCustomer(localCustomer.copy(custId = realCustId, isSynced = true))
+                    } else {
+                        customerDao.updateSyncStatus(tempId, true)
+                    }
                     kotlin.Result.success(Unit)
                 } else {
+                    val errBody = response.errorBody()?.string()
+                    Log.e("CustomerRepo", "POST failed ${response.code()}: $errBody")
                     syncManager.scheduleSync()
                     kotlin.Result.success(Unit)
                 }

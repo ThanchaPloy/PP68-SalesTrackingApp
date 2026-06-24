@@ -156,7 +156,7 @@ class AddContactViewModel @Inject constructor(
             val s = _uiState.value
             val currentUserId = authRepo.currentUser()?.userId
             val contactToSave = ContactPerson(
-                contactId   = s.contactId ?: ("CNT-" + UUID.randomUUID().toString().take(8).uppercase()),
+                contactId   = s.contactId ?: ("TEMP-" + UUID.randomUUID().toString().take(8).uppercase()),
                 custId      = s.selectedCompanyId!!,
                 fullName    = s.fullName,
                 nickname    = s.nickname.ifBlank { null },

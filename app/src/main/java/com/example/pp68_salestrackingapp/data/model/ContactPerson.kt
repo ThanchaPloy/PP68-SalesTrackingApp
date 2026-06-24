@@ -3,14 +3,12 @@ package com.example.pp68_salestrackingapp.data.model
 import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.PrimaryKey
-import com.google.gson.annotations.JsonAdapter
 import com.google.gson.annotations.SerializedName
 
 @Entity(tableName = "contact_person")
 data class ContactPerson(
     @PrimaryKey
     @ColumnInfo(name = "contactId")
-    @JsonAdapter(IntOrStringTypeAdapter::class)
     @SerializedName("contact_id")
     val contactId: String,
 

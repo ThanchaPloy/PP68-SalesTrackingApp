@@ -32,11 +32,32 @@ class SyncWorker @AssistedInject constructor(
             // 1. Sync Customers (ลำดับที่ 1: แม่ของข้อมูลอื่น)
             val unsyncedCustomers = customerDao.getUnsyncedCustomers()
             for (customer in unsyncedCustomers) {
-                val response = apiService.addCustomer(customer)
-                if (response.isSuccessful) customerDao.updateSyncStatus(customer.custId, true)
+                val body = mutableMapOf<String, Any?>(
+                    "customer_name"         to customer.companyName,
+                    "gen_bus_posting_group" to customer.branchId,
+                    "cust_type"             to customer.custType,
+                    "address"               to customer.companyAddr,
+                    "company_lat"           to customer.companyLat,
+                    "company_long"          to customer.companyLong,
+                    "customer_status"       to customer.companyStatus,
+                    "create_date"           to customer.createdAt,
+                    "salesperson_code"      to customer.createdBy,
+                    "grade"                 to customer.grade
+                ).filterValues { it != null }
+                val response = apiService.addCustomer(body)
+                if (response.isSuccessful) {
+                    val realCustId = response.body()?.firstOrNull()?.custId
+                    if (realCustId != null && realCustId != customer.custId) {
+                        contactDao.updateCustIdForContacts(customer.custId, realCustId)
+                        customerDao.deleteCustomerById(customer.custId)
+                        customerDao.insertCustomer(customer.copy(custId = realCustId, isSynced = true))
+                    } else {
+                        customerDao.updateSyncStatus(customer.custId, true)
+                    }
+                }
             }
 
-            // 2. Sync Contacts
+            // 2. Sync Contacts (ต้องทำหลัง customer เพื่อให้ custId เป็น real ID แล้ว)
             val unsyncedContacts = contactDao.getUnsyncedContacts()
             for (contact in unsyncedContacts) {
                 val fields = buildMap<String, Any?> {
@@ -44,16 +65,51 @@ class SyncWorker @AssistedInject constructor(
                     contact.fullName?.let { put("contact_name", it) }
                     contact.phoneNumber?.let { put("mobile_phone", it) }
                     contact.email?.let { put("email", it) }
+                    contact.nickname?.let { put("nickname", it) }
+                    contact.position?.let { put("position", it) }
+                    contact.line?.let { put("line", it) }
                 }
                 val response = apiService.addContact(fields)
-                if (response.isSuccessful) contactDao.updateSyncStatus(contact.contactId, true)
+                if (response.isSuccessful) {
+                    val serverContact = response.body()?.firstOrNull()
+                    if (serverContact != null && serverContact.contactId != contact.contactId) {
+                        contactDao.deleteContactById(contact.contactId)
+                        contactDao.insertContact(serverContact.copy(isSynced = true))
+                    } else {
+                        contactDao.updateSyncStatus(contact.contactId, true)
+                    }
+                }
             }
 
             // 3. Sync Projects
             val unsyncedProjects = projectDao.getUnsyncedProjects()
             for (project in unsyncedProjects) {
-                val response = apiService.addProject(project)
-                if (response.isSuccessful) projectDao.updateSyncStatus(project.projectId, true)
+                val body = mutableMapOf<String, Any?>(
+                    "customer_code"           to project.custId,
+                    "project_name"            to project.projectName,
+                    "branch_code"             to project.branchId,
+                    "billing_branch_id"       to project.billingBranchId,
+                    "expected_value"          to project.expectedValue,
+                    "project_status"          to project.projectStatus,
+                    "start_date"              to project.startDate,
+                    "closing_date"            to project.closingDate,
+                    "project_lat"             to project.projectLat,
+                    "project_long"            to project.projectLong,
+                    "opportunity_score"       to project.opportunityScore,
+                    "remark"                  to project.remark,
+                    "create_by"               to project.createBy,
+                    "created_at"              to project.createdAt
+                ).filterValues { it != null }
+                val response = apiService.addProject(body)
+                if (response.isSuccessful) {
+                    val realId = response.body()?.firstOrNull()?.projectId
+                    if (realId != null && realId != project.projectId) {
+                        projectDao.deleteProjectById(project.projectId)
+                        projectDao.insertProject(project.copy(projectId = realId, isSynced = true))
+                    } else {
+                        projectDao.updateSyncStatus(project.projectId, true)
+                    }
+                }
             }
 
             // 4. Sync Activities (นัดหมาย)

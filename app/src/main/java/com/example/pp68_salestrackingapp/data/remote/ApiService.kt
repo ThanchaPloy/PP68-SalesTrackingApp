@@ -96,7 +96,7 @@ interface ApiService {
 
     @POST("customer")
     @Headers("Prefer: return=representation", "Content-Profile: public")
-    suspend fun addCustomer(@Body customer: Customer): Response<List<Customer>>
+    suspend fun addCustomer(@Body fields: @JvmSuppressWildcards Map<String, Any?>): Response<List<Customer>>
 
     @PATCH("customer")
     @Headers("Prefer: return=representation", "Content-Profile: public")
@@ -153,7 +153,7 @@ interface ApiService {
 
     @POST("project")
     @Headers("Prefer: return=representation", "Content-Profile: public")
-    suspend fun addProject(@Body project: Project): Response<List<Project>>
+    suspend fun addProject(@Body fields: @JvmSuppressWildcards Map<String, Any?>): Response<List<Project>>
 
     @PATCH("project")
     @Headers("Prefer: return=representation", "Content-Profile: public")

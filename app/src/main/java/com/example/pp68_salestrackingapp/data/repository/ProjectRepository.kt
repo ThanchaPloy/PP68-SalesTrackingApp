@@ -11,6 +11,7 @@ import com.example.pp68_salestrackingapp.data.model.ProjectSalesMember
 import com.example.pp68_salestrackingapp.data.remote.ApiService
 import com.example.pp68_salestrackingapp.data.remote.FirebaseRealtimeService
 import com.example.pp68_salestrackingapp.utils.SyncManager
+import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
@@ -58,25 +59,54 @@ class ProjectRepository @Inject constructor(
 
     suspend fun createProject(project: Project, userId: String): Result<Project> {
         return withContext(Dispatchers.IO) {
-            val generatedId = generateNewProjectNumber(project.branchId ?: "")
             val today = java.time.LocalDate.now().toString()
-            val projectToSave = project.copy(projectId = generatedId, isSynced = false, createdAt = project.createdAt ?: today)
-            projectDao.insertProject(projectToSave)
-            
+            val tempId = "TEMP-${java.util.UUID.randomUUID().toString().take(8).uppercase()}"
+            val tempProject = project.copy(projectId = tempId, isSynced = false, createdAt = project.createdAt ?: today)
+            projectDao.insertProject(tempProject)
             try {
-                val response = apiService.addProject(projectToSave)
+                val body = mutableMapOf<String, Any?>(
+                    "customer_code"           to project.custId,
+                    "project_name"            to project.projectName,
+                    "branch_code"             to project.branchId,
+                    "billing_branch_id"       to project.billingBranchId,
+                    "expected_value"          to project.expectedValue,
+                    "project_status"          to project.projectStatus,
+                    "start_date"              to project.startDate,
+                    "closing_date"            to project.closingDate,
+                    "desired_completion_date" to project.desiredCompletionDate,
+                    "project_lat"             to project.projectLat,
+                    "project_long"            to project.projectLong,
+                    "opportunity_score"       to project.opportunityScore,
+                    "remark"                  to project.remark,
+                    "create_by"               to project.createBy,
+                    "created_at"              to (project.createdAt ?: today)
+                ).filterValues { it != null }
+                Log.d("ProjectRepo", "POST body: $body")
+                val response = apiService.addProject(body)
+                Log.d("ProjectRepo", "POST project → HTTP ${response.code()}")
                 if (response.isSuccessful) {
-                    val member = ProjectMemberInsertDto(projectId = generatedId, userId = userId, saleRole = "owner")
-                    apiService.addProjectMembers(listOf(member))
-                    projectDao.updateSyncStatus(generatedId, true)
-                    Result.success(projectToSave)
+                    val realId = response.body()?.firstOrNull()?.projectId
+                    Log.d("ProjectRepo", "realId=$realId tempId=$tempId")
+                    val finalProject = if (realId != null && realId != tempId) {
+                        projectDao.deleteProjectById(tempId)
+                        val real = tempProject.copy(projectId = realId, isSynced = true)
+                        projectDao.insertProject(real)
+                        real
+                    } else {
+                        projectDao.updateSyncStatus(tempId, true)
+                        tempProject
+                    }
+                    apiService.addProjectMembers(listOf(ProjectMemberInsertDto(finalProject.projectId, userId, "owner")))
+                    Result.success(finalProject)
                 } else {
+                    val err = response.errorBody()?.string()
+                    Log.e("ProjectRepo", "POST failed ${response.code()}: $err")
                     syncManager.scheduleSync()
-                    Result.success(projectToSave)
+                    Result.success(tempProject)
                 }
             } catch (e: IOException) {
                 syncManager.scheduleSync()
-                Result.success(projectToSave)
+                Result.success(tempProject)
             } catch (e: Exception) { Result.failure(e) }
         }
     }
@@ -238,19 +268,6 @@ class ProjectRepository @Inject constructor(
             if (response.isSuccessful) Result.success(response.body()?.map { it.branchId to it.branchName } ?: emptyList())
             else Result.success(emptyList())
         } catch (e: Exception) { Result.success(emptyList()) }
-    }
-
-    private suspend fun generateNewProjectNumber(branchId: String): String {
-        return try {
-            val bb = branchId.take(2).uppercase().ifBlank { "PJ" }
-            val now = LocalDate.now()
-            val beYear = (now.year + 543) % 100
-            val prefix = "$bb%02d%02d".format(beYear, now.monthValue)
-            var seq = projectDao.getProjectCountByPrefix(prefix) + 1
-            // skip IDs that already exist in Room to avoid primary key collision
-            while (projectDao.getProjectById("$prefix%03d".format(seq)) != null) seq++
-            "$prefix%03d".format(seq)
-        } catch (e: Exception) { "PJ" + System.currentTimeMillis().toString().takeLast(7) }
     }
 
     suspend fun getProjectById(projectId: String): Result<Project> {
