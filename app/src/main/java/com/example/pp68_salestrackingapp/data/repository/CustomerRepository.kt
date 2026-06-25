@@ -72,8 +72,10 @@ class CustomerRepository @Inject constructor(
                 val deduped = customers.distinctBy { it.custId }.map { it.copy(isSynced = true) }
                 customerDao.clearAndInsert(deduped)
                 kotlin.Result.success(Unit)
+            } catch (e: IOException) {
+                kotlin.Result.success(Unit) // offline — Room data still valid
             } catch (e: Exception) {
-                kotlin.Result.failure(Exception("Network Error: ${e.message}"))
+                kotlin.Result.failure(e)
             }
         }
     }

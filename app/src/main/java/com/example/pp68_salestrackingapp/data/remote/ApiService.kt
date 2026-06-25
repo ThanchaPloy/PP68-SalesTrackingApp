@@ -162,6 +162,9 @@ interface ApiService {
     suspend fun getProjectsByIds(@Query("project_code") projectIds: String, @Query("limit") limit: Int = 1000): Response<List<Project>>
 
     @GET("project")
+    suspend fun getProjectsByCreator(@Query("create_by") userId: String, @Query("limit") limit: Int = 1000): Response<List<Project>>
+
+    @GET("project")
     suspend fun getProjectById(@Query("project_code") projectId: String, @Query("limit") limit: Int = 1): Response<List<Project>>
 
     @POST("project")
@@ -230,7 +233,7 @@ interface ApiService {
 
     @POST("project_product")
     @Headers("Prefer: return=representation", "Content-Profile: public")
-    suspend fun addProductToProject(@Body item: ProjectProductInsertDto): Response<List<ProjectProductInsertDto>>
+    suspend fun addProductToProject(@Body item: ProjectProductInsertDto): Response<List<ProjectProductDto>>
 
     @PATCH("project_product")
     @Headers("Prefer: return=representation", "Content-Profile: public")

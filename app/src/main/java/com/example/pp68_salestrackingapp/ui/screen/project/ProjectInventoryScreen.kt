@@ -237,6 +237,14 @@ fun ProductInventoryCard(
                 verticalAlignment = Alignment.Top
             ) {
                 Column(modifier = Modifier.weight(1f)) {
+                    if (item.lineCode != null) {
+                        Text(
+                            item.lineCode,
+                            fontSize = 11.sp,
+                            color = TextGray,
+                            modifier = Modifier.padding(bottom = 2.dp)
+                        )
+                    }
                     Text(
                         item.productName,
                         fontWeight = FontWeight.Bold,
@@ -320,9 +328,9 @@ fun ProjectInventoryScreenPreview() {
                 ),
                 companyName = "Tech Installer A",
                 items = listOf(
-                    InventoryItem("P1", "กระจกเทมเปอร์ 12mm", "กระจก", 45.0, "ตารางฟุต"),
-                    InventoryItem("P2", "อะลูมิเนียม Profile X-200", "อะลูมิเนียม", 120.0, "ชิ้น"),
-                    InventoryItem("P3", "Silicone Sealant Pro", "ซิลิโคน", 8.0, "เซ็ต")
+                    InventoryItem("P1", "PP-2506-0001", "กระจกเทมเปอร์ 12mm", "กระจก", 45.0, "ตารางฟุต"),
+                    InventoryItem("P2", "PP-2506-0002", "อะลูมิเนียม Profile X-200", "อะลูมิเนียม", 120.0, "ชิ้น"),
+                    InventoryItem("P3", null, "Silicone Sealant Pro", "ซิลิโคน", 8.0, "เซ็ต")
                 )
             ),
             onBack = {},

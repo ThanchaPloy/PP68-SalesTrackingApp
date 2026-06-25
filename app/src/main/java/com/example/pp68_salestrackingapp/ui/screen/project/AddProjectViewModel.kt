@@ -454,6 +454,7 @@ class AddProjectViewModel @Inject constructor(
                 val projectToSave = Project(
                     projectId             = s.projectId ?: "",
                     custId                = s.selectedCustomerId ?: "",
+                    customerName          = s.selectedCustomerName,
                     branchId              = branchId,
                     billingBranchId       = s.selectedBillingBranchId,
                     projectName           = s.projectName,

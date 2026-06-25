@@ -1,9 +1,15 @@
 package com.pp68.backend.data.repository
 
 import com.pp68.backend.data.database.tables.AppointmentTable
+import com.pp68.backend.data.database.tables.EmployeeTable
 import com.pp68.backend.domain.entity.Appointment
 import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
+import java.time.LocalDate
+import java.time.LocalDateTime
+import java.time.LocalTime
+import java.time.ZoneId
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.inList
 
 class AppointmentRepositoryImpl {
 
@@ -15,9 +21,9 @@ class AppointmentRepositoryImpl {
         activityType       = this[AppointmentTable.activityType],
         isAppointment      = this[AppointmentTable.isAppointment],
         topic              = this[AppointmentTable.topic],
-        plannedDate        = this[AppointmentTable.plannedDate],
-        plannedTime        = this[AppointmentTable.plannedTime],
-        plannedEndTime     = this[AppointmentTable.plannedEndTime],
+        plannedDate        = this[AppointmentTable.plannedDate]?.toString(),
+        plannedTime        = this[AppointmentTable.plannedTime]?.toString(),
+        plannedEndTime     = this[AppointmentTable.plannedEndTime]?.toString(),
         plannedLat         = this[AppointmentTable.plannedLat],
         plannedLong        = this[AppointmentTable.plannedLong],
         checkInTime        = this[AppointmentTable.checkInTime],
@@ -52,9 +58,9 @@ class AppointmentRepositoryImpl {
             it[activityType]       = appointment.activityType
             it[isAppointment]      = appointment.isAppointment
             it[topic]              = appointment.topic
-            it[plannedDate]        = appointment.plannedDate
-            it[plannedTime]        = appointment.plannedTime
-            it[plannedEndTime]     = appointment.plannedEndTime
+            it[plannedDate]        = appointment.plannedDate?.let { LocalDate.parse(it) }
+            it[plannedTime]        = appointment.plannedTime?.let { LocalTime.parse(it) }
+            it[plannedEndTime]     = appointment.plannedEndTime?.let { LocalTime.parse(it) }
             it[plannedLat]         = appointment.plannedLat
             it[plannedLong]        = appointment.plannedLong
             it[status]             = appointment.status
@@ -85,5 +91,35 @@ class AppointmentRepositoryImpl {
 
     suspend fun deleteByCustId(custId: String): Boolean = dbQuery {
         AppointmentTable.deleteWhere { AppointmentTable.customerId eq custId } > 0
+    }
+
+    suspend fun findUpcomingForReminders(withinMinutes: Long = 60): List<Pair<Appointment, String?>> = dbQuery {
+        val thaiZone  = ZoneId.of("Asia/Bangkok")
+        val nowThai   = LocalDateTime.now(thaiZone)
+        val cutoff    = nowThai.plusMinutes(withinMinutes)
+        val todayDate = nowThai.toLocalDate()
+
+        // Step 1: get today's appointments in the time window (simple select — no JOIN to avoid column qualifier issues)
+        val appointments = AppointmentTable
+            .select { AppointmentTable.plannedDate eq todayDate }
+            // NOTE: add status filter here once actual plan_status values are confirmed
+            .mapNotNull { row ->
+                val plannedTime = row[AppointmentTable.plannedTime] ?: return@mapNotNull null
+                val plannedDt   = LocalDateTime.of(todayDate, plannedTime)
+                if (plannedDt.isAfter(nowThai) && !plannedDt.isAfter(cutoff)) row.toAppointment() else null
+            }
+
+        if (appointments.isEmpty()) return@dbQuery emptyList()
+
+        // Step 2: batch-fetch FCM tokens for the relevant users
+        val userIds = appointments.map { it.userId }.distinct()
+        val tokenMap = EmployeeTable
+            .select { EmployeeTable.empCode inList userIds }
+            .associate { it[EmployeeTable.empCode] to it[EmployeeTable.fcmToken] }
+
+        // Step 3: merge — only include appointments where an FCM token exists
+        appointments.mapNotNull { a ->
+            tokenMap[a.userId]?.let { token -> Pair(a, token) }
+        }
     }
 }

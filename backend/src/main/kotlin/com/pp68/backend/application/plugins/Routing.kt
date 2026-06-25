@@ -27,6 +27,8 @@ fun Application.configureRouting(jwt: JwtConfig) {
         uploadRoutes()
         callLogRoutes()
 
+        notificationRoutes()
+
         // Serve uploaded files statically
         staticFiles("/uploads", java.io.File("uploads"))
     }

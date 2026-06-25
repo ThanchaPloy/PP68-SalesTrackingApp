@@ -18,7 +18,8 @@ class EmployeeRepositoryImpl {
         createDate  = this[EmployeeTable.createDate]?.toString(),
         updatedAt   = this[EmployeeTable.updatedAt]?.toString(),
         empType     = this[EmployeeTable.empType],
-        password    = this[EmployeeTable.password]
+        password    = this[EmployeeTable.password],
+        fcmToken    = this[EmployeeTable.fcmToken]
     )
 
     suspend fun findByCode(empCode: String): Employee? = dbQuery {
@@ -38,5 +39,11 @@ class EmployeeRepositoryImpl {
     suspend fun updatePassword(empCode: String, passwordHash: String): Employee? = dbQuery {
         EmployeeTable.update({ EmployeeTable.empCode eq empCode }) { it[password] = passwordHash }
         EmployeeTable.select { EmployeeTable.empCode eq empCode }.singleOrNull()?.toEmployee()
+    }
+
+    suspend fun updateFcmToken(empCode: String, token: String): Boolean = dbQuery {
+        EmployeeTable.update({ EmployeeTable.empCode eq empCode }) {
+            it[fcmToken] = token
+        } > 0
     }
 }

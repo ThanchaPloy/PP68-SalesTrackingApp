@@ -55,6 +55,9 @@ dependencies {
     implementation("io.insert-koin:koin-ktor:$koin_version")
     implementation("io.insert-koin:koin-logger-slf4j:$koin_version")
 
+    // Firebase Admin SDK (FCM push notifications)
+    implementation("com.google.firebase:firebase-admin:9.2.0")
+
     // BCrypt (password hashing)
     implementation("at.favre.lib:bcrypt:0.10.2")
 

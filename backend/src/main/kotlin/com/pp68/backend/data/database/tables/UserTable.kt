@@ -15,6 +15,7 @@ object EmployeeTable : Table("employee") {
     val updatedAt   = timestamp("updated_at").nullable()
     val password    = varchar("password", 255).nullable()
     val empType     = varchar("emp_type", 50).nullable()
+    val fcmToken    = varchar("fcm_token", 255).nullable()
 
     override val primaryKey = PrimaryKey(empCode)
 }

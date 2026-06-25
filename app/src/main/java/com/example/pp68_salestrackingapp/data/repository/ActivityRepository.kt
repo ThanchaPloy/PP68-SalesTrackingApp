@@ -55,6 +55,8 @@ class ActivityRepository @Inject constructor(
                 } else {
                     kotlin.Result.failure(Exception("API error: ${resp.code()}"))
                 }
+            } catch (e: IOException) {
+                kotlin.Result.success(Unit) // offline — Room data still valid
             } catch (e: Exception) {
                 kotlin.Result.failure(e)
             }
@@ -72,6 +74,8 @@ class ActivityRepository @Inject constructor(
                 } else {
                     kotlin.Result.failure(Exception("API error: ${resp.code()}"))
                 }
+            } catch (e: IOException) {
+                kotlin.Result.success(Unit) // offline — Room data still valid
             } catch (e: Exception) {
                 kotlin.Result.failure(e)
             }

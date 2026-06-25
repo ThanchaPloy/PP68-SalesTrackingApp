@@ -1,19 +1,21 @@
 package com.pp68.backend.data.database.tables
 
 import org.jetbrains.exposed.sql.Table
+import org.jetbrains.exposed.sql.javatime.date
+import org.jetbrains.exposed.sql.javatime.time
 import org.jetbrains.exposed.sql.javatime.timestamp
 
 object AppointmentTable : Table("appointment") {
     val appointmentId      = varchar("appointment_id", 64)
-    val userId             = varchar("user_id", 64)
-    val customerId         = varchar("cust_id", 64)
-    val projectId          = varchar("project_id", 64).nullable()
+    val userId             = varchar("emp_code", 64)
+    val customerId         = varchar("cust_code", 64)
+    val projectId          = varchar("project_code", 64).nullable()
     val activityType       = varchar("type", 100)
     val isAppointment      = bool("is_appointment").default(false)
     val topic              = text("topic").nullable()
-    val plannedDate        = varchar("planned_date", 32).nullable()
-    val plannedTime        = varchar("planned_time", 16).nullable()
-    val plannedEndTime     = varchar("planned_end_time", 16).nullable()
+    val plannedDate        = date("planned_date").nullable()
+    val plannedTime        = time("planned_time").nullable()
+    val plannedEndTime     = time("planned_end_time").nullable()
     val plannedLat         = double("planned_lat").nullable()
     val plannedLong        = double("planned_long").nullable()
     val checkInTime        = varchar("check_in_time", 64).nullable()

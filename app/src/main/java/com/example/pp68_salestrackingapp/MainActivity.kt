@@ -17,6 +17,7 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import com.example.pp68_salestrackingapp.data.remote.ApiService
 import com.example.pp68_salestrackingapp.di.TokenManager
+import com.example.pp68_salestrackingapp.utils.SyncManager
 import com.google.firebase.messaging.FirebaseMessaging
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -26,6 +27,7 @@ class MainActivity : ComponentActivity() {
 
     @Inject lateinit var apiService: ApiService
     @Inject lateinit var tokenManager: TokenManager
+    @Inject lateinit var syncManager: SyncManager
 
     private val requestPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -40,6 +42,17 @@ class MainActivity : ComponentActivity() {
     ) { granted ->
         if (granted) {
             Log.d("CallLog", "READ_CALL_LOG permission granted")
+        }
+    }
+
+    private var lastSyncMs = 0L
+
+    override fun onResume() {
+        super.onResume()
+        val now = System.currentTimeMillis()
+        if (tokenManager.getToken() != null && now - lastSyncMs > 60_000) {
+            lastSyncMs = now
+            syncManager.runSyncNow(lifecycleScope)
         }
     }
 

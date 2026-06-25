@@ -19,6 +19,7 @@ import javax.inject.Inject
 
 data class InventoryItem(
     val productId: String,
+    val lineCode: String? = null,
     val productName: String,
     val category: String,
     val quantity: Double,
@@ -106,6 +107,7 @@ class ProjectInventoryViewModel @Inject constructor(
                 val product = productsMap[pp.productId]
                 InventoryItem(
                     productId          = pp.productId,
+                    lineCode           = pp.lineCode,
                     productName        = product?.description ?: pp.productId,
                     category           = product?.groupName ?: "ทั่วไป",
                     quantity           = pp.quantity ?: 0.0,

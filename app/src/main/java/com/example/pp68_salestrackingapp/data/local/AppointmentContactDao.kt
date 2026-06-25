@@ -13,4 +13,7 @@ interface AppointmentContactDao {
 
     @Query("DELETE FROM appointment_contact WHERE appointment_id = :appointmentId")
     suspend fun deleteContactsByAppointmentId(appointmentId: String)
+
+    @Query("UPDATE appointment_contact SET appointment_id = :newId WHERE appointment_id = :oldId")
+    suspend fun updateAppointmentId(oldId: String, newId: String)
 }

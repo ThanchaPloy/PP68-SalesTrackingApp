@@ -105,15 +105,15 @@ class CreateAppointmentViewModel @Inject constructor(
 
     private fun loadAllContacts() {
         viewModelScope.launch {
-            val userId = authRepo.currentUser()?.userId ?: return@launch
-            // ดึงทั้งหมดของ user จาก API ไม่ผ่าน Room filter
-            val resp = apiService.getContactPersons()
-            if (resp.isSuccessful) {
-                val options = resp.body()?.map {
-                    ContactOption(it.contactId, it.fullName ?: it.contactId)
-                } ?: emptyList()
-                _uiState.update { it.copy(allContactOptions = options) }
-            }
+            try {
+                val resp = apiService.getContactPersons()
+                if (resp.isSuccessful) {
+                    val options = resp.body()?.map {
+                        ContactOption(it.contactId, it.fullName ?: it.contactId)
+                    } ?: emptyList()
+                    _uiState.update { it.copy(allContactOptions = options) }
+                }
+            } catch (e: Exception) { /* offline — contacts stay empty */ }
         }
     }
 

@@ -38,21 +38,29 @@ class ProjectRepository @Inject constructor(
         return withContext(Dispatchers.IO) {
             try {
                 val memberResp = apiService.getMyProjectIds(userId = "eq.$userId")
-                if (!memberResp.isSuccessful) return@withContext Result.failure(Exception("HTTP ${memberResp.code()}"))
+                val memberIds = if (memberResp.isSuccessful) memberResp.body()?.map { it.projectId } ?: emptyList() else emptyList()
 
-                val projectIds = memberResp.body()?.map { it.projectId } ?: emptyList()
+                val creatorResp = apiService.getProjectsByCreator(userId = "eq.$userId")
+                val creatorProjects = if (creatorResp.isSuccessful) creatorResp.body() ?: emptyList() else emptyList()
 
-                // ponytail: never clear local cache on empty — corrupt/missing project_sales_member
-                // records would silently wipe all local data; only replace when server confirms results
-                if (projectIds.isEmpty()) return@withContext Result.success(Unit)
+                val allIds = (memberIds + creatorProjects.map { it.projectId }).distinct()
 
-                val projectResp = apiService.getProjectsByIds(projectIds = "in.(${projectIds.joinToString(",")})")
-                if (projectResp.isSuccessful && projectResp.body() != null) {
-                    projectDao.clearAndInsert(projectResp.body()!!.map { it.copy(isSynced = true) })
-                }
+                // ponytail: never clear local cache on empty — missing records would silently wipe all local data
+                if (allIds.isEmpty()) return@withContext Result.success(Unit)
+
+                val memberProjects = if (memberIds.isNotEmpty()) {
+                    val r = apiService.getProjectsByIds(projectIds = "in.(${memberIds.joinToString(",")})")
+                    if (r.isSuccessful) r.body() ?: emptyList() else emptyList()
+                } else emptyList()
+
+                val merged = (memberProjects + creatorProjects).distinctBy { it.projectId }
+                    .map { it.copy(isSynced = true) }
+                if (merged.isNotEmpty()) projectDao.clearAndInsert(merged)
                 Result.success(Unit)
+            } catch (e: IOException) {
+                Result.success(Unit) // offline — Room data still valid
             } catch (e: Exception) {
-                Result.failure(Exception("Network Error: ${e.message}"))
+                Result.failure(e)
             }
         }
     }
@@ -66,6 +74,7 @@ class ProjectRepository @Inject constructor(
             try {
                 val body = mutableMapOf<String, Any?>(
                     "customer_code"           to project.custId,
+                    "customer_name"           to project.customerName,
                     "project_name"            to project.projectName,
                     "branch_code"             to project.branchId,
                     "billing_branch_id"       to project.billingBranchId,

@@ -15,12 +15,6 @@ import com.google.gson.annotations.SerializedName
             parentColumns = ["appointment_id"],
             childColumns = ["appointment_id"],
             onDelete = ForeignKey.CASCADE
-        ),
-        ForeignKey(
-            entity = ContactPerson::class,
-            parentColumns = ["contactId"],
-            childColumns = ["contact_id"],
-            onDelete = ForeignKey.CASCADE
         )
     ],
     indices = [Index("appointment_id"), Index("contact_id")]

@@ -1,6 +1,7 @@
 package com.pp68.backend.application.di
 
 import com.pp68.backend.data.repository.*
+import com.pp68.backend.data.service.FcmService
 import com.pp68.backend.domain.usecase.*
 import org.koin.dsl.module
 
@@ -20,6 +21,9 @@ val appModule = module {
     single { ProjectMemberRepositoryImpl() }
     single { ProjectContactRepositoryImpl() }
     single { CallLogRepositoryImpl() }
+
+    // Services
+    single { FcmService() }
 
     // Use Cases
     single { AuthUseCase(get()) }

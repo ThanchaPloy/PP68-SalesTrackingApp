@@ -16,5 +16,6 @@ data class Employee(
     @SerialName("create_date")   val createDate:  String?  = null,
     @SerialName("updated_at")    val updatedAt:   String?  = null,
     @SerialName("emp_type")      val empType:     String?  = null,
-    @Transient val password: String? = null
+    @Transient val password:  String? = null,
+    @Transient val fcmToken:  String? = null
 )

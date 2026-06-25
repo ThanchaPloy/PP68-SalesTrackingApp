@@ -19,7 +19,7 @@ import com.example.pp68_salestrackingapp.data.model.*
         AppointmentContact::class,
         ProjectSalesMember::class
     ],
-    version = 39,
+    version = 40,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -189,6 +189,22 @@ abstract class AppDatabase : RoomDatabase() {
         val MIGRATION_38_39 = object : Migration(38, 39) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE activity_table ADD COLUMN created_at TEXT")
+            }
+        }
+
+        val MIGRATION_39_40 = object : Migration(39, 40) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("DROP TABLE IF EXISTS `appointment_contact`")
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS `appointment_contact` (
+                        `appointment_id` TEXT NOT NULL,
+                        `contact_id` TEXT NOT NULL,
+                        PRIMARY KEY(`appointment_id`, `contact_id`),
+                        FOREIGN KEY(`appointment_id`) REFERENCES `activity_table`(`appointment_id`) ON DELETE CASCADE
+                    )
+                """.trimIndent())
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_appointment_contact_appointment_id` ON `appointment_contact`(`appointment_id`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_appointment_contact_contact_id` ON `appointment_contact`(`contact_id`)")
             }
         }
     }
