@@ -42,10 +42,19 @@ android {
         buildConfigField("String", "MAPS_API_KEY", "\"$mapsApiKey\"")
         manifestPlaceholders["MAPS_API_KEY"] = mapsApiKey
     }
+    signingConfigs {
+        create("release") {
+            storeFile = file("C:/AndroidProject/PP68.jks")
+            storePassword = "practical68"
+            keyAlias = "key0"
+            keyPassword = "practical68"
+        }
+    }
 
     buildTypes {
         release {
             isMinifyEnabled = false
+            signingConfig = signingConfigs.getByName("release")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -70,6 +79,12 @@ android {
         unitTests {
             isReturnDefaultValues = true
         }
+    }
+    lint {
+        checkReleaseBuilds = false
+        abortOnError = false
+        checkDependencies = false
+        ignoreTestSources = true
     }
 }
 

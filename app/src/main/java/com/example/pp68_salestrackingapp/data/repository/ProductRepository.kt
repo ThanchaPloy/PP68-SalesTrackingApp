@@ -2,6 +2,7 @@ package com.example.pp68_salestrackingapp.data.repository
 
 import com.example.pp68_salestrackingapp.data.remote.ApiService
 import com.example.pp68_salestrackingapp.data.model.ProjectProductInsertDto
+import com.example.pp68_salestrackingapp.data.remote.ProductMasterDto
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
@@ -31,24 +32,9 @@ class ProductRepository @Inject constructor(
         return withContext(Dispatchers.IO) {
             try {
                 // เรียก API ดึงข้อมูลสินค้าพร้อมข้อมูล Type และ Group ที่ Join มาแล้ว
-                val response = apiService.getProductMaster()
+                val response = apiService.getProductMaster(limit = 1000)
                 if (response.isSuccessful && response.body() != null) {
-                    val list = response.body()!!.map {
-                        ProductSimpleDto(
-                            productId   = it.productId,
-                            productName = it.description ?: it.productId,
-                            brand       = it.brandName?.trim()?.ifBlank { null } ?: it.productBrandNo ?: "ไม่ระบุแบรนด์",
-                            brandNo     = it.productBrandNo,
-                            category    = it.groupName ?: it.productGroupNo ?: "ทั่วไป",
-                            subCategory = it.subgroupName ?: it.productSubgroupNo ?: "",
-                            unit        = it.unit ?: "ชิ้น",
-                            color       = it.colorName ?: it.productColorNo,
-                            thickness   = null,
-                            width       = null,
-                            length      = null,
-                            dimensionUnit = null
-                        )
-                    }
+                    val list = response.body()!!.map { it.toSimpleDto() }
                     Result.success(list)
                 } else {
                     val errorBody = response.errorBody()?.string() ?: ""
@@ -59,6 +45,67 @@ class ProductRepository @Inject constructor(
             }
         }
     }
+
+    suspend fun getProductById(productId: String): Result<ProductSimpleDto> {
+        return withContext(Dispatchers.IO) {
+            try {
+                val response = apiService.getProductsByIds("eq.$productId")
+                if (response.isSuccessful && !response.body().isNullOrEmpty()) {
+                    Result.success(response.body()!!.first().toSimpleDto())
+                } else {
+                    Result.failure(Exception("Product not found: $productId"))
+                }
+            } catch (e: Exception) {
+                Result.failure(e)
+            }
+        }
+    }
+
+    suspend fun searchProducts(
+        query: String?,
+        brandNo: String?,
+        limit: Int = 50,
+        offset: Int = 0
+    ): Result<List<ProductSimpleDto>> {
+        return withContext(Dispatchers.IO) {
+            try {
+                val descriptionParam = if (!query.isNullOrBlank()) "ilike.*$query*" else null
+                val brandParam = if (!brandNo.isNullOrBlank()) "eq.$brandNo" else null
+                
+                val response = apiService.getProductMaster(
+                    description = descriptionParam,
+                    brandNo = brandParam,
+                    limit = limit,
+                    offset = offset
+                )
+                
+                if (response.isSuccessful && response.body() != null) {
+                    val list = response.body()!!.map { it.toSimpleDto() }
+                    Result.success(list)
+                } else {
+                    val errorBody = response.errorBody()?.string() ?: ""
+                    Result.failure(Exception("HTTP ${response.code()}: $errorBody"))
+                }
+            } catch (e: Exception) {
+                Result.failure(e)
+            }
+        }
+    }
+
+    private fun ProductMasterDto.toSimpleDto() = ProductSimpleDto(
+        productId   = productId,
+        productName = description ?: productId,
+        brand       = brandName?.trim()?.ifBlank { null } ?: productBrandNo ?: "ไม่ระบุแบรนด์",
+        brandNo     = productBrandNo,
+        category    = groupName ?: productGroupNo ?: "ทั่วไป",
+        subCategory = subgroupName ?: productSubgroupNo ?: "",
+        unit        = unit ?: "ชิ้น",
+        color       = colorName ?: productColorNo,
+        thickness   = null,
+        width       = null,
+        length      = null,
+        dimensionUnit = null
+    )
 
     suspend fun getBrands(): Result<List<Pair<String, String>>> {
         return withContext(Dispatchers.IO) {
@@ -98,16 +145,36 @@ class ProductRepository @Inject constructor(
         productId: String,
         quantity: Double,
         wantedDate: String?,
-        shippingBranchId: String?
+        shippingBranchId: String?,
+        brandName: String? = null,
+        categoryName: String? = null,
+        subcategoryName: String? = null,
+        productName: String? = null,
+        color: String? = null,
+        thickness: String? = null,
+        width: String? = null,
+        length: String? = null,
+        dimensionUnit: String? = null,
+        uom: String? = null
     ): Result<Unit> {
         return withContext(Dispatchers.IO) {
             try {
                 val body = ProjectProductInsertDto(
-                    projectId = projectId,
-                    productId = productId,
-                    quantity  = quantity,
-                    desiredDate = wantedDate?.ifBlank { null },
-                    shippingBranchId = shippingBranchId
+                    projectId        = projectId,
+                    productId        = productId,
+                    quantity         = quantity,
+                    desiredDate      = wantedDate?.ifBlank { null },
+                    shippingBranchId = shippingBranchId,
+                    brandName        = brandName?.ifBlank { null },
+                    categoryName     = categoryName?.ifBlank { null },
+                    subcategoryName  = subcategoryName?.ifBlank { null },
+                    productName      = productName?.ifBlank { null },
+                    color            = color?.ifBlank { null },
+                    thickness        = thickness?.ifBlank { null },
+                    width            = width?.ifBlank { null },
+                    length           = length?.ifBlank { null },
+                    dimensionUnit    = dimensionUnit?.ifBlank { null },
+                    uom              = uom?.ifBlank { null }
                 )
                 val response = apiService.addProductToProject(body)
                 if (response.isSuccessful) {

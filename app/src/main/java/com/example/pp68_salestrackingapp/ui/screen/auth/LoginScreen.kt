@@ -43,7 +43,7 @@ val ErrorRed        = Color(0xFFDC2626)
 @Composable
 fun LoginScreen(
     onLoginSuccess: (AuthUser) -> Unit,
-    onRegisterClick: () -> Unit,
+    onRegisterClick: () -> Unit = {},
     viewModel: LoginViewModel = hiltViewModel()
 ) {
     val uiState  by viewModel.uiState.collectAsState()
@@ -73,7 +73,7 @@ fun LoginScreenContent(
     onUsernameChange: (String) -> Unit,
     onPasswordChange: (String) -> Unit,
     onLoginClick: () -> Unit,
-    onRegisterClick: () -> Unit,
+    onRegisterClick: () -> Unit = {},
     onLoginSuccess: (AuthUser) -> Unit
 ) {
     var showPassword by remember { mutableStateOf(false) }
@@ -253,19 +253,19 @@ fun LoginScreenContent(
             Spacer(modifier = Modifier.height(24.dp))
 
             // ── Register Link ──────────────────────────────────
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.Center
-            ) {
-                Text("ยังไม่มีบัญชีผู้ใช้งาน? ", color = TextGray, fontSize = 14.sp)
-                Text(
-                    text = "ลงทะเบียนที่นี่",
-                    color = BrandRed,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.clickable { onRegisterClick() }
-                )
-            }
+            // Row(
+            //     verticalAlignment = Alignment.CenterVertically,
+            //     horizontalArrangement = Arrangement.Center
+            // ) {
+            //     Text("ยังไม่มีบัญชีผู้ใช้งาน? ", color = TextGray, fontSize = 14.sp)
+            //     Text(
+            //         text = "ลงทะเบียนที่นี่",
+            //         color = BrandRed,
+            //         fontSize = 14.sp,
+            //         fontWeight = FontWeight.Bold,
+            //         modifier = Modifier.clickable { onRegisterClick() }
+            //     )
+            // }
         }
     }
 }

@@ -29,7 +29,7 @@ backend/.env
 *.png
 *.log
 *.sqlite
-*.xml
+# *.xml  <-- นำออกเพื่อให้ระบบทำงานกับ Android Manifest และ XML ได้
 ui*.xml
 backend/run_*.txt
 app/debug/

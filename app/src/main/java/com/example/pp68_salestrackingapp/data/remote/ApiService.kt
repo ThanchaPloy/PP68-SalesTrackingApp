@@ -195,7 +195,11 @@ interface ApiService {
     // ── Products ─────────────────────────────────────────────────
     @GET("item_silver")
     suspend fun getProductMaster(
-        @Query("limit") limit: Int = 1000
+        @Query("description") description: String? = null,
+        @Query("product_brand_no") brandNo: String? = null,
+        @Query("limit") limit: Int = 50,
+        @Query("offset") offset: Int = 0,
+        @Query("order") order: String = "description.asc"
     ): Response<List<ProductMasterDto>>
 
     @GET("item_silver")

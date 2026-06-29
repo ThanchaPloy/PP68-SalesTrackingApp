@@ -47,6 +47,8 @@ fun AddProductScreen(
         s = s,
         onBack = onBack,
         onBrandSelected = { viewModel.onBrandSelected(it) },
+        onGroupSelected = { viewModel.onGroupSelected(it) },
+        onSubgroupSelected = { viewModel.onSubgroupSelected(it) },
         onNameSelected = { viewModel.onNameSelected(it) },
         onQuantityChange = { viewModel.onQuantityChange(it) },
         onDateSelected = { viewModel.onDateSelected(it) },
@@ -62,6 +64,8 @@ fun AddProductContent(
     s: AddProductUiState,
     onBack: () -> Unit,
     onBrandSelected: (String) -> Unit,
+    onGroupSelected: (String) -> Unit,
+    onSubgroupSelected: (String) -> Unit,
     onNameSelected: (String) -> Unit,
     onQuantityChange: (String) -> Unit,
     onDateSelected: (String) -> Unit,
@@ -126,6 +130,28 @@ fun AddProductContent(
                 )
             }
 
+            FormField(label = "กลุ่มสินค้า") {
+                SearchableDropdownField(
+                    value = s.selectedGroup,
+                    placeholder = "พิมพ์เพื่อค้นหากลุ่มสินค้า",
+                    options = s.filteredGroups,
+                    onSelect = { onGroupSelected(it) },
+                    onClear  = { onGroupSelected("") },
+                    enabled  = !s.isEditMode
+                )
+            }
+
+            FormField(label = "กลุ่มย่อยสินค้า") {
+                SearchableDropdownField(
+                    value = s.selectedSubgroup,
+                    placeholder = "พิมพ์เพื่อค้นหากลุ่มย่อย",
+                    options = s.filteredSubgroups,
+                    onSelect = { onSubgroupSelected(it) },
+                    onClear  = { onSubgroupSelected("") },
+                    enabled  = !s.isEditMode
+                )
+            }
+
             FormField(label = "ชื่อสินค้า") {
                 SearchableDropdownField(
                     value = s.selectedProductName,
@@ -134,24 +160,6 @@ fun AddProductContent(
                     onSelect = { onNameSelected(it) },
                     onClear  = { onNameSelected("") },
                     enabled  = !s.isEditMode
-                )
-            }
-
-            FormField(label = "กลุ่มสินค้า") {
-                FormTextField(
-                    value = s.selectedGroup,
-                    onValueChange = {},
-                    placeholder = "กลุ่มของสินค้า",
-                    readOnly = true
-                )
-            }
-
-            FormField(label = "กลุ่มย่อยสินค้า") {
-                FormTextField(
-                    value = s.selectedSubgroup,
-                    onValueChange = {},
-                    placeholder = "ประเภทย่อยของสินค้า",
-                    readOnly = true
                 )
             }
 
@@ -211,20 +219,20 @@ fun AddProductContent(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                FormField(label = "จำนวน", modifier = Modifier.weight(1f)) {
+                FormField(label = "จำนวน", modifier = Modifier.weight(0.6f)) {
                     FormTextField(
                         value = s.quantity,
                         onValueChange = onQuantityChange,
-                        placeholder = "จำนวนสินค้า",
+                        placeholder = "จำนวน",
                         keyboardType = KeyboardType.Number
                     )
                 }
-                FormField(label = "หน่วยนับ", modifier = Modifier.weight(1f)) {
-                    DropdownField(
+                FormField(label = "หน่วยนับ", modifier = Modifier.weight(0.4f)) {
+                    SearchableDropdownField(
                         value = s.unit,
                         placeholder = "หน่วย",
                         options = s.allUnits,
-                        onSelect = { onUnitSelected(s.allUnits[it]) }
+                        onSelect = { onUnitSelected(it) }
                     )
                 }
             }
@@ -290,7 +298,7 @@ fun AddProductContent(
                     s.error!!,
                     color = AppColors.Error,
                     fontSize = 14.sp,
-                    modifier = Modifier.align(Alignment.CenterHorizontally)
+                    modifier = Modifier.align(Alignment.CenterHorizontally).padding(bottom = 16.dp)
                 )
             }
         }
@@ -312,56 +320,5 @@ private fun FormField(
             color = if (enabled) AppColors.TextPrimary else AppColors.TextSecondary
         )
         content()
-    }
-}
-
-@Preview(showBackground = true)
-@Composable
-fun AddProductScreenPreview() {
-    SalesTrackingTheme {
-        AddProductContent(
-            s = AddProductUiState(
-                products = listOf(
-                    ProductSimpleDto(
-                        productId = "1",
-                        productName = "Product A",
-                        brand = "Brand X",
-                        brandNo = "BX01",
-                        category = "Category 1",
-                        subCategory = "Subcategory 1",
-                        unit = "ชิ้น",
-                        color = "Red",
-                        thickness = "10mm",
-                        width = "100cm",
-                        length = "200cm",
-                        dimensionUnit = "cm"
-                    )
-                ),
-                selectedBrand = "Brand X",
-                selectedProductName = "Product A",
-                selectedGroup = "Category 1",
-                selectedSubgroup = "Subcategory 1",
-                color = "Red",
-                thickness = "10mm",
-                width = "100cm",
-                length = "200cm",
-                dimensionUnit = "cm",
-                quantity = "5",
-                unit = "ชิ้น",
-                filteredNames = listOf("Product A"),
-                filteredBrands = listOf("Brand X"),
-                shippingBranchOptions = listOf("B1" to "Bangkok Branch"),
-                selectedShippingBranchId = "B1",
-                selectedShippingBranchName = "Bangkok Branch"
-            ),
-            onBack = {},
-            onBrandSelected = {},
-            onNameSelected = {},
-            onQuantityChange = {},
-            onDateSelected = {},
-            onShippingBranchSelected = { _, _ -> },
-            onUnitSelected = {},
-            onSave = {}
-        )
     }
 }

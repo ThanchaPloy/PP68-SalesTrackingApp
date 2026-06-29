@@ -13,7 +13,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.example.pp68_salestrackingapp.ui.screen.activity.*
 import com.example.pp68_salestrackingapp.ui.screen.auth.LoginScreen
-import com.example.pp68_salestrackingapp.ui.screen.auth.RegisterScreen
+// import com.example.pp68_salestrackingapp.ui.screen.auth.RegisterScreen
 import com.example.pp68_salestrackingapp.ui.screen.customer.*
 import com.example.pp68_salestrackingapp.ui.screen.dashboard.DashboardScreen
 import com.example.pp68_salestrackingapp.ui.screen.export.ExportMenuScreen
@@ -53,22 +53,20 @@ fun SalesTrackingApp() {
                         popUpTo(Route.Login.path) { inclusive = true }
                     }
                 },
-                onRegisterClick = {
-                    navController.navigate(Route.Register.path)
-                }
+                // onRegisterClick = { navController.navigate(Route.Register.path) }
             )
         }
 
-        composable(Route.Register.path) {
-            RegisterScreen(
-                onBack = { navController.popBackStack() },
-                onRegisterSuccess = {
-                    navController.navigate(Route.Home.path) {
-                        popUpTo(0) { inclusive = true }
-                    }
-                }
-            )
-        }
+        // composable(Route.Register.path) {
+        //     RegisterScreen(
+        //         onBack = { navController.popBackStack() },
+        //         onRegisterSuccess = {
+        //             navController.navigate(Route.Home.path) {
+        //                 popUpTo(0) { inclusive = true }
+        //             }
+        //         }
+        //     )
+        // }
 
         // --- Activity / Home ---
         composable(Route.Home.path) {
