@@ -19,7 +19,7 @@ import com.example.pp68_salestrackingapp.data.model.*
         AppointmentContact::class,
         ProjectSalesMember::class
     ],
-    version = 40,
+    version = 41,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -189,6 +189,12 @@ abstract class AppDatabase : RoomDatabase() {
         val MIGRATION_38_39 = object : Migration(38, 39) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE activity_table ADD COLUMN created_at TEXT")
+            }
+        }
+
+        val MIGRATION_40_41 = object : Migration(40, 41) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `customer` ADD COLUMN `vat_registration_no` TEXT")
             }
         }
 

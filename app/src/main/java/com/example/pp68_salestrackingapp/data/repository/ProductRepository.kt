@@ -129,11 +129,18 @@ class ProductRepository @Inject constructor(
     suspend fun getUnits(): Result<List<String>> {
         return withContext(Dispatchers.IO) {
             try {
-                val resp = apiService.getUnitOfMeasures()
-                if (resp.isSuccessful)
-                    Result.success(resp.body()!!.map { it.code }.distinct().filter { it.isNotBlank() }.sorted())
-                else
-                    Result.failure(Exception("HTTP ${resp.code()}"))
+                val all = mutableListOf<String>()
+                val batchSize = 1000
+                var offset = 0
+                while (true) {
+                    val resp = apiService.getUnitOfMeasures(limit = batchSize, offset = offset)
+                    if (!resp.isSuccessful) return@withContext Result.failure(Exception("HTTP ${resp.code()}"))
+                    val rows = resp.body()!!
+                    all.addAll(rows.mapNotNull { it.code }.filter { it.isNotBlank() })
+                    if (rows.size < batchSize) break
+                    offset += batchSize
+                }
+                Result.success(all.distinct().sorted())
             } catch (e: Exception) {
                 Result.failure(e)
             }

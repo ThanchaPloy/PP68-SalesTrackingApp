@@ -117,13 +117,13 @@ fun AddCustomerContent(
                 )
             }
 
-            // ── Branch ────────────────────────────────────────
-            FormField("สาขา") {
+            // ── Tax ID ────────────────────────────────────────
+            FormField("เลขจดทะเบียนภาษี") {
                 FormTextField(
-                    value         = uiState.branch,
-                    onValueChange = { onEvent(AddCustomerEvent.BranchChanged(it)) },
-                    placeholder   = "เช่น สำนักงานใหญ่, สาขาภาคเหนือ",
-                    leadingIcon   = Icons.Default.AccountTree
+                    value         = uiState.vatRegistrationNo,
+                    onValueChange = { onEvent(AddCustomerEvent.VatRegistrationNoChanged(it)) },
+                    placeholder   = "เช่น 0105556123456",
+                    leadingIcon   = Icons.Default.Receipt
                 )
             }
 
@@ -255,7 +255,7 @@ fun AddCustomerContent(
 fun AddCustomerScreenPreview() {
     val mockState = AddCustomerUiState(
         companyName = "Example Company",
-        branch = "Main Branch",
+        vatRegistrationNo = "0105556123456",
         address = "123 Example St, Bangkok",
         custType = "Owner",
         projectOptions = listOf("1" to "Project A", "2" to "Project B")

@@ -119,16 +119,17 @@ class CustomerRepository @Inject constructor(
             customerDao.insertCustomer(localCustomer)
             try {
                 val body = mutableMapOf<String, Any?>(
-                    "customer_name"        to localCustomer.companyName,
+                    "customer_name"         to localCustomer.companyName,
                     "gen_bus_posting_group" to localCustomer.branchId,
-                    "cust_type"            to localCustomer.custType,
-                    "address"              to localCustomer.companyAddr,
-                    "company_lat"          to localCustomer.companyLat,
-                    "company_long"         to localCustomer.companyLong,
-                    "customer_status"      to localCustomer.companyStatus,
-                    "create_date"          to localCustomer.createdAt,
-                    "salesperson_code"     to localCustomer.createdBy,
-                    "grade"                to localCustomer.grade
+                    "cust_type"             to localCustomer.custType,
+                    "address"               to localCustomer.companyAddr,
+                    "company_lat"           to localCustomer.companyLat,
+                    "company_long"          to localCustomer.companyLong,
+                    "customer_status"       to localCustomer.companyStatus,
+                    "create_date"           to localCustomer.createdAt,
+                    "salesperson_code"      to localCustomer.createdBy,
+                    "grade"                 to localCustomer.grade,
+                    "vat_registration_no"   to localCustomer.vatRegistrationNo
                 ).filterValues { it != null }
                 val response = apiService.addCustomer(body)
                 Log.d("CustomerRepo", "POST customer → HTTP ${response.code()}")
@@ -172,6 +173,7 @@ class CustomerRepository @Inject constructor(
                     put("create_date", customer.createdAt)
                     put("salesperson_code", customer.createdBy)
                     put("grade", customer.grade)
+                    put("vat_registration_no", customer.vatRegistrationNo)
                 }.filterValues { it != null }
                 val response = apiService.updateCustomer("eq.$custId", updates)
                 if (response.isSuccessful) {

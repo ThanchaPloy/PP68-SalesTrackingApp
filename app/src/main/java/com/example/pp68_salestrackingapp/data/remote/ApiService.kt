@@ -226,22 +226,23 @@ interface ApiService {
     @GET("silver_productcolor_dx")
     suspend fun getProductColors(@Query("limit") limit: Int = 500): Response<List<ProductColorDxDto>>
 
-    @GET("item_unit_of_measure")
+    @GET("item_silver")
     suspend fun getUnitOfMeasures(
-        @Query("select") select: String = "code",
-        @Query("limit") limit: Int = 1000
+        @Query("select") select: String = "base_unit_of_measure",
+        @Query("limit") limit: Int = 2000,
+        @Query("offset") offset: Int = 0
     ): Response<List<UnitOfMeasureDto>>
 
     @GET("project_product")
     suspend fun getProjectProducts(@Query("project_code") projectId: String, @Query("limit") limit: Int = 100): Response<List<ProjectProductDto>>
 
     @POST("project_product")
-    @Headers("Prefer: return=representation", "Content-Profile: public")
-    suspend fun addProductToProject(@Body item: ProjectProductInsertDto): Response<List<ProjectProductDto>>
+    @Headers("Prefer: return=minimal", "Content-Profile: public")
+    suspend fun addProductToProject(@Body item: ProjectProductInsertDto): Response<Unit>
 
     @PATCH("project_product")
-    @Headers("Prefer: return=representation", "Content-Profile: public")
-    suspend fun updateProjectProduct(@Query("project_code") projectId: String, @Query("product_id") productId: String, @Body updates: @JvmSuppressWildcards Map<String, Any?>): Response<List<ProjectProductDto>>
+    @Headers("Prefer: return=minimal", "Content-Profile: public")
+    suspend fun updateProjectProduct(@Query("project_code") projectId: String, @Query("product_id") productId: String, @Body updates: @JvmSuppressWildcards Map<String, Any?>): Response<Unit>
 
     @GET("project_product")
     suspend fun getProjectProductsByStatus(@Query("project_code") projectId: String, @Query("status") status: String): Response<List<ProjectProductDto>>
@@ -368,4 +369,4 @@ data class ProductBrandDxDto(@SerializedName("product_brand_no") val code: Strin
 data class ProductGroupDxDto(@SerializedName("product_group_no") val code: String, @SerializedName("name") val name: String)
 data class ProductSubgroupDxDto(@SerializedName("product_subgroup_no") val code: String, @SerializedName("name") val name: String)
 data class ProductColorDxDto(@SerializedName("product_color_no") val code: String, @SerializedName("name") val name: String)
-data class UnitOfMeasureDto(@SerializedName("code") val code: String)
+data class UnitOfMeasureDto(@SerializedName("base_unit_of_measure") val code: String?)

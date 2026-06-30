@@ -20,6 +20,9 @@ data class Customer(
     @ColumnInfo(name = "branch")
     @SerializedName("branch") val branch: String? = null,
 
+    @ColumnInfo(name = "vat_registration_no")
+    @SerializedName("vat_registration_no") val vatRegistrationNo: String? = null,
+
     @ColumnInfo(name = "cust_type")
     @SerializedName("cust_type") val custType: String? = null,
 

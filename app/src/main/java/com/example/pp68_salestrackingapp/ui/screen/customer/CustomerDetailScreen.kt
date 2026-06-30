@@ -36,6 +36,7 @@ import com.example.pp68_salestrackingapp.data.model.Customer
 import com.example.pp68_salestrackingapp.data.model.Project
 import com.example.pp68_salestrackingapp.ui.components.AppTopBar
 import com.example.pp68_salestrackingapp.ui.components.BottomNavBar
+import com.example.pp68_salestrackingapp.ui.theme.AppColors
 import com.example.pp68_salestrackingapp.ui.theme.SalesTrackingTheme
 import com.example.pp68_salestrackingapp.ui.viewmodels.customer.CustomerDetailViewModel
 
@@ -232,7 +233,7 @@ fun CustomerDetailContent(
                     Spacer(Modifier.width(12.dp))
                     Column(modifier = Modifier.weight(1f)) {
                         Text(customer?.companyName ?: "กำลังโหลด...", color = White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                        Text("สาขา: ${customer?.branch ?: "-"}", color = White.copy(0.8f), fontSize = 12.sp)
+                        Text("เลขจดทะเบียนภาษี: ${customer?.vatRegistrationNo ?: "-"}", color = White.copy(0.8f), fontSize = 12.sp)
                     }
                     Row {
                         IconButton(onClick = { customer?.let { onEditCustomer(it.custId) } }) {
@@ -284,6 +285,12 @@ private fun InfoTab(customer: Customer?, projects: List<Project>, onProjectClick
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text("ประเภทธุรกิจ: ${customer?.custType ?: "-"}", fontWeight = FontWeight.Bold)
                         BizGroupBadge(customer?.branchId)
+                    }
+                    if (!customer?.vatRegistrationNo.isNullOrBlank()) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Icon(Icons.Default.Receipt, null, tint = AppColors.TextSecondary, modifier = Modifier.size(14.dp))
+                            Text("เลขจดทะเบียนภาษี: ${customer?.vatRegistrationNo}", fontSize = 13.sp, color = AppColors.TextSecondary)
+                        }
                     }
                     Text(customer?.companyAddr ?: "ไม่พบข้อมูลที่อยู่")
                     

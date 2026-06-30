@@ -20,7 +20,7 @@ import javax.inject.Inject
 data class AddCustomerUiState(
     val custId:              String? = null,
     val companyName:         String  = "",
-    val branch:              String  = "",
+    val vatRegistrationNo:   String  = "",
     val address:             String  = "",
     val selectedLat:         Double? = null,
     val selectedLng:         Double? = null,
@@ -45,7 +45,7 @@ data class AddCustomerUiState(
 sealed class AddCustomerEvent {
     data class LoadCustomer(val id: String) : AddCustomerEvent()
     data class CompanyNameChanged(val value: String) : AddCustomerEvent()
-    data class BranchChanged(val value: String)      : AddCustomerEvent()
+    data class VatRegistrationNoChanged(val value: String) : AddCustomerEvent()
     data class AddressChanged(val value: String)     : AddCustomerEvent()
     data class LocationPicked(val lat: Double, val lng: Double) : AddCustomerEvent()
     data class CustTypeChanged(val value: String)    : AddCustomerEvent()
@@ -88,7 +88,7 @@ class AddCustomerViewModel @Inject constructor(
                         it.copy(
                             custId            = customer.custId,
                             companyName       = customer.companyName,
-                            branch            = customer.branch ?: "",
+                            vatRegistrationNo = customer.vatRegistrationNo ?: "",
                             address           = customer.companyAddr ?: "",
                             selectedLat       = customer.companyLat,
                             selectedLng       = customer.companyLong,
@@ -117,8 +117,8 @@ class AddCustomerViewModel @Inject constructor(
             is AddCustomerEvent.CompanyNameChanged ->
                 _uiState.update { it.copy(companyName = event.value, companyNameError = null) }
 
-            is AddCustomerEvent.BranchChanged ->
-                _uiState.update { it.copy(branch = event.value) }
+            is AddCustomerEvent.VatRegistrationNoChanged ->
+                _uiState.update { it.copy(vatRegistrationNo = event.value) }
 
             is AddCustomerEvent.AddressChanged ->
                 _uiState.update { it.copy(address = event.value) }
@@ -169,8 +169,8 @@ class AddCustomerViewModel @Inject constructor(
             val customer = Customer(
                 custId        = s.custId ?: "TEMP-${UUID.randomUUID().toString().take(8).uppercase()}",
                 companyName   = s.companyName,
-                branchId      = userBranchId,
-                branch        = s.branch.ifBlank { null },
+                branchId          = userBranchId,
+                vatRegistrationNo = s.vatRegistrationNo.ifBlank { null },
                 custType      = s.custType,
                 companyAddr   = s.address.ifBlank { null },
                 companyLat    = s.selectedLat,
