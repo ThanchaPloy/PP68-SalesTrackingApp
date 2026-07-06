@@ -154,7 +154,7 @@ class ActivityDetailViewModel @Inject constructor(
 
         viewModelScope.launch {
             _uiState.update { it.copy(isCheckingIn = true, error = null) }
-            repo.checkIn(act.activityId, lat, lng, isVerified).fold(
+            repo.checkIn(act.activityId, lat, lng, isVerified, _uiState.value.currentDistance).fold(
                 onSuccess = {
                     _uiState.update { it.copy(isCheckingIn = false, showCheckinDialog = false) }
                     loadActivity(act.activityId)

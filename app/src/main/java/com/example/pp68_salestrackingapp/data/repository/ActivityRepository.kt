@@ -50,7 +50,21 @@ class ActivityRepository @Inject constructor(
                 val resp = apiService.getMyAppointments("eq.$userId")
                 if (resp.isSuccessful && resp.body() != null) {
                     val activities = resp.body()!!.map { it.copy(isSynced = true) }
+                    val unsyncedContacts = appointmentContactDao.getAll()
+                        .filter { it.appointmentId.startsWith("TEMP-") }
                     activityDao.clearAndInsert(activities)
+                    // Restore offline (TEMP) contacts
+                    if (unsyncedContacts.isNotEmpty())
+                        appointmentContactDao.insertAppointmentContacts(unsyncedContacts)
+                    // Fetch all contacts from server in one call
+                    if (activities.isNotEmpty()) {
+                        try {
+                            val ids = activities.map { it.activityId }
+                            val cr = apiService.getAppointmentContacts("in.(${ids.joinToString(",")})")
+                            if (cr.isSuccessful && !cr.body().isNullOrEmpty())
+                                appointmentContactDao.insertAppointmentContacts(cr.body()!!)
+                        } catch (_: Exception) {}
+                    }
                     kotlin.Result.success(Unit)
                 } else {
                     kotlin.Result.failure(Exception("API error: ${resp.code()}"))
@@ -89,10 +103,11 @@ class ActivityRepository @Inject constructor(
             val localActivity = activity.copy(activityId = tempId, isSynced = false, createdAt = activity.createdAt ?: now)
             activityDao.insertActivity(localActivity)
             try {
+                val custCode = if (activity.customerId == "CST-UNKNOWN") "" else activity.customerId
                 val body = mutableMapOf<String, Any?>(
                     "emp_code"         to activity.userId,
-                    "cust_code"        to activity.customerId,
-                    "project_code"     to activity.projectId,
+                    "cust_code"        to custCode,
+                    "project_code"     to (activity.projectId ?: ""),
                     "type"             to activity.activityType,
                     "is_appointment"   to activity.isAppointment,
                     "topic"            to activity.detail,
@@ -143,9 +158,15 @@ class ActivityRepository @Inject constructor(
                     if (updates.containsKey("planned_lat"))    updated = updated.copy(plannedLat    = updates["planned_lat"] as? Double)
                     if (updates.containsKey("planned_long"))   updated = updated.copy(plannedLong   = updates["planned_long"] as? Double)
                     if (updates.containsKey("is_appointment")) updated = updated.copy(isAppointment = updates["is_appointment"] as Boolean)
+                    if (updates.containsKey("project_code"))  updated = updated.copy(projectId  = updates["project_code"] as? String)
+                    if (updates.containsKey("cust_code"))     updated = updated.copy(customerId = (updates["cust_code"] as? String) ?: updated.customerId)
                     activityDao.insertActivity(updated)
                 }
 
+                if (activityId.startsWith("TEMP-")) {
+                    syncManager.scheduleSync()
+                    return@withContext kotlin.Result.success(Unit)
+                }
                 val response = apiService.updateActivity("eq.$activityId", updates)
                 if (response.isSuccessful) {
                     activityDao.updateSyncStatus(activityId, true)
@@ -165,10 +186,15 @@ class ActivityRepository @Inject constructor(
         withContext(Dispatchers.IO) {
             planItemDao.deletePlanItemsByAppointmentId(appointmentId)
             planItemDao.insertPlanItems(items)
-            try {
-                val dtos = items.map { ChecklistInsertDto(appointmentId = appointmentId, masterId = it.masterId, isDone = it.isDone) }
-                apiService.insertChecklist(dtos)
-            } catch (e: Exception) { }
+            if (!appointmentId.startsWith("TEMP-")) {
+                try {
+                    apiService.deleteChecklistByAppointment("eq.$appointmentId")
+                    if (items.isNotEmpty()) {
+                        val dtos = items.map { ChecklistInsertDto(appointmentId = appointmentId, masterId = it.masterId, isDone = it.isDone) }
+                        apiService.insertChecklist(dtos)
+                    }
+                } catch (_: Exception) { }
+            }
         }
     }
 
@@ -219,7 +245,7 @@ class ActivityRepository @Inject constructor(
         return withContext(Dispatchers.IO) {
             try {
                 val local = activityDao.getActivityById(id)
-                if (local != null && !local.plannedTime.isNullOrBlank()) return@withContext kotlin.Result.success(listOf(enrichActivity(local)))
+                if (local != null) return@withContext kotlin.Result.success(listOf(enrichActivity(local)))
                 val resp = apiService.getAppointmentById("eq.$id")
                 if (resp.isSuccessful && resp.body() != null) {
                     val data = resp.body()!!.map { it.copy(isSynced = true) }
@@ -235,18 +261,19 @@ class ActivityRepository @Inject constructor(
         }
     }
 
-    suspend fun checkIn(activityId: String, lat: Double, lng: Double, isVerified: Boolean): kotlin.Result<Unit> {
+    suspend fun checkIn(activityId: String, lat: Double, lng: Double, isVerified: Boolean, distanceDeviation: Double? = null): kotlin.Result<Unit> {
         return withContext(Dispatchers.IO) {
             try {
-                val updates = mapOf("check_in_lat" to lat as Any, "check_in_long" to lng as Any, "check_in_time" to java.time.Instant.now().toString() as Any, "plan_status" to "checked_in", "is_location_verified" to isVerified)
+                val updates = mutableMapOf<String, Any>("check_in_lat" to lat, "check_in_long" to lng, "check_in_time" to java.time.Instant.now().toString(), "plan_status" to "checked_in", "is_location_verified" to isVerified)
+                distanceDeviation?.let { updates["distance_deviation"] = it }
                 apiService.updateActivity("eq.$activityId", updates)
                 activityDao.getActivityById(activityId)?.let {
-                    activityDao.insertActivity(it.copy(status = "checked_in", checkInLat = lat, checkInLong = lng, isLocationVerified = isVerified, isSynced = true))
+                    activityDao.insertActivity(it.copy(status = "checked_in", checkInLat = lat, checkInLong = lng, isLocationVerified = isVerified, distanceDeviation = distanceDeviation, isSynced = true))
                 }
                 kotlin.Result.success(Unit)
             } catch (e: Exception) {
                 activityDao.getActivityById(activityId)?.let {
-                    activityDao.insertActivity(it.copy(status = "checked_in", checkInLat = lat, checkInLong = lng, isLocationVerified = isVerified, isSynced = false))
+                    activityDao.insertActivity(it.copy(status = "checked_in", checkInLat = lat, checkInLong = lng, isLocationVerified = isVerified, distanceDeviation = distanceDeviation, isSynced = false))
                     syncManager.scheduleSync()
                 }
                 kotlin.Result.success(Unit)
@@ -287,7 +314,7 @@ class ActivityRepository @Inject constructor(
                 val cards = activities.map { activity ->
                     val project = activity.projectId?.let { projects[it] }
                     val customer = customers[activity.customerId]
-                    ActivityCard(activityId = activity.activityId, activityType = activity.activityType, projectName = project?.projectName ?: activity.projectName, companyName = customer?.companyName ?: activity.companyName, contactName = activity.contactName, objective = activity.detail, planStatus = activity.status, plannedDate = activity.activityDate, plannedTime = activity.plannedTime, plannedEndTime = activity.plannedEndTime, weeklyNote = activity.weeklyNote, customerId = activity.customerId)
+                    ActivityCard(activityId = activity.activityId, activityType = activity.activityType, projectName = project?.projectName ?: activity.projectName, companyName = customer?.companyName ?: activity.companyName, contactName = activity.contactName, objective = activity.detail, planStatus = activity.status, plannedDate = activity.activityDate, plannedTime = activity.plannedTime, plannedEndTime = activity.plannedEndTime, weeklyNote = activity.weeklyNote ?: activity.note, customerId = activity.customerId)
                 }
                 kotlin.Result.success(cards)
             } catch (e: Exception) {
@@ -451,6 +478,7 @@ class ActivityRepository @Inject constructor(
         result.previousSolution?.let { body["current_solution"] = it }
         result.counterpartyMultiplier?.let { body["counterparty_type"] = it }
         result.summary?.let { body["note_summary"] = it }
+        result.lossReason?.let { body["loss_reason"] = it }
         if (!result.photoUrl.isNullOrBlank()) body["photo_url"] = result.photoUrl
         if (!result.photoTakenAt.isNullOrBlank()) body["photo_taken_at"] = result.photoTakenAt
         if (result.photoLat != null) body["photo_lat"] = result.photoLat
@@ -479,12 +507,12 @@ class ActivityRepository @Inject constructor(
                 val companyName = customer?.companyName ?: activity.companyName
                 val project = activity.projectId?.let { projectDao.getProjectById(it) }
                 val projectName = project?.projectName ?: activity.projectName
-                val contactIds = appointmentContactDao.getContactsByAppointmentId(activity.activityId).map { it.contactId }
-                val allContacts = contactDao.getContactsByCustomerId(activity.customerId)
-                val selectedContacts = allContacts.filter { it.contactId in contactIds }
-                val namesString = if (selectedContacts.isNotEmpty()) {
-                    selectedContacts.joinToString(", ") { it.fullName ?: it.nickname ?: "Unknown" }
-                } else { allContacts.firstOrNull()?.let { it.fullName ?: it.nickname } }
+                val contactIds = appointmentContactDao.getContactsByAppointmentId(activity.activityId).map { it.contactId }.toSet()
+                val namesString = if (contactIds.isNotEmpty()) {
+                    contactIds.mapNotNull { id -> contactDao.getContactById(id) }
+                        .joinToString(", ") { it.fullName ?: it.nickname ?: "Unknown" }
+                        .takeIf { it.isNotBlank() }
+                } else null
                 activity.copy(companyName = companyName, projectName = projectName, contactName = namesString ?: activity.contactName)
             } catch (e: Exception) { activity }
         }
@@ -501,7 +529,15 @@ class ActivityRepository @Inject constructor(
         withContext(Dispatchers.IO) {
             appointmentContactDao.deleteContactsByAppointmentId(appointmentId)
             val items = contactIds.map { AppointmentContact(appointmentId, it) }
-            appointmentContactDao.insertAppointmentContacts(items)
+            if (items.isNotEmpty()) {
+                appointmentContactDao.insertAppointmentContacts(items)
+                if (!appointmentId.startsWith("TEMP-")) {
+                    try {
+                        apiService.deleteAppointmentContacts("eq.$appointmentId")
+                        apiService.addAppointmentContacts(items)
+                    } catch (_: IOException) { /* offline — skip, contacts saved locally */ }
+                }
+            }
         }
     }
 

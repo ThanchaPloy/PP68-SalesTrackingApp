@@ -9,7 +9,6 @@ import com.example.pp68_salestrackingapp.data.repository.ProjectRepository
 import com.example.pp68_salestrackingapp.data.model.ActivityMaster
 import com.example.pp68_salestrackingapp.data.model.SalesActivity
 import com.example.pp68_salestrackingapp.data.model.ActivityPlanItem
-import com.example.pp68_salestrackingapp.data.remote.ApiService
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -90,8 +89,7 @@ class CreateAppointmentViewModel @Inject constructor(
     private val activityRepo: ActivityRepository,
     private val projectRepo:  ProjectRepository,
     private val customerRepo: CustomerRepository,
-    private val authRepo:     AuthRepository,
-    private val apiService:   ApiService
+    private val authRepo:     AuthRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(CreateAppointmentUiState())
@@ -105,15 +103,12 @@ class CreateAppointmentViewModel @Inject constructor(
 
     private fun loadAllContacts() {
         viewModelScope.launch {
-            try {
-                val resp = apiService.getContactPersons()
-                if (resp.isSuccessful) {
-                    val options = resp.body()?.map {
-                        ContactOption(it.contactId, it.fullName ?: it.contactId)
-                    } ?: emptyList()
-                    _uiState.update { it.copy(allContactOptions = options) }
+            customerRepo.getAllContacts().collect { contacts ->
+                val options = contacts.map {
+                    ContactOption(it.contactId, it.fullName ?: it.nickname ?: it.contactId)
                 }
-            } catch (e: Exception) { /* offline — contacts stay empty */ }
+                _uiState.update { it.copy(allContactOptions = options) }
+            }
         }
     }
 
@@ -449,11 +444,6 @@ class CreateAppointmentViewModel @Inject constructor(
                 }
             }
 
-            if (customerId == null && s.selectedProjectId != null) {
-                _uiState.update { it.copy(isLoading = false, saveError = "ไม่พบข้อมูลลูกค้า") }
-                return@launch
-            }
-
             val isEditMode = s.activityId != null
             val isoDate = s.plannedDate?.let { parseToIsoDate(it) } ?: LocalDate.now().toString()
 
@@ -482,15 +472,17 @@ class CreateAppointmentViewModel @Inject constructor(
             if (isEditMode) {
                 val appointmentId = s.activityId!!
                 val updates = mutableMapOf<String, Any>(
-                    "type"             to s.activityType,
-                    "planned_date"     to isoDate,
-                    "topic"            to s.titleTopic,
-                    "planned_time"     to (formatTimeToDb(s.startTime) ?: ""),
-                    "planned_end_time" to (formatTimeToDb(s.endTime) ?: ""),
-                    "planned_lat"      to (s.lat ?: 0.0),
-                    "planned_long"     to (s.lng ?: 0.0),
-                    "is_appointment"   to s.selectedContactIds.isNotEmpty()
+                    "type"           to s.activityType,
+                    "planned_date"   to isoDate,
+                    "topic"          to s.titleTopic,
+                    "is_appointment" to s.selectedContactIds.isNotEmpty()
                 )
+                s.startTime?.let { updates["planned_time"]     = formatTimeToDb(it) ?: it }
+                s.endTime?.let   { updates["planned_end_time"] = formatTimeToDb(it) ?: it }
+                s.lat?.let       { updates["planned_lat"]      = it }
+                s.lng?.let       { updates["planned_long"]     = it }
+                s.selectedProjectId?.let  { updates["project_code"] = it }
+                s.selectedCustomerId?.let { updates["cust_code"]    = it }
                 activityRepo.updateActivity(appointmentId, updates)
                 finalId = appointmentId
             } else {

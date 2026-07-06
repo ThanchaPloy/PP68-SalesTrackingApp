@@ -27,7 +27,8 @@ class SyncManager @Inject constructor(
     private val contactDao: ContactDao,
     private val activityDao: ActivityDao,
     private val resultDao: ActivityResultDao,
-    private val appointmentContactDao: AppointmentContactDao
+    private val appointmentContactDao: AppointmentContactDao,
+    private val planItemDao: ActivityPlanItemDao
 ) {
     fun scheduleSync() {
         val constraints = Constraints.Builder()
@@ -73,13 +74,15 @@ class SyncManager @Inject constructor(
                 "customer_status"       to customer.companyStatus,
                 "create_date"           to customer.createdAt,
                 "salesperson_code"      to customer.createdBy,
-                "grade"                 to customer.grade
+                "grade"                 to customer.grade,
+                "vat_registration_no"   to customer.vatRegistrationNo
             ).filterValues { it != null }
             val response = apiService.addCustomer(body)
             if (response.isSuccessful) {
                 val realCustId = response.body()?.firstOrNull()?.custId
                 if (realCustId != null && realCustId != customer.custId) {
                     contactDao.updateCustIdForContacts(customer.custId, realCustId)
+                    activityDao.updateCustIdForActivities(customer.custId, realCustId)
                     customerDao.deleteCustomerById(customer.custId)
                     customerDao.insertCustomer(customer.copy(custId = realCustId, isSynced = true))
                 } else {
@@ -137,6 +140,7 @@ class SyncManager @Inject constructor(
             if (response.isSuccessful) {
                 val realId = response.body()?.firstOrNull()?.projectId
                 val finalId = if (realId != null && realId != project.projectId) {
+                    activityDao.updateProjectIdForActivities(project.projectId, realId)
                     projectDao.deleteProjectById(project.projectId)
                     projectDao.insertProject(project.copy(projectId = realId, isSynced = true))
                     realId
@@ -155,10 +159,11 @@ class SyncManager @Inject constructor(
         val unsyncedActivities = activityDao.getUnsyncedActivities()
         for (activity in unsyncedActivities) {
             if (activity.activityId.startsWith("TEMP-")) {
+                val custCode = if (activity.customerId == "CST-UNKNOWN") "" else activity.customerId
                 val body = mutableMapOf<String, Any?>(
                     "emp_code"         to activity.userId,
-                    "cust_code"        to activity.customerId,
-                    "project_code"     to activity.projectId,
+                    "cust_code"        to custCode,
+                    "project_code"     to (activity.projectId ?: ""),
                     "type"             to activity.activityType,
                     "is_appointment"   to activity.isAppointment,
                     "topic"            to activity.detail,
@@ -173,19 +178,37 @@ class SyncManager @Inject constructor(
                 val response = apiService.addActivityMap(body)
                 if (response.isSuccessful) {
                     val realId = response.body()?.firstOrNull()?.activityId
+                    val finalId = realId ?: activity.activityId
                     if (realId != null && realId != activity.activityId) {
                         activityDao.insertActivity(activity.copy(activityId = realId, isSynced = true))
                         appointmentContactDao.updateAppointmentId(activity.activityId, realId)
+                        planItemDao.updateAppointmentId(activity.activityId, realId)
                         activityDao.deleteActivityById(activity.activityId)
                     } else {
                         activityDao.updateSyncStatus(activity.activityId, true)
                     }
+                    val contacts = appointmentContactDao.getContactsByAppointmentId(finalId)
+                    if (contacts.isNotEmpty()) {
+                        try {
+                            apiService.deleteAppointmentContacts("eq.$finalId")
+                            apiService.addAppointmentContacts(contacts)
+                        } catch (_: Exception) {}
+                    }
                 }
             } else {
-                val apiActivity = activity.copy(
-                    projectName = null, companyName = null, contactName = null, weeklyNote = null
-                )
-                val response = apiService.addActivity(apiActivity)
+                val patchBody = buildMap<String, Any> {
+                    put("type", activity.activityType)
+                    activity.detail?.let { put("topic", it) }
+                    put("planned_date", activity.activityDate)
+                    put("plan_status", activity.status)
+                    put("is_appointment", activity.isAppointment)
+                    activity.plannedTime?.let { put("planned_time", it) }
+                    activity.plannedEndTime?.let { put("planned_end_time", it) }
+                    activity.plannedLat?.let { put("planned_lat", it) }
+                    activity.plannedLong?.let { put("planned_long", it) }
+                    activity.note?.let { put("note", it) }
+                }
+                val response = apiService.updateActivity("eq.${activity.activityId}", patchBody)
                 if (response.isSuccessful) activityDao.updateSyncStatus(activity.activityId, true)
             }
         }
@@ -237,6 +260,7 @@ class SyncManager @Inject constructor(
         body["photo_lat"]          = result.photoLat
         body["photo_lng"]          = result.photoLng
         body["photo_device_model"] = result.photoDeviceModel
+        result.lossReason?.let { body["loss_reason"] = it }
         return body.filterValues { it != null }
     }
 }

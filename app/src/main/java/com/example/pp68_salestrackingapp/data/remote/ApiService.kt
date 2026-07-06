@@ -303,6 +303,20 @@ interface ApiService {
     @GET("activity_result")
     suspend fun getResultById(@Query("result_id") resultId: String, @Query("limit") limit: Int = 1): Response<List<ActivityResult>>
 
+    // ── Appointment Contact ───────────────────────────────────────
+    @GET("appointment_contact")
+    suspend fun getAppointmentContacts(
+        @Query("appointment_id") appointmentId: String,
+        @Query("limit") limit: Int = 100
+    ): Response<List<AppointmentContact>>
+
+    @POST("appointment_contact")
+    @Headers("Content-Profile: public")
+    suspend fun addAppointmentContacts(@Body contacts: List<AppointmentContact>): Response<Unit>
+
+    @DELETE("appointment_contact")
+    suspend fun deleteAppointmentContacts(@Query("appointment_id") appointmentId: String): Response<Unit>
+
     // ── Checklist ────────────────────────────────────────────────
     @GET("appointment_checklist")
     suspend fun getChecklistByAppointment(@Query("appointment_id") appointmentId: String, @Query("limit") limit: Int = 100): Response<List<ChecklistInsertDto>>
@@ -318,6 +332,9 @@ interface ApiService {
         @Query("master_id") masterId: String,
         @Body updates: @JvmSuppressWildcards Map<String, Any>
     ): Response<List<ChecklistInsertDto>>
+
+    @DELETE("appointment_checklist")
+    suspend fun deleteChecklistByAppointment(@Query("appointment_id") appointmentId: String): Response<Unit>
 
     @POST("call_log")
     @Headers("Prefer: return=representation", "Content-Profile: public")

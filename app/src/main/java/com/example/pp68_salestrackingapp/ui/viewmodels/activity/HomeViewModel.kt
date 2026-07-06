@@ -102,7 +102,7 @@ class HomeViewModel @Inject constructor(
                         try {
                             if (card.plannedDate.isNullOrBlank()) false
                             else {
-                                val date = LocalDate.parse(card.plannedDate)
+                                val date = LocalDate.parse(card.plannedDate.take(10))
                                 YearMonth.from(date) == currentMonth
                             }
                         } catch (e: Exception) {
@@ -141,7 +141,7 @@ class HomeViewModel @Inject constructor(
                 // ✅ เพิ่มการ refreshResults เพื่อดึงสถานะการบันทึกผลล่าสุดจาก Server
                 activityRepo.refreshActivities(userId)
                 activityRepo.refreshResults(userId)
-                customerRepo.refreshCustomers(userId)
+                customerRepo.refreshCustomers(authRepo.currentUser()?.teamId ?: "")
                 projectRepo.refreshProjects(userId)
             } catch (e: Exception) {
                 android.util.Log.e("HomeVM", "Error refreshing data: ${e.message}")

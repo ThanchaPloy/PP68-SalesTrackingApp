@@ -16,4 +16,7 @@ interface AppointmentContactDao {
 
     @Query("UPDATE appointment_contact SET appointment_id = :newId WHERE appointment_id = :oldId")
     suspend fun updateAppointmentId(oldId: String, newId: String)
+
+    @Query("SELECT * FROM appointment_contact")
+    suspend fun getAll(): List<AppointmentContact>
 }
