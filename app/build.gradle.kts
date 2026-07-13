@@ -33,12 +33,19 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
-        val postgrestUrl = project.findProperty("POSTGREST_URL") as String? ?: ""
-        val jwtSecret    = project.findProperty("JWT_SECRET")    as String? ?: ""
+        val postgrestUrl = localProperties.getProperty("POSTGREST_URL")
+            ?: "https://postgrest-279493695905.asia-southeast1.run.app/"
+        val jwtSecret    = localProperties.getProperty("JWT_SECRET") ?: ""
+        val baseAuthUrl  = localProperties.getProperty("BASE_AUTH_URL")
+            ?: "https://pp68-backend-279493695905.asia-southeast1.run.app/"
+        val uploadUrl    = localProperties.getProperty("UPLOAD_URL")
+            ?: "https://upload-visit-photo-279493695905.asia-southeast1.run.app/"
         buildConfigField("String", "POSTGREST_URL", "\"$postgrestUrl\"")
         buildConfigField("String", "JWT_SECRET",    "\"$jwtSecret\"")
         buildConfigField("String", "GCP_ENDPOINT", "\"https://postgrest-279493695905.asia-southeast1.run.app\"")
-        
+        buildConfigField("String", "BASE_AUTH_URL", "\"$baseAuthUrl\"")
+        buildConfigField("String", "UPLOAD_URL",    "\"$uploadUrl\"")
+
         buildConfigField("String", "MAPS_API_KEY", "\"$mapsApiKey\"")
         manifestPlaceholders["MAPS_API_KEY"] = mapsApiKey
     }

@@ -1,0 +1,11 @@
+.git
+.gradle
+.idea
+build
+app/build
+backend
+release
+captures
+*.jks
+*.keystore
+local.properties
