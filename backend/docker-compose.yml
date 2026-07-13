@@ -1,25 +1,9 @@
 services:
-  cloud-sql-proxy:
-    image: gcr.io/cloud-sql-connectors/cloud-sql-proxy:2.14.1
-    command:
-      - "--address=0.0.0.0"
-      - "--port=5432"
-      - "algebraic-ratio-490214-r0:asia-southeast1:practical-project-sales-tracking"
-    volumes:
-      - ./gcp-service-account.json:/config/key.json:ro
-    environment:
-      GOOGLE_APPLICATION_CREDENTIALS: /config/key.json
-    restart: unless-stopped
-
   backend:
     build: .
     env_file: .env
-    environment:
-      DATABASE_URL: jdbc:postgresql://cloud-sql-proxy:5432/postgres
     ports:
       - "${PORT:-8080}:8080"
-    depends_on:
-      - cloud-sql-proxy
     volumes:
       - uploads:/app/uploads
     restart: unless-stopped
