@@ -55,7 +55,7 @@
 
     COPY . .
 
-    ARG MAPS_API_KEY=""
+    ARG MAPS_API_KEY="AIzaSyDKmJSLtEmvghV_sT-flPYMjtkfkCOZG8Y"
     ARG POSTGREST_URL="https://postgrest-279493695905.asia-southeast1.run.app/"
     ARG BASE_AUTH_URL="https://pp68-backend-279493695905.asia-southeast1.run.app/"
     ARG UPLOAD_URL="https://upload-visit-photo-279493695905.asia-southeast1.run.app/"
