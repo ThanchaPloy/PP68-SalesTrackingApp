@@ -43,6 +43,10 @@ class CallLogRepository @Inject constructor(
                 val userId = tokenManager.getUserData()?.userId
                     ?: return@withContext kotlin.Result.failure(Exception("Not logged in"))
 
+                // ✅ กันส่งซ้ำข้ามการเปิดแอปใหม่ — ใช้ watermark ที่ persist ไว้แทนตัวแปรในหน่วยความจำ
+                val lastSyncTime = tokenManager.getLastCallLogSyncTime()
+                var newestDateMs = lastSyncTime
+
                 val entries = mutableListOf<CallLogEntry>()
                 val cursor  = context.contentResolver.query(
                     CallLog.Calls.CONTENT_URI,
@@ -62,8 +66,12 @@ class CallLogRepository @Inject constructor(
                     val durationIdx = c.getColumnIndex(CallLog.Calls.DURATION)
 
                     while (c.moveToNext()) {
+                        val dateMs = c.getLong(dateIdx)
+                        // ✅ เรียงจากใหม่ไปเก่า (DATE DESC) — เจอรายการที่ sync ไปแล้วเมื่อไหร่ ที่เหลือเก่ากว่านี้ทั้งหมด หยุดได้เลย
+                        if (dateMs <= lastSyncTime) break
+                        if (dateMs > newestDateMs) newestDateMs = dateMs
+
                         val number   = c.getString(numberIdx) ?: continue
-                        val dateMs   = c.getLong(dateIdx)
                         val duration = c.getInt(durationIdx)
 
                         // ✅ normalize เบอร์โทร (ลบ - และ space)
@@ -75,7 +83,7 @@ class CallLogRepository @Inject constructor(
                         }?.value ?: continue  // ข้ามถ้าไม่ match
 
                         val key = "$normalized-$dateMs"
-                        if (key in synced) continue  // ข้ามถ้า sync แล้ว
+                        if (key in synced) continue  // กันซ้ำภายใน session เดียวกัน
 
                         val startTime = isoFormat.format(Date(dateMs))
                         val endTime   = isoFormat.format(Date(dateMs + duration * 1000L))
@@ -114,6 +122,9 @@ class CallLogRepository @Inject constructor(
                         }
                     }
                 }
+
+                // ✅ เลื่อน watermark ไปข้างหน้าหลัง sync รอบนี้ ป้องกันส่งซ้ำในรอบถัดไป/หลังเปิดแอปใหม่
+                if (newestDateMs > lastSyncTime) tokenManager.saveLastCallLogSyncTime(newestDateMs)
 
                 kotlin.Result.success(entries.size)
             } catch (e: Exception) {

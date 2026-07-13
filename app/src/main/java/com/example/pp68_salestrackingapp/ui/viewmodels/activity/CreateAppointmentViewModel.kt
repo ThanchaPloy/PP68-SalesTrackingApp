@@ -25,6 +25,7 @@ data class CreateAppointmentUiState(
     val selectedProjectId:   String? = null,
     val selectedProjectName: String? = null,
     val selectedCustomerId:  String? = null,
+    val selectedCompanyName: String? = null,
     val titleTopic:          String  = "",
     val activityType:        String  = "onsite",
     val plannedDate:         String? = null,
@@ -43,6 +44,7 @@ data class CreateAppointmentUiState(
     val allContactOptions: List<ContactOption> = emptyList(), // สำหรับค้นหาทั้งหมด
     val masterOptions:   List<ActivityMaster>  = emptyList(),
     val allMasterOptions:  List<ActivityMaster> = emptyList(),
+    val companyOptions:  List<Pair<String, String>> = emptyList(), // custId to companyName สำหรับค้นหาบริษัท (กรณีไม่เลือกโครงการ)
 
     val contactSearchQuery: String = "",
 
@@ -50,6 +52,7 @@ data class CreateAppointmentUiState(
     val isLoadingProjects: Boolean = false,
     val isLoadingContacts: Boolean = false,
     val isLoadingMasters:  Boolean = false,
+    val isLoadingCompanies: Boolean = false,
     val isSaved:           Boolean = false,
 
     val projectError: String? = null,
@@ -67,6 +70,7 @@ sealed class CreateAppointmentEvent {
     data class LoadActivity(val activityId: String)         : CreateAppointmentEvent()
     data class LoadInitialProject(val projectId: String)    : CreateAppointmentEvent()
     data class ProjectSelected(val id: String?, val name: String?, val status: String?) : CreateAppointmentEvent()
+    data class CompanySelected(val id: String, val name: String) : CreateAppointmentEvent()
     data class TitleChanged(val value: String)              : CreateAppointmentEvent()
     data class TypeChanged(val value: String)               : CreateAppointmentEvent()
     data class ContactToggled(val id: String)               : CreateAppointmentEvent()
@@ -99,6 +103,23 @@ class CreateAppointmentViewModel @Inject constructor(
         loadProjects()
         loadMasterObjectives()
         loadAllContacts()
+        loadAllCompanies()
+    }
+
+    private fun loadAllCompanies() {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoadingCompanies = true) }
+            customerRepo.getCustomers().onSuccess { customers ->
+                _uiState.update {
+                    it.copy(
+                        companyOptions    = customers.map { c -> c.custId to c.companyName },
+                        isLoadingCompanies = false
+                    )
+                }
+            }.onFailure {
+                _uiState.update { it.copy(isLoadingCompanies = false) }
+            }
+        }
     }
 
     private fun loadAllContacts() {
@@ -195,6 +216,9 @@ class CreateAppointmentViewModel @Inject constructor(
                 val status  = project.projectStatus ?: ""
 
                 _uiState.update { it.copy(selectedCustomerId = custId) }
+                customerRepo.getCustomerById(custId).onSuccess { c ->
+                    _uiState.update { it.copy(selectedCompanyName = c.companyName) }
+                }
 
                 val category = getCategoryForProjectStatus(status)
                 val filtered = if (category != null) {
@@ -274,6 +298,11 @@ class CreateAppointmentViewModel @Inject constructor(
                             masterOptions = state.allMasterOptions
                         )
                     }
+                    activity.customerId?.let { custId ->
+                        customerRepo.getCustomerById(custId).onSuccess { c ->
+                            _uiState.update { it.copy(selectedCompanyName = c.companyName) }
+                        }
+                    }
                 }
             }
         }
@@ -333,7 +362,9 @@ class CreateAppointmentViewModel @Inject constructor(
                            projectError = null,
                            contactOptions = it.allContactOptions,
                            masterOptions = it.allMasterOptions,
-                           selectedContactIds = emptySet()
+                           selectedContactIds = emptySet(),
+                           selectedCustomerId = null,
+                           selectedCompanyName = null
                        )
                    }
                 } else {
@@ -349,6 +380,15 @@ class CreateAppointmentViewModel @Inject constructor(
                     }
                     loadContactsForProject(event.id)
                     filterMastersByProjectStatus(event.status ?: "")
+                }
+            }
+
+            is CreateAppointmentEvent.CompanySelected -> {
+                _uiState.update {
+                    it.copy(
+                        selectedCustomerId  = event.id.ifBlank { null },
+                        selectedCompanyName = event.name.ifBlank { null }
+                    )
                 }
             }
 
@@ -419,7 +459,29 @@ class CreateAppointmentViewModel @Inject constructor(
         }
     }
 
+    // ✅ บังคับกรอกแค่หัวข้อ + วันเวลานัด (ประเภทกิจกรรมมีค่า default อยู่แล้วไม่มีทางว่าง)
+    // ส่วนโครงการ/บริษัท/ผู้ติดต่อ เป็น optional ทั้งหมด ไม่ใส่ก็เซฟได้
+    private fun validate(): Boolean {
+        val s = _uiState.value
+        return when {
+            s.titleTopic.isBlank() -> {
+                _uiState.update { it.copy(saveError = "กรุณากรอกหัวข้อกิจกรรม") }
+                false
+            }
+            s.plannedDate.isNullOrBlank() -> {
+                _uiState.update { it.copy(saveError = "กรุณาเลือกวันที่นัดหมาย") }
+                false
+            }
+            s.startTime.isNullOrBlank() -> {
+                _uiState.update { it.copy(saveError = "กรุณาเลือกเวลานัดหมาย") }
+                false
+            }
+            else -> true
+        }
+    }
+
     private fun save() {
+        if (!validate()) return
         val s = _uiState.value
 
         viewModelScope.launch {

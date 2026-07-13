@@ -38,7 +38,7 @@ class ContactRepository @Inject constructor(
                 val resp = apiService.getContactsByCustomerIds(custIds = codesParam)
                 if (resp.isSuccessful && resp.body() != null) {
                     val contacts = resp.body()!!.map { it.copy(isSynced = true) }
-                    contactDao.clearAndInsert(contacts)
+                    if (contacts.isNotEmpty()) contactDao.clearAndInsert(contacts)
                     kotlin.Result.success(Unit)
                 } else {
                     kotlin.Result.failure(Exception("โหลด Contact ไม่สำเร็จ: HTTP ${resp.code()}"))
@@ -102,7 +102,7 @@ class ContactRepository @Inject constructor(
                     put("line", contact.line)
                     put("is_active", contact.isActive)
                     put("is_dm_confirmed", contact.isDmConfirmed)
-                }
+                }.filterValues { it != null }
                 val response = apiService.updateContact("eq.$contactId", updates)
                 if (response.isSuccessful) {
                     contactDao.updateSyncStatus(contactId, true)

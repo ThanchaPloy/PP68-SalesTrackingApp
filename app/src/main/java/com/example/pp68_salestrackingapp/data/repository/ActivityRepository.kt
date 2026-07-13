@@ -29,6 +29,7 @@ class ActivityRepository @Inject constructor(
     private val contactDao: ContactDao,
     private val planItemDao: ActivityPlanItemDao,
     private val resultDao: ActivityResultDao,
+    private val photoDao: ActivityResultPhotoDao,
     private val appointmentContactDao: AppointmentContactDao,
     private val projectRepo: ProjectRepository,
     private val syncManager: SyncManager
@@ -43,6 +44,7 @@ class ActivityRepository @Inject constructor(
     fun getAllResultIdsFlow(): Flow<List<String>> = resultDao.getAllResultIdsFlow()
     fun getAllResultsFlow(): Flow<List<ActivityResult>> = resultDao.getAllResultsFlow()
     fun getResultsByProjectFlow(projectId: String): Flow<List<ActivityResult>> = resultDao.getAllResultsByProject(projectId)
+    fun getResultVersionHistory(resultGroupId: String): Flow<List<ActivityResult>> = resultDao.getVersionHistory(resultGroupId)
 
     suspend fun refreshActivities(userId: String): kotlin.Result<Unit> {
         return withContext(Dispatchers.IO) {
@@ -84,6 +86,15 @@ class ActivityRepository @Inject constructor(
                 if (resp.isSuccessful && resp.body() != null) {
                     val results = resp.body()!!.map { it.copy(isSynced = true) }
                     resultDao.clearAndInsert(results)
+                    // ✅ clearAndInsert ลบ+สร้างแถว activity_result ใหม่ ซึ่ง cascade ลบ activity_result_photo ที่ผูกอยู่ไปด้วย
+                    // ต้องดึงรูปกลับมาจาก server ใหม่ทุกครั้งหลัง sync ไม่งั้นจะเหลือแค่รูปปก (photo_url บน activity_result เอง)
+                    if (results.isNotEmpty()) {
+                        try {
+                            val ids = results.map { it.resultId }
+                            val pr = apiService.getResultPhotos("in.(${ids.joinToString(",")})", limit = ids.size * 5)
+                            if (pr.isSuccessful && !pr.body().isNullOrEmpty()) photoDao.insertPhotos(pr.body()!!)
+                        } catch (_: Exception) {}
+                    }
                     kotlin.Result.success(Unit)
                 } else {
                     kotlin.Result.failure(Exception("API error: ${resp.code()}"))
@@ -103,11 +114,11 @@ class ActivityRepository @Inject constructor(
             val localActivity = activity.copy(activityId = tempId, isSynced = false, createdAt = activity.createdAt ?: now)
             activityDao.insertActivity(localActivity)
             try {
-                val custCode = if (activity.customerId == "CST-UNKNOWN") "" else activity.customerId
+                val custCode = if (activity.customerId == "CST-UNKNOWN") null else activity.customerId
                 val body = mutableMapOf<String, Any?>(
                     "emp_code"         to activity.userId,
                     "cust_code"        to custCode,
-                    "project_code"     to (activity.projectId ?: ""),
+                    "project_code"     to activity.projectId,
                     "type"             to activity.activityType,
                     "is_appointment"   to activity.isAppointment,
                     "topic"            to activity.detail,
@@ -127,7 +138,9 @@ class ActivityRepository @Inject constructor(
                         activityDao.insertActivity(localActivity.copy(activityId = realId, isSynced = true))
                         kotlin.Result.success(realId)
                     } else {
-                        activityDao.updateSyncStatus(tempId, true)
+                        // ✅ ห้าม mark synced ถ้าไม่ได้ realId กลับมา (server ไม่คืนแถวที่สร้าง เช่น RLS บล็อก)
+                        // ไม่งั้นแถวนี้จะค้างเป็น TEMP- ตลอดไปแต่ถูกมองว่า sync แล้ว ทำให้บันทึกที่ผูกกับนัดหมายนี้ insert ไม่ได้ (FK violation)
+                        syncManager.scheduleSync()
                         kotlin.Result.success(tempId)
                     }
                 } else {
@@ -313,7 +326,7 @@ class ActivityRepository @Inject constructor(
                 val customers = customerDao.getAllCustomers().first().associateBy { it.custId }
                 val cards = activities.map { activity ->
                     val project = activity.projectId?.let { projects[it] }
-                    val customer = customers[activity.customerId]
+                    val customer = activity.customerId?.let { customers[it] }
                     ActivityCard(activityId = activity.activityId, activityType = activity.activityType, projectName = project?.projectName ?: activity.projectName, companyName = customer?.companyName ?: activity.companyName, contactName = activity.contactName, objective = activity.detail, planStatus = activity.status, plannedDate = activity.activityDate, plannedTime = activity.plannedTime, plannedEndTime = activity.plannedEndTime, weeklyNote = activity.weeklyNote ?: activity.note, customerId = activity.customerId)
                 }
                 kotlin.Result.success(cards)
@@ -353,12 +366,23 @@ class ActivityRepository @Inject constructor(
                 val resp = apiService.getActivityResult("eq.$activityId")
                 if (resp.isSuccessful && !resp.body().isNullOrEmpty()) {
                     val result = resp.body()!!.first().copy(isSynced = true)
+                    // ✅ insertResult ใช้ OnConflictStrategy.REPLACE — ถ้า result_id นี้มีอยู่แล้วในเครื่อง
+                    // SQLite จะลบแถวเดิมทิ้งก่อนแล้วค่อย insert ใหม่ ซึ่ง cascade ลบ activity_result_photo ที่ผูกอยู่ไปด้วย
+                    // ต้องดึงรูปกลับมาจาก server ใหม่ทุกครั้งหลังจากนี้ ไม่งั้นจะเหลือแค่รูปปก
                     resultDao.insertResult(result)
+                    refreshPhotosForResult(result.resultId)
                     return@withContext result
                 }
                 resultDao.getResultByActivityId(activityId)
             } catch (e: Exception) { resultDao.getResultByActivityId(activityId) }
         }
+    }
+
+    private suspend fun refreshPhotosForResult(resultId: String) {
+        try {
+            val pr = apiService.getResultPhotos("eq.$resultId")
+            if (pr.isSuccessful && !pr.body().isNullOrEmpty()) photoDao.insertPhotos(pr.body()!!)
+        } catch (_: Exception) {}
     }
 
     suspend fun getResultById(resultId: String): ActivityResult? {
@@ -377,74 +401,90 @@ class ActivityRepository @Inject constructor(
         }
     }
 
-    suspend fun saveActivityResult(result: ActivityResult): kotlin.Result<Unit> {
+    suspend fun saveActivityResult(result: ActivityResult, photoUrls: List<String> = emptyList()): kotlin.Result<Unit> {
         return withContext(Dispatchers.IO) {
-            val isNew = result.resultId.isBlank()
-            val tempId = if (isNew) "TEMP-${java.util.UUID.randomUUID().toString().take(8).uppercase()}" else result.resultId
-            val localResult = result.copy(resultId = tempId, isSynced = false)
-            resultDao.insertResult(localResult)
-            try {
-                val body = buildResultBody(localResult)
-                if (isNew) body.remove("result_id")
-                val apiResp = if (isNew) apiService.insertActivityResultMap(body) else apiService.upsertActivityResult(body)
-                if (apiResp.isSuccessful) {
-                    if (isNew) {
-                        val realId = apiResp.body()?.firstOrNull()?.resultId
-                        if (realId != null && realId != tempId) {
-                            resultDao.deleteResultById(tempId)
-                            resultDao.insertResult(localResult.copy(resultId = realId, isSynced = true))
-                        } else {
-                            resultDao.updateSyncStatus(tempId, true)
-                        }
-                    } else {
-                        resultDao.updateSyncStatus(tempId, true)
-                    }
-                    syncProjectStatus(localResult)
-                    kotlin.Result.success(Unit)
-                } else {
-                    syncManager.scheduleSync()
-                    kotlin.Result.success(Unit)
-                }
-            } catch (e: Exception) {
-                syncManager.scheduleSync()
-                kotlin.Result.success(Unit)
-            }
+            saveResultAsNewVersion(result, photoUrls)
         }
     }
 
-    suspend fun saveStandaloneResult(projectId: String, result: ActivityResult): kotlin.Result<Unit> {
+    suspend fun saveStandaloneResult(projectId: String, result: ActivityResult, photoUrls: List<String> = emptyList()): kotlin.Result<Unit> {
         return withContext(Dispatchers.IO) {
-            val isNew = result.resultId.isBlank()
-            val tempId = if (isNew) "TEMP-${java.util.UUID.randomUUID().toString().take(8).uppercase()}" else result.resultId
-            val resultWithProject = result.copy(resultId = tempId, projectId = projectId, activityId = null, isSynced = false)
-            resultDao.insertResult(resultWithProject)
-            try {
-                val body = buildResultBody(resultWithProject)
-                if (isNew) body.remove("result_id")
-                val apiResp = if (isNew) apiService.insertActivityResultMap(body) else apiService.upsertActivityResult(body)
-                if (apiResp.isSuccessful) {
-                    if (isNew) {
-                        val realId = apiResp.body()?.firstOrNull()?.resultId
-                        if (realId != null && realId != tempId) {
-                            resultDao.deleteResultById(tempId)
-                            resultDao.insertResult(resultWithProject.copy(resultId = realId, isSynced = true))
-                        } else {
-                            resultDao.updateSyncStatus(tempId, true)
-                        }
-                    } else {
-                        resultDao.updateSyncStatus(tempId, true)
+            val resultWithProject = result.copy(projectId = projectId, activityId = null)
+            saveResultAsNewVersion(resultWithProject, photoUrls)
+        }
+    }
+
+    // ✅ ทุกครั้งที่บันทึก (ทั้งครั้งแรกและแก้ไข) จะสร้างแถวใหม่เป็น version ถัดไปเสมอ
+    // แทนการเขียนทับของเดิม — เพื่อรักษาประวัติการแก้ไขบันทึกผลการขายไว้ทั้งหมด
+    private suspend fun saveResultAsNewVersion(result: ActivityResult, photoUrls: List<String> = emptyList()): kotlin.Result<Unit> {
+        val previous = result.resultId.takeIf { it.isNotBlank() }?.let { resultDao.getResultById(it) }
+        val tempId = "TEMP-${java.util.UUID.randomUUID().toString().take(8).uppercase()}"
+        val groupId = previous?.resultGroupId ?: previous?.resultId ?: tempId
+        val localResult = result.copy(
+            resultId      = tempId,
+            isSynced      = false,
+            version       = (previous?.version ?: 0) + 1,
+            isLatest      = true,
+            resultGroupId = groupId
+        )
+        previous?.let { resultDao.markNotLatest(it.resultId) }
+        resultDao.insertResult(localResult)
+        savePhotosForResult(tempId, photoUrls)
+        return try {
+            val body = buildResultBody(localResult)
+            body.remove("result_id") // แต่ละ version คือแถวใหม่เสมอ ให้ server สร้าง id ให้
+            val apiResp = apiService.insertActivityResultMap(body)
+            if (apiResp.isSuccessful) {
+                val realId = apiResp.body()?.firstOrNull()?.resultId
+                if (realId != null && realId != tempId) {
+                    val finalGroupId = previous?.resultGroupId ?: previous?.resultId ?: realId
+                    // ✅ ต้อง insert แถว realId ก่อน แล้วค่อยย้ายรูปมาที่ realId แล้วค่อยลบ tempId ทีหลัง
+                    // เพราะ activity_result_photo มี FK CASCADE ไปยัง activity_result — ถ้าลบ tempId ก่อน รูปที่ยังผูกกับ tempId จะโดนลบไปด้วย
+                    resultDao.insertResult(localResult.copy(resultId = realId, resultGroupId = finalGroupId, isSynced = true))
+                    photoDao.updateResultId(tempId, realId)
+                    resultDao.deleteResultById(tempId)
+                    if (photoUrls.isNotEmpty()) {
+                        try { apiService.addResultPhotos(photoDao.getPhotosByResultId(realId)) } catch (_: Exception) {}
                     }
-                    syncProjectStatus(resultWithProject)
-                    kotlin.Result.success(Unit)
+                    if (previous == null) {
+                        // version แรกสุด — ผูก group id ของตัวเองเข้ากับ realId บน server ด้วย
+                        try { apiService.updateActivityResult("eq.$realId", mapOf("result_group_id" to realId)) } catch (_: Exception) {}
+                    }
                 } else {
-                    syncManager.scheduleSync()
-                    kotlin.Result.success(Unit)
+                    resultDao.updateSyncStatus(tempId, true)
                 }
-            } catch (e: Exception) {
+                // ✅ mark version เก่าบน server ว่าไม่ใช่ล่าสุดแล้ว (best-effort เหมือนจุดอื่นๆ ในไฟล์นี้)
+                previous?.let {
+                    try { apiService.updateActivityResult("eq.${it.resultId}", mapOf("is_latest" to false)) } catch (_: Exception) {}
+                }
+                syncProjectStatus(localResult)
+                kotlin.Result.success(Unit)
+            } else {
                 syncManager.scheduleSync()
                 kotlin.Result.success(Unit)
             }
+        } catch (e: Exception) {
+            syncManager.scheduleSync()
+            kotlin.Result.success(Unit)
         }
+    }
+
+    // ✅ เก็บรูปยืนยันการเข้าพบสูงสุด 5 รูปต่อบันทึกผล เรียงตาม photo_order (0 = รูปปก)
+    private suspend fun savePhotosForResult(resultId: String, photoUrls: List<String>) {
+        photoDao.deletePhotosByResultId(resultId)
+        if (photoUrls.isEmpty()) return
+        val items = photoUrls.mapIndexed { index, url -> ActivityResultPhoto(resultId, index, url) }
+        photoDao.insertPhotos(items)
+        if (!resultId.startsWith("TEMP-")) {
+            try {
+                apiService.deleteResultPhotos("eq.$resultId")
+                apiService.addResultPhotos(items)
+            } catch (_: IOException) { /* offline — synced later via SyncManager */ }
+        }
+    }
+
+    suspend fun getResultPhotos(resultId: String): List<String> {
+        return withContext(Dispatchers.IO) { photoDao.getPhotosByResultId(resultId).map { it.photoUrl } }
     }
 
     private suspend fun syncProjectStatus(result: ActivityResult) {
@@ -484,6 +524,9 @@ class ActivityRepository @Inject constructor(
         if (result.photoLat != null) body["photo_lat"] = result.photoLat
         if (result.photoLng != null) body["photo_lng"] = result.photoLng
         if (!result.photoDeviceModel.isNullOrBlank()) body["photo_device_model"] = result.photoDeviceModel
+        body["version"] = result.version
+        body["is_latest"] = result.isLatest
+        result.resultGroupId?.let { body["result_group_id"] = it }
         return body
     }
 
@@ -503,7 +546,7 @@ class ActivityRepository @Inject constructor(
     suspend fun enrichActivity(activity: SalesActivity): SalesActivity {
         return withContext(Dispatchers.IO) {
             try {
-                val customer = customerDao.getCustomerById(activity.customerId)
+                val customer = activity.customerId?.let { customerDao.getCustomerById(it) }
                 val companyName = customer?.companyName ?: activity.companyName
                 val project = activity.projectId?.let { projectDao.getProjectById(it) }
                 val projectName = project?.projectName ?: activity.projectName

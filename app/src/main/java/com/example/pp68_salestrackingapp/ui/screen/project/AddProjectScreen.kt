@@ -339,7 +339,7 @@ fun AddProjectContent(
                     CircularProgressIndicator(
                         color = Color.White, modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
                 } else {
-                    Text(if (uiState.projectId != null) "อัปเดตโครงการ" else "สร้างโครงการ", fontSize = 16.sp,
+                    Text(if (uiState.projectId != null) "บันทึกการเปลี่ยนแปลงโครงการ" else "สร้างโครงการ", fontSize = 16.sp,
                         fontWeight = FontWeight.SemiBold, color = Color.White)
                 }
             }

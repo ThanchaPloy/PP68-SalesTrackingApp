@@ -16,6 +16,7 @@ import retrofit2.converter.gson.GsonConverterFactory
 import java.util.concurrent.TimeUnit
 import javax.inject.Qualifier
 import javax.inject.Singleton
+import com.example.pp68_salestrackingapp.BuildConfig
 import com.example.pp68_salestrackingapp.data.remote.ApiService
 import com.example.pp68_salestrackingapp.data.remote.AuthService
 import com.example.pp68_salestrackingapp.data.remote.UploadApiService
@@ -92,7 +93,8 @@ object NetworkModule {
     @Singleton
     fun provideOkHttpClient(authInterceptor: Interceptor): OkHttpClient {
         val logging = HttpLoggingInterceptor().apply {
-            level = HttpLoggingInterceptor.Level.BODY
+            level = if (BuildConfig.DEBUG) HttpLoggingInterceptor.Level.BODY
+                    else HttpLoggingInterceptor.Level.NONE
         }
         return OkHttpClient.Builder()
             .addInterceptor(logging)

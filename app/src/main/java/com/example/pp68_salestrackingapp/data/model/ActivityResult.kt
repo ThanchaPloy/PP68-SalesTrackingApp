@@ -103,6 +103,19 @@ data class ActivityResult(
     @SerializedName("loss_reason")
     val lossReason: String? = null,
 
+    // ✅ version history: การแก้ไขบันทึกผลแต่ละครั้งสร้างแถวใหม่แทนการเขียนทับของเดิม
+    @ColumnInfo(name = "version")
+    @SerializedName("version")
+    val version: Int = 1,
+
+    @ColumnInfo(name = "is_latest")
+    @SerializedName("is_latest")
+    val isLatest: Boolean = true,
+
+    @ColumnInfo(name = "result_group_id")
+    @SerializedName("result_group_id")
+    val resultGroupId: String? = null,
+
     @ColumnInfo(name = "is_synced")
     val isSynced: Boolean = true
 )

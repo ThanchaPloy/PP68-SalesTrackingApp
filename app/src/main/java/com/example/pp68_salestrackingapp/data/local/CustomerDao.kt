@@ -38,6 +38,9 @@ interface CustomerDao {
     @Query("DELETE FROM customer")
     suspend fun deleteAll()
 
+    @Query("DELETE FROM customer WHERE is_synced = 1")
+    suspend fun deleteAllSynced()
+
     @Query("SELECT cust_id FROM customer")
     suspend fun getAllCustomerIds(): List<String>
 
@@ -46,6 +49,7 @@ interface CustomerDao {
 
     @Transaction
     suspend fun clearAndInsert(customers: List<Customer>) {
+        deleteAllSynced()
         if (customers.isNotEmpty()) {
             insertCustomers(customers)
         }

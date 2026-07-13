@@ -45,23 +45,34 @@ data class SalesResultUiState(
     val isSaving: Boolean = false,
     val isSaved: Boolean = false,
     val error: String? = null,
-    val photoUri: Uri? = null,
-    val photoUrl: String? = null,
-    val isUploadingPhoto: Boolean = false,
-    val isPhotoLocationValid: Boolean? = null,
-    val photoTakenAt: String? = null,
-    val photoLat: Double? = null,
-    val photoLng: Double? = null,
-    val photoDeviceModel: String? = null,
+    val photos: List<ResultPhoto> = emptyList(),
     val lossReason: String = "",
     val otherLossReason: String = "",
-    val lossReasonError: String? = null
+    val lossReasonError: String? = null,
+
+    // ✅ รองรับ version history ของบันทึกผลการขาย
+    val resultGroupId: String? = null,
+    val version: Int = 1,
+    val isReadOnlyVersion: Boolean = false // true = กำลังดู version เก่า (ไม่ใช่ล่าสุด) แก้ไขไม่ได้
 )
 
 enum class ResultMode {
     FROM_APPOINTMENT,
     STANDALONE
 }
+
+// ✅ รูปภาพยืนยันการเข้าพบ 1 รูป — ถ่ายจากกล้องเท่านั้น ไม่รับรูปจากแกลเลอรี/อินเทอร์เน็ต
+// เก็บ metadata (เวลาถ่าย/พิกัด/รุ่นเครื่อง) เฉพาะรูปแรก (index 0) เท่านั้น ตามที่ activity_result รองรับ
+data class ResultPhoto(
+    val localUri: Uri? = null,
+    val url: String? = null,
+    val isUploading: Boolean = false,
+    val takenAt: String? = null,
+    val lat: Double? = null,
+    val lng: Double? = null,
+    val deviceModel: String? = null,
+    val isLocationValid: Boolean? = null
+)
 
 @HiltViewModel
 class SalesResultViewModel @Inject constructor(
@@ -112,19 +123,20 @@ class SalesResultViewModel @Inject constructor(
                 ) }
                 activity.projectId?.let { loadProjectData(it) }
                 // ดึงผลลัพธ์ล่าสุดที่ผูกกับ Appointment นี้ (ถ้ามี)
-                activityRepo.getActivityResult(id)?.let { applyResultToState(it) }
+                activityRepo.getActivityResult(id)?.let { applyResultToState(it); loadPhotosForResult(it) }
             } else {
                 // 2. ถ้าไม่ใช่ อาจเป็น Result ID โดยตรง (กรณี Standalone หรือคลิกจาก History)
                 val result = activityRepo.getResultById(id)
                 if (result != null) {
                     _uiState.update { it.copy(
                         resultId = result.resultId,
-                        projectId = result.projectId, 
+                        projectId = result.projectId,
                         mode = if (result.activityId != null) ResultMode.FROM_APPOINTMENT else ResultMode.STANDALONE,
                         activityId = result.activityId,
                         reportDate = result.reportDate ?: LocalDate.now().toString()
                     ) }
                     applyResultToState(result)
+                    loadPhotosForResult(result)
                     result.projectId?.let { loadProjectData(it) }
                 }
             }
@@ -158,15 +170,33 @@ class SalesResultViewModel @Inject constructor(
                 competitorCount        = result.competitorCount,
                 dmInvolved             = result.dmInvolved,
                 visitSummary           = result.summary ?: "",
-                photoUrl               = result.photoUrl,
-                photoTakenAt           = result.photoTakenAt,
-                photoLat               = result.photoLat,
-                photoLng               = result.photoLng,
-                photoDeviceModel       = result.photoDeviceModel,
                 lossReason             = reason,
-                otherLossReason        = other
+                otherLossReason        = other,
+                resultGroupId          = result.resultGroupId,
+                version                = result.version,
+                isReadOnlyVersion      = !result.isLatest
             )
         }
+    }
+
+    // ✅ โหลดรูปทั้งหมดจากตาราง activity_result_photo; รูปเก่าก่อนมี feature นี้จะมีแค่ photo_url เดียวบน activity_result
+    private suspend fun loadPhotosForResult(result: ActivityResult) {
+        val childUrls = activityRepo.getResultPhotos(result.resultId)
+        val urls = childUrls.ifEmpty { listOfNotNull(result.photoUrl.takeUnless { it.isNullOrBlank() }) }
+        val photos = urls.mapIndexed { index, url ->
+            if (index == 0) {
+                ResultPhoto(
+                    url = url,
+                    takenAt = result.photoTakenAt,
+                    lat = result.photoLat,
+                    lng = result.photoLng,
+                    deviceModel = result.photoDeviceModel
+                )
+            } else {
+                ResultPhoto(url = url)
+            }
+        }
+        _uiState.update { it.copy(photos = photos) }
     }
 
     private fun loadProjectData(pId: String) {
@@ -185,6 +215,8 @@ class SalesResultViewModel @Inject constructor(
     }
 
     companion object {
+        const val MAX_PHOTOS = 5
+
         val DEAL_POSITION_MAP = mapOf(
             "ลูกค้าใช้เราอยู่แล้ว การต่อสัญญามีโอกาสสูงมาก" to "incumbent",
             "ลูกค้าเลือกเราเป็นตัวหลัก คู่แข่งอื่นเป็นแค่ backup"  to "vendor_of_choice",
@@ -233,13 +265,64 @@ class SalesResultViewModel @Inject constructor(
     fun onLossReasonChanged(value: String)        { _uiState.update { it.copy(lossReason = value, lossReasonError = null) } }
     fun onOtherLossReasonChanged(value: String)   { _uiState.update { it.copy(otherLossReason = value, lossReasonError = null) } }
 
-    fun onPhotoPicked(context: Context, uri: Uri) {
-        _uiState.update { it.copy(photoUri = uri, photoUrl = null) }
-        extractExifData(context, uri)
+    // ✅ ถ่ายรูปใหม่จากกล้อง — เพิ่มเข้า slot ถัดไป (สูงสุด MAX_PHOTOS รูป) แล้วอัปโหลดทันที
+    fun onPhotoCaptured(context: Context, uri: Uri) {
+        if (_uiState.value.photos.size >= MAX_PHOTOS) return
+        addPhoto(context, uri, extractExifData(context, uri))
     }
 
-    private fun extractExifData(context: Context, uri: Uri) {
-        try {
+    // ✅ เลือกได้หลายรูปพร้อมกันจากอัลบั้ม (สูงสุดเท่าที่ยัง slot ว่าง) — รับเฉพาะรูปที่มี EXIF ของกล้องจริง (ยี่ห้อ/รุ่นเครื่อง)
+    // เพื่อกันรูป screenshot หรือรูปที่โหลด/แชร์มาจากอินเทอร์เน็ต-แชท ซึ่งปกติ EXIF จะถูกลบไปแล้ว
+    fun onPhotosPicked(context: Context, uris: List<Uri>) {
+        if (uris.isEmpty()) return
+        val remainingSlots = MAX_PHOTOS - _uiState.value.photos.size
+        val toProcess = uris.take(remainingSlots)
+        val skippedOverLimit = uris.size - toProcess.size
+        var skippedNonCamera = 0
+
+        toProcess.forEach { uri ->
+            val exif = extractExifData(context, uri)
+            if (exif.deviceModel.isNullOrBlank()) skippedNonCamera++
+            else addPhoto(context, uri, exif)
+        }
+
+        val messages = buildList {
+            if (skippedNonCamera > 0) add("ข้าม $skippedNonCamera รูปที่ไม่ใช่รูปจากกล้อง")
+            if (skippedOverLimit > 0) add("เพิ่มรูปได้สูงสุด $MAX_PHOTOS รูป ข้าม $skippedOverLimit รูปที่เกิน")
+        }
+        if (messages.isNotEmpty()) _uiState.update { it.copy(error = messages.joinToString(" ")) }
+    }
+
+    private fun addPhoto(context: Context, uri: Uri, exif: ExifData) {
+        val index = _uiState.value.photos.size
+        _uiState.update {
+            it.copy(photos = it.photos + ResultPhoto(
+                localUri = uri,
+                isUploading = true,
+                takenAt = exif.takenAt,
+                lat = exif.lat,
+                lng = exif.lng,
+                deviceModel = exif.deviceModel,
+                isLocationValid = exif.isLocationValid
+            ))
+        }
+        uploadPhotoAt(context, index, uri)
+    }
+
+    fun onRemovePhoto(index: Int) {
+        _uiState.update { s -> s.copy(photos = s.photos.filterIndexed { i, _ -> i != index }) }
+    }
+
+    private data class ExifData(
+        val takenAt: String? = null,
+        val lat: Double? = null,
+        val lng: Double? = null,
+        val deviceModel: String? = null,
+        val isLocationValid: Boolean? = null
+    )
+
+    private fun extractExifData(context: Context, uri: Uri): ExifData {
+        return try {
             context.contentResolver.openInputStream(uri)?.use { inputStream ->
                 val exif = ExifInterface(inputStream)
                 val dateTaken = exif.getAttribute(ExifInterface.TAG_DATETIME)
@@ -257,10 +340,11 @@ class SalesResultViewModel @Inject constructor(
                     } else null
                 } else null
 
-                _uiState.update { it.copy(photoTakenAt = dateTaken, photoLat = lat, photoLng = lng, photoDeviceModel = deviceModel, isPhotoLocationValid = isLocationValid) }
-            }
+                ExifData(dateTaken, lat, lng, deviceModel, isLocationValid)
+            } ?: ExifData()
         } catch (e: Exception) {
             Log.e("SalesResult", "Error extracting EXIF: ${e.message}")
+            ExifData()
         }
     }
 
@@ -276,32 +360,43 @@ class SalesResultViewModel @Inject constructor(
     fun onCompetitorCountChanged(delta: Int)      { _uiState.update { it.copy(competitorCount = (it.competitorCount + delta).coerceAtLeast(0)) } }
     fun onSummaryChanged(text: String)            { _uiState.update { it.copy(visitSummary = text) } }
 
-    fun uploadPhoto(context: Context) {
+    private fun uploadPhotoAt(context: Context, index: Int, uri: Uri) {
         val s = _uiState.value
-        val uri = s.photoUri
-        val uploadId = s.activityId ?: s.projectId 
-        
-        if (uri == null || uploadId == null) return
-        
+        val uploadId = s.activityId ?: s.projectId
+        if (uploadId == null) {
+            updatePhotoAt(index) { it.copy(isUploading = false) }
+            return
+        }
         viewModelScope.launch {
-            _uiState.update { it.copy(isUploadingPhoto = true, error = null) }
             val bytes = try { context.contentResolver.openInputStream(uri)?.use { it.readBytes() } } catch (e: Exception) { null }
-            if (bytes == null) { 
-                _uiState.update { it.copy(error = "ไม่สามารถอ่านไฟล์รูปภาพได้", isUploadingPhoto = false) }
-                return@launch 
+            if (bytes == null) {
+                updatePhotoAt(index) { it.copy(isUploading = false) }
+                _uiState.update { it.copy(error = "ไม่สามารถอ่านไฟล์รูปภาพได้") }
+                return@launch
             }
-            
-            activityRepo.uploadVisitPhoto(uploadId, bytes).onSuccess { url -> 
-                _uiState.update { it.copy(photoUrl = url, isUploadingPhoto = false) } 
-            }.onFailure { e -> 
-                _uiState.update { it.copy(error = "อัปโหลดรูปไม่สำเร็จ: ${e.message}", isUploadingPhoto = false) } 
+
+            activityRepo.uploadVisitPhoto(uploadId, bytes).onSuccess { url ->
+                updatePhotoAt(index) { it.copy(url = url, isUploading = false) }
+            }.onFailure { e ->
+                updatePhotoAt(index) { it.copy(isUploading = false) }
+                _uiState.update { it.copy(error = "อัปโหลดรูปไม่สำเร็จ: ${e.message}") }
             }
+        }
+    }
+
+    private fun updatePhotoAt(index: Int, transform: (ResultPhoto) -> ResultPhoto) {
+        _uiState.update { s ->
+            val list = s.photos.toMutableList()
+            if (index in list.indices) list[index] = transform(list[index])
+            s.copy(photos = list)
         }
     }
 
     fun save() {
         val s = _uiState.value
+        if (s.isReadOnlyVersion) { _uiState.update { it.copy(error = "กำลังดูเวอร์ชันเก่า ไม่สามารถแก้ไขได้") }; return }
         if (s.visitSummary.isBlank()) { _uiState.update { it.copy(error = "กรุณากรอกสรุปการเข้าพบ") }; return }
+        if (s.photos.any { it.isUploading }) { _uiState.update { it.copy(error = "กรุณารอให้อัปโหลดรูปให้เสร็จก่อนบันทึก") }; return }
 
         if (s.isStatusUpdateEnabled) {
             if (s.newStatus.isBlank()) {
@@ -330,6 +425,8 @@ class SalesResultViewModel @Inject constructor(
                 } else null
 
                 val finalResultId = s.resultId ?: ""
+                val photoUrls = s.photos.mapNotNull { it.url }
+                val cover = s.photos.firstOrNull()
 
                 val resultToSave = ActivityResult(
                     resultId               = finalResultId,
@@ -348,17 +445,17 @@ class SalesResultViewModel @Inject constructor(
                     competitorCount        = s.competitorCount,
                     dmInvolved             = s.dmInvolved,
                     summary                = s.visitSummary,
-                    photoUrl               = s.photoUrl,
-                    photoTakenAt           = s.photoTakenAt,
-                    photoLat               = s.photoLat,
-                    photoLng               = s.photoLng,
-                    photoDeviceModel       = s.photoDeviceModel,
+                    photoUrl               = cover?.url,
+                    photoTakenAt           = cover?.takenAt,
+                    photoLat               = cover?.lat,
+                    photoLng               = cover?.lng,
+                    photoDeviceModel       = cover?.deviceModel,
                     lossReason             = finalLossReason
                 )
-                
+
                 val saveResult = when (s.mode) {
-                    ResultMode.FROM_APPOINTMENT -> activityRepo.saveActivityResult(resultToSave)
-                    ResultMode.STANDALONE -> activityRepo.saveStandaloneResult(s.projectId!!, resultToSave)
+                    ResultMode.FROM_APPOINTMENT -> activityRepo.saveActivityResult(resultToSave, photoUrls)
+                    ResultMode.STANDALONE -> activityRepo.saveStandaloneResult(s.projectId!!, resultToSave, photoUrls)
                 }
 
                 if (saveResult.isSuccess) { _uiState.update { it.copy(isSaving = false, isSaved = true) } }

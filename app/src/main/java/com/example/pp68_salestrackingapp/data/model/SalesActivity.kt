@@ -18,7 +18,7 @@ data class SalesActivity(
 
     @ColumnInfo(name = "cust_id")
     @SerializedName("cust_code")
-    val customerId: String,
+    val customerId: String? = null,
 
     @ColumnInfo(name = "project_id")
     @SerializedName("project_code")

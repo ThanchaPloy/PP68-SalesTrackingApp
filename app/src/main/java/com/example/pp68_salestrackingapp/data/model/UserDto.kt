@@ -8,6 +8,5 @@ data class UserDto(
     @SerializedName("full_name")    val fullName:    String? = null,
     @SerializedName("branch_id")    val branchId:    String? = null,
     @SerializedName("role")         val role:        String? = null,
-    @SerializedName("email")        val email:       String? = null,
     @SerializedName("phone_number") val phoneNumber: String? = null
 )

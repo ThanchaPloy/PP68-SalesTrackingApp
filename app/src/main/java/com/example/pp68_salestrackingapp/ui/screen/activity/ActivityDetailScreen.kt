@@ -144,10 +144,9 @@ fun ActivityDetailContent(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     StatusBadge(s.activity?.status ?: "planned")
                     Spacer(Modifier.weight(1f))
-                    if (s.activity?.status != "completed") {
-                        IconButton(onClick = onEdit) {
-                            Icon(Icons.Default.Edit, "แก้ไข", tint = RedPrimary)
-                        }
+                    // ✅ ให้แก้ไขได้ทุกสถานะ รวมถึงหลัง check-in/บันทึกผล (completed) แล้ว
+                    IconButton(onClick = onEdit) {
+                        Icon(Icons.Default.Edit, "แก้ไข", tint = RedPrimary)
                     }
                 }
                 

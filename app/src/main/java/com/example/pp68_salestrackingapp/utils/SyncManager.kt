@@ -27,6 +27,7 @@ class SyncManager @Inject constructor(
     private val contactDao: ContactDao,
     private val activityDao: ActivityDao,
     private val resultDao: ActivityResultDao,
+    private val photoDao: ActivityResultPhotoDao,
     private val appointmentContactDao: AppointmentContactDao,
     private val planItemDao: ActivityPlanItemDao
 ) {
@@ -159,11 +160,11 @@ class SyncManager @Inject constructor(
         val unsyncedActivities = activityDao.getUnsyncedActivities()
         for (activity in unsyncedActivities) {
             if (activity.activityId.startsWith("TEMP-")) {
-                val custCode = if (activity.customerId == "CST-UNKNOWN") "" else activity.customerId
+                val custCode = if (activity.customerId == "CST-UNKNOWN") null else activity.customerId
                 val body = mutableMapOf<String, Any?>(
                     "emp_code"         to activity.userId,
                     "cust_code"        to custCode,
-                    "project_code"     to (activity.projectId ?: ""),
+                    "project_code"     to activity.projectId,
                     "type"             to activity.activityType,
                     "is_appointment"   to activity.isAppointment,
                     "topic"            to activity.detail,
@@ -184,9 +185,8 @@ class SyncManager @Inject constructor(
                         appointmentContactDao.updateAppointmentId(activity.activityId, realId)
                         planItemDao.updateAppointmentId(activity.activityId, realId)
                         activityDao.deleteActivityById(activity.activityId)
-                    } else {
-                        activityDao.updateSyncStatus(activity.activityId, true)
                     }
+                    // ✅ ถ้าไม่ได้ realId กลับมา ห้าม mark synced เด็ดขาด ปล่อยให้ลองใหม่รอบถัดไป
                     val contacts = appointmentContactDao.getContactsByAppointmentId(finalId)
                     if (contacts.isNotEmpty()) {
                         try {
@@ -216,13 +216,26 @@ class SyncManager @Inject constructor(
         val unsyncedResults = resultDao.getUnsyncedResults()
         for (res in unsyncedResults) {
             if (res.resultId.startsWith("TEMP-")) {
+                // ✅ ถ้ายังไม่เคยมี version ก่อนหน้า group id จะผูกกับ tempId ของตัวเองไปก่อน ต้องแก้เป็น realId ทีหลัง
+                val wasSelfGroup = res.resultGroupId == res.resultId
                 val body = buildResultBody(res).filterKeys { it != "result_id" }
                 val response = apiService.insertActivityResultMap(body)
                 if (response.isSuccessful) {
                     val realId = response.body()?.firstOrNull()?.resultId
                     if (realId != null && realId != res.resultId) {
+                        val finalGroupId = if (wasSelfGroup) realId else res.resultGroupId
+                        // ✅ ต้อง insert แถว realId ก่อน แล้วค่อยย้ายรูปมาที่ realId แล้วค่อยลบ tempId ทีหลัง
+                        // เพราะ activity_result_photo มี FK CASCADE ไปยัง activity_result — ถ้าลบ tempId ก่อน รูปที่ยังผูกกับ tempId จะโดนลบไปด้วย
+                        resultDao.insertResult(res.copy(resultId = realId, resultGroupId = finalGroupId, isSynced = true))
+                        photoDao.updateResultId(res.resultId, realId)
                         resultDao.deleteResultById(res.resultId)
-                        resultDao.insertResult(res.copy(resultId = realId, isSynced = true))
+                        val pendingPhotos = photoDao.getPhotosByResultId(realId)
+                        if (pendingPhotos.isNotEmpty()) {
+                            try { apiService.addResultPhotos(pendingPhotos) } catch (_: Exception) {}
+                        }
+                        if (wasSelfGroup) {
+                            try { apiService.updateActivityResult("eq.$realId", mapOf("result_group_id" to realId)) } catch (_: Exception) {}
+                        }
                     } else {
                         resultDao.updateSyncStatus(res.resultId, true)
                     }
@@ -261,6 +274,9 @@ class SyncManager @Inject constructor(
         body["photo_lng"]          = result.photoLng
         body["photo_device_model"] = result.photoDeviceModel
         result.lossReason?.let { body["loss_reason"] = it }
+        body["version"]         = result.version
+        body["is_latest"]       = result.isLatest
+        body["result_group_id"] = result.resultGroupId
         return body.filterValues { it != null }
     }
 }

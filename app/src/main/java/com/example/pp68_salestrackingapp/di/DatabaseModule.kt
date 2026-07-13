@@ -5,6 +5,7 @@ import androidx.room.Room
 import com.example.pp68_salestrackingapp.data.local.ActivityDao
 import com.example.pp68_salestrackingapp.data.local.ActivityPlanItemDao
 import com.example.pp68_salestrackingapp.data.local.ActivityResultDao
+import com.example.pp68_salestrackingapp.data.local.ActivityResultPhotoDao
 import com.example.pp68_salestrackingapp.data.local.AppDatabase
 import com.example.pp68_salestrackingapp.data.local.AppointmentContactDao
 import com.example.pp68_salestrackingapp.data.local.ProjectContactDao
@@ -36,6 +37,7 @@ object DatabaseModule {
             .addMigrations(
                 AppDatabase.MIGRATION_28_29,
                 AppDatabase.MIGRATION_29_30,
+                AppDatabase.MIGRATION_31_32,
                 AppDatabase.MIGRATION_32_33,
                 AppDatabase.MIGRATION_33_34,
                 AppDatabase.MIGRATION_34_35,
@@ -44,7 +46,10 @@ object DatabaseModule {
                 AppDatabase.MIGRATION_37_38,
                 AppDatabase.MIGRATION_38_39,
                 AppDatabase.MIGRATION_39_40,
-                AppDatabase.MIGRATION_40_41
+                AppDatabase.MIGRATION_40_41,
+                AppDatabase.MIGRATION_41_42,
+                AppDatabase.MIGRATION_42_43,
+                AppDatabase.MIGRATION_43_44
             )
             .build()
     }
@@ -100,4 +105,8 @@ object DatabaseModule {
     @Provides
     @Singleton
     fun provideProjectSalesMemberDao(db: AppDatabase): ProjectSalesMemberDao = db.projectSalesMemberDao()
+
+    @Provides
+    @Singleton
+    fun provideActivityResultPhotoDao(db: AppDatabase): ActivityResultPhotoDao = db.activityResultPhotoDao()
 }

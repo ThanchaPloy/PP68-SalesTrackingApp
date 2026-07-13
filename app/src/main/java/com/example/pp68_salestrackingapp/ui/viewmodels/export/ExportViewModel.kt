@@ -132,7 +132,7 @@ class ExportViewModel @Inject constructor(
                             date = res.reportDate ?: "",
                             projectName = project?.projectName ?: "N/A",
                             companyName = null, 
-                            topic = "บันทึกผลการทำงาน (ไม่มีแผนนัดหมาย)",
+                            topic = "บันทึกผลการทำงาน",
                             note = "",
                             status = "completed",
                             results = listOfNotNull(res.summary)

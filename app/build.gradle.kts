@@ -44,10 +44,10 @@ android {
     }
     signingConfigs {
         create("release") {
-            storeFile = file("C:/AndroidProject/PP68.jks")
-            storePassword = "practical68"
-            keyAlias = "key0"
-            keyPassword = "practical68"
+            storeFile = file(System.getenv("KEYSTORE_PATH") ?: "PP68.jks")
+            storePassword = System.getenv("STORE_PASSWORD") ?: ""
+            keyAlias = System.getenv("KEY_ALIAS") ?: "key0"
+            keyPassword = System.getenv("KEY_PASSWORD") ?: ""
         }
     }
 
