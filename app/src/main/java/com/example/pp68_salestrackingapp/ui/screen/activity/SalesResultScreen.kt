@@ -1,14 +1,21 @@
 package com.example.pp68_salestrackingapp.ui.screen.activity
 
+import android.Manifest
+import android.content.pm.PackageManager
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -26,13 +33,17 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
+import androidx.core.content.FileProvider
 import androidx.hilt.navigation.compose.hiltViewModel
 import coil.compose.AsyncImage
 import com.example.pp68_salestrackingapp.ui.components.DatePickerField
 import com.example.pp68_salestrackingapp.ui.components.DropdownField
 import com.example.pp68_salestrackingapp.ui.theme.SalesTrackingTheme
+import com.example.pp68_salestrackingapp.ui.viewmodels.activity.ResultPhoto
 import com.example.pp68_salestrackingapp.ui.viewmodels.activity.SalesResultUiState
 import com.example.pp68_salestrackingapp.ui.viewmodels.activity.SalesResultViewModel
+import java.io.File
 
 private val White      = Color.White
 private val TextDark   = Color(0xFF1A1A1A)
@@ -46,6 +57,7 @@ private val BorderGray = Color(0xFFE8E8E8)
 fun SalesResultScreen(
     onBack: () -> Unit,
     onSaved: () -> Unit,
+    onViewHistory: (String) -> Unit = {},
     viewModel: SalesResultViewModel = hiltViewModel()
 ) {
     val s by viewModel.uiState.collectAsState()
@@ -80,9 +92,11 @@ fun SalesResultScreen(
         onLossReasonChanged             = viewModel::onLossReasonChanged,
         onOtherLossReasonChanged        = viewModel::onOtherLossReasonChanged,
         lossReasonOptions               = viewModel.lossReasonOptions,
-        onPhotoPicked                   = { uri -> viewModel.onPhotoPicked(context, uri) },
-        onUploadPhoto                   = { viewModel.uploadPhoto(context) },
+        onPhotoCaptured                 = { uri -> viewModel.onPhotoCaptured(context, uri) },
+        onPhotosPicked                  = { uris -> viewModel.onPhotosPicked(context, uris) },
+        onRemovePhoto                   = viewModel::onRemovePhoto,
         onSave                          = viewModel::save,
+        onViewHistory                   = { s.resultGroupId?.let(onViewHistory) },
     )
 }
 
@@ -108,9 +122,11 @@ private fun SalesResultContent(
     onLossReasonChanged: (String) -> Unit,
     onOtherLossReasonChanged: (String) -> Unit,
     lossReasonOptions: List<String>,
-    onPhotoPicked: (Uri) -> Unit,
-    onUploadPhoto: () -> Unit,
-    onSave: () -> Unit
+    onPhotoCaptured: (Uri) -> Unit,
+    onPhotosPicked: (List<Uri>) -> Unit,
+    onRemovePhoto: (Int) -> Unit,
+    onSave: () -> Unit,
+    onViewHistory: () -> Unit = {}
 ) {
     var expandSolution by remember { mutableStateOf(false) }
     var expandContract by remember { mutableStateOf(false) }
@@ -124,6 +140,13 @@ private fun SalesResultContent(
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, null)
+                    }
+                },
+                actions = {
+                    if (s.resultGroupId != null) {
+                        IconButton(onClick = onViewHistory) {
+                            Icon(Icons.Default.History, "ดูประวัติการแก้ไข", tint = RedPrimary)
+                        }
                     }
                 },
                 colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = White)
@@ -144,6 +167,26 @@ private fun SalesResultContent(
                     .padding(20.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
+                if (s.isReadOnlyVersion) {
+                    Surface(
+                        color = Color(0xFFFFF3E0),
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(Icons.Default.Info, null, tint = Color(0xFFE65100), modifier = Modifier.size(20.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                "กำลังดูเวอร์ชันเก่า (version ${s.version}) — ไม่สามารถแก้ไขได้",
+                                fontSize = 13.sp, color = Color(0xFFE65100), fontWeight = FontWeight.Medium
+                            )
+                        }
+                    }
+                }
+
                 SectionCard(title = "วันที่บันทึกผล", icon = Icons.Default.CalendarToday) {
                     DatePickerField(
                         selectedDate  = s.reportDate,
@@ -251,16 +294,10 @@ private fun SalesResultContent(
 
                 SectionCard(title = "รูปภาพยืนยันการเข้าพบ", icon = Icons.Default.PhotoCamera) {
                     PhotoUploadSection(
-                        photoUri = s.photoUri,
-                        photoUrl = s.photoUrl,
-                        isUploading = s.isUploadingPhoto,
-                        photoTakenAt         = s.photoTakenAt,
-                        photoLat             = s.photoLat,
-                        photoLng             = s.photoLng,
-                        photoDeviceModel     = s.photoDeviceModel,
-                        isPhotoLocationValid = s.isPhotoLocationValid,
-                        onPhotoPicked = onPhotoPicked,
-                        onUpload = onUploadPhoto
+                        photos = s.photos,
+                        onPhotoCaptured = onPhotoCaptured,
+                        onPhotosPicked = onPhotosPicked,
+                        onRemovePhoto = onRemovePhoto
                     )
                 }
 
@@ -403,12 +440,15 @@ private fun SalesResultContent(
                         .height(56.dp),
                     shape = RoundedCornerShape(12.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = RedPrimary),
-                    enabled = !s.isSaving
+                    enabled = !s.isSaving && !s.isReadOnlyVersion
                 ) {
                     if (s.isSaving) {
                         CircularProgressIndicator(color = White, modifier = Modifier.size(24.dp))
                     } else {
-                        Text("บันทึกข้อมูล", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                        Text(
+                            if (s.resultId != null) "บันทึกการเปลี่ยนแปลงผลการขาย" else "บันทึกข้อมูล",
+                            fontSize = 16.sp, fontWeight = FontWeight.Bold
+                        )
                     }
                 }
 
@@ -526,119 +566,185 @@ private fun SelectOption(
     }
 }
 
+private const val MAX_RESULT_PHOTOS = 5
+
+private fun createCameraCaptureUri(context: android.content.Context): Uri {
+    val file = File.createTempFile("visit_photo_", ".jpg", context.cacheDir)
+    return FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+}
+
 @Composable
 private fun PhotoUploadSection(
-    photoUri: Uri?,
-    photoUrl: String?,
-    isUploading: Boolean,
-    photoTakenAt: String?,
-    photoLat: Double?,
-    photoLng: Double?,
-    photoDeviceModel: String?,
-    isPhotoLocationValid: Boolean?,
-    onPhotoPicked: (Uri) -> Unit,
-    onUpload: () -> Unit
+    photos: List<ResultPhoto>,
+    onPhotoCaptured: (Uri) -> Unit,
+    onPhotosPicked: (List<Uri>) -> Unit,
+    onRemovePhoto: (Int) -> Unit
 ) {
-    val launcher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.GetContent()
-    ) { uri: Uri? -> uri?.let { onPhotoPicked(it) } }
+    val context = LocalContext.current
+    var pendingCaptureUri by remember { mutableStateOf<Uri?>(null) }
 
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        if (photoUrl != null || photoUri != null ) {
-            AsyncImage(
-                model = photoUrl ?: photoUri,
-                contentDescription = null,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(200.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .border(1.dp, BorderGray, RoundedCornerShape(12.dp)),
-                contentScale = ContentScale.Crop
-            )
-            Spacer(Modifier.height(12.dp))
+    val cameraLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.TakePicture()
+    ) { success ->
+        val uri = pendingCaptureUri
+        if (success && uri != null) onPhotoCaptured(uri)
+        pendingCaptureUri = null
+    }
 
-            if (photoTakenAt != null || photoLat != null || photoDeviceModel != null) {
-                Surface(
-                    color    = Color(0xFFF5F5F5),
-                    shape    = RoundedCornerShape(8.dp),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Column(
-                        modifier = Modifier.padding(10.dp),
-                        verticalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        photoTakenAt?.let {
-                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                Icon(Icons.Default.AccessTime, null, modifier = Modifier.size(14.dp), tint = TextGray)
-                                Text("ถ่ายเมื่อ: $it", fontSize = 12.sp, color = TextGray)
-                            }
+    fun launchCamera() {
+        val uri = createCameraCaptureUri(context)
+        pendingCaptureUri = uri
+        cameraLauncher.launch(uri)
+    }
+
+    val permissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { granted -> if (granted) launchCamera() }
+
+    fun requestCameraCapture() {
+        val hasPermission = ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
+        if (hasPermission) launchCamera() else permissionLauncher.launch(Manifest.permission.CAMERA)
+    }
+
+    val galleryLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.PickMultipleVisualMedia()
+    ) { uris -> if (uris.isNotEmpty()) onPhotosPicked(uris) }
+
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Text(
+            "ถ่ายรูป หรือเลือกรูปที่ถ่ายจากกล้องไว้ในอัลบั้มได้สูงสุด $MAX_RESULT_PHOTOS รูป (ต้องเป็นรูปที่ถ่ายจากกล้องเท่านั้น ไม่ใช่รูปดาวน์โหลด/จากอินเทอร์เน็ต)",
+            fontSize = 12.sp,
+            color = TextGray
+        )
+        Spacer(Modifier.height(10.dp))
+
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            itemsIndexed(photos) { index, photo ->
+                Box(modifier = Modifier.size(96.dp)) {
+                    AsyncImage(
+                        model = photo.url ?: photo.localUri,
+                        contentDescription = null,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .clip(RoundedCornerShape(10.dp))
+                            .border(1.dp, BorderGray, RoundedCornerShape(10.dp)),
+                        contentScale = ContentScale.Crop
+                    )
+                    if (photo.isUploading) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(Color.Black.copy(alpha = 0.4f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            CircularProgressIndicator(color = White, modifier = Modifier.size(22.dp), strokeWidth = 2.dp)
                         }
-                        if (photoLat != null && photoLng != null) {
-                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                val iconTint = when (isPhotoLocationValid) {
+                    }
+                    IconButton(
+                        onClick = { onRemovePhoto(index) },
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(2.dp)
+                            .size(22.dp)
+                            .background(Color.Black.copy(alpha = 0.5f), CircleShape)
+                    ) {
+                        Icon(Icons.Default.Close, contentDescription = "ลบรูป", tint = White, modifier = Modifier.size(14.dp))
+                    }
+                }
+            }
+
+            if (photos.size < MAX_RESULT_PHOTOS) {
+                item {
+                    Box(
+                        modifier = Modifier
+                            .size(96.dp)
+                            .clip(RoundedCornerShape(10.dp))
+                            .border(1.dp, BorderGray, RoundedCornerShape(10.dp))
+                            .clickable { requestCameraCapture() },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(Icons.Default.PhotoCamera, null, tint = TextGray, modifier = Modifier.size(26.dp))
+                            Spacer(Modifier.height(4.dp))
+                            Text("ถ่ายรูป", fontSize = 11.sp, color = TextGray)
+                        }
+                    }
+                }
+                item {
+                    Box(
+                        modifier = Modifier
+                            .size(96.dp)
+                            .clip(RoundedCornerShape(10.dp))
+                            .border(1.dp, BorderGray, RoundedCornerShape(10.dp))
+                            .clickable {
+                                galleryLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(Icons.Default.PhotoLibrary, null, tint = TextGray, modifier = Modifier.size(26.dp))
+                            Spacer(Modifier.height(4.dp))
+                            Text("เลือกจากอัลบั้ม", fontSize = 11.sp, color = TextGray)
+                        }
+                    }
+                }
+            }
+        }
+        Spacer(Modifier.height(4.dp))
+        Text("${photos.size}/$MAX_RESULT_PHOTOS รูป", fontSize = 11.sp, color = TextGray)
+
+        val cover = photos.firstOrNull()
+        if (cover != null && (cover.takenAt != null || cover.lat != null || cover.deviceModel != null)) {
+            Spacer(Modifier.height(12.dp))
+            Surface(
+                color    = Color(0xFFF5F5F5),
+                shape    = RoundedCornerShape(8.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(
+                    modifier = Modifier.padding(10.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    cover.takenAt?.let {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Icon(Icons.Default.AccessTime, null, modifier = Modifier.size(14.dp), tint = TextGray)
+                            Text("ถ่ายเมื่อ: $it", fontSize = 12.sp, color = TextGray)
+                        }
+                    }
+                    if (cover.lat != null && cover.lng != null) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            val iconTint = when (cover.isLocationValid) {
+                                true  -> Color(0xFF2E7D32)
+                                false -> Color(0xFFC62828)
+                                null  -> TextGray
+                            }
+                            Icon(Icons.Default.LocationOn, null, modifier = Modifier.size(14.dp), tint = iconTint)
+                            Text(
+                                text = when (cover.isLocationValid) {
+                                    true  -> "พิกัดตรงกับสถานที่นัด ✅"
+                                    false -> "พิกัดไม่ตรงกับสถานที่นัด ⚠️"
+                                    null  -> "พิกัด: %.4f, %.4f".format(cover.lat, cover.lng)
+                                },
+                                fontSize = 12.sp,
+                                color = when (cover.isLocationValid) {
                                     true  -> Color(0xFF2E7D32)
                                     false -> Color(0xFFC62828)
                                     null  -> TextGray
                                 }
-                                Icon(Icons.Default.LocationOn, null, modifier = Modifier.size(14.dp), tint = iconTint)
-                                Text(
-                                    text = when (isPhotoLocationValid) {
-                                        true  -> "พิกัดตรงกับสถานที่นัด ✅"
-                                        false -> "พิกัดไม่ตรงกับสถานที่นัด ⚠️"
-                                        null  -> "พิกัด: %.4f, %.4f".format(photoLat, photoLng)
-                                    },
-                                    fontSize = 12.sp,
-                                    color = when (isPhotoLocationValid) {
-                                        true  -> Color(0xFF2E7D32)
-                                        false -> Color(0xFFC62828)
-                                        null  -> TextGray
-                                    }
-                                )
-                            }
-                        } else {
-                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                Icon(Icons.Default.LocationOff, null, modifier = Modifier.size(14.dp), tint = TextGray)
-                                Text("ไม่พบพิกัดในรูป", fontSize = 12.sp, color = TextGray)
-                            }
+                            )
                         }
-                        photoDeviceModel?.let {
-                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                Icon(Icons.Default.PhoneAndroid, null, modifier = Modifier.size(14.dp), tint = TextGray)
-                                Text("อุปกรณ์: $it", fontSize = 12.sp, color = TextGray)
-                            }
+                    } else {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Icon(Icons.Default.LocationOff, null, modifier = Modifier.size(14.dp), tint = TextGray)
+                            Text("ไม่พบพิกัดในรูป", fontSize = 12.sp, color = TextGray)
                         }
                     }
-                }
-                Spacer(Modifier.height(12.dp))
-            }
-        }
-
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            OutlinedButton(
-                onClick = { launcher.launch("image/*") },
-                shape   = RoundedCornerShape(8.dp)
-            ) {
-                Icon(Icons.Default.PhotoLibrary, null, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.width(8.dp))
-                Text("เลือกรูป")
-            }
-
-            if ((photoUri != null) && photoUrl == null) {
-                Button(
-                    onClick  = onUpload,
-                    shape    = RoundedCornerShape(8.dp),
-                    colors   = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50)),
-                    enabled  = !isUploading
-                ) {
-                    if (isUploading) {
-                        CircularProgressIndicator(color = White, modifier = Modifier.size(18.dp))
-                    } else {
-                        Icon(Icons.Default.CloudUpload, null, modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.width(8.dp))
-                        Text("อัปโหลด")
+                    cover.deviceModel?.let {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Icon(Icons.Default.PhoneAndroid, null, modifier = Modifier.size(14.dp), tint = TextGray)
+                            Text("อุปกรณ์: $it", fontSize = 12.sp, color = TextGray)
+                        }
                     }
                 }
             }
@@ -679,8 +785,9 @@ private fun SalesResultScreenPreview() {
             onLossReasonChanged = {},
             onOtherLossReasonChanged = {},
             lossReasonOptions = listOf("ผลิตไม่ได้/ผลิตไม่ทัน", "เทคโนโลยีไม่ผ่าน", "สู้ราคาไม่ไหว", "อื่น ๆ"),
-            onPhotoPicked = {},
-            onUploadPhoto = {},
+            onPhotoCaptured = {},
+            onPhotosPicked = {},
+            onRemovePhoto = {},
             onSave = {}
         )
     }

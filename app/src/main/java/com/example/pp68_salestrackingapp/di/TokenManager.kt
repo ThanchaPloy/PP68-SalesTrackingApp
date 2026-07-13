@@ -76,4 +76,13 @@ class TokenManager @Inject constructor(
     fun isVisitReminderEnabled(): Boolean {
         return prefs.getBoolean("visit_reminder_enabled", true) // default = เปิด
     }
+
+    // ✅ กันส่ง call log ซ้ำข้ามการเปิดแอปใหม่ — ต้อง persist ไว้ข้าม process ไม่ใช่แค่ในหน่วยความจำ
+    fun saveLastCallLogSyncTime(timeMs: Long) {
+        prefs.edit().putLong("last_call_log_sync_time", timeMs).apply()
+    }
+
+    fun getLastCallLogSyncTime(): Long {
+        return prefs.getLong("last_call_log_sync_time", 0L)
+    }
 }

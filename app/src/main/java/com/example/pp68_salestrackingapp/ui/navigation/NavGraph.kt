@@ -149,7 +149,18 @@ fun SalesTrackingApp() {
         ) {
             SalesResultScreen(
                 onBack = { navController.popBackStack() },
-                onSaved = { navController.popBackStack() }
+                onSaved = { navController.popBackStack() },
+                onViewHistory = { groupId -> navController.navigate(Route.ResultHistory.createRoute(groupId)) }
+            )
+        }
+
+        composable(
+            route = Route.ResultHistory.path,
+            arguments = listOf(navArgument("resultGroupId") { type = NavType.StringType })
+        ) {
+            ResultHistoryScreen(
+                onBack = { navController.popBackStack() },
+                onSelectVersion = { resultId -> navController.navigate(Route.SalesResult.createRoute(resultId)) }
             )
         }
 
@@ -267,7 +278,8 @@ fun SalesTrackingApp() {
         ) {
             SalesResultScreen(
                 onBack     = { navController.popBackStack() },
-                onSaved    = { navController.popBackStack() }
+                onSaved    = { navController.popBackStack() },
+                onViewHistory = { groupId -> navController.navigate(Route.ResultHistory.createRoute(groupId)) }
             )
         }
 

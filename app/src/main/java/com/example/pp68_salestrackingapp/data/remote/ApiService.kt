@@ -11,35 +11,38 @@ import retrofit2.http.*
 interface ApiService {
 
     // ── User ─────────────────────────────────────────────────────
-    @GET("user")
+    // ✅ ตาราง "user" ไม่มีอยู่จริงใน schema — ตารางจริงคือ "employee" (emp_code/emp_name/emp_brch_code/emp_post/stat)
+    // ใช้ PostgREST column aliasing (select=alias:real_column) ให้ response ยังคืน key แบบเดิมที่ UserDto ใช้อยู่
+    @GET("employee")
     suspend fun getUserById(
-        @Query("user_id") userId: String,
-        @Query("select") select: String = "user_id,full_name,branch_id,role,email,phone_number",
+        @Query("emp_code") userId: String,
+        @Query("select") select: String = "user_id:emp_code,full_name:emp_name,branch_id:emp_brch_code,role:emp_post,phone_number",
         @Query("limit") limit: Int = 1
     ): Response<List<UserDto>>
 
-    @GET("user")
+    @GET("employee")
     suspend fun getUsersByIds(
-        @Query("user_id") userIds: String,
-        @Query("select") select: String = "user_id,full_name",
+        @Query("emp_code") userIds: String,
+        @Query("select") select: String = "user_id:emp_code,full_name:emp_name",
         @Query("limit") limit: Int = 1000
     ): Response<List<UserDto>>
 
-    @GET("user")
+    @GET("employee")
     suspend fun getUsersByBranch(
-        @Query("branch_id") branchId: String,
-        @Query("select") select: String = "user_id,full_name,role",
-        @Query("is_active") isActive: String? = null,
+        @Query("emp_brch_code") branchId: String,
+        @Query("select") select: String = "user_id:emp_code,full_name:emp_name,role:emp_post",
+        @Query("stat") isActive: String? = null,
         @Query("limit") limit: Int = 100
     ): Response<List<UserDto>>
 
-    @PATCH("user")
+    @PATCH("employee")
     @Headers("Prefer: return=representation", "Content-Profile: public")
-    suspend fun updateFcmToken(@Query("user_id") userId: String, @Body updates: Map<String, String>): Response<List<UserDto>>
+    suspend fun updateFcmToken(@Query("emp_code") userId: String, @Body updates: Map<String, String>): Response<List<UserDto>>
 
-    @PATCH("user")
+    // ⚠️ body ต้องใช้ชื่อ column จริง (เช่น "emp_name" ไม่ใช่ "full_name") เพราะ PATCH เขียนตรงเข้าคอลัมน์ ไม่รองรับ alias เหมือน select
+    @PATCH("employee")
     @Headers("Prefer: return=representation", "Content-Profile: public")
-    suspend fun updateUserProfile(@Query("user_id") userId: String, @Body updates: Map<String, String>): Response<List<UserDto>>
+    suspend fun updateUserProfile(@Query("emp_code") userId: String, @Body updates: Map<String, String>): Response<List<UserDto>>
 
     @POST("project_sales_member")
     @Headers("Prefer: return=representation", "Content-Profile: public")
@@ -295,13 +298,51 @@ interface ApiService {
     suspend fun upsertActivityResult(@Body result: @JvmSuppressWildcards Map<String, Any?>): Response<List<ActivityResult>>
 
     @GET("activity_result")
-    suspend fun getActivityResult(@Query("appointment_id") appointmentId: String, @Query("limit") limit: Int = 1): Response<List<ActivityResult>>
+    suspend fun getActivityResult(
+        @Query("appointment_id") appointmentId: String,
+        @Query("is_latest") isLatest: String = "eq.true",
+        @Query("limit") limit: Int = 1
+    ): Response<List<ActivityResult>>
+
+    // ✅ ใช้ตอน mark version เก่าว่าไม่ใช่ล่าสุดแล้ว (result_group_id ผูก version เดียวกันเข้าด้วยกัน)
+    @PATCH("activity_result")
+    @Headers("Prefer: return=minimal", "Content-Profile: public")
+    suspend fun updateActivityResult(@Query("result_id") resultId: String, @Body updates: @JvmSuppressWildcards Map<String, Any?>): Response<Unit>
 
     @GET("activity_result")
     suspend fun getResultsByUser(@Query("created_by") userId: String, @Query("limit") limit: Int = 1000): Response<List<ActivityResult>>
 
     @GET("activity_result")
     suspend fun getResultById(@Query("result_id") resultId: String, @Query("limit") limit: Int = 1): Response<List<ActivityResult>>
+
+    // ── Activity Result Photo (รองรับหลายรูปต่อบันทึกผลการขาย) ────
+    @GET("activity_result_photo")
+    suspend fun getResultPhotos(
+        @Query("result_id") resultId: String,
+        @Query("order") order: String = "photo_order.asc",
+        @Query("limit") limit: Int = 20
+    ): Response<List<ActivityResultPhoto>>
+
+    @POST("activity_result_photo")
+    @Headers("Prefer: return=representation", "Content-Profile: public")
+    suspend fun addResultPhotos(@Body photos: List<ActivityResultPhoto>): Response<List<ActivityResultPhoto>>
+
+    @DELETE("activity_result_photo")
+    suspend fun deleteResultPhotos(@Query("result_id") resultId: String): Response<Unit>
+
+    // ── Appointment Contact ───────────────────────────────────────
+    @GET("appointment_contact")
+    suspend fun getAppointmentContacts(
+        @Query("appointment_id") appointmentId: String,
+        @Query("limit") limit: Int = 100
+    ): Response<List<AppointmentContact>>
+
+    @POST("appointment_contact")
+    @Headers("Content-Profile: public")
+    suspend fun addAppointmentContacts(@Body contacts: List<AppointmentContact>): Response<Unit>
+
+    @DELETE("appointment_contact")
+    suspend fun deleteAppointmentContacts(@Query("appointment_id") appointmentId: String): Response<Unit>
 
     // ── Checklist ────────────────────────────────────────────────
     @GET("appointment_checklist")
@@ -318,6 +359,9 @@ interface ApiService {
         @Query("master_id") masterId: String,
         @Body updates: @JvmSuppressWildcards Map<String, Any>
     ): Response<List<ChecklistInsertDto>>
+
+    @DELETE("appointment_checklist")
+    suspend fun deleteChecklistByAppointment(@Query("appointment_id") appointmentId: String): Response<Unit>
 
     @POST("call_log")
     @Headers("Prefer: return=representation", "Content-Profile: public")

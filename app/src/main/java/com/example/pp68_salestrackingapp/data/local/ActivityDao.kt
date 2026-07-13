@@ -40,10 +40,13 @@ interface ActivityDao {
     @Query("DELETE FROM activity_table")
     suspend fun deleteAll()
 
+    @Query("DELETE FROM activity_table WHERE is_synced = 1")
+    suspend fun deleteAllSynced()
+
     @Transaction
     suspend fun clearAndInsert(activities: List<SalesActivity>) {
-        deleteAll()
-        insertAll(activities)
+        deleteAllSynced()
+        if (activities.isNotEmpty()) insertAll(activities)
     }
 
     @Query("DELETE FROM activity_table WHERE appointment_id = :activityId")
@@ -60,4 +63,10 @@ interface ActivityDao {
 
     @Query("UPDATE activity_table SET is_synced = :isSynced WHERE appointment_id = :activityId")
     suspend fun updateSyncStatus(activityId: String, isSynced: Boolean)
+
+    @Query("UPDATE activity_table SET cust_id = :newCustId WHERE cust_id = :oldCustId")
+    suspend fun updateCustIdForActivities(oldCustId: String, newCustId: String)
+
+    @Query("UPDATE activity_table SET project_id = :newProjectId WHERE project_id = :oldProjectId")
+    suspend fun updateProjectIdForActivities(oldProjectId: String, newProjectId: String)
 }

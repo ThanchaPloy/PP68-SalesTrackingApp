@@ -113,7 +113,7 @@ class ProductRepository @Inject constructor(
                 val resp = apiService.getProductBrands()
                 if (resp.isSuccessful)
                     Result.success(
-                        resp.body()!!
+                        (resp.body() ?: emptyList())
                             .filter { it.name.isNotBlank() }
                             .map { it.code to it.name }
                             .sortedBy { it.second }

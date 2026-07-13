@@ -9,7 +9,6 @@ import com.example.pp68_salestrackingapp.data.repository.ProjectRepository
 import com.example.pp68_salestrackingapp.data.model.ActivityMaster
 import com.example.pp68_salestrackingapp.data.model.SalesActivity
 import com.example.pp68_salestrackingapp.data.model.ActivityPlanItem
-import com.example.pp68_salestrackingapp.data.remote.ApiService
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -26,6 +25,7 @@ data class CreateAppointmentUiState(
     val selectedProjectId:   String? = null,
     val selectedProjectName: String? = null,
     val selectedCustomerId:  String? = null,
+    val selectedCompanyName: String? = null,
     val titleTopic:          String  = "",
     val activityType:        String  = "onsite",
     val plannedDate:         String? = null,
@@ -44,6 +44,7 @@ data class CreateAppointmentUiState(
     val allContactOptions: List<ContactOption> = emptyList(), // สำหรับค้นหาทั้งหมด
     val masterOptions:   List<ActivityMaster>  = emptyList(),
     val allMasterOptions:  List<ActivityMaster> = emptyList(),
+    val companyOptions:  List<Pair<String, String>> = emptyList(), // custId to companyName สำหรับค้นหาบริษัท (กรณีไม่เลือกโครงการ)
 
     val contactSearchQuery: String = "",
 
@@ -51,6 +52,7 @@ data class CreateAppointmentUiState(
     val isLoadingProjects: Boolean = false,
     val isLoadingContacts: Boolean = false,
     val isLoadingMasters:  Boolean = false,
+    val isLoadingCompanies: Boolean = false,
     val isSaved:           Boolean = false,
 
     val projectError: String? = null,
@@ -68,6 +70,7 @@ sealed class CreateAppointmentEvent {
     data class LoadActivity(val activityId: String)         : CreateAppointmentEvent()
     data class LoadInitialProject(val projectId: String)    : CreateAppointmentEvent()
     data class ProjectSelected(val id: String?, val name: String?, val status: String?) : CreateAppointmentEvent()
+    data class CompanySelected(val id: String, val name: String) : CreateAppointmentEvent()
     data class TitleChanged(val value: String)              : CreateAppointmentEvent()
     data class TypeChanged(val value: String)               : CreateAppointmentEvent()
     data class ContactToggled(val id: String)               : CreateAppointmentEvent()
@@ -90,8 +93,7 @@ class CreateAppointmentViewModel @Inject constructor(
     private val activityRepo: ActivityRepository,
     private val projectRepo:  ProjectRepository,
     private val customerRepo: CustomerRepository,
-    private val authRepo:     AuthRepository,
-    private val apiService:   ApiService
+    private val authRepo:     AuthRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(CreateAppointmentUiState())
@@ -101,19 +103,33 @@ class CreateAppointmentViewModel @Inject constructor(
         loadProjects()
         loadMasterObjectives()
         loadAllContacts()
+        loadAllCompanies()
+    }
+
+    private fun loadAllCompanies() {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoadingCompanies = true) }
+            customerRepo.getCustomers().onSuccess { customers ->
+                _uiState.update {
+                    it.copy(
+                        companyOptions    = customers.map { c -> c.custId to c.companyName },
+                        isLoadingCompanies = false
+                    )
+                }
+            }.onFailure {
+                _uiState.update { it.copy(isLoadingCompanies = false) }
+            }
+        }
     }
 
     private fun loadAllContacts() {
         viewModelScope.launch {
-            try {
-                val resp = apiService.getContactPersons()
-                if (resp.isSuccessful) {
-                    val options = resp.body()?.map {
-                        ContactOption(it.contactId, it.fullName ?: it.contactId)
-                    } ?: emptyList()
-                    _uiState.update { it.copy(allContactOptions = options) }
+            customerRepo.getAllContacts().collect { contacts ->
+                val options = contacts.map {
+                    ContactOption(it.contactId, it.fullName ?: it.nickname ?: it.contactId)
                 }
-            } catch (e: Exception) { /* offline — contacts stay empty */ }
+                _uiState.update { it.copy(allContactOptions = options) }
+            }
         }
     }
 
@@ -200,6 +216,9 @@ class CreateAppointmentViewModel @Inject constructor(
                 val status  = project.projectStatus ?: ""
 
                 _uiState.update { it.copy(selectedCustomerId = custId) }
+                customerRepo.getCustomerById(custId).onSuccess { c ->
+                    _uiState.update { it.copy(selectedCompanyName = c.companyName) }
+                }
 
                 val category = getCategoryForProjectStatus(status)
                 val filtered = if (category != null) {
@@ -279,6 +298,11 @@ class CreateAppointmentViewModel @Inject constructor(
                             masterOptions = state.allMasterOptions
                         )
                     }
+                    activity.customerId?.let { custId ->
+                        customerRepo.getCustomerById(custId).onSuccess { c ->
+                            _uiState.update { it.copy(selectedCompanyName = c.companyName) }
+                        }
+                    }
                 }
             }
         }
@@ -338,7 +362,9 @@ class CreateAppointmentViewModel @Inject constructor(
                            projectError = null,
                            contactOptions = it.allContactOptions,
                            masterOptions = it.allMasterOptions,
-                           selectedContactIds = emptySet()
+                           selectedContactIds = emptySet(),
+                           selectedCustomerId = null,
+                           selectedCompanyName = null
                        )
                    }
                 } else {
@@ -354,6 +380,15 @@ class CreateAppointmentViewModel @Inject constructor(
                     }
                     loadContactsForProject(event.id)
                     filterMastersByProjectStatus(event.status ?: "")
+                }
+            }
+
+            is CreateAppointmentEvent.CompanySelected -> {
+                _uiState.update {
+                    it.copy(
+                        selectedCustomerId  = event.id.ifBlank { null },
+                        selectedCompanyName = event.name.ifBlank { null }
+                    )
                 }
             }
 
@@ -424,7 +459,29 @@ class CreateAppointmentViewModel @Inject constructor(
         }
     }
 
+    // ✅ บังคับกรอกแค่หัวข้อ + วันเวลานัด (ประเภทกิจกรรมมีค่า default อยู่แล้วไม่มีทางว่าง)
+    // ส่วนโครงการ/บริษัท/ผู้ติดต่อ เป็น optional ทั้งหมด ไม่ใส่ก็เซฟได้
+    private fun validate(): Boolean {
+        val s = _uiState.value
+        return when {
+            s.titleTopic.isBlank() -> {
+                _uiState.update { it.copy(saveError = "กรุณากรอกหัวข้อกิจกรรม") }
+                false
+            }
+            s.plannedDate.isNullOrBlank() -> {
+                _uiState.update { it.copy(saveError = "กรุณาเลือกวันที่นัดหมาย") }
+                false
+            }
+            s.startTime.isNullOrBlank() -> {
+                _uiState.update { it.copy(saveError = "กรุณาเลือกเวลานัดหมาย") }
+                false
+            }
+            else -> true
+        }
+    }
+
     private fun save() {
+        if (!validate()) return
         val s = _uiState.value
 
         viewModelScope.launch {
@@ -447,11 +504,6 @@ class CreateAppointmentViewModel @Inject constructor(
                 customerRepo.getAllContacts().first().find { it.contactId == contactId }?.let {
                     customerId = it.custId
                 }
-            }
-
-            if (customerId == null && s.selectedProjectId != null) {
-                _uiState.update { it.copy(isLoading = false, saveError = "ไม่พบข้อมูลลูกค้า") }
-                return@launch
             }
 
             val isEditMode = s.activityId != null
@@ -482,15 +534,17 @@ class CreateAppointmentViewModel @Inject constructor(
             if (isEditMode) {
                 val appointmentId = s.activityId!!
                 val updates = mutableMapOf<String, Any>(
-                    "type"             to s.activityType,
-                    "planned_date"     to isoDate,
-                    "topic"            to s.titleTopic,
-                    "planned_time"     to (formatTimeToDb(s.startTime) ?: ""),
-                    "planned_end_time" to (formatTimeToDb(s.endTime) ?: ""),
-                    "planned_lat"      to (s.lat ?: 0.0),
-                    "planned_long"     to (s.lng ?: 0.0),
-                    "is_appointment"   to s.selectedContactIds.isNotEmpty()
+                    "type"           to s.activityType,
+                    "planned_date"   to isoDate,
+                    "topic"          to s.titleTopic,
+                    "is_appointment" to s.selectedContactIds.isNotEmpty()
                 )
+                s.startTime?.let { updates["planned_time"]     = formatTimeToDb(it) ?: it }
+                s.endTime?.let   { updates["planned_end_time"] = formatTimeToDb(it) ?: it }
+                s.lat?.let       { updates["planned_lat"]      = it }
+                s.lng?.let       { updates["planned_long"]     = it }
+                s.selectedProjectId?.let  { updates["project_code"] = it }
+                s.selectedCustomerId?.let { updates["cust_code"]    = it }
                 activityRepo.updateActivity(appointmentId, updates)
                 finalId = appointmentId
             } else {

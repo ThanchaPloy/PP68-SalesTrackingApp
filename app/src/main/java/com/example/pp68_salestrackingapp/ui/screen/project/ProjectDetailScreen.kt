@@ -309,6 +309,36 @@ fun ProjectDetailContent(
                     Spacer(Modifier.height(16.dp))
                 }
 
+                // ── 3b. Project Contacts ────────────────────────
+                item {
+                    SectionHeader(
+                        icon  = Icons.Default.Contacts,
+                        title = "ผู้ติดต่อในโครงการ",
+                        sub   = null
+                    )
+                }
+                if (s.isLoadingContacts) {
+                    item {
+                        Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {
+                            CircularProgressIndicator(color = RedPrimary, modifier = Modifier.size(24.dp))
+                        }
+                    }
+                } else if (s.projectContacts.isEmpty()) {
+                    item {
+                        EmptySection("ยังไม่มีผู้ติดต่อในโครงการนี้",
+                            modifier = Modifier.padding(horizontal = 16.dp))
+                    }
+                } else {
+                    items(s.projectContacts) { contact ->
+                        ProjectContactRow(
+                            contact = contact,
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
+                        )
+                    }
+                }
+
+                item { Spacer(Modifier.height(16.dp)) }
+
                 // ── 4. History ──────────────────────────────────
                 item {
                     SectionHeader(
@@ -760,9 +790,56 @@ private fun HistoryCard(item: HistoryItem, onClick: () -> Unit, onFinish: () -> 
 }
 
 @Composable
+private fun ProjectContactRow(contact: com.example.pp68_salestrackingapp.data.model.ContactPerson, modifier: Modifier = Modifier) {
+    Surface(
+        color = White,
+        shape = RoundedCornerShape(12.dp),
+        border = androidx.compose.foundation.BorderStroke(1.dp, BorderGray),
+        modifier = modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier.padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier.size(36.dp).clip(CircleShape).background(BlueBtn),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    (contact.fullName ?: contact.nickname ?: "?").take(1).uppercase(),
+                    color = White, fontWeight = FontWeight.Bold, fontSize = 14.sp
+                )
+            }
+            Spacer(Modifier.width(12.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    contact.fullName ?: contact.nickname ?: "ไม่ระบุชื่อ",
+                    fontWeight = FontWeight.Medium, fontSize = 14.sp, color = TextDark,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis
+                )
+                val subtitle = listOfNotNull(contact.position, contact.phoneNumber)
+                    .joinToString(" · ")
+                if (subtitle.isNotBlank()) {
+                    Text(subtitle, fontSize = 12.sp, color = TextGray, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+            }
+            if (contact.isDmConfirmed == true) {
+                Surface(color = Color(0xFFE8F5E9), shape = RoundedCornerShape(8.dp)) {
+                    Text(
+                        "DM", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color(0xFF2E7D32),
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
 private fun SalesTeamRow(members: List<TeamMember>) {
     Row(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+        verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy((-8).dp)
     ) {
         members.take(5).forEachIndexed { idx, member ->
@@ -782,9 +859,21 @@ private fun SalesTeamRow(members: List<TeamMember>) {
             ) { Text("+${members.size - 5}", fontSize = 12.sp, color = TextDark) }
         }
         Spacer(Modifier.width(16.dp))
-        Column(verticalArrangement = Arrangement.Center, modifier = Modifier.height(40.dp)) {
-            Text("${members.size} สมาชิก", fontWeight = FontWeight.Bold, fontSize = 14.sp)
-            Text("ได้รับมอบหมายในโครงการนี้", fontSize = 11.sp, color = TextGray)
+        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(
+                "${members.size} สมาชิก",
+                fontWeight = FontWeight.Bold,
+                fontSize = 14.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                "ได้รับมอบหมายในโครงการนี้",
+                fontSize = 11.sp,
+                color = TextGray,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
         }
     }
 }

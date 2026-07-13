@@ -60,4 +60,7 @@ sealed class Route(val path: String) {
     object StandaloneSalesResult : Route("standalone_sales_result/{projectId}") {
         fun createRoute(projectId: String) = "standalone_sales_result/$projectId"
     }
+    object ResultHistory : Route("result_history/{resultGroupId}") {
+        fun createRoute(resultGroupId: String) = "result_history/$resultGroupId"
+    }
 }

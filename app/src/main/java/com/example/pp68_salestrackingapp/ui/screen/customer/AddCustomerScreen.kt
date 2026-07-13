@@ -132,12 +132,7 @@ fun AddCustomerContent(
                 FormTextField(
                     value         = uiState.address,
                     onValueChange = { onEvent(AddCustomerEvent.AddressChanged(it)) },
-                    placeholder   = "กรอกที่อยู่",
-                    trailingIcon  = {
-                        IconButton(onClick = { onEvent(AddCustomerEvent.UseCurrentLocation) }) {
-                            Icon(Icons.Default.LocationOn, null, tint = AppColors.Primary)
-                        }
-                    }
+                    placeholder   = "กรอกที่อยู่"
                 )
             }
 
@@ -239,7 +234,7 @@ fun AddCustomerContent(
                         color = Color.White, modifier = Modifier.size(20.dp), strokeWidth = 2.dp
                     )
                 } else {
-                    Text(if (uiState.custId != null) "อัปเดตข้อมูลลูกค้า" else "บันทึกข้อมูลลูกค้า", fontSize = 16.sp,
+                    Text(if (uiState.custId != null) "บันทึกการเปลี่ยนแปลงลูกค้า" else "บันทึกข้อมูลลูกค้า", fontSize = 16.sp,
                         fontWeight = FontWeight.Bold, color = Color.White)
                 }
             }

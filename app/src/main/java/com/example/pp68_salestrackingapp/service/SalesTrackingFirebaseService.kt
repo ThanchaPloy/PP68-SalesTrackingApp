@@ -1,16 +1,15 @@
 package com.example.pp68_salestrackingapp.service
 
-import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
-import android.os.Build
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.example.pp68_salestrackingapp.MainActivity
 import com.example.pp68_salestrackingapp.R
 import com.example.pp68_salestrackingapp.di.TokenManager
+import com.example.pp68_salestrackingapp.utils.NotificationChannels
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
 import dagger.hilt.android.AndroidEntryPoint
@@ -73,8 +72,8 @@ class SalesTrackingFirebaseService : FirebaseMessagingService() {
     }
 
     private fun showNotification(title: String, body: String, activityId: String?) {
-        val channelId = "sales_tracking_channel"
-        
+        val channelId = NotificationChannels.SALES_TRACKING_CHANNEL_ID
+
         // ตรวจสอบว่ามีข้อมูลครบถ้วนสำหรับการสร้าง Notification หรือไม่
         if (title.isBlank() && body.isBlank()) {
             Log.w("FCM", "Title และ Body ว่างเปล่า ไม่สร้าง Notification")
@@ -85,27 +84,15 @@ class SalesTrackingFirebaseService : FirebaseMessagingService() {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
             activityId?.let { putExtra("activity_id", it) }
         }
-        
+
         val pendingIntent = PendingIntent.getActivity(
             this, System.currentTimeMillis().toInt(), intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
-        
+
         val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
-                channelId,
-                "Sales Tracking Notifications",
-                NotificationManager.IMPORTANCE_HIGH
-            ).apply {
-                description = "แจ้งเตือนการนัดหมายและรายงาน"
-                enableVibration(true)
-                lockscreenVisibility = android.app.Notification.VISIBILITY_PUBLIC
-            }
-            manager.createNotificationChannel(channel)
-        }
-        
+        NotificationChannels.ensureCreated(this)
+
         val notification = NotificationCompat.Builder(this, channelId)
             .setSmallIcon(R.mipmap.ic_launcher) 
             .setContentTitle(title)

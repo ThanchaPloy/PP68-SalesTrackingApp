@@ -3,6 +3,7 @@ package com.example.pp68_salestrackingapp
 import android.app.Application
 import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
+import com.example.pp68_salestrackingapp.utils.NotificationChannels
 import dagger.hilt.android.HiltAndroidApp
 import javax.inject.Inject
 
@@ -16,4 +17,9 @@ class SalesTrackingApplication : Application(), Configuration.Provider {
         get() = Configuration.Builder()
             .setWorkerFactory(workerFactory)
             .build()
+
+    override fun onCreate() {
+        super.onCreate()
+        NotificationChannels.ensureCreated(this)
+    }
 }

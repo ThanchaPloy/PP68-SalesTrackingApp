@@ -1,5 +1,6 @@
 package com.example.pp68_salestrackingapp.data.repository
 
+import com.example.pp68_salestrackingapp.data.local.ContactDao
 import com.example.pp68_salestrackingapp.data.local.ProjectContactDao
 import com.example.pp68_salestrackingapp.data.local.ProjectDao
 import com.example.pp68_salestrackingapp.data.local.ProjectSalesMemberDao
@@ -25,6 +26,7 @@ class ProjectRepository @Inject constructor(
     private val projectDao: ProjectDao,
     private val projectContactDao: ProjectContactDao,
     private val projectSalesMemberDao: ProjectSalesMemberDao,
+    private val contactDao: ContactDao,
     private val firebaseService: FirebaseRealtimeService,
     private val syncManager: SyncManager
 ) {
@@ -105,7 +107,13 @@ class ProjectRepository @Inject constructor(
                         projectDao.updateSyncStatus(tempId, true)
                         tempProject
                     }
-                    apiService.addProjectMembers(listOf(ProjectMemberInsertDto(finalProject.projectId, userId, "owner")))
+                    try {
+                        apiService.addProjectMembers(listOf(ProjectMemberInsertDto(finalProject.projectId, userId, "owner")))
+                    } catch (e: Exception) {
+                        // ✅ โครงการสร้างสำเร็จแล้ว — ห้ามให้ error ตรงนี้ไปเปลี่ยนผลลัพธ์เป็น tempProject (id เก่าที่ถูกลบไปแล้ว)
+                        Log.e("ProjectRepo", "addProjectMembers (owner) failed for ${finalProject.projectId}: ${e.message}")
+                        syncManager.scheduleSync()
+                    }
                     Result.success(finalProject)
                 } else {
                     val err = response.errorBody()?.string()
@@ -126,6 +134,8 @@ class ProjectRepository @Inject constructor(
             projectDao.insertProject(localProject)
             try {
                 val updates = mutableMapOf<String, Any?>(
+                    "customer_code" to project.custId,
+                    "customer_name" to project.customerName,
                     "project_name" to project.projectName,
                     "project_status" to project.projectStatus,
                     "expected_value" to project.expectedValue,
@@ -137,7 +147,7 @@ class ProjectRepository @Inject constructor(
                     "closing_date" to project.closingDate,
                     "progress_pct" to project.progressPct,
                     "updated_at" to java.time.Instant.now().toString()
-                )
+                ).filterValues { it != null }.toMutableMap()
                 project.projectLat?.let { updates["project_lat"] = it }
                 project.projectLong?.let { updates["project_long"] = it }
 
@@ -218,9 +228,9 @@ class ProjectRepository @Inject constructor(
                     if (rows.isNotEmpty()) projectContactDao.insertAll(rows)
                 }
             } catch (_: Exception) { /* offline */ }
-            // อ่านจาก Room เสมอ
+            // อ่านจาก Room เสมอ — ดึงรายละเอียดผู้ติดต่อเต็มๆ ไม่ใช่แค่ id
             val ids = projectContactDao.getContactIdsByProject(projectId)
-            Result.success(ids.map { ContactPerson(contactId = it, custId = "") })
+            Result.success(ids.mapNotNull { contactDao.getContactById(it) })
         }
     }
 

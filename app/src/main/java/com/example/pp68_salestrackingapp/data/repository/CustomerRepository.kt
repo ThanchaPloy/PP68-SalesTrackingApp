@@ -48,29 +48,38 @@ class CustomerRepository @Inject constructor(
                 val empType = tokenManager.getEmpType()
                 val branchSuffix = branchId.takeLast(2)
 
-                val empCodes: List<String> = if (empType == "Project") {
-                    val resp = apiService.getProjectEmployeeCodes()
-                    resp.body()?.mapNotNull { it["emp_code"] }?.filter { it.isNotBlank() } ?: emptyList()
+                val empCodesResp = if (empType == "Project") {
+                    apiService.getProjectEmployeeCodes()
                 } else {
-                    val resp = apiService.getEmployeeCodesByBranch(branchCode = "eq.$branchId")
-                    resp.body()?.mapNotNull { it["emp_code"] }?.filter { it.isNotBlank() } ?: emptyList()
+                    apiService.getEmployeeCodesByBranch(branchCode = "eq.$branchId")
                 }
+                if (!empCodesResp.isSuccessful) {
+                    return@withContext kotlin.Result.failure(Exception("API error: ${empCodesResp.code()}"))
+                }
+                val empCodes = empCodesResp.body()?.mapNotNull { it["emp_code"] }?.filter { it.isNotBlank() } ?: emptyList()
 
                 val customers = mutableListOf<Customer>()
                 if (empCodes.isNotEmpty()) {
                     val codesParam = "in.(${empCodes.joinToString(",")})"
                     val custResp = apiService.getCustomersBySalespersonCodes(codes = codesParam)
+                    if (!custResp.isSuccessful) {
+                        return@withContext kotlin.Result.failure(Exception("API error: ${custResp.code()}"))
+                    }
                     customers.addAll(custResp.body() ?: emptyList())
                 }
 
                 val fallbackResp = apiService.getCustomersWithEmptySalesperson()
+                if (!fallbackResp.isSuccessful) {
+                    return@withContext kotlin.Result.failure(Exception("API error: ${fallbackResp.code()}"))
+                }
                 val fallback = fallbackResp.body()
                     ?.filter { it.custId.takeLast(2).equals(branchSuffix, ignoreCase = true) }
                     ?: emptyList()
                 customers.addAll(fallback)
 
                 val deduped = customers.distinctBy { it.custId }.map { it.copy(isSynced = true) }
-                customerDao.clearAndInsert(deduped)
+                // ✅ อย่าล้างข้อมูลลูกค้าในเครื่องถ้าผลลัพธ์ว่างเปล่า — ป้องกันข้อมูลถูกลบเงียบๆ เมื่อ response ว่างผิดปกติ
+                if (deduped.isNotEmpty()) customerDao.clearAndInsert(deduped)
                 kotlin.Result.success(Unit)
             } catch (e: IOException) {
                 kotlin.Result.success(Unit) // offline — Room data still valid
@@ -168,7 +177,10 @@ class CustomerRepository @Inject constructor(
                 val updates = buildMap<String, Any?> {
                     put("customer_name", customer.companyName)
                     put("gen_bus_posting_group", customer.branchId)
+                    put("cust_type", customer.custType)
                     put("address", customer.companyAddr)
+                    put("company_lat", customer.companyLat)
+                    put("company_long", customer.companyLong)
                     put("customer_status", customer.companyStatus)
                     put("create_date", customer.createdAt)
                     put("salesperson_code", customer.createdBy)

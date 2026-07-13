@@ -17,9 +17,10 @@ import com.example.pp68_salestrackingapp.data.model.*
         ActivityResult::class,
         ProjectContact::class,
         AppointmentContact::class,
-        ProjectSalesMember::class
+        ProjectSalesMember::class,
+        ActivityResultPhoto::class
     ],
-    version = 41,
+    version = 44,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -34,6 +35,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun appointmentContactDao(): AppointmentContactDao
     abstract fun projectContactDao(): ProjectContactDao
     abstract fun projectSalesMemberDao(): ProjectSalesMemberDao
+    abstract fun activityResultPhotoDao(): ActivityResultPhotoDao
 
     fun clearAllData() {
         this.clearAllTables()
@@ -211,6 +213,77 @@ abstract class AppDatabase : RoomDatabase() {
                 """.trimIndent())
                 db.execSQL("CREATE INDEX IF NOT EXISTS `index_appointment_contact_appointment_id` ON `appointment_contact`(`appointment_id`)")
                 db.execSQL("CREATE INDEX IF NOT EXISTS `index_appointment_contact_contact_id` ON `appointment_contact`(`contact_id`)")
+            }
+        }
+
+        val MIGRATION_41_42 = object : Migration(41, 42) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                // ✅ cust_id ต้องรองรับ null เพราะบางนัดหมายจากเซิร์ฟเวอร์ไม่ผูกกับลูกค้า
+                db.execSQL("""
+                    CREATE TABLE activity_table_new (
+                        appointment_id TEXT NOT NULL PRIMARY KEY,
+                        user_id TEXT NOT NULL,
+                        cust_id TEXT,
+                        project_id TEXT,
+                        type TEXT NOT NULL,
+                        is_appointment INTEGER NOT NULL,
+                        topic TEXT,
+                        planned_date TEXT NOT NULL,
+                        planned_time TEXT,
+                        planned_end_time TEXT,
+                        planned_lat REAL,
+                        planned_long REAL,
+                        check_in_time TEXT,
+                        check_in_lat REAL,
+                        check_in_long REAL,
+                        distance_deviation REAL,
+                        is_location_verified INTEGER NOT NULL,
+                        plan_status TEXT NOT NULL,
+                        note TEXT,
+                        created_at TEXT,
+                        project_name TEXT,
+                        company_name TEXT,
+                        contact_name TEXT,
+                        weekly_note TEXT,
+                        is_synced INTEGER NOT NULL DEFAULT 1
+                    )
+                """.trimIndent())
+                db.execSQL("""
+                    INSERT INTO activity_table_new SELECT
+                        appointment_id, user_id, cust_id, project_id, type, is_appointment, topic,
+                        planned_date, planned_time, planned_end_time, planned_lat, planned_long,
+                        check_in_time, check_in_lat, check_in_long, distance_deviation, is_location_verified,
+                        plan_status, note, created_at, project_name, company_name, contact_name, weekly_note, is_synced
+                    FROM activity_table
+                """.trimIndent())
+                db.execSQL("DROP TABLE activity_table")
+                db.execSQL("ALTER TABLE activity_table_new RENAME TO activity_table")
+            }
+        }
+
+        val MIGRATION_42_43 = object : Migration(42, 43) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                // ✅ รองรับ version history ของบันทึกผลการขาย
+                db.execSQL("ALTER TABLE activity_result ADD COLUMN version INTEGER NOT NULL DEFAULT 1")
+                db.execSQL("ALTER TABLE activity_result ADD COLUMN is_latest INTEGER NOT NULL DEFAULT 1")
+                db.execSQL("ALTER TABLE activity_result ADD COLUMN result_group_id TEXT")
+                db.execSQL("UPDATE activity_result SET result_group_id = result_id WHERE result_group_id IS NULL")
+            }
+        }
+
+        val MIGRATION_43_44 = object : Migration(43, 44) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                // ✅ รองรับหลายรูปต่อบันทึกผลการขาย (สูงสุด 5 รูป)
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS `activity_result_photo` (
+                        `result_id` TEXT NOT NULL,
+                        `photo_order` INTEGER NOT NULL,
+                        `photo_url` TEXT NOT NULL,
+                        PRIMARY KEY(`result_id`, `photo_order`),
+                        FOREIGN KEY(`result_id`) REFERENCES `activity_result`(`result_id`) ON DELETE CASCADE
+                    )
+                """.trimIndent())
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_activity_result_photo_result_id` ON `activity_result_photo`(`result_id`)")
             }
         }
     }

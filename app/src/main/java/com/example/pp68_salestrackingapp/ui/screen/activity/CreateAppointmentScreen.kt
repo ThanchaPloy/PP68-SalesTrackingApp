@@ -77,7 +77,7 @@ fun CreateAppointmentScreen(
                         fontWeight = FontWeight.SemiBold, fontSize = 17.sp, color = TextDark)
                     Spacer(Modifier.weight(1f))
                     TextButton(onClick = { onEvent(CreateAppointmentEvent.Save) }) {
-                        Text("Save", color = RedPrimary,
+                        Text(if (activityId == null) "บันทึก" else "บันทึกการเปลี่ยนแปลง", color = RedPrimary,
                             fontWeight = FontWeight.Bold, fontSize = 15.sp)
                     }
                 }
@@ -93,6 +93,15 @@ fun CreateAppointmentScreen(
                 .padding(horizontal = 20.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
+
+            FormField(label = "หัวข้อกิจกรรม", required = true) {
+                FormTextField(
+                    value         = state.titleTopic,
+                    onValueChange = { onEvent(CreateAppointmentEvent.TitleChanged(it)) },
+                    placeholder   = "ระบุหัวข้อกิจกรรม",
+                    leadingIcon   = Icons.AutoMirrored.Filled.Label
+                )
+            }
 
             FormField(label = "เลือกโครงการ (ไม่ระบุได้)") {
                 val options = state.projectOptions.map { it.name }.toMutableList()
@@ -119,13 +128,30 @@ fun CreateAppointmentScreen(
                 )
             }
 
-            FormField(label = "หัวข้อกิจกรรม") {
-                FormTextField(
-                    value         = state.titleTopic,
-                    onValueChange = { onEvent(CreateAppointmentEvent.TitleChanged(it)) },
-                    placeholder   = "ระบุหัวข้อกิจกรรม",
-                    leadingIcon   = Icons.AutoMirrored.Filled.Label
-                )
+            FormField(label = "บริษัท") {
+                if (state.selectedProjectId != null) {
+                    FormTextField(
+                        value         = state.selectedCompanyName ?: "",
+                        onValueChange = {},
+                        placeholder   = "กำลังโหลด...",
+                        leadingIcon   = Icons.Default.Business,
+                        readOnly      = true
+                    )
+                } else if (state.isLoadingCompanies) {
+                    CircularProgressIndicator(color = RedPrimary, modifier = Modifier.size(24.dp))
+                } else {
+                    SearchableDropdownField(
+                        value       = state.selectedCompanyName ?: "",
+                        placeholder = "ค้นหาชื่อบริษัท...",
+                        options     = state.companyOptions.map { it.second },
+                        onSelect    = { name ->
+                            state.companyOptions.firstOrNull { it.second == name }?.let { (id, n) ->
+                                onEvent(CreateAppointmentEvent.CompanySelected(id, n))
+                            }
+                        },
+                        onClear     = { onEvent(CreateAppointmentEvent.CompanySelected("", "")) }
+                    )
+                }
             }
 
             FormField(label = "ผู้ติดต่อ") {
@@ -139,12 +165,13 @@ fun CreateAppointmentScreen(
                             leadingIcon = Icons.Default.Search
                         )
                         
+                        // ✅ ไม่โชว์รายชื่อทั้งหมดจากฐานข้อมูล ต้องพิมพ์ค้นหาก่อนถึงจะขึ้น (ยกเว้นชื่อที่เลือกไว้แล้ว)
                         val filteredContacts = if (state.contactSearchQuery.isBlank()) {
-                            state.allContactOptions
+                            state.allContactOptions.filter { it.id in state.selectedContactIds }
                         } else {
                             state.allContactOptions.filter { it.name.contains(state.contactSearchQuery, ignoreCase = true) }
                         }
-                        
+
                         if (filteredContacts.isNotEmpty()) {
                             FlowRow(
                                 modifier = Modifier.fillMaxWidth(),
@@ -164,7 +191,7 @@ fun CreateAppointmentScreen(
                                     )
                                 }
                             }
-                        } else {
+                        } else if (state.contactSearchQuery.isNotBlank()) {
                             Text("ไม่พบรายชื่อผู้ติดต่อ", color = TextGray, fontSize = 12.sp)
                         }
                     }
@@ -220,7 +247,7 @@ fun CreateAppointmentScreen(
                 }
             }
 
-            FormField(label = "กำหนดการ") {
+            FormField(label = "กำหนดการ", required = true) {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     DatePickerField(
                         selectedDate   = state.plannedDate,
@@ -388,7 +415,7 @@ fun CreateAppointmentScreen(
                     Icon(if (activityId == null) Icons.Default.Add else Icons.Default.Save, null, tint = White,
                         modifier = Modifier.size(20.dp))
                     Spacer(Modifier.width(8.dp))
-                    Text(if (activityId == null) "สร้างการนัดหมาย" else "บันทึกการแก้ไข", fontSize = 16.sp,
+                    Text(if (activityId == null) "สร้างการนัดหมาย" else "บันทึกการเปลี่ยนแปลงแผนงาน", fontSize = 16.sp,
                         fontWeight = FontWeight.SemiBold, color = White)
                 }
             }

@@ -3,6 +3,7 @@ package com.example.pp68_salestrackingapp.ui.viewmodels.project
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.pp68_salestrackingapp.data.model.ContactPerson
 import com.example.pp68_salestrackingapp.data.model.Project
 import com.example.pp68_salestrackingapp.data.repository.ProjectRepository
 import com.example.pp68_salestrackingapp.data.repository.AuthRepository
@@ -49,6 +50,8 @@ data class ProjectDetailUiState(
     val companyName: String = "",
     val upcomingTasks: List<TaskItem> = emptyList(),
     val teamMembers: List<TeamMember> = emptyList(),
+    val projectContacts: List<ContactPerson> = emptyList(),
+    val isLoadingContacts: Boolean = false,
     val history: List<HistoryItem> = emptyList(),
     val error: String? = null,
     val deleteSuccess: Boolean = false
@@ -74,6 +77,21 @@ class ProjectDetailViewModel @Inject constructor(
             observeProject(id)
             observeActivities(id)
             syncProjectFromServer(id)
+            loadProjectContacts(id)
+        }
+    }
+
+    private fun loadProjectContacts(id: String) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoadingContacts = true) }
+            projectRepo.getProjectContacts(id).fold(
+                onSuccess = { contacts ->
+                    _uiState.update { it.copy(projectContacts = contacts, isLoadingContacts = false) }
+                },
+                onFailure = {
+                    _uiState.update { it.copy(isLoadingContacts = false) }
+                }
+            )
         }
     }
 
@@ -91,6 +109,7 @@ class ProjectDetailViewModel @Inject constructor(
                 .map { TeamMember(it.first, it.second) }
             _uiState.update { it.copy(teamMembers = members) }
         }
+        loadProjectContacts(id)
     }
 
     private fun observeProject(id: String) {

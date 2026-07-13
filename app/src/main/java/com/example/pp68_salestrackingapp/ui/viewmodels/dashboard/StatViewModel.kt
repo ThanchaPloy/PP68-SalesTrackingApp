@@ -141,7 +141,7 @@ class StatsViewModel @Inject constructor(
         }
 
         val weeklyNewProj = myProjects.count { p ->
-            isInRange(p.createdAt?.take(10), weekStart, weekEnd)
+            isInRange(p.startDate?.take(10), weekStart, weekEnd)
         }
 
         val weeklyVisit = activities.count { a ->
@@ -167,7 +167,7 @@ class StatsViewModel @Inject constructor(
         }
 
         val monthlyNewProj = myProjects.count { p ->
-            isInRange(p.createdAt?.take(10), monthStart, monthEnd)
+            isInRange(p.startDate?.take(10), monthStart, monthEnd)
         }
 
         val closingMonthCount = myProjects.count { p ->

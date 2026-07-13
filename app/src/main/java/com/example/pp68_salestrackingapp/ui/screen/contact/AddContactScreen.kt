@@ -295,7 +295,7 @@ fun AddContactContent(
                         color = White, modifier = Modifier.size(20.dp), strokeWidth = 2.dp
                     )
                 } else {
-                    Text(if (uiState.contactId != null) "อัปเดตข้อมูลผู้ติดต่อ" else "บันทึกข้อมูลผู้ติดต่อ", fontSize = 16.sp,
+                    Text(if (uiState.contactId != null) "บันทึกการเปลี่ยนแปลงผู้ติดต่อ" else "บันทึกข้อมูลผู้ติดต่อ", fontSize = 16.sp,
                         fontWeight = FontWeight.SemiBold, color = White)
                 }
             }

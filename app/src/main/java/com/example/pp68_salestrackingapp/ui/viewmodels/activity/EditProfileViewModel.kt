@@ -68,8 +68,9 @@ class EditProfileViewModel @Inject constructor(
                 }
                 val userId = user.userId
 
+                // ⚠️ ต้องใช้ชื่อ column จริงของตาราง employee ("emp_name") ไม่ใช่ "full_name"
                 val updates = mutableMapOf<String, String>(
-                    "full_name" to _uiState.value.fullName.trim()
+                    "emp_name" to _uiState.value.fullName.trim()
                 )
                 if (_uiState.value.phoneNumber.isNotBlank()) {
                     updates["phone_number"] = _uiState.value.phoneNumber.trim()

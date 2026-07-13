@@ -17,4 +17,7 @@ interface ActivityPlanItemDao {
 
     @Query("UPDATE activity_plan_item SET isDone = :isDone WHERE appointmentId = :appointmentId AND masterId = :masterId")
     suspend fun updateItemStatus(appointmentId: String, masterId: Int, isDone: Boolean)
+
+    @Query("UPDATE activity_plan_item SET appointmentId = :newId WHERE appointmentId = :oldId")
+    suspend fun updateAppointmentId(oldId: String, newId: String)
 }

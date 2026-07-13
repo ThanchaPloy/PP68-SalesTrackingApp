@@ -16,6 +16,7 @@ import retrofit2.converter.gson.GsonConverterFactory
 import java.util.concurrent.TimeUnit
 import javax.inject.Qualifier
 import javax.inject.Singleton
+import com.example.pp68_salestrackingapp.BuildConfig
 import com.example.pp68_salestrackingapp.data.remote.ApiService
 import com.example.pp68_salestrackingapp.data.remote.AuthService
 import com.example.pp68_salestrackingapp.data.remote.UploadApiService
@@ -37,9 +38,9 @@ annotation class LoginRetrofit
 @InstallIn(SingletonComponent::class)
 object NetworkModule {
 
-    private const val POSTGREST_URL = "https://postgrest-279493695905.asia-southeast1.run.app/"
-    private const val BASE_AUTH_URL = "https://pp68-backend-279493695905.asia-southeast1.run.app/"
-    private const val UPLOAD_URL    = "https://upload-visit-photo-279493695905.asia-southeast1.run.app/"
+    private val POSTGREST_URL = BuildConfig.POSTGREST_URL
+    private val BASE_AUTH_URL = BuildConfig.BASE_AUTH_URL
+    private val UPLOAD_URL    = BuildConfig.UPLOAD_URL
 
     // Only serialize fields that have @SerializedName — local-only Room fields (isSynced,
     // projectName, companyName, etc.) have no @SerializedName and must not reach PostgREST.
@@ -92,7 +93,8 @@ object NetworkModule {
     @Singleton
     fun provideOkHttpClient(authInterceptor: Interceptor): OkHttpClient {
         val logging = HttpLoggingInterceptor().apply {
-            level = HttpLoggingInterceptor.Level.BODY
+            level = if (BuildConfig.DEBUG) HttpLoggingInterceptor.Level.BODY
+                    else HttpLoggingInterceptor.Level.NONE
         }
         return OkHttpClient.Builder()
             .addInterceptor(logging)
