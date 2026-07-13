@@ -1,14 +1,8 @@
 # Build-only image for the PP68 Sales Tracking Android app (frontend).
 # Produces app-debug.apk — this image does not run the app (Android needs a device/emulator).
 #
-# Usage:
-#   docker build \
-#     --build-arg MAPS_API_KEY=xxx \
-#     --build-arg POSTGREST_URL=https://postgrest-279493695905.asia-southeast1.run.app/ \
-#     --build-arg BASE_AUTH_URL=https://pp68-backend-279493695905.asia-southeast1.run.app/ \
-#     --build-arg UPLOAD_URL=https://upload-visit-photo-279493695905.asia-southeast1.run.app/ \
-#     --build-arg JWT_SECRET=xxx \
-#     -t pp68-app-build .
+# Usage (ARG defaults below already match backend/.env — override only if it drifts):
+#   docker build -t pp68-app-build .
 #   docker create --name extract pp68-app-build && \
 #     docker cp extract:/app/app/build/outputs/apk/debug/app-debug.apk . && \
 #     docker rm extract
@@ -43,11 +37,13 @@ RUN chmod +x gradlew && ./gradlew --version --no-daemon
 
 COPY . .
 
-ARG MAPS_API_KEY=""
-ARG POSTGREST_URL="https://postgrest-279493695905.asia-southeast1.run.app/"
-ARG BASE_AUTH_URL="https://pp68-backend-279493695905.asia-southeast1.run.app/"
+ARG MAPS_API_KEY="AIzaSyDKmJSLtEmvghV_sT-flPYMjtkfkCOZG8Y"
+# ARG POSTGREST_URL="https://postgrest-279493695905.asia-southeast1.run.app/"
+# ARG BASE_AUTH_URL="http://192.168.15.177:8080"
+ARG POSTGREST_URL=postgresql://postgres:your_password@192.168.15.182:5432/postgres
+ARG BASE_AUTH_URL=http://192.168.15.177:8080
 ARG UPLOAD_URL="https://upload-visit-photo-279493695905.asia-southeast1.run.app/"
-ARG JWT_SECRET=""
+ARG JWT_SECRET="sales-app-super-secret-key-2026-practical-project"
 RUN printf "MAPS_API_KEY=%s\nPOSTGREST_URL=%s\nBASE_AUTH_URL=%s\nUPLOAD_URL=%s\nJWT_SECRET=%s\nsdk.dir=%s\n" \
       "$MAPS_API_KEY" "$POSTGREST_URL" "$BASE_AUTH_URL" "$UPLOAD_URL" "$JWT_SECRET" "$ANDROID_SDK_ROOT" \
       > local.properties

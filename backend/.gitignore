@@ -1,6 +1,0 @@
-.idea/
-build/
-.env
-uploads/
-*.log
-cloud-sql-proxy.exe
