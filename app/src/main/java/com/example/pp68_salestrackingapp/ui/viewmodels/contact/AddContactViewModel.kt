@@ -151,6 +151,11 @@ class AddContactViewModel @Inject constructor(
             _uiState.update { it.copy(fullNameError = "กรุณากรอกชื่อ") }
             return
         }
+        val email = _uiState.value.email
+        if (email.isNotBlank() && (!email.contains("@") || !email.substringAfter("@").contains("."))) {
+            _uiState.update { it.copy(emailError = "รูปแบบ Email ไม่ถูกต้อง") }
+            return
+        }
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, saveError = null) }
             val s = _uiState.value

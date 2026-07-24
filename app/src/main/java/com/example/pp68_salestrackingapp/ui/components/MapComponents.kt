@@ -12,6 +12,15 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.LocationOn
+import android.Manifest
+import android.annotation.SuppressLint
+import android.content.pm.PackageManager
+import android.util.Log
+import androidx.core.content.ContextCompat
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import com.google.android.gms.location.LocationServices
+import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -49,14 +58,29 @@ private val BorderGray  = Color(0xFFE8E8E8)
 
 @Composable
 fun GoogleMapPickerField(
-    lat: Double,
-    lng: Double,
-    onLocationPicked: (Double, Double) -> Unit
+    lat: Double?,
+    lng: Double?,
+    onLocationPicked: (Double, Double) -> Unit,
+    onResetToCurrentLocation: (() -> Unit)? = null,
+    onClearLocation: (() -> Unit)? = null
 ) {
     val context      = LocalContext.current
     val focusManager = LocalFocusManager.current
     val scope        = rememberCoroutineScope()
     val isPreview    = LocalInspectionMode.current
+
+    val fusedLocationClient = remember {
+        if (isPreview) null else LocationServices.getFusedLocationProviderClient(context)
+    }
+
+    var hasLocationPermission by remember {
+        mutableStateOf(
+            if (isPreview) false else (
+                ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
+                ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+            )
+        )
+    }
 
     // ── State ────────────────────────────────────────────────
     var searchQuery       by remember { mutableStateOf("") }
@@ -65,31 +89,90 @@ fun GoogleMapPickerField(
     var showSuggestions   by remember { mutableStateOf(false) }
     var searchJob:  Job?  = remember { null }
 
-    val currentLatLng = LatLng(if (lat == 0.0) 13.7563 else lat, if (lng == 0.0) 100.5018 else lng)
+    val currentLatLng = LatLng(if (lat == null || lat == 0.0) 13.7563 else lat, if (lng == null || lng == 0.0) 100.5018 else lng)
 
     val cameraPositionState = rememberCameraPositionState {
         position = CameraPosition.fromLatLngZoom(currentLatLng, 15f)
     }
     val markerState = rememberMarkerState(position = currentLatLng)
 
-    // Sync camera if lat/lng changes from outside
+    val permissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        val granted = permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
+                permissions[Manifest.permission.ACCESS_COARSE_LOCATION] == true
+        hasLocationPermission = granted
+        if (granted && fusedLocationClient != null) {
+            fetchLocation(fusedLocationClient) { fetchedLat, fetchedLng ->
+                onLocationPicked(fetchedLat, fetchedLng)
+                scope.launch {
+                    cameraPositionState.animate(CameraUpdateFactory.newLatLngZoom(LatLng(fetchedLat, fetchedLng), 15f))
+                }
+            }
+        }
+    }
+
+    var permissionRequested by remember { mutableStateOf(false) }
+
+    // Sync camera if lat/lng changes from outside, and auto-fetch current location if not set yet
     LaunchedEffect(lat, lng) {
-        val newPoint = LatLng(lat, lng)
-        if (lat != 0.0 && lng != 0.0) {
+        if (lat != null && lng != null && lat != 0.0 && lng != 0.0 && (lat != 13.7563 || lng != 100.5018)) {
+            val newPoint = LatLng(lat, lng)
             markerState.position = newPoint
             cameraPositionState.position = CameraPosition.fromLatLngZoom(newPoint, 15f)
+        } else {
+            searchQuery = ""
+            if ((lat == null || lng == null || lat == 0.0 || lng == 0.0 || (lat == 13.7563 && lng == 100.5018)) && !permissionRequested) {
+                permissionRequested = true
+                if (hasLocationPermission && fusedLocationClient != null) {
+                    fetchLocation(fusedLocationClient) { fetchedLat, fetchedLng ->
+                        onLocationPicked(fetchedLat, fetchedLng)
+                        scope.launch {
+                            cameraPositionState.animate(CameraUpdateFactory.newLatLngZoom(LatLng(fetchedLat, fetchedLng), 15f))
+                        }
+                    }
+                } else if (!isPreview) {
+                    permissionLauncher.launch(arrayOf(
+                        Manifest.permission.ACCESS_FINE_LOCATION,
+                        Manifest.permission.ACCESS_COARSE_LOCATION
+                    ))
+                }
+            }
+        }
+    }
+
+    val actualResetToCurrentLocation = onResetToCurrentLocation ?: {
+        if (hasLocationPermission && fusedLocationClient != null) {
+            fetchLocation(fusedLocationClient) { fetchedLat, fetchedLng ->
+                onLocationPicked(fetchedLat, fetchedLng)
+                scope.launch {
+                    cameraPositionState.animate(CameraUpdateFactory.newLatLngZoom(LatLng(fetchedLat, fetchedLng), 15f))
+                }
+            }
+        } else if (!isPreview) {
+            permissionLauncher.launch(arrayOf(
+                Manifest.permission.ACCESS_FINE_LOCATION,
+                Manifest.permission.ACCESS_COARSE_LOCATION
+            ))
         }
     }
 
     // ── Places Client ────────────────────────────────────────
     val placesClient = remember {
-        if (isPreview) null else {
+        if (isPreview) {
+            Log.d("MapComponents", "Preview mode: skipping Places client initialization")
+            null
+        } else {
             try {
                 if (!Places.isInitialized()) {
+                    val keyLength = BuildConfig.MAPS_API_KEY.length
+                    val maskedKey = if (keyLength > 8) BuildConfig.MAPS_API_KEY.take(4) + "..." + BuildConfig.MAPS_API_KEY.takeLast(4) else "short_key"
+                    Log.d("MapComponents", "Initializing Places with API Key: $maskedKey (length: $keyLength)")
                     Places.initialize(context, BuildConfig.MAPS_API_KEY)
                 }
                 Places.createClient(context)
             } catch (e: Exception) {
+                Log.e("MapComponents", "Failed to initialize Places Client", e)
                 null
             }
         }
@@ -97,6 +180,7 @@ fun GoogleMapPickerField(
 
     // ── Search function (debounce 400ms) ──────────────────────
     fun searchPlaces(query: String) {
+        Log.d("MapComponents", "searchPlaces called with query: '$query'. Client is null: ${placesClient == null}")
         val client = placesClient ?: return
         searchJob?.cancel()
         if (query.length < 2) {
@@ -108,6 +192,7 @@ fun GoogleMapPickerField(
             delay(400)
             isSearching = true
             try {
+                Log.d("MapComponents", "Sending autocomplete predictions request for query: '$query'")
                 val request = FindAutocompletePredictionsRequest.builder()
                     .setQuery(query)
                     .setCountries("TH")
@@ -118,19 +203,23 @@ fun GoogleMapPickerField(
                         suggestions     = response.autocompletePredictions
                         showSuggestions = suggestions.isNotEmpty()
                         isSearching     = false
+                        Log.d("MapComponents", "Autocomplete success: ${suggestions.size} suggestions retrieved")
                     }
-                    .addOnFailureListener {
+                    .addOnFailureListener { exception ->
+                        Log.e("MapComponents", "Autocomplete predictions request failed", exception)
                         suggestions     = emptyList()
                         showSuggestions = false
                         isSearching     = false
                     }
             } catch (e: Exception) {
+                Log.e("MapComponents", "Autocomplete exception during request construction/call", e)
                 isSearching = false
             }
         }
     }
 
     fun selectPlace(prediction: AutocompletePrediction) {
+        Log.d("MapComponents", "selectPlace selected: ${prediction.getPrimaryText(null)} (ID: ${prediction.placeId})")
         val client = placesClient ?: return
         val placeFields = listOf(Place.Field.LAT_LNG, Place.Field.NAME)
         val request     = FetchPlaceRequest.newInstance(prediction.placeId, placeFields)
@@ -140,6 +229,7 @@ fun GoogleMapPickerField(
                 val place  = response.place
                 val latLng = place.latLng ?: return@addOnSuccessListener
 
+                Log.d("MapComponents", "FetchPlace success. Name: ${place.name}, LatLng: ${latLng.latitude}, ${latLng.longitude}")
                 markerState.position = latLng
                 scope.launch {
                     cameraPositionState.animate(CameraUpdateFactory.newLatLngZoom(latLng, 16f))
@@ -150,6 +240,9 @@ fun GoogleMapPickerField(
                 showSuggestions = false
                 suggestions     = emptyList()
                 focusManager.clearFocus()
+            }
+            .addOnFailureListener { exception ->
+                Log.e("MapComponents", "FetchPlace request failed", exception)
             }
     }
 
@@ -240,12 +333,12 @@ fun GoogleMapPickerField(
                     modifier = Modifier.fillMaxSize(),
                     cameraPositionState = cameraPositionState,
                     properties = MapProperties(
-                        isMyLocationEnabled = false, // ตั้งเป็น true หากขอ permission แล้ว
+                        isMyLocationEnabled = hasLocationPermission,
                         mapType = MapType.NORMAL
                     ),
                     uiSettings = MapUiSettings(
                         zoomControlsEnabled = true,
-                        myLocationButtonEnabled = false
+                        myLocationButtonEnabled = hasLocationPermission
                     ),
                     onMapClick = { latLng ->
                         markerState.position = latLng
@@ -254,11 +347,13 @@ fun GoogleMapPickerField(
                         showSuggestions = false
                     }
                 ) {
-                    Marker(
-                        state = markerState,
-                        title = "Location",
-                        snippet = "${"%.4f".format(markerState.position.latitude)}, ${"%.4f".format(markerState.position.longitude)}"
-                    )
+                    if (lat != null && lng != null && lat != 0.0 && lng != 0.0) {
+                        Marker(
+                            state = markerState,
+                            title = "Location",
+                            snippet = "${"%.4f".format(markerState.position.latitude)}, ${"%.4f".format(markerState.position.longitude)}"
+                        )
+                    }
                 }
             }
 
@@ -273,10 +368,74 @@ fun GoogleMapPickerField(
             }
         }
 
-        // Selected coordinates
-        Text(
-            "📍 ${"%.6f".format(markerState.position.latitude)}, ${"%.6f".format(markerState.position.longitude)}",
-            fontSize = 11.sp, color = TextGray, modifier = Modifier.padding(top = 4.dp, start = 4.dp)
-        )
+        // Selected coordinates & actions
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            if (lat != null && lng != null && lat != 0.0 && lng != 0.0) {
+                Text(
+                    "📍 ${"%.6f".format(lat)}, ${"%.6f".format(lng)}",
+                    fontSize = 11.sp,
+                    color = TextGray
+                )
+            } else {
+                Text(
+                    "📍 ยังไม่ได้ระบุตำแหน่ง",
+                    fontSize = 11.sp,
+                    color = TextGray
+                )
+            }
+
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (lat != null && lng != null && lat != 0.0 && lng != 0.0 && onClearLocation != null) {
+                    TextButton(
+                        onClick = onClearLocation,
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                        modifier = Modifier.height(28.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Clear,
+                            contentDescription = null,
+                            modifier = Modifier.size(14.dp),
+                            tint = RedPrimary
+                        )
+                        Spacer(Modifier.width(4.dp))
+                        Text("ล้างตำแหน่ง", fontSize = 11.sp, color = RedPrimary)
+                    }
+                }
+
+                TextButton(
+                    onClick = actualResetToCurrentLocation,
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                    modifier = Modifier.height(28.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.MyLocation,
+                        contentDescription = null,
+                        modifier = Modifier.size(14.dp),
+                        tint = RedPrimary
+                    )
+                    Spacer(Modifier.width(4.dp))
+                    Text("รีเซ็ตเป็นตำแหน่งปัจจุบัน", fontSize = 11.sp, color = RedPrimary)
+                }
+            }
+        }
+    }
+}
+
+@SuppressLint("MissingPermission")
+private fun fetchLocation(
+    fusedLocationClient: com.google.android.gms.location.FusedLocationProviderClient,
+    onResult: (Double, Double) -> Unit
+) {
+    fusedLocationClient.getCurrentLocation(
+        com.google.android.gms.location.Priority.PRIORITY_HIGH_ACCURACY,
+        com.google.android.gms.tasks.CancellationTokenSource().token
+    ).addOnSuccessListener { location ->
+        location?.let {
+            onResult(it.latitude, it.longitude)
+        }
     }
 }

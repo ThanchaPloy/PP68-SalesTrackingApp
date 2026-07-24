@@ -199,7 +199,16 @@ class AddProductViewModel @Inject constructor(
 
     fun onBrandSelected(brand: String) {
         val brandNo = _uiState.value.allBrandPairs.find { it.second == brand }?.first
-        _uiState.update { it.copy(selectedBrand = brand, selectedBrandNo = brandNo) }
+        _uiState.update {
+            it.copy(
+                selectedBrand = brand,
+                selectedBrandNo = brandNo,
+                selectedProductName = "",
+                selectedGroup = "",
+                selectedSubgroup = "",
+                unit = ""
+            )
+        }
         viewModelScope.launch {
             performSearch(reset = true)
         }
@@ -231,7 +240,10 @@ class AddProductViewModel @Inject constructor(
 
     fun onNameSelected(name: String) {
         val state = _uiState.value
-        val product = state.products.find { p -> p.productName == name }
+        val product = state.products.find { p ->
+            p.productName == name &&
+            (state.selectedBrandNo?.let { no -> p.brandNo == no } ?: (p.brand == state.selectedBrand || state.selectedBrand.isBlank()))
+        }
         
         if (product != null) {
             _uiState.update {
@@ -248,7 +260,7 @@ class AddProductViewModel @Inject constructor(
                 )
             }
         } else {
-             _uiState.update { it.copy(selectedProductName = name) }
+             _uiState.update { it.copy(selectedProductName = name, selectedGroup = "", selectedSubgroup = "", unit = "") }
         }
     }
 
@@ -270,7 +282,10 @@ class AddProductViewModel @Inject constructor(
 
     fun save() {
         val state = _uiState.value
-        if (projectId.isNullOrBlank()) return
+        if (projectId.isNullOrBlank()) {
+            _uiState.update { it.copy(error = "Error: ไม่พบข้อมูล Project ID") }
+            return
+        }
 
         val qty = state.quantity.toDoubleOrNull()
         if (qty == null || qty <= 0) {

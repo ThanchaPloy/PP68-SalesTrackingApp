@@ -13,6 +13,7 @@ import org.junit.Assert.*
 import org.junit.Before
 import org.junit.Test
 import retrofit2.Response
+import com.example.pp68_salestrackingapp.utils.SyncManager
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class ActivityRepositoryTest {
@@ -28,6 +29,8 @@ class ActivityRepositoryTest {
     private val resultDao   = mockk<ActivityResultDao>(relaxed = true)
     private val appointmentContactDao = mockk<AppointmentContactDao>(relaxed = true)
     private val projectRepo = mockk<ProjectRepository>(relaxed = true)
+    private val photoDao = mockk<ActivityResultPhotoDao>(relaxed = true)
+    private val syncManager = mockk<SyncManager>(relaxed = true)
 
     private val sampleActivity = SalesActivity(
         activityId   = "APT-001",
@@ -66,15 +69,14 @@ class ActivityRepositoryTest {
             companyAddr = null,
             companyLat = null,
             companyLong = null,
-            companyStatus = "customer",
-            firstCustomerDate = null
+            companyStatus = 1
         )
     )
 
     @Before
     fun setup() {
         repository = ActivityRepository(
-            apiService, uploadApiService, activityDao, projectDao, customerDao, contactDao, planItemDao, resultDao, appointmentContactDao, projectRepo
+            apiService, uploadApiService, activityDao, projectDao, customerDao, contactDao, planItemDao, resultDao, photoDao, appointmentContactDao, projectRepo, syncManager
         )
     }
 
@@ -262,8 +264,8 @@ class ActivityRepositoryTest {
         coEvery { planItemDao.getPlanItemsByAppointmentId("APT-001") } returns emptyList()
         coEvery { apiService.getChecklistByAppointment("eq.APT-001") } returns
                 Response.success(listOf(
-                    ChecklistItemDto(masterId = 1, isDone = false),
-                    ChecklistItemDto(masterId = 2, isDone = true)
+                    ChecklistInsertDto(appointmentId = "APT-001", masterId = 1, isDone = false),
+                    ChecklistInsertDto(appointmentId = "APT-001", masterId = 2, isDone = true)
                 ))
         coEvery { apiService.getMasterActivities() } returns
                 Response.success(listOf(

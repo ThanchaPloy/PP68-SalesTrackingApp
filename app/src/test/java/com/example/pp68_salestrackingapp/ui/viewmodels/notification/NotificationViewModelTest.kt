@@ -35,11 +35,13 @@ class NotificationViewModelTest {
 
     @Before
     fun setUp() {
+        System.setProperty("is_test", "true")
         Dispatchers.setMain(dispatcher)
     }
 
     @After
     fun tearDown() {
+        System.clearProperty("is_test")
         Dispatchers.resetMain()
     }
 

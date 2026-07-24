@@ -10,7 +10,7 @@ import com.example.pp68_salestrackingapp.data.repository.ActivityRepository
 import com.example.pp68_salestrackingapp.data.repository.AuthRepository
 import com.example.pp68_salestrackingapp.data.repository.CustomerRepository
 import com.example.pp68_salestrackingapp.data.repository.ProjectRepository
-import com.example.pp68_salestrackingapp.ui.viewmodels.ProjectDetailViewModel
+import com.example.pp68_salestrackingapp.ui.viewmodels.project.ProjectDetailViewModel
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.clearAllMocks
@@ -49,6 +49,13 @@ class ProjectDetailViewModelTest {
     @Before
     fun setUp() {
         Dispatchers.setMain(dispatcher)
+        coEvery { projectRepo.getProjectContacts(any()) } returns Result.success(emptyList())
+        every { projectRepo.getProjectByIdFlow(any()) } returns flowOf(null)
+        every { projectRepo.getProjectByIdFlow("PRJ-1") } returns flowOf(
+            Project(projectId = "PRJ-1", custId = "C1", projectName = "Project A")
+        )
+        every { activityRepo.getResultsByProjectFlow(any()) } returns flowOf(emptyList())
+        coEvery { projectRepo.getProjectMembersDetailed(any()) } returns listOf("U1" to "John Doe")
     }
 
     @After
@@ -106,6 +113,7 @@ class ProjectDetailViewModelTest {
 
     @Test
     fun `loadProjectDetail failure should set error`() = runTest {
+        every { projectRepo.getProjectByIdFlow("PRJ-1") } returns flowOf(null)
         coEvery { projectRepo.getProjectById("PRJ-1") } returns Result.failure(Exception("load error"))
         every { activityRepo.getActivitiesByProjectFlow("PRJ-1") } returns MutableStateFlow(emptyList())
 
@@ -204,6 +212,9 @@ class ProjectDetailViewModelTest {
 
     @Test
     fun `loadProjectDetail success when customer lookup fails should fallback companyName empty`() = runTest {
+        every { projectRepo.getProjectByIdFlow("PRJ-2") } returns flowOf(
+            Project(projectId = "PRJ-2", custId = "C2", projectName = "Project B")
+        )
         coEvery { projectRepo.getProjectById("PRJ-2") } returns Result.success(
             Project(projectId = "PRJ-2", custId = "C2", projectName = "Project B")
         )
@@ -223,6 +234,9 @@ class ProjectDetailViewModelTest {
 
     @Test
     fun `observeActivities should treat completed status case-insensitively`() = runTest {
+        every { projectRepo.getProjectByIdFlow("PRJ-3") } returns flowOf(
+            Project(projectId = "PRJ-3", custId = "C3", projectName = "Project C")
+        )
         coEvery { projectRepo.getProjectById("PRJ-3") } returns Result.success(
             Project(projectId = "PRJ-3", custId = "C3", projectName = "Project C")
         )

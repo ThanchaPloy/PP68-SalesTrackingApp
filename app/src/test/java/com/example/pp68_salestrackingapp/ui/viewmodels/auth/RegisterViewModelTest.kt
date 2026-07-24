@@ -41,12 +41,14 @@ class RegisterViewModelTest {
     @Before
     fun setUp() {
         Dispatchers.setMain(testDispatcher)
+        System.setProperty("is_test", "true")
     }
 
     @After
     fun tearDown() {
         Dispatchers.resetMain()
         unmockkAll()
+        System.clearProperty("is_test")
     }
 
     private fun createViewModel() {
@@ -54,12 +56,7 @@ class RegisterViewModelTest {
     }
 
     private fun setupEmailPatternMock(matches: Boolean) {
-        mockkStatic(android.util.Patterns::class)
-        val mockPattern = mockk<Pattern>()
-        val mockMatcher = mockk<Matcher>()
-        every { android.util.Patterns.EMAIL_ADDRESS } returns mockPattern
-        every { mockPattern.matcher(any<CharSequence>()) } returns mockMatcher
-        every { mockMatcher.matches() } returns matches
+        // No-op - JVM regex validation is used instead of Patterns mocking
     }
 
     // TC-UNIT-VM-REG-01

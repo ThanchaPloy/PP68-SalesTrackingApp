@@ -87,6 +87,8 @@ class StatsViewModel @Inject constructor(
                 customerRepo.getAllCustomersFlow()
             ) { projects, activities, customers ->
                 calculateStats(projects, activities, customers, user?.userId ?: "")
+            }.catch { e ->
+                _uiState.update { it.copy(isLoading = false, error = e.message) }
             }.collect { updatedStats ->
                 _uiState.update { current ->
                     updatedStats.copy(

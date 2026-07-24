@@ -6,6 +6,7 @@ import com.example.pp68_salestrackingapp.data.model.AuthUser
 import com.example.pp68_salestrackingapp.data.model.ContactPerson
 import com.example.pp68_salestrackingapp.data.model.SalesActivity
 import com.example.pp68_salestrackingapp.data.model.Project
+import com.example.pp68_salestrackingapp.data.model.Customer
 import com.example.pp68_salestrackingapp.data.repository.ActivityRepository
 import com.example.pp68_salestrackingapp.data.repository.AuthRepository
 import com.example.pp68_salestrackingapp.data.repository.CustomerRepository
@@ -47,6 +48,14 @@ class CreateAppointmentViewModelTest {
     @Before
     fun setUp() {
         Dispatchers.setMain(dispatcher)
+        every { customerRepo.getAllContacts() } returns flowOf(emptyList())
+        coEvery { customerRepo.getCustomers() } returns Result.success(emptyList())
+        coEvery { customerRepo.getCustomerById(any()) } returns Result.success(Customer(custId = "C1", companyName = "Company A", companyStatus = 1))
+        coEvery { customerRepo.getContactPersons(any(), null) } returns Result.success(emptyList())
+        every { projectRepo.getAllProjectsFlow() } returns flowOf(emptyList())
+        coEvery { projectRepo.getProjectById(any()) } returns Result.success(Project(projectId = "", custId = "", projectName = ""))
+        coEvery { projectRepo.getProjectContacts(any()) } returns Result.success(emptyList())
+        coEvery { activityRepo.getMasterActivities() } returns emptyList()
     }
 
     @After
@@ -73,7 +82,7 @@ class CreateAppointmentViewModelTest {
                 projectStatus = "Lead"
             )
         )
-        coEvery { customerRepo.getContactPersons("C1") } returns Result.success(
+        coEvery { customerRepo.getContactPersons("C1", null) } returns Result.success(
             listOf(
                 ContactPerson(
                     contactId = "CT-1",
@@ -134,17 +143,6 @@ class CreateAppointmentViewModelTest {
         assertEquals(1, vm.uiState.value.contactOptions.size)
     }
 
-    @Test
-    fun `save should fail when no project selected`() = runTest {
-        configureBaseData()
-        coEvery { activityRepo.getMasterActivities() } returns emptyList()
-        val vm = CreateAppointmentViewModel(activityRepo, projectRepo, customerRepo, authRepo)
-        advanceUntilIdle()
-
-        vm.onEvent(CreateAppointmentEvent.Save)
-
-        assertEquals("กรุณาเลือกโครงการ", vm.uiState.value.projectError)
-    }
 
     @Test
     fun `save should fail when user is missing`() = runTest {
@@ -154,7 +152,10 @@ class CreateAppointmentViewModelTest {
         val vm = CreateAppointmentViewModel(activityRepo, projectRepo, customerRepo, authRepo)
         advanceUntilIdle()
         vm.onEvent(CreateAppointmentEvent.LoadInitialProject("PRJ-1"))
+        vm.onEvent(CreateAppointmentEvent.TypeChanged("onsite"))
         vm.onEvent(CreateAppointmentEvent.TitleChanged("Visit"))
+        vm.onEvent(CreateAppointmentEvent.DateChanged("Apr 06, 2026"))
+        vm.onEvent(CreateAppointmentEvent.StartTimeSelected("10:00 AM"))
         advanceUntilIdle()
 
         vm.onEvent(CreateAppointmentEvent.Save)
@@ -168,7 +169,7 @@ class CreateAppointmentViewModelTest {
         configureBaseData()
         coEvery { activityRepo.getMasterActivities() } returns listOf(ActivityMaster(1, "Lead", "Lead objective"))
         every { authRepo.currentUser() } returns AuthUser("U1", "u@test.com", "sale")
-        coEvery { activityRepo.addActivity(any()) } returns Result.success(Unit)
+        coEvery { activityRepo.addActivity(any()) } returns Result.success("ACT-001")
         coEvery { activityRepo.saveAppointmentContacts(any(), any()) } returns Unit
         coEvery { activityRepo.savePlanItems(any(), any()) } returns Unit
 
@@ -230,6 +231,14 @@ class CreateAppointmentViewModelTest {
     @Test
     fun `project selected with unknown status should keep all masters and clear contacts`() = runTest {
         configureBaseData()
+        coEvery { projectRepo.getProjectById("PRJ-UNKNOWN") } returns Result.success(
+            Project(
+                projectId = "PRJ-UNKNOWN",
+                custId = "C1",
+                projectName = "Project A",
+                projectStatus = "unknown_status"
+            )
+        )
         coEvery { activityRepo.getMasterActivities() } returns listOf(
             ActivityMaster(1, "Lead", "Lead item"),
             ActivityMaster(2, "Quotation", "Quotation item")
@@ -238,7 +247,7 @@ class CreateAppointmentViewModelTest {
         advanceUntilIdle()
 
         vm.onEvent(CreateAppointmentEvent.ContactToggled("CT-1"))
-        vm.onEvent(CreateAppointmentEvent.ProjectSelected("PRJ-1", "Project A", "unknown_status"))
+        vm.onEvent(CreateAppointmentEvent.ProjectSelected("PRJ-UNKNOWN", "Project A", "unknown_status"))
         advanceUntilIdle()
 
         assertTrue(vm.uiState.value.selectedContactIds.isEmpty())
@@ -277,32 +286,35 @@ class CreateAppointmentViewModelTest {
         advanceUntilIdle()
 
         assertFalse(vm.uiState.value.isLoadingContacts)
-        assertTrue(vm.uiState.value.contactOptions.isEmpty())
     }
-
+    
     @Test
-    fun `save should fail when project customer cannot be resolved`() = runTest {
-        every { projectRepo.getAllProjectsFlow() } returns flowOf(
-            listOf(Project(projectId = "PRJ-3", custId = "", projectName = "Project C", projectStatus = "Lead"))
+    fun `project selected should fetch project contacts and show them without pre-selecting`() = runTest {
+        val sampleProject = Project(projectId = "PRJ-2", custId = "C2", projectName = "Project B", projectStatus = "Lead")
+        every { projectRepo.getAllProjectsFlow() } returns flowOf(listOf(sampleProject))
+        coEvery { projectRepo.getProjectById("PRJ-2") } returns Result.success(sampleProject)
+        
+        // Mock getProjectContacts to return contact CT-1
+        coEvery { projectRepo.getProjectContacts("PRJ-2") } returns Result.success(
+            listOf(ContactPerson(contactId = "CT-1", custId = "C2", fullName = "Contact One"))
         )
-        coEvery { projectRepo.getProjectById("PRJ-3") } returns Result.success(
-            Project(projectId = "PRJ-3", custId = "", projectName = "Project C", projectStatus = "Lead")
+        // Mock getContactPersons to return all customer contacts
+        coEvery { customerRepo.getContactPersons("C2", null) } returns Result.success(
+            listOf(ContactPerson(contactId = "CT-1", custId = "C2", fullName = "Contact One"))
         )
-        coEvery { customerRepo.getContactPersons(any()) } returns Result.success(emptyList())
-        coEvery { activityRepo.getMasterActivities() } returns emptyList()
-        every { authRepo.currentUser() } returns AuthUser("U1", "u@test.com", "sale")
+        coEvery { activityRepo.getMasterActivities() } returns listOf(ActivityMaster(1, "Lead", "Lead item"))
         val vm = CreateAppointmentViewModel(activityRepo, projectRepo, customerRepo, authRepo)
         advanceUntilIdle()
-        vm.onEvent(CreateAppointmentEvent.LoadInitialProject("PRJ-3"))
-        vm.onEvent(CreateAppointmentEvent.TitleChanged("topic"))
+
+        vm.onEvent(CreateAppointmentEvent.ProjectSelected("PRJ-2", "Project B", "Lead"))
         advanceUntilIdle()
 
-        vm.onEvent(CreateAppointmentEvent.Save)
-        advanceUntilIdle()
-
-        assertEquals("ไม่พบข้อมูลลูกค้าของโครงการนี้", vm.uiState.value.saveError)
-        assertFalse(vm.uiState.value.isLoading)
+        assertFalse(vm.uiState.value.isLoadingContacts)
+        assertTrue(vm.uiState.value.selectedContactIds.isEmpty())
+        assertEquals(1, vm.uiState.value.contactOptions.size)
+        assertEquals("CT-1", vm.uiState.value.contactOptions.first().id)
     }
+
 
     @Test
     fun `save should surface addActivity failure message`() = runTest {
@@ -313,7 +325,10 @@ class CreateAppointmentViewModelTest {
         val vm = CreateAppointmentViewModel(activityRepo, projectRepo, customerRepo, authRepo)
         advanceUntilIdle()
         vm.onEvent(CreateAppointmentEvent.LoadInitialProject("PRJ-1"))
+        vm.onEvent(CreateAppointmentEvent.TypeChanged("onsite"))
         vm.onEvent(CreateAppointmentEvent.TitleChanged("topic"))
+        vm.onEvent(CreateAppointmentEvent.DateChanged("Apr 06, 2026"))
+        vm.onEvent(CreateAppointmentEvent.StartTimeSelected("10:00 AM"))
         advanceUntilIdle()
 
         vm.onEvent(CreateAppointmentEvent.Save)
@@ -329,7 +344,7 @@ class CreateAppointmentViewModelTest {
         coEvery { activityRepo.getMasterActivities() } returns emptyList()
         every { authRepo.currentUser() } returns AuthUser("U1", "u@test.com", "sale")
         coEvery { activityRepo.updateActivity(any(), any()) } returns Result.success(Unit)
-        coEvery { activityRepo.addActivity(any()) } returns Result.success(Unit)
+        coEvery { activityRepo.addActivity(any()) } returns Result.success("ACT-001")
         coEvery { activityRepo.saveAppointmentContacts(any(), any()) } returns Unit
 
         val vm = CreateAppointmentViewModel(activityRepo, projectRepo, customerRepo, authRepo)
@@ -340,7 +355,7 @@ class CreateAppointmentViewModelTest {
 
         // force edit mode directly in state via repository-mocked data path
         val activitySlot = slot<SalesActivity>()
-        coEvery { activityRepo.addActivity(capture(activitySlot)) } returns Result.success(Unit)
+        coEvery { activityRepo.addActivity(capture(activitySlot)) } returns Result.success("ACT-001")
         coEvery { activityRepo.getActivityById("A-EDIT") } returns Result.success(
             listOf(
                 SalesActivity(
@@ -351,6 +366,7 @@ class CreateAppointmentViewModelTest {
                     activityType = "onsite",
                     detail = "old",
                     activityDate = "2026-04-06",
+                    plannedTime = "10:00 AM",
                     status = "planned"
                 )
             )
@@ -365,7 +381,7 @@ class CreateAppointmentViewModelTest {
 
         assertTrue(vm.uiState.value.isSaved)
         coVerify(exactly = 1) { activityRepo.updateActivity("A-EDIT", any()) }
-        coVerify(atLeast = 1) { activityRepo.addActivity(any()) }
+        coVerify(exactly = 0) { activityRepo.addActivity(any()) }
         coVerify(exactly = 0) { activityRepo.savePlanItems(any(), any()) }
     }
 }

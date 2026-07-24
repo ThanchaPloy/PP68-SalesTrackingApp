@@ -34,17 +34,28 @@ class ContactRepository @Inject constructor(
 
                 if (customerIds.isEmpty()) return@withContext kotlin.Result.success(Unit)
 
-                val codesParam = "in.(${customerIds.joinToString(",")})"
-                val resp = apiService.getContactsByCustomerIds(custIds = codesParam)
-                if (resp.isSuccessful && resp.body() != null) {
-                    val contacts = resp.body()!!.map { it.copy(isSynced = true) }
-                    if (contacts.isNotEmpty()) contactDao.clearAndInsert(contacts)
-                    kotlin.Result.success(Unit)
-                } else {
-                    kotlin.Result.failure(Exception("โหลด Contact ไม่สำเร็จ: HTTP ${resp.code()}"))
+                val allContacts = mutableListOf<ContactPerson>()
+                val chunks = customerIds.chunked(50)
+                for (chunk in chunks) {
+                    try {
+                        val batchQuery = "in.(" + chunk.joinToString(",") + ")"
+                        val resp = apiService.getContactsByCustomerIds(custIds = batchQuery)
+                        if (resp.isSuccessful && resp.body() != null) {
+                            allContacts.addAll(resp.body()!!)
+                        }
+                    } catch (e: Exception) {
+                        Log.e("ContactRepo", "Batch contact fetch error: ${e.message}")
+                    }
                 }
+
+                val deduped = allContacts.distinctBy { it.contactId }.map { it.copy(isSynced = true) }
+                if (deduped.isNotEmpty()) {
+                    contactDao.clearAndInsert(deduped)
+                }
+                kotlin.Result.success(Unit)
             } catch (e: Exception) {
-                kotlin.Result.failure(Exception("Network Error: ${e.message}"))
+                Log.e("ContactRepo", "refreshContacts error: ${e.message}", e)
+                kotlin.Result.failure(e)
             }
         }
     }

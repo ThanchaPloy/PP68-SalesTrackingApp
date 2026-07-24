@@ -42,6 +42,7 @@ class ExportViewModelTest {
     fun setup() {
         Dispatchers.setMain(testDispatcher)
         every { projectRepo.getAllProjectsFlow() } returns flowOf(emptyList())
+        every { activityRepo.getAllResultsFlow() } returns flowOf(emptyList())
         viewModel = ExportViewModel(activityRepo, projectRepo)
     }
 
@@ -221,7 +222,7 @@ class ExportViewModelTest {
         val activityCsv = viewModel.generateActivityCsvString()
         val projectCsv = viewModel.generateProjectCsvString()
 
-        assertEquals("Date,Project Name,Company Name,Topic,Note,Status\n", activityCsv)
+        assertEquals("Date,Project Name,Company Name,Topic,Note,Status,Results\n", activityCsv)
         assertEquals("Project Name,Expected Value,Status,Score,Close Date\n", projectCsv)
     }
 }

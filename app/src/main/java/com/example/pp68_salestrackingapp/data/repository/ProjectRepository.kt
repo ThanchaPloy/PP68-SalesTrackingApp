@@ -39,10 +39,11 @@ class ProjectRepository @Inject constructor(
     suspend fun refreshProjects(userId: String): Result<Unit> {
         return withContext(Dispatchers.IO) {
             try {
-                val memberResp = apiService.getMyProjectIds(userId = "eq.$userId")
-                val memberIds = if (memberResp.isSuccessful) memberResp.body()?.map { it.projectId } ?: emptyList() else emptyList()
+                val cleanUserId = userId.removePrefix("eq.")
+                val memberResp = apiService.getMyProjectIds(userId = cleanUserId)
+                val memberIds = if (memberResp.isSuccessful) memberResp.body()?.mapNotNull { it.projectId } ?: emptyList() else emptyList()
 
-                val creatorResp = apiService.getProjectsByCreator(userId = "eq.$userId")
+                val creatorResp = apiService.getProjectsByCreator(userId = cleanUserId)
                 val creatorProjects = if (creatorResp.isSuccessful) creatorResp.body() ?: emptyList() else emptyList()
 
                 val allIds = (memberIds + creatorProjects.map { it.projectId }).distinct()
@@ -50,8 +51,8 @@ class ProjectRepository @Inject constructor(
                 // ponytail: never clear local cache on empty — missing records would silently wipe all local data
                 if (allIds.isEmpty()) return@withContext Result.success(Unit)
 
-                val memberProjects = if (memberIds.isNotEmpty()) {
-                    val r = apiService.getProjectsByIds(projectIds = "in.(${memberIds.joinToString(",")})")
+                val memberProjects = if (allIds.isNotEmpty()) {
+                    val r = apiService.getProjectsByIds(projectIds = "in.(${allIds.joinToString(",")})")
                     if (r.isSuccessful) r.body() ?: emptyList() else emptyList()
                 } else emptyList()
 
@@ -99,9 +100,11 @@ class ProjectRepository @Inject constructor(
                     val realId = response.body()?.firstOrNull()?.projectId
                     Log.d("ProjectRepo", "realId=$realId tempId=$tempId")
                     val finalProject = if (realId != null && realId != tempId) {
-                        projectDao.deleteProjectById(tempId)
                         val real = tempProject.copy(projectId = realId, isSynced = true)
                         projectDao.insertProject(real)
+                        projectContactDao.updateProjectId(tempId, realId)
+                        projectSalesMemberDao.updateProjectId(tempId, realId)
+                        projectDao.deleteProjectById(tempId)
                         real
                     } else {
                         projectDao.updateSyncStatus(tempId, true)
@@ -183,51 +186,106 @@ class ProjectRepository @Inject constructor(
 
     suspend fun addProjectMembers(projectId: String, userIds: List<String>, role: String = "support"): Result<Unit> {
         return withContext(Dispatchers.IO) {
+            Log.d("ProjectRepo", "addProjectMembers started. projectId=$projectId, userIds=$userIds")
             projectSalesMemberDao.deleteByProject(projectId)
             if (userIds.isNotEmpty()) {
-                projectSalesMemberDao.insertAll(userIds.map { ProjectSalesMember(projectId, it.trim(), role) })
+                val localRows = userIds.map { ProjectSalesMember(projectId, it.trim(), role) }
+                projectSalesMemberDao.insertAll(localRows)
+                Log.d("ProjectRepo", "Inserted local members: ${localRows.size} rows")
+            }
+            if (projectId.startsWith("TEMP-")) {
+                return@withContext Result.success(Unit)
             }
             try {
-                apiService.deleteProjectMembers("eq.$projectId")
-                if (userIds.isNotEmpty()) {
-                    apiService.addProjectMembers(userIds.map { ProjectMemberInsertDto(projectId, it.trim(), role) })
+                val delResp = apiService.deleteProjectMembers("eq.$projectId")
+                Log.d("ProjectRepo", "deleteProjectMembers API status: ${delResp.code()}")
+                if (!delResp.isSuccessful) {
+                    val errMsg = delResp.errorBody()?.string() ?: ""
+                    return@withContext Result.failure(Exception("ลบสมาชิกเก่าล้มเหลว: HTTP ${delResp.code()} $errMsg"))
                 }
-            } catch (_: Exception) { }
-            Result.success(Unit)
+                if (userIds.isNotEmpty()) {
+                    val remoteRows = userIds.map { ProjectMemberInsertDto(projectId, it.trim(), role) }
+                    val addResp = apiService.addProjectMembers(remoteRows)
+                    Log.d("ProjectRepo", "addProjectMembers API status: ${addResp.code()}")
+                    if (!addResp.isSuccessful) {
+                        val errMsg = addResp.errorBody()?.string() ?: ""
+                        return@withContext Result.failure(Exception("บันทึกสมาชิกหลักล้มเหลว: HTTP ${addResp.code()} $errMsg"))
+                    }
+                }
+                Result.success(Unit)
+            } catch (e: IOException) {
+                Log.w("ProjectRepo", "addProjectMembers offline: ${e.message}")
+                Result.success(Unit) // Offline fallback
+            } catch (e: Exception) {
+                Log.e("ProjectRepo", "addProjectMembers failed: ${e.message}", e)
+                Result.failure(e)
+            }
         }
     }
 
     suspend fun saveProjectContacts(projectId: String, contactIds: List<String>): Result<Unit> {
         return withContext(Dispatchers.IO) {
+            Log.d("ProjectRepo", "saveProjectContacts started. projectId=$projectId, contactIds=$contactIds")
             // บันทึก Room ก่อนเสมอ
             projectContactDao.deleteByProject(projectId)
             if (contactIds.isNotEmpty()) {
                 val rows = contactIds.map { ProjectContact(projectId, it.trim()) }
                 projectContactDao.insertAll(rows)
+                Log.d("ProjectRepo", "Inserted local contacts: ${rows.size} rows")
+            }
+            if (projectId.startsWith("TEMP-")) {
+                return@withContext Result.success(Unit)
             }
             // sync API
             try {
-                apiService.deleteProjectContacts("eq.$projectId")
+                val delResp = apiService.deleteProjectContacts("eq.$projectId")
+                Log.d("ProjectRepo", "deleteProjectContacts API status: ${delResp.code()}")
+                if (!delResp.isSuccessful) {
+                    val errMsg = delResp.errorBody()?.string() ?: ""
+                    return@withContext Result.failure(Exception("ลบผู้ติดต่อเก่าล้มเหลว: HTTP ${delResp.code()} $errMsg"))
+                }
                 if (contactIds.isNotEmpty()) {
                     val rows = contactIds.map { ProjectContact(projectId, it.trim()) }
-                    apiService.addProjectContacts(rows)
+                    val addResp = apiService.addProjectContacts(rows)
+                    Log.d("ProjectRepo", "addProjectContacts API status: ${addResp.code()}")
+                    if (!addResp.isSuccessful) {
+                        val errMsg = addResp.errorBody()?.string() ?: ""
+                        return@withContext Result.failure(Exception("บันทึกผู้ติดต่อหลักล้มเหลว: HTTP ${addResp.code()} $errMsg"))
+                    }
                 }
-            } catch (_: Exception) { /* offline — SyncWorker จะ retry */ }
-            Result.success(Unit)
+                Result.success(Unit)
+            } catch (e: IOException) {
+                Log.w("ProjectRepo", "saveProjectContacts offline: ${e.message}")
+                Result.success(Unit) // Offline fallback
+            } catch (e: Exception) {
+                Log.e("ProjectRepo", "saveProjectContacts failed: ${e.message}", e)
+                Result.failure(e)
+            }
         }
     }
 
     suspend fun getProjectContacts(projectId: String): Result<List<ContactPerson>> {
         return withContext(Dispatchers.IO) {
             // อัพเดท Room จาก API ก่อน (ถ้าทำได้)
-            try {
-                val response = apiService.getProjectContacts("eq.$projectId")
-                if (response.isSuccessful && response.body() != null) {
-                    val rows = response.body()!!.map { ProjectContact(projectId, it.contactId) }
-                    projectContactDao.deleteByProject(projectId)
-                    if (rows.isNotEmpty()) projectContactDao.insertAll(rows)
-                }
-            } catch (_: Exception) { /* offline */ }
+            if (!projectId.startsWith("TEMP-")) {
+                try {
+                    val response = apiService.getProjectContacts("eq.$projectId")
+                    if (response.isSuccessful && response.body() != null) {
+                        val rows = response.body()!!.map { ProjectContact(projectId, it.contactId) }
+                        projectContactDao.deleteByProject(projectId)
+                        if (rows.isNotEmpty()) {
+                            val contactIds = rows.map { it.contact_id }.distinct()
+                            if (contactIds.isNotEmpty()) {
+                                val contactResp = apiService.getContactsByIds("in.(${contactIds.joinToString(",")})")
+                                if (contactResp.isSuccessful && contactResp.body() != null) {
+                                    contactDao.insertAll(contactResp.body()!!.map { it.copy(isSynced = true) })
+                                }
+                            }
+                            projectContactDao.insertAll(rows)
+                        }
+                    }
+                } catch (_: Exception) { /* offline */ }
+            }
             // อ่านจาก Room เสมอ — ดึงรายละเอียดผู้ติดต่อเต็มๆ ไม่ใช่แค่ id
             val ids = projectContactDao.getContactIdsByProject(projectId)
             Result.success(ids.mapNotNull { contactDao.getContactById(it) })
@@ -277,10 +335,7 @@ class ProjectRepository @Inject constructor(
     suspend fun getMembersByBranch(branchId: String): Result<List<Pair<String, String>>> {
         return withContext(Dispatchers.IO) {
             try {
-                val empResp = apiService.getEmployeeCodesByBranch(
-                    branchCode = "eq.$branchId",
-                    select = "emp_code,emp_name"
-                )
+                val empResp = apiService.getEmployeeCodesByBranch(branchCode = "eq.$branchId")
                 if (!empResp.isSuccessful || empResp.body().isNullOrEmpty()) {
                     return@withContext Result.failure(Exception("No employees found for branch $branchId"))
                 }

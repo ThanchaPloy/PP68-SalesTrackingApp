@@ -21,14 +21,39 @@ interface ProjectDao {
     @Query("SELECT * FROM project WHERE projectId = :projectId LIMIT 1")
     suspend fun getProjectById(projectId: String): Project?
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertProjects(projects: List<Project>)
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertProjectsRaw(projects: List<Project>): List<Long>
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertProject(project: Project)
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertProjectRaw(project: Project): Long
 
     @Update
-    suspend fun updateProject(project: Project)
+    suspend fun updateProjects(projects: List<Project>)
+
+    @Update
+    suspend fun updateProjectRaw(project: Project)
+
+    @Transaction
+    suspend fun insertProjects(projects: List<Project>) {
+        val insertResults = insertProjectsRaw(projects)
+        val updateList = mutableListOf<Project>()
+        for (i in insertResults.indices) {
+            if (insertResults[i] == -1L) {
+                updateList.add(projects[i])
+            }
+        }
+        if (updateList.isNotEmpty()) {
+            updateProjects(updateList)
+        }
+    }
+
+    @Transaction
+    suspend fun insertProject(project: Project) {
+        val insertResult = insertProjectRaw(project)
+        if (insertResult == -1L) {
+            updateProjectRaw(project)
+        }
+    }
 
     @Query("DELETE FROM project WHERE projectId = :projectId")
     suspend fun deleteProjectById(projectId: String)
@@ -47,11 +72,19 @@ interface ProjectDao {
 
     @Transaction
     suspend fun clearAndInsert(projects: List<Project>) {
-        deleteAllSynced()   // คง row is_synced=0 (ออฟไลน์) ไว้
+        val incomingIds = projects.map { it.projectId }
+        if (incomingIds.isNotEmpty()) {
+            deleteSyncedProjectsNotIn(incomingIds)
+        } else {
+            deleteAllSynced()
+        }
         if (projects.isNotEmpty()) {
             insertProjects(projects)
         }
     }
+
+    @Query("DELETE FROM project WHERE is_synced = 1 AND projectId NOT IN (:incomingIds)")
+    suspend fun deleteSyncedProjectsNotIn(incomingIds: List<String>)
 
     @Query("SELECT * FROM project WHERE is_synced = 0")
     suspend fun getUnsyncedProjects(): List<Project>

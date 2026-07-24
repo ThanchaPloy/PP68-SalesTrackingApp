@@ -201,16 +201,21 @@ class SalesResultViewModel @Inject constructor(
 
     private fun loadProjectData(pId: String) {
         viewModelScope.launch {
-            projectRepo.getProjectById(pId).onSuccess { p ->
-                custId = p.custId
-                _uiState.update {
-                    it.copy(
-                        project = p,
-                        currentStatus = p.projectStatus ?: "",
-                        opportunityScore = if (it.opportunityScore.isNullOrBlank()) p.opportunityScore else it.opportunityScore
-                    )
+            projectRepo.getProjectById(pId).fold(
+                onSuccess = { p ->
+                    custId = p.custId
+                    _uiState.update {
+                        it.copy(
+                            project = p,
+                            currentStatus = p.projectStatus ?: "",
+                            opportunityScore = if (it.opportunityScore.isNullOrBlank()) p.opportunityScore else it.opportunityScore
+                        )
+                    }
+                },
+                onFailure = { e ->
+                    _uiState.update { it.copy(error = "โหลดข้อมูลโครงการไม่สำเร็จ: ${e.message}") }
                 }
-            }
+            )
         }
     }
 
@@ -394,6 +399,7 @@ class SalesResultViewModel @Inject constructor(
 
     fun save() {
         val s = _uiState.value
+        if (s.activityId.isNullOrBlank()) { _uiState.update { it.copy(error = "ไม่พบรหัสนัดหมาย") }; return }
         if (s.isReadOnlyVersion) { _uiState.update { it.copy(error = "กำลังดูเวอร์ชันเก่า ไม่สามารถแก้ไขได้") }; return }
         if (s.visitSummary.isBlank()) { _uiState.update { it.copy(error = "กรุณากรอกสรุปการเข้าพบ") }; return }
         if (s.photos.any { it.isUploading }) { _uiState.update { it.copy(error = "กรุณารอให้อัปโหลดรูปให้เสร็จก่อนบันทึก") }; return }

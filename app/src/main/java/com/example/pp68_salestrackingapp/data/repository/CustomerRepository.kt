@@ -45,45 +45,51 @@ class CustomerRepository @Inject constructor(
     suspend fun refreshCustomers(branchId: String): kotlin.Result<Unit> {
         return withContext(Dispatchers.IO) {
             try {
-                val empType = tokenManager.getEmpType()
-                val branchSuffix = branchId.takeLast(2)
-
-                val empCodesResp = if (empType == "Project") {
-                    apiService.getProjectEmployeeCodes()
-                } else {
-                    apiService.getEmployeeCodesByBranch(branchCode = "eq.$branchId")
-                }
-                if (!empCodesResp.isSuccessful) {
-                    return@withContext kotlin.Result.failure(Exception("API error: ${empCodesResp.code()}"))
-                }
-                val empCodes = empCodesResp.body()?.mapNotNull { it["emp_code"] }?.filter { it.isNotBlank() } ?: emptyList()
-
+                val currentUserId = tokenManager.getUserData()?.userId ?: ""
                 val customers = mutableListOf<Customer>()
-                if (empCodes.isNotEmpty()) {
-                    val codesParam = "in.(${empCodes.joinToString(",")})"
-                    val custResp = apiService.getCustomersBySalespersonCodes(codes = codesParam)
-                    if (!custResp.isSuccessful) {
-                        return@withContext kotlin.Result.failure(Exception("API error: ${custResp.code()}"))
+
+                // 1. Fetch current user's own customers FIRST & insert into Room immediately
+                if (currentUserId.isNotBlank()) {
+                    val ownCustResp = apiService.getCustomersBySalespersonCodes(
+                        codes = currentUserId,
+                        limit = 1000,
+                        offset = 0
+                    )
+                    if (ownCustResp.isSuccessful && ownCustResp.body() != null) {
+                        val ownCustomers = ownCustResp.body()!!.map { it.copy(isSynced = true) }
+                        customers.addAll(ownCustomers)
+                        if (ownCustomers.isNotEmpty()) {
+                            customerDao.clearAndInsert(ownCustomers)
+                        }
                     }
-                    customers.addAll(custResp.body() ?: emptyList())
                 }
 
-                val fallbackResp = apiService.getCustomersWithEmptySalesperson()
-                if (!fallbackResp.isSuccessful) {
-                    return@withContext kotlin.Result.failure(Exception("API error: ${fallbackResp.code()}"))
+                // 2. Fetch branch team member customers in background to enrich local database
+                if (branchId.isNotBlank()) {
+                    val empCodesResp = apiService.getEmployeeCodesByBranch(branchCode = branchId)
+                    if (empCodesResp.isSuccessful) {
+                        val empCodes = empCodesResp.body()?.mapNotNull { it["emp_code"] }?.filter { it.isNotBlank() && it != currentUserId } ?: emptyList()
+                        // Only fetch first 10 branch team members to avoid long loops
+                        for (empCode in empCodes.take(10)) {
+                            val custResp = apiService.getCustomersBySalespersonCodes(
+                                codes = empCode,
+                                limit = 1000,
+                                offset = 0
+                            )
+                            if (custResp.isSuccessful && custResp.body() != null) {
+                                customers.addAll(custResp.body()!!)
+                            }
+                        }
+                    }
                 }
-                val fallback = fallbackResp.body()
-                    ?.filter { it.custId.takeLast(2).equals(branchSuffix, ignoreCase = true) }
-                    ?: emptyList()
-                customers.addAll(fallback)
 
                 val deduped = customers.distinctBy { it.custId }.map { it.copy(isSynced = true) }
-                // ✅ อย่าล้างข้อมูลลูกค้าในเครื่องถ้าผลลัพธ์ว่างเปล่า — ป้องกันข้อมูลถูกลบเงียบๆ เมื่อ response ว่างผิดปกติ
                 if (deduped.isNotEmpty()) customerDao.clearAndInsert(deduped)
                 kotlin.Result.success(Unit)
             } catch (e: IOException) {
                 kotlin.Result.success(Unit) // offline — Room data still valid
             } catch (e: Exception) {
+                Log.e("CustomerRepo", "refreshCustomers error: ${e.message}", e)
                 kotlin.Result.failure(e)
             }
         }

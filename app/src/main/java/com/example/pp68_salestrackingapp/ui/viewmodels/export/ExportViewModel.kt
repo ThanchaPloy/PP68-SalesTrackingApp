@@ -70,7 +70,7 @@ class ExportViewModel @Inject constructor(
             
             try {
                 val activitiesResult = activityRepo.getMyActivitiesWithDetails()
-                val allActivities = activitiesResult.getOrDefault(emptyList())
+                val allActivities = activitiesResult.getOrThrow()
                 val allResults = activityRepo.getAllResultsFlow().first()
 
                 val filteredActivities = allActivities.filter { card ->

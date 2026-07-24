@@ -103,15 +103,15 @@ class ProjectInventoryViewModel @Inject constructor(
             val branchesMap = branchRepo.observeBranches().associateBy { it.branchId }
 
             // 4. Map — fallback ชื่อเป็น productId ถ้า master ไม่มีข้อมูล
-            projectProducts.map { pp ->
-                val product = productsMap[pp.productId]
+            projectProducts.mapNotNull { pp ->
+                val product = productsMap[pp.productId] ?: return@mapNotNull null
                 InventoryItem(
                     productId          = pp.productId,
                     lineCode           = pp.lineCode,
-                    productName        = product?.description ?: pp.productId,
-                    category           = product?.groupName ?: "ทั่วไป",
+                    productName        = product.description ?: pp.productId,
+                    category           = product.groupName ?: "ทั่วไป",
                     quantity           = pp.quantity ?: 0.0,
-                    unit               = product?.unit ?: "ชิ้น",
+                    unit               = product.unit ?: "ชิ้น",
                     desiredDate        = pp.desiredDate,
                     shippingBranchName = branchesMap[pp.shippingBranchId]?.branchName
                 )

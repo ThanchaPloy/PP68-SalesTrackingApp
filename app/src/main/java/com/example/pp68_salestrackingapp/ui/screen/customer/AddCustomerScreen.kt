@@ -138,8 +138,8 @@ fun AddCustomerContent(
 
             // ── Google Maps Picker ───────────────────────────
             GoogleMapPickerField(
-                lat = uiState.selectedLat ?: DEFAULT_LAT,
-                lng = uiState.selectedLng ?: DEFAULT_LNG,
+                lat = uiState.selectedLat,
+                lng = uiState.selectedLng,
                 onLocationPicked = { pickedLat, pickedLng ->
                     onEvent(AddCustomerEvent.LocationPicked(pickedLat, pickedLng))
                 }

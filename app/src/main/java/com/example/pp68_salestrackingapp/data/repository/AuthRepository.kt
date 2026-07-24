@@ -27,27 +27,32 @@ class AuthRepository @Inject constructor(
                     tokenManager.saveToken(loginResp.token)
                     database.clearAllTables()
 
-                    // 2. ใช้ข้อมูลจาก login response โดยตรง (Ktor backend ส่ง branch_id / full_name มาแล้ว)
-                    val branchId = loginResp.branchId ?: ""
+                    // 2. ดึงข้อมูลผู้ใช้ (รองรับทั้ง Ktor/PostgREST backend และ Node.js backend)
+                    val finalUserId = loginResp.employee?.empCode ?: loginResp.userId ?: ""
+                    val finalFullName = loginResp.employee?.empName ?: loginResp.fullName
+                    val finalRole = loginResp.employee?.empPost ?: loginResp.role ?: ""
+                    val finalBranchId = loginResp.employee?.empBrchCode ?: loginResp.branchId ?: ""
+                    val finalEmpType = loginResp.employee?.empPost ?: loginResp.empType
+
                     val authUser = AuthUser(
-                        userId     = loginResp.userId,
+                        userId     = finalUserId,
                         email      = username,
-                        role       = loginResp.role,
-                        teamId     = branchId,
-                        fullName   = loginResp.fullName,
+                        role       = finalRole,
+                        teamId     = finalBranchId,
+                        fullName   = finalFullName,
                         branchName = null,
-                        empType    = loginResp.empType
+                        empType    = finalEmpType
                     )
                     tokenManager.saveUserData(authUser)
 
                     // 3. Sync ข้อมูลทั้งหมดตามสาขาของผู้ใช้
                     syncManager.syncAll(
-                        userId   = loginResp.userId,
-                        branchId = branchId
+                        userId   = finalUserId,
+                        branchId = finalBranchId
                     )
 
                     // 4. อัปเดต FCM Token สำหรับการแจ้งเตือน
-                    updateFcmTokenOnServer(loginResp.userId)
+                    updateFcmTokenOnServer(finalUserId)
 
                     kotlin.Result.success(loginResp)
                 } else {
@@ -80,11 +85,14 @@ class AuthRepository @Inject constructor(
                     tokenManager.saveToken(loginResp.token)
                     database.clearAllTables()
 
-                    val userDetail = fetchUserDetail(loginResp.userId)
+                    val finalUserId = loginResp.employee?.empCode ?: loginResp.userId ?: ""
+                    val finalRole = loginResp.employee?.empPost ?: loginResp.role ?: ""
+
+                    val userDetail = fetchUserDetail(finalUserId)
                     val authUser = AuthUser(
-                        userId     = loginResp.userId,
+                        userId     = finalUserId,
                         email      = email,
-                        role       = loginResp.role,
+                        role       = finalRole,
                         teamId     = userDetail?.branchId ?: branchId,
                         fullName   = fullName,
                         branchName = userDetail?.branchName
@@ -93,12 +101,12 @@ class AuthRepository @Inject constructor(
 
                     // Sync ข้อมูลเริ่มต้นหลังสมัครสมาชิก
                     syncManager.syncAll(
-                        userId   = loginResp.userId,
+                        userId   = finalUserId,
                         branchId = userDetail?.branchId ?: branchId
                     )
 
                     // อัปเดต FCM Token สำหรับผู้ใช้ใหม่
-                    updateFcmTokenOnServer(loginResp.userId)
+                    updateFcmTokenOnServer(finalUserId)
 
                     kotlin.Result.success(loginResp)
                 } else {

@@ -3,10 +3,13 @@ package com.example.pp68_salestrackingapp.ui.viewmodels.dashboard
 import androidx.arch.core.executor.testing.InstantTaskExecutorRule
 import com.example.pp68_salestrackingapp.data.model.AuthUser
 import com.example.pp68_salestrackingapp.data.model.Project
+import com.example.pp68_salestrackingapp.data.model.Customer
+import com.example.pp68_salestrackingapp.data.model.SalesActivity
 import com.example.pp68_salestrackingapp.data.repository.ActivityRepository
 import com.example.pp68_salestrackingapp.data.repository.AuthRepository
 import com.example.pp68_salestrackingapp.data.repository.ProjectRepository
-import com.example.pp68_salestrackingapp.ui.screen.dashboard.StatsViewModel
+import com.example.pp68_salestrackingapp.data.repository.CustomerRepository
+
 import com.example.pp68_salestrackingapp.ui.viewmodels.activity.ActivityCard
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -40,11 +43,19 @@ class StatsViewModelTest {
     private val dispatcher = StandardTestDispatcher()
     private val projectRepo = mockk<ProjectRepository>(relaxed = true)
     private val activityRepo = mockk<ActivityRepository>(relaxed = true)
+    private val customerRepo = mockk<CustomerRepository>(relaxed = true)
     private val authRepo = mockk<AuthRepository>(relaxed = true)
 
     @Before
     fun setUp() {
         Dispatchers.setMain(dispatcher)
+        every { projectRepo.getAllProjectsFlow() } returns flowOf(emptyList())
+        every { activityRepo.getAllActivitiesFlow() } returns flowOf(emptyList())
+        every { customerRepo.getAllCustomersFlow() } returns flowOf(emptyList())
+        coEvery { projectRepo.refreshProjects(any()) } returns Result.success(Unit)
+        coEvery { activityRepo.refreshActivities(any()) } returns Result.success(Unit)
+        coEvery { customerRepo.refreshCustomers(any()) } returns Result.success(Unit)
+        coEvery { activityRepo.getMyActivitiesWithDetails() } returns Result.success(emptyList())
     }
 
     @After
@@ -58,6 +69,16 @@ class StatsViewModelTest {
         val user = AuthUser("U1", "u@test.com", "sale")
 
         every { authRepo.currentUser() } returns user
+        every { customerRepo.getAllCustomersFlow() } returns flowOf(
+            listOf(
+                Customer(custId = "C1", companyName = "Company", companyStatus = 1, createdBy = "U1", createdAt = today)
+            )
+        )
+        every { activityRepo.getAllActivitiesFlow() } returns flowOf(
+            listOf(
+                SalesActivity("A1", "U1", "C1", "P1", "visit", true, "Lead", today, "09:00", "10:00", status = "completed")
+            )
+        )
         every { projectRepo.getAllProjectsFlow() } returns flowOf(
             listOf(
                 Project(
@@ -66,6 +87,7 @@ class StatsViewModelTest {
                     projectName = "Lead",
                     projectStatus = "Lead",
                     createdAt = "${today}T08:00:00",
+                    startDate = today,
                     expectedValue = 100.0,
                     opportunityScore = "HOT",
                     closingDate = today
@@ -76,6 +98,7 @@ class StatsViewModelTest {
                     projectName = "PO",
                     projectStatus = "PO",
                     createdAt = "${today}T09:00:00",
+                    startDate = today,
                     expectedValue = 200.0,
                     opportunityScore = "WARM",
                     closingDate = today
@@ -86,6 +109,7 @@ class StatsViewModelTest {
                     projectName = "Lost",
                     projectStatus = "Lost",
                     createdAt = "${today}T10:00:00",
+                    startDate = today,
                     expectedValue = 300.0,
                     opportunityScore = "COLD"
                 )
@@ -120,7 +144,7 @@ class StatsViewModelTest {
             )
         )
 
-        val vm = StatsViewModel(projectRepo, activityRepo, authRepo)
+        val vm = StatsViewModel(projectRepo, activityRepo, customerRepo, authRepo)
         advanceUntilIdle()
 
         val state = vm.uiState.value
@@ -136,13 +160,13 @@ class StatsViewModelTest {
 
     @Test
     fun `load failure should expose error`() = runTest {
-        every { authRepo.currentUser() } returns null
+        every { authRepo.currentUser() } returns AuthUser("U1", "u@test.com", "sale")
         every { projectRepo.getAllProjectsFlow() } returns flowOf(emptyList())
-        coEvery { activityRepo.getMyActivitiesWithDetails() } returns Result.failure(Exception("load fail"))
-
-        val vm = StatsViewModel(projectRepo, activityRepo, authRepo)
+        coEvery { projectRepo.refreshProjects(any()) } returns Result.failure(Exception("load fail"))
+ 
+        val vm = StatsViewModel(projectRepo, activityRepo, customerRepo, authRepo)
         advanceUntilIdle()
-
+ 
         val state = vm.uiState.value
         assertFalse(state.isLoading)
         assertEquals("load fail", state.error)
@@ -154,7 +178,7 @@ class StatsViewModelTest {
         every { projectRepo.getAllProjectsFlow() } returns flowOf(emptyList())
         coEvery { activityRepo.getMyActivitiesWithDetails() } returns Result.success(emptyList())
         coEvery { authRepo.logout() } returns Unit
-        val vm = StatsViewModel(projectRepo, activityRepo, authRepo)
+        val vm = StatsViewModel(projectRepo, activityRepo, customerRepo, authRepo)
         advanceUntilIdle()
 
         vm.logout()
@@ -215,7 +239,7 @@ class StatsViewModelTest {
             )
         )
 
-        val vm = StatsViewModel(projectRepo, activityRepo, authRepo)
+        val vm = StatsViewModel(projectRepo, activityRepo, customerRepo, authRepo)
         advanceUntilIdle()
 
         val state = vm.uiState.value
@@ -229,14 +253,14 @@ class StatsViewModelTest {
         every { authRepo.currentUser() } returns AuthUser("U1", "u@test.com", "sale")
         every { projectRepo.getAllProjectsFlow() } returns flowOf(
             listOf(
-                Project(projectId = "P1", custId = "C1", projectName = "N1", projectStatus = "Quotation", createdAt = "${today}T01:00:00", expectedValue = 150.0),
-                Project(projectId = "P2", custId = "C1", projectName = "Lead", projectStatus = "Lead", createdAt = "${today}T02:00:00", expectedValue = 50.0),
-                Project(projectId = "P3", custId = "C1", projectName = "Lost", projectStatus = "Lost", createdAt = "${today}T03:00:00", expectedValue = 10.0)
+                Project(projectId = "P1", custId = "C1", projectName = "N1", projectStatus = "Quotation", createdAt = "${today}T01:00:00", startDate = today, expectedValue = 150.0),
+                Project(projectId = "P2", custId = "C1", projectName = "Lead", projectStatus = "Lead", createdAt = "${today}T02:00:00", startDate = null, expectedValue = 50.0),
+                Project(projectId = "P3", custId = "C1", projectName = "Lost", projectStatus = "Lost", createdAt = "${today}T03:00:00", startDate = null, expectedValue = 10.0)
             )
         )
         coEvery { activityRepo.getMyActivitiesWithDetails() } returns Result.success(emptyList())
 
-        val vm = StatsViewModel(projectRepo, activityRepo, authRepo)
+        val vm = StatsViewModel(projectRepo, activityRepo, customerRepo, authRepo)
         advanceUntilIdle()
         val state = vm.uiState.value
 
@@ -273,7 +297,7 @@ class StatsViewModelTest {
             )
         )
 
-        val vm = StatsViewModel(projectRepo, activityRepo, authRepo)
+        val vm = StatsViewModel(projectRepo, activityRepo, customerRepo, authRepo)
         advanceUntilIdle()
         val state = vm.uiState.value
 
@@ -297,7 +321,7 @@ class StatsViewModelTest {
         )
         coEvery { activityRepo.getMyActivitiesWithDetails() } returns Result.success(emptyList())
 
-        val vm = StatsViewModel(projectRepo, activityRepo, authRepo)
+        val vm = StatsViewModel(projectRepo, activityRepo, customerRepo, authRepo)
         advanceUntilIdle()
         val groups = vm.uiState.value.opportunityGroups.associateBy { it.score }
 
@@ -314,7 +338,7 @@ class StatsViewModelTest {
         every { projectRepo.getAllProjectsFlow() } returns flow { throw IllegalStateException("project flow error") }
         coEvery { activityRepo.getMyActivitiesWithDetails() } returns Result.success(emptyList())
 
-        val vm = StatsViewModel(projectRepo, activityRepo, authRepo)
+        val vm = StatsViewModel(projectRepo, activityRepo, customerRepo, authRepo)
         advanceUntilIdle()
 
         assertFalse(vm.uiState.value.isLoading)

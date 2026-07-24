@@ -5,6 +5,8 @@ import android.util.Log
 import androidx.work.*
 import com.example.pp68_salestrackingapp.data.local.*
 import com.example.pp68_salestrackingapp.data.model.ActivityResult
+import com.example.pp68_salestrackingapp.data.model.ProjectContact
+import com.example.pp68_salestrackingapp.data.model.ProjectSalesMember
 import com.example.pp68_salestrackingapp.data.model.ProjectMemberInsertDto
 import com.example.pp68_salestrackingapp.data.remote.ApiService
 import com.example.pp68_salestrackingapp.di.TokenManager
@@ -29,7 +31,9 @@ class SyncManager @Inject constructor(
     private val resultDao: ActivityResultDao,
     private val photoDao: ActivityResultPhotoDao,
     private val appointmentContactDao: AppointmentContactDao,
-    private val planItemDao: ActivityPlanItemDao
+    private val planItemDao: ActivityPlanItemDao,
+    private val projectContactDao: ProjectContactDao,
+    private val projectSalesMemberDao: ProjectSalesMemberDao
 ) {
     fun scheduleSync() {
         val constraints = Constraints.Builder()
@@ -141,18 +145,45 @@ class SyncManager @Inject constructor(
             if (response.isSuccessful) {
                 val realId = response.body()?.firstOrNull()?.projectId
                 val finalId = if (realId != null && realId != project.projectId) {
-                    activityDao.updateProjectIdForActivities(project.projectId, realId)
-                    projectDao.deleteProjectById(project.projectId)
+                    val oldId = project.projectId
+                    activityDao.updateProjectIdForActivities(oldId, realId)
                     projectDao.insertProject(project.copy(projectId = realId, isSynced = true))
+                    projectContactDao.updateProjectId(oldId, realId)
+                    projectSalesMemberDao.updateProjectId(oldId, realId)
+                    projectDao.deleteProjectById(oldId)
                     realId
                 } else {
                     projectDao.updateSyncStatus(project.projectId, true)
                     project.projectId
                 }
-                project.createBy?.let { userId ->
-                    try {
-                        apiService.addProjectMembers(listOf(ProjectMemberInsertDto(finalId, userId, "owner")))
-                    } catch (e: Exception) { /* retry next sync */ }
+
+                // Sync contacts to remote
+                try {
+                    val localContacts = projectContactDao.getContactIdsByProject(finalId)
+                    if (localContacts.isNotEmpty()) {
+                        apiService.deleteProjectContacts("eq.$finalId")
+                        val rows = localContacts.map { ProjectContact(finalId, it.trim()) }
+                        apiService.addProjectContacts(rows)
+                    }
+                } catch (e: Exception) {
+                    Log.e("SyncManager", "Failed to sync project contacts for $finalId: ${e.message}")
+                }
+
+                // Sync sales members to remote
+                try {
+                    val localMembers = projectSalesMemberDao.getMemberIdsByProject(finalId)
+                    if (localMembers.isNotEmpty()) {
+                        apiService.deleteProjectMembers("eq.$finalId")
+                        val memberRows = localMembers.map { ProjectMemberInsertDto(finalId, it.trim(), "owner") }
+                        apiService.addProjectMembers(memberRows)
+                    } else {
+                        project.createBy?.let { userId ->
+                            apiService.deleteProjectMembers("eq.$finalId")
+                            apiService.addProjectMembers(listOf(ProjectMemberInsertDto(finalId, userId, "owner")))
+                        }
+                    }
+                } catch (e: Exception) {
+                    Log.e("SyncManager", "Failed to sync project members for $finalId: ${e.message}")
                 }
             }
         }
@@ -273,7 +304,6 @@ class SyncManager @Inject constructor(
         body["photo_lat"]          = result.photoLat
         body["photo_lng"]          = result.photoLng
         body["photo_device_model"] = result.photoDeviceModel
-        result.lossReason?.let { body["loss_reason"] = it }
         body["version"]         = result.version
         body["is_latest"]       = result.isLatest
         body["result_group_id"] = result.resultGroupId

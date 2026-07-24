@@ -7,6 +7,10 @@ import com.example.pp68_salestrackingapp.data.model.ContactPerson
 import com.example.pp68_salestrackingapp.data.model.Project
 import com.example.pp68_salestrackingapp.data.model.ProjectMemberDto
 import com.example.pp68_salestrackingapp.data.remote.ApiService
+import com.example.pp68_salestrackingapp.data.local.CustomerDao
+import com.example.pp68_salestrackingapp.di.TokenManager
+import com.example.pp68_salestrackingapp.utils.SyncManager
+import com.example.pp68_salestrackingapp.data.model.AuthUser
 import io.mockk.*
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.runTest
@@ -137,6 +141,9 @@ class ContactRepositoryTest {
     private lateinit var repository: ContactRepository
     private val apiService = mockk<ApiService>(relaxed = true)
     private val contactDao = mockk<ContactDao>(relaxed = true)
+    private val customerDao = mockk<CustomerDao>(relaxed = true)
+    private val tokenManager = mockk<TokenManager>(relaxed = true)
+    private val syncManager = mockk<SyncManager>(relaxed = true)
 
     private val sampleContact = ContactPerson(
         contactId   = "CON-001",
@@ -151,21 +158,19 @@ class ContactRepositoryTest {
 
     @Before
     fun setup() {
-        repository = ContactRepository(apiService, contactDao)
+        repository = ContactRepository(apiService, contactDao, customerDao, tokenManager, syncManager)
     }
 
     // TC-UNIT-CONT-01
     @Test
     fun `refreshContacts success should clear and insert`() = runTest {
-        val members  = listOf(ProjectMemberDto("PJ-001", "USR-001", "owner"))
-        val projects = listOf(Project(projectId = "PJ-001", custId = "CST-001", projectName = "P1"))
         val contacts = listOf(sampleContact)
 
-        coEvery { apiService.getMyProjectIds("eq.USR-001") } returns Response.success(members)
-        coEvery { apiService.getProjectsByIds(any()) } returns Response.success(projects)
-        coEvery { apiService.getContactsByCustomerIds(any()) } returns Response.success(contacts)
+        every { tokenManager.getUserData() } returns AuthUser("USR-001", "u@test.com", "sale")
+        coEvery { customerDao.getCustomerIdsByUserId("USR-001") } returns listOf("CST-001")
+        coEvery { apiService.getContactsByCustomerIds("in.(CST-001)") } returns Response.success(contacts)
 
-        val result = repository.refreshContacts("USR-001")
+        val result = repository.refreshContacts()
 
         assertTrue(result.isSuccess)
         coVerify { contactDao.clearAndInsert(contacts) }
@@ -174,9 +179,10 @@ class ContactRepositoryTest {
     // TC-UNIT-CONT-02
     @Test
     fun `refreshContacts no projects should return success without inserting`() = runTest {
-        coEvery { apiService.getMyProjectIds(any()) } returns Response.success(emptyList())
+        every { tokenManager.getUserData() } returns AuthUser("USR-001", "u@test.com", "sale")
+        coEvery { customerDao.getCustomerIdsByUserId("USR-001") } returns emptyList()
 
-        val result = repository.refreshContacts("USR-001")
+        val result = repository.refreshContacts()
 
         assertTrue(result.isSuccess)
         coVerify(exactly = 0) { contactDao.clearAndInsert(any()) }
@@ -185,9 +191,10 @@ class ContactRepositoryTest {
     // TC-UNIT-CONT-03
     @Test
     fun `refreshContacts network error should return failure`() = runTest {
-        coEvery { apiService.getMyProjectIds(any()) } throws Exception("Network error")
+        every { tokenManager.getUserData() } returns AuthUser("USR-001", "u@test.com", "sale")
+        coEvery { customerDao.getCustomerIdsByUserId(any()) } throws Exception("Network error")
 
-        val result = repository.refreshContacts("USR-001")
+        val result = repository.refreshContacts()
 
         assertTrue(result.isFailure)
     }

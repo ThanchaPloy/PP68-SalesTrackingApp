@@ -12,6 +12,7 @@ import io.mockk.mockk
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.resetMain
@@ -40,14 +41,20 @@ class AddProductViewModelTest {
         id: String = "P1",
         name: String = "Product A",
         brand: String = "Brand A",
+        brandNo: String? = "B01",
         category: String = "Cat",
-        subgroup: String = "Sub",
+        subCategory: String = "Sub",
         unit: String = "EA"
-    ) = ProductSimpleDto(id, name, brand, category, subgroup, unit)
+    ) = ProductSimpleDto(id, name, brand, brandNo, category, subCategory, unit)
 
     @Before
     fun setUp() {
         Dispatchers.setMain(dispatcher)
+        coEvery { productRepo.getBrands() } returns Result.success(listOf(Pair("B01", "Brand A"), Pair("B02", "Brand B")))
+        coEvery { productRepo.getUnits() } returns Result.success(emptyList())
+        coEvery { branchRepo.syncFromRemote() } returns Result.success(Unit)
+        coEvery { productRepo.getAllProducts() } returns Result.success(emptyList())
+        coEvery { productRepo.searchProducts(any(), any(), any(), any()) } coAnswers { productRepo.getAllProducts() }
     }
 
     @After
@@ -77,7 +84,7 @@ class AddProductViewModelTest {
         advanceUntilIdle()
 
         assertFalse(vm.uiState.value.isLoading)
-        assertTrue(vm.uiState.value.error?.contains("โหลดสินค้าไม่สำเร็จ") == true)
+        assertTrue(vm.uiState.value.error?.contains("ค้นหาล้มเหลว") == true)
     }
 
     @Test
@@ -87,7 +94,7 @@ class AddProductViewModelTest {
                 product(id = "P1", name = "A1", brand = "Brand A"),
                 product(id = "P2", name = "A2", brand = "Brand A"),
                 product(id = "P3", name = "A1", brand = "Brand A"),
-                product(id = "P4", name = "B1", brand = "Brand B")
+                product(id = "P4", name = "B1", brand = "Brand B", brandNo = "B02")
             )
         )
         val vm = AddProductViewModel(SavedStateHandle(mapOf("projectId" to "PRJ-1")), productRepo, branchRepo, apiService)
@@ -98,6 +105,7 @@ class AddProductViewModelTest {
 
         // Given-When
         vm.onBrandSelected("Brand A")
+        advanceUntilIdle()
 
         // Then
         assertEquals("Brand A", vm.uiState.value.selectedBrand)
@@ -113,7 +121,7 @@ class AddProductViewModelTest {
     @Test
     fun givenNameSelected_whenMatchingSelectedBrand_thenFillsGroupSubgroupAndUnit() = runTest {
         coEvery { productRepo.getAllProducts() } returns Result.success(
-            listOf(product(id = "P1", name = "A1", brand = "Brand A", category = "Glass", subgroup = "Tempered", unit = "sqm"))
+            listOf(product(id = "P1", name = "A1", brand = "Brand A", category = "Glass", subCategory = "Tempered", unit = "sqm"))
         )
         val vm = AddProductViewModel(SavedStateHandle(mapOf("projectId" to "PRJ-1")), productRepo, branchRepo, apiService)
         advanceUntilIdle()
@@ -130,7 +138,7 @@ class AddProductViewModelTest {
     @Test
     fun givenNameSelected_whenBrandBlank_thenFindsByNameAndFillsFields() = runTest {
         coEvery { productRepo.getAllProducts() } returns Result.success(
-            listOf(product(id = "P1", name = "Shared", brand = "Brand A", category = "CatA", subgroup = "SubA", unit = "kg"))
+            listOf(product(id = "P1", name = "Shared", brand = "Brand A", category = "CatA", subCategory = "SubA", unit = "kg"))
         )
         val vm = AddProductViewModel(SavedStateHandle(mapOf("projectId" to "PRJ-1")), productRepo, branchRepo, apiService)
         advanceUntilIdle()
@@ -146,7 +154,7 @@ class AddProductViewModelTest {
     @Test
     fun givenNameSelected_whenNoMatchingProduct_thenClearsDerivedFields() = runTest {
         coEvery { productRepo.getAllProducts() } returns Result.success(
-            listOf(product(id = "P1", name = "A1", brand = "Brand A", category = "CatA", subgroup = "SubA", unit = "kg"))
+            listOf(product(id = "P1", name = "A1", brand = "Brand A", category = "CatA", subCategory = "SubA", unit = "kg"))
         )
         val vm = AddProductViewModel(SavedStateHandle(mapOf("projectId" to "PRJ-1")), productRepo, branchRepo, apiService)
         advanceUntilIdle()
@@ -205,8 +213,9 @@ class AddProductViewModelTest {
         vm.onQuantityChange("10")
 
         vm.save()
+        advanceUntilIdle()
 
-        assertEquals("กรุณาเลือกสินค้าให้ถูกต้อง", vm.uiState.value.error)
+        assertEquals("กรุณาเลือกสินค้า", vm.uiState.value.error)
     }
 
     @Test
@@ -241,8 +250,27 @@ class AddProductViewModelTest {
     fun givenValidInputs_whenSaveSuccess_thenClearsErrorTogglesSavingAndMarksSaved() = runTest {
         coEvery { productRepo.getAllProducts() } returns Result.success(listOf(product()))
         coEvery {
-            productRepo.addProductToProject("PRJ-1", "P1", 2.0, null, "B1")
-        } returns Result.success(Unit)
+            productRepo.addProductToProject(
+                projectId = "PRJ-1",
+                productId = "P1",
+                quantity = 2.0,
+                wantedDate = null,
+                shippingBranchId = "B1",
+                brandName = "Brand A",
+                categoryName = "Cat",
+                subcategoryName = "Sub",
+                productName = "Product A",
+                color = null,
+                thickness = null,
+                width = null,
+                length = null,
+                dimensionUnit = null,
+                uom = "EA"
+            )
+        } coAnswers {
+            delay(100)
+            Result.success(Unit)
+        }
         val vm = AddProductViewModel(SavedStateHandle(mapOf("projectId" to "PRJ-1")), productRepo, branchRepo, apiService)
         advanceUntilIdle()
         vm.onBrandSelected("Brand A")
@@ -263,13 +291,49 @@ class AddProductViewModelTest {
 
         assertTrue(vm.uiState.value.isSaved)
         assertFalse(vm.uiState.value.isSaving)
-        coVerify(exactly = 1) { productRepo.addProductToProject("PRJ-1", "P1", 2.0, null, "B1") }
+        coVerify(exactly = 1) {
+            productRepo.addProductToProject(
+                projectId = "PRJ-1",
+                productId = "P1",
+                quantity = 2.0,
+                wantedDate = null,
+                shippingBranchId = "B1",
+                brandName = "Brand A",
+                categoryName = "Cat",
+                subcategoryName = "Sub",
+                productName = "Product A",
+                color = null,
+                thickness = null,
+                width = null,
+                length = null,
+                dimensionUnit = null,
+                uom = "EA"
+            )
+        }
     }
 
     @Test
     fun givenValidInputs_whenSaveFails_thenStopsSavingAndSetsFailureMessage() = runTest {
         coEvery { productRepo.getAllProducts() } returns Result.success(listOf(product()))
-        coEvery { productRepo.addProductToProject(any(), any(), any(), any(), any()) } returns Result.failure(Exception("api"))
+        coEvery {
+            productRepo.addProductToProject(
+                projectId = "PRJ-1",
+                productId = "P1",
+                quantity = 2.0,
+                wantedDate = null,
+                shippingBranchId = "B1",
+                brandName = "Brand A",
+                categoryName = "Cat",
+                subcategoryName = "Sub",
+                productName = "Product A",
+                color = null,
+                thickness = null,
+                width = null,
+                length = null,
+                dimensionUnit = null,
+                uom = "EA"
+            )
+        } returns Result.failure(Exception("api"))
         val vm = AddProductViewModel(SavedStateHandle(mapOf("projectId" to "PRJ-1")), productRepo, branchRepo, apiService)
         advanceUntilIdle()
         vm.onBrandSelected("Brand A")
@@ -281,6 +345,6 @@ class AddProductViewModelTest {
         advanceUntilIdle()
 
         assertFalse(vm.uiState.value.isSaving)
-        assertTrue(vm.uiState.value.error?.contains("บันทึกไม่สำเร็จ") == true)
+        assertTrue(vm.uiState.value.error?.contains("เพิ่มไม่สำเร็จ") == true)
     }
 }

@@ -16,4 +16,7 @@ interface ProjectSalesMemberDao {
 
     @Query("SELECT emp_code FROM project_sales_member WHERE project_code = :projectId")
     suspend fun getMemberIdsByProject(projectId: String): List<String>
+
+    @Query("UPDATE project_sales_member SET project_code = :newProjectId WHERE project_code = :oldProjectId")
+    suspend fun updateProjectId(oldProjectId: String, newProjectId: String)
 }

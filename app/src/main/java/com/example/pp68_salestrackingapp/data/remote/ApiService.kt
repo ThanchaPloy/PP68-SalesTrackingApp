@@ -11,59 +11,32 @@ import retrofit2.http.*
 interface ApiService {
 
     // ── User ─────────────────────────────────────────────────────
-    // ✅ ตาราง "user" ไม่มีอยู่จริงใน schema — ตารางจริงคือ "employee" (emp_code/emp_name/emp_brch_code/emp_post/stat)
-    // ใช้ PostgREST column aliasing (select=alias:real_column) ให้ response ยังคืน key แบบเดิมที่ UserDto ใช้อยู่
-    @GET("employee")
-    suspend fun getUserById(
-        @Query("emp_code") userId: String,
-        @Query("select") select: String = "user_id:emp_code,full_name:emp_name,branch_id:emp_brch_code,role:emp_post,phone_number",
-        @Query("limit") limit: Int = 1
-    ): Response<List<UserDto>>
+    // Real DB table is "employee", but the deployed Ktor backend exposes it at /user
+    // with params user_id / branch_id and raw emp_code/emp_name/... JSON keys (see UserDto).
+    @GET("user")
+    suspend fun getUserById(@Query("user_id") userId: String): Response<List<UserDto>>
 
-    @GET("employee")
-    suspend fun getUsersByIds(
-        @Query("emp_code") userIds: String,
-        @Query("select") select: String = "user_id:emp_code,full_name:emp_name",
-        @Query("limit") limit: Int = 1000
-    ): Response<List<UserDto>>
+    @PATCH("user/fcm-token")
+    suspend fun updateFcmToken(@Query("emp_code") userId: String, @Body updates: Map<String, String>): Response<Map<String, String>>
 
-    @GET("employee")
-    suspend fun getUsersByBranch(
-        @Query("emp_brch_code") branchId: String,
-        @Query("select") select: String = "user_id:emp_code,full_name:emp_name,role:emp_post",
-        @Query("stat") isActive: String? = null,
-        @Query("limit") limit: Int = 100
-    ): Response<List<UserDto>>
-
-    @PATCH("employee")
-    @Headers("Prefer: return=representation", "Content-Profile: public")
-    suspend fun updateFcmToken(@Query("emp_code") userId: String, @Body updates: Map<String, String>): Response<List<UserDto>>
-
-    // ⚠️ body ต้องใช้ชื่อ column จริง (เช่น "emp_name" ไม่ใช่ "full_name") เพราะ PATCH เขียนตรงเข้าคอลัมน์ ไม่รองรับ alias เหมือน select
-    @PATCH("employee")
-    @Headers("Prefer: return=representation", "Content-Profile: public")
-    suspend fun updateUserProfile(@Query("emp_code") userId: String, @Body updates: Map<String, String>): Response<List<UserDto>>
+    // ponytail: backend has no generic profile-update route (only /user/fcm-token) and no
+    // phone_number column — this keeps 404ing until the backend adds one.
+    @PATCH("user")
+    suspend fun updateUserProfile(@Query("user_id") userId: String, @Body updates: Map<String, String>): Response<List<UserDto>>
 
     @POST("project_sales_member")
     @Headers("Prefer: return=representation", "Content-Profile: public")
     suspend fun addProjectMembers(@Body members: List<ProjectMemberInsertDto>): Response<List<ProjectMemberInsertDto>>
 
     @DELETE("project_sales_member")
-    suspend fun deleteProjectMembers(@Query("project_code") projectId: String): Response<Unit>
+    suspend fun deleteProjectMembers(@Query("project_id") projectId: String): Response<Unit>
 
     @GET("project_sales_member")
-    suspend fun getProjectMembers(@Query("project_code") projectId: String, @Query("select") select: String = "emp_code,sales_role"): Response<List<ProjectMemberDto>>
+    suspend fun getProjectMembers(@Query("project_id") projectId: String, @Query("select") select: String = "emp_code,sales_role"): Response<List<ProjectMemberDto>>
 
     @GET("project_team_member")
     suspend fun getProjectTeamMemberCodes(
         @Query("select") select: String = "emp_code",
-        @Query("limit") limit: Int = 1000
-    ): Response<List<Map<String, String>>>
-
-    @GET("employee")
-    suspend fun getEmployeesByIds(
-        @Query("emp_code") empCodes: String,
-        @Query("select") select: String = "emp_code,emp_name",
         @Query("limit") limit: Int = 1000
     ): Response<List<Map<String, String>>>
 
@@ -84,27 +57,23 @@ interface ApiService {
     @GET("customer")
     suspend fun getCustomersBySalespersonCodes(
         @Query("salesperson_code") codes: String,   // format: in.(code1,code2,...)
-        @Query("limit") limit: Int = 2000
+        @Query("limit") limit: Int,
+        @Query("offset") offset: Int
     ): Response<List<Customer>>
 
-    @GET("employee")
+    @GET("user")
     suspend fun getEmployeeCodesByBranch(
-        @Query("emp_brch_code") branchCode: String,  // format: eq.90HO
-        @Query("select") select: String = "emp_code",
-        @Query("stat") stat: String = "eq.1"
-    ): Response<List<Map<String, String>>>
-
-    @GET("employee")
-    suspend fun getProjectEmployeeCodes(
-        @Query("emp_type") empType: String = "eq.Project",
-        @Query("select") select: String = "emp_code",
-        @Query("stat") stat: String = "eq.1"
+        @Query("branch_id") branchCode: String  // format: eq.90HO
     ): Response<List<Map<String, String>>>
 
     @GET("customer")
+    // ponytail: backend's /customer route checks customer_code before salesperson_code and
+    // has no ilike support — sending both together always 404s (customer_code treated as a
+    // literal exact-match lookup). Filter by branch suffix client-side instead (see CustomerRepository).
     suspend fun getCustomersWithEmptySalesperson(
         @Query("salesperson_code") code: String = "eq.",
-        @Query("limit") limit: Int = 5000
+        @Query("limit") limit: Int,
+        @Query("offset") offset: Int
     ): Response<List<Customer>>
 
     @GET("customer")
@@ -143,6 +112,12 @@ interface ApiService {
         @Query("limit") limit: Int = 2000
     ): Response<List<ContactPerson>>
 
+    @GET("contact_person")
+    suspend fun getContactsByIds(
+        @Query("contact_id") contactIds: String,
+        @Query("limit") limit: Int = 1000
+    ): Response<List<ContactPerson>>
+
     @POST("contact_person")
     @Headers("Prefer: return=representation", "Content-Profile: public")
     suspend fun addContact(@Body fields: @JvmSuppressWildcards Map<String, Any?>): Response<List<ContactPerson>>
@@ -162,13 +137,13 @@ interface ApiService {
 
     // ── Project ──────────────────────────────────────────────────
     @GET("project")
-    suspend fun getProjectsByIds(@Query("project_code") projectIds: String, @Query("limit") limit: Int = 1000): Response<List<Project>>
+    suspend fun getProjectsByIds(@Query("project_id") projectIds: String, @Query("limit") limit: Int = 1000): Response<List<Project>>
 
     @GET("project")
     suspend fun getProjectsByCreator(@Query("create_by") userId: String, @Query("limit") limit: Int = 1000): Response<List<Project>>
 
     @GET("project")
-    suspend fun getProjectById(@Query("project_code") projectId: String, @Query("limit") limit: Int = 1): Response<List<Project>>
+    suspend fun getProjectById(@Query("project_id") projectId: String, @Query("limit") limit: Int = 1): Response<List<Project>>
 
     @POST("project")
     @Headers("Prefer: return=representation", "Content-Profile: public")
@@ -186,7 +161,7 @@ interface ApiService {
 
     // ── Project Contact ──────────────────────────────────────────
     @GET("project_contact")
-    suspend fun getProjectContacts(@Query("project_code") projectId: String, @Query("select") select: String = "contact_id,contact_person(full_name)"): Response<List<ProjectContactResponse>>
+    suspend fun getProjectContacts(@Query("project_code") projectId: String, @Query("select") select: String = "contact_id"): Response<List<ProjectContactResponse>>
 
     @POST("project_contact")
     @Headers("Content-Profile: public")
@@ -255,7 +230,7 @@ interface ApiService {
 
     // ── Appointment ──────────────────────────────────────────────
     @GET("appointment")
-    suspend fun getMyAppointments(@Query("emp_code") userId: String, @Query("limit") limit: Int = 1000, @Query("order") order: String = "planned_date.desc"): Response<List<SalesActivity>>
+    suspend fun getMyAppointments(@Query("user_id") userId: String, @Query("limit") limit: Int = 1000, @Query("order") order: String = "planned_date.desc"): Response<List<SalesActivity>>
 
     @POST("appointment")
     @Headers("Prefer: return=representation", "Content-Profile: public")
@@ -282,7 +257,7 @@ interface ApiService {
     suspend fun getMasterActivities(@Query("is_active") isActive: String = "eq.true", @Query("limit") limit: Int = 100): Response<List<ActivityMasterDto>>
 
     @GET("project_sales_member")
-    suspend fun getMyProjectIds(@Query("emp_code") userId: String, @Query("select") select: String = "project_code", @Query("limit") limit: Int = 1000): Response<List<ProjectMemberDto>>
+    suspend fun getMyProjectIds(@Query("user_id") userId: String, @Query("select") select: String = "project_code", @Query("limit") limit: Int = 1000): Response<List<ProjectMemberDto>>
 
     // ── Activity Result ──────────────────────────────────────────
     @POST("activity_result")

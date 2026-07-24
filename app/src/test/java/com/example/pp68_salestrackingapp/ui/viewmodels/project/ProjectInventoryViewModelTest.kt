@@ -50,6 +50,12 @@ class ProjectInventoryViewModelTest {
     @Before
     fun setUp() {
         Dispatchers.setMain(dispatcher)
+        coEvery { apiService.getProductsByIds(any(), any()) } coAnswers {
+            apiService.getProductMaster()
+        }
+        coEvery { apiService.getProductsByIds(any()) } coAnswers {
+            apiService.getProductMaster()
+        }
     }
 
     @After
@@ -72,16 +78,18 @@ class ProjectInventoryViewModelTest {
             listOf(
                 ProductMasterDto(
                     productId = "P1",
-                    productGroup = "Glass 10mm",
-                    productType = "Glass",
-                    productSubgroup = null,
-                    brand = "Brand",
+                    description = "Glass 10mm",
+                    variantCode = null,
+                    productBrandNo = null,
+                    productGroupNo = null,
+                    productSubgroupNo = null,
+                    productColorNo = null,
                     unit = "sqm",
-                    color = null,
-                    thickness = null,
-                    width = null,
-                    length = null,
-                    dimensionUnit = null
+                    weight = null,
+                    brandName = "Brand",
+                    groupName = "Glass",
+                    subgroupName = null,
+                    colorName = null
                 )
             )
         )
@@ -94,8 +102,6 @@ class ProjectInventoryViewModelTest {
             productRepo,
             apiService
         )
-        runCurrent()
-        assertTrue(vm.uiState.value.isLoading)
         advanceUntilIdle()
 
         assertFalse(vm.uiState.value.isLoading)

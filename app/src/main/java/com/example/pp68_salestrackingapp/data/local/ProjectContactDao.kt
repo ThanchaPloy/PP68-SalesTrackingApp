@@ -16,4 +16,7 @@ interface ProjectContactDao {
 
     @Query("SELECT contact_id FROM project_contact WHERE project_id = :projectId")
     suspend fun getContactIdsByProject(projectId: String): List<String>
+
+    @Query("UPDATE project_contact SET project_id = :newProjectId WHERE project_id = :oldProjectId")
+    suspend fun updateProjectId(oldProjectId: String, newProjectId: String)
 }

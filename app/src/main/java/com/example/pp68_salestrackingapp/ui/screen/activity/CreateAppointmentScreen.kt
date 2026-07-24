@@ -27,6 +27,16 @@ import com.example.pp68_salestrackingapp.ui.components.*
 import com.example.pp68_salestrackingapp.ui.theme.*
 import com.example.pp68_salestrackingapp.ui.viewmodels.activity.CreateAppointmentEvent
 import com.example.pp68_salestrackingapp.ui.viewmodels.activity.CreateAppointmentViewModel
+import android.Manifest
+import android.annotation.SuppressLint
+import android.content.pm.PackageManager
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.ui.platform.LocalContext
+import androidx.core.content.ContextCompat
+import com.google.android.gms.location.LocationServices
+import com.google.android.gms.location.Priority
+import com.google.android.gms.tasks.CancellationTokenSource
 
 private val TextDark   = Color(0xFF1A1A1A)
 private val TextGray   = Color(0xFF888888)
@@ -46,6 +56,42 @@ fun CreateAppointmentScreen(
 ) {
     val state by viewModel.uiState.collectAsState()
     val onEvent = viewModel::onEvent
+
+    val context = LocalContext.current
+    val fusedLocationClient = remember { LocationServices.getFusedLocationProviderClient(context) }
+    var hasLocationPermission by remember {
+        mutableStateOf(
+            ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
+            ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+        )
+    }
+
+    val permissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        hasLocationPermission = permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
+                permissions[Manifest.permission.ACCESS_COARSE_LOCATION] == true
+        if (hasLocationPermission) {
+            fetchLocation(fusedLocationClient) { lat, lng ->
+                onEvent(CreateAppointmentEvent.LocationPicked(lat, lng))
+            }
+        }
+    }
+
+    LaunchedEffect(state.activityType) {
+        if (state.activityType == "onsite" && state.lat == null && state.lng == null) {
+            if (hasLocationPermission) {
+                fetchLocation(fusedLocationClient) { lat, lng ->
+                    onEvent(CreateAppointmentEvent.LocationPicked(lat, lng))
+                }
+            } else {
+                permissionLauncher.launch(arrayOf(
+                    Manifest.permission.ACCESS_FINE_LOCATION,
+                    Manifest.permission.ACCESS_COARSE_LOCATION
+                ))
+            }
+        }
+    }
 
     LaunchedEffect(activityId, projectId) {
         if (activityId != null) {
@@ -387,14 +433,31 @@ fun CreateAppointmentScreen(
                 }
             }
 
-            FormField(label = "สถานที่") {
-                GoogleMapPickerField(
-                    lat = state.lat ?: 13.7563,
-                    lng = state.lng ?: 100.5018,
-                    onLocationPicked = { lat, lng ->
-                        onEvent(CreateAppointmentEvent.LocationPicked(lat, lng))
-                    }
-                )
+            if (state.activityType == "onsite") {
+                FormField(label = "สถานที่") {
+                    GoogleMapPickerField(
+                        lat = state.lat,
+                        lng = state.lng,
+                        onLocationPicked = { lat, lng ->
+                            onEvent(CreateAppointmentEvent.LocationPicked(lat, lng))
+                        },
+                        onResetToCurrentLocation = {
+                            if (hasLocationPermission) {
+                                fetchLocation(fusedLocationClient) { lat, lng ->
+                                    onEvent(CreateAppointmentEvent.LocationPicked(lat, lng))
+                                }
+                            } else {
+                                permissionLauncher.launch(arrayOf(
+                                    Manifest.permission.ACCESS_FINE_LOCATION,
+                                    Manifest.permission.ACCESS_COARSE_LOCATION
+                                ))
+                            }
+                        },
+                        onClearLocation = {
+                            onEvent(CreateAppointmentEvent.LocationPicked(null, null))
+                        }
+                    )
+                }
             }
 
             state.saveError?.let {
@@ -443,6 +506,21 @@ fun CreateAppointmentScreen(
             },
             onDismiss = { onEvent(CreateAppointmentEvent.DismissTimePicker) }
         )
+    }
+}
+
+@SuppressLint("MissingPermission")
+private fun fetchLocation(
+    fusedLocationClient: com.google.android.gms.location.FusedLocationProviderClient,
+    onResult: (Double, Double) -> Unit
+) {
+    fusedLocationClient.getCurrentLocation(
+        com.google.android.gms.location.Priority.PRIORITY_HIGH_ACCURACY,
+        com.google.android.gms.tasks.CancellationTokenSource().token
+    ).addOnSuccessListener { location ->
+        location?.let {
+            onResult(it.latitude, it.longitude)
+        }
     }
 }
 

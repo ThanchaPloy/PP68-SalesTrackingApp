@@ -48,9 +48,17 @@ interface ActivityResultDao {
 
     @Transaction
     suspend fun clearAndInsert(results: List<ActivityResult>) {
-        deleteAllSynced()   // คง row is_synced=0 (ยังไม่ได้ส่งขึ้น server) ไว้
+        val incomingIds = results.map { it.resultId }
+        if (incomingIds.isNotEmpty()) {
+            deleteSyncedResultsNotIn(incomingIds)
+        } else {
+            deleteAllSynced()
+        }
         if (results.isNotEmpty()) insertAll(results)
     }
+
+    @Query("DELETE FROM activity_result WHERE is_synced = 1 AND result_id NOT IN (:incomingIds)")
+    suspend fun deleteSyncedResultsNotIn(incomingIds: List<String>)
 
     @Query("SELECT appointment_id FROM activity_result WHERE appointment_id IS NOT NULL AND is_latest = 1")
     fun getAllResultIdsFlow(): Flow<List<String>>

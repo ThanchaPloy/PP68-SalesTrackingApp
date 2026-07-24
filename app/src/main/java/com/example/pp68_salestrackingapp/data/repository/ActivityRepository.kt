@@ -49,7 +49,8 @@ class ActivityRepository @Inject constructor(
     suspend fun refreshActivities(userId: String): kotlin.Result<Unit> {
         return withContext(Dispatchers.IO) {
             try {
-                val resp = apiService.getMyAppointments("eq.$userId")
+                val cleanUserId = userId.removePrefix("eq.")
+                val resp = apiService.getMyAppointments(cleanUserId)
                 if (resp.isSuccessful && resp.body() != null) {
                     val activities = resp.body()!!.map { it.copy(isSynced = true) }
                     val unsyncedContacts = appointmentContactDao.getAll()
@@ -82,7 +83,8 @@ class ActivityRepository @Inject constructor(
     suspend fun refreshResults(userId: String): kotlin.Result<Unit> {
         return withContext(Dispatchers.IO) {
             try {
-                val resp = apiService.getResultsByUser("eq.$userId")
+                val cleanUserId = userId.removePrefix("eq.")
+                val resp = apiService.getResultsByUser(cleanUserId)
                 if (resp.isSuccessful && resp.body() != null) {
                     val results = resp.body()!!.map { it.copy(isSynced = true) }
                     resultDao.clearAndInsert(results)
@@ -518,7 +520,6 @@ class ActivityRepository @Inject constructor(
         result.previousSolution?.let { body["current_solution"] = it }
         result.counterpartyMultiplier?.let { body["counterparty_type"] = it }
         result.summary?.let { body["note_summary"] = it }
-        result.lossReason?.let { body["loss_reason"] = it }
         if (!result.photoUrl.isNullOrBlank()) body["photo_url"] = result.photoUrl
         if (!result.photoTakenAt.isNullOrBlank()) body["photo_taken_at"] = result.photoTakenAt
         if (result.photoLat != null) body["photo_lat"] = result.photoLat

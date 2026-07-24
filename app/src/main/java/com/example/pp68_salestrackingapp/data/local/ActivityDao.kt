@@ -5,6 +5,7 @@ import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Transaction
+import androidx.room.Update
 import com.example.pp68_salestrackingapp.data.model.SalesActivity
 import kotlinx.coroutines.flow.Flow
 
@@ -25,17 +26,47 @@ interface ActivityDao {
     @Query("SELECT * FROM activity_table WHERE appointment_id = :id LIMIT 1")
     suspend fun getActivityById(id: String): SalesActivity?
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertActivities(activities: List<SalesActivity>)
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertActivitiesRaw(activities: List<SalesActivity>): List<Long>
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertActivity(activity: SalesActivity)
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertActivityRaw(activity: SalesActivity): Long
+
+    @Update
+    suspend fun updateActivities(activities: List<SalesActivity>)
+
+    @Update
+    suspend fun updateActivityRaw(activity: SalesActivity)
+
+    @Transaction
+    suspend fun insertActivities(activities: List<SalesActivity>) {
+        val insertResults = insertActivitiesRaw(activities)
+        val updateList = mutableListOf<SalesActivity>()
+        for (i in insertResults.indices) {
+            if (insertResults[i] == -1L) {
+                updateList.add(activities[i])
+            }
+        }
+        if (updateList.isNotEmpty()) {
+            updateActivities(updateList)
+        }
+    }
+
+    @Transaction
+    suspend fun insertActivity(activity: SalesActivity) {
+        val insertResult = insertActivityRaw(activity)
+        if (insertResult == -1L) {
+            updateActivityRaw(activity)
+        }
+    }
 
     @Query("DELETE FROM activity_table")
     suspend fun deleteAllActivities()
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertAll(activities: List<SalesActivity>)
+    @Transaction
+    suspend fun insertAll(activities: List<SalesActivity>) {
+        insertActivities(activities)
+    }
 
     @Query("DELETE FROM activity_table")
     suspend fun deleteAll()
@@ -45,9 +76,17 @@ interface ActivityDao {
 
     @Transaction
     suspend fun clearAndInsert(activities: List<SalesActivity>) {
-        deleteAllSynced()
+        val incomingIds = activities.map { it.activityId }
+        if (incomingIds.isNotEmpty()) {
+            deleteSyncedActivitiesNotIn(incomingIds)
+        } else {
+            deleteAllSynced()
+        }
         if (activities.isNotEmpty()) insertAll(activities)
     }
+
+    @Query("DELETE FROM activity_table WHERE is_synced = 1 AND appointment_id NOT IN (:incomingIds)")
+    suspend fun deleteSyncedActivitiesNotIn(incomingIds: List<String>)
 
     @Query("DELETE FROM activity_table WHERE appointment_id = :activityId")
     suspend fun deleteActivityById(activityId: String)

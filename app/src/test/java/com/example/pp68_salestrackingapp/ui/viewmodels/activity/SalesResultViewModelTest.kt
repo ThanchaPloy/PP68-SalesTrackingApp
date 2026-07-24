@@ -22,6 +22,8 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -43,6 +45,8 @@ class SalesResultViewModelTest {
     @Before
     fun setUp() {
         Dispatchers.setMain(dispatcher)
+        coEvery { activityRepo.getActivityById(any()) } returns Result.success(emptyList())
+        coEvery { activityRepo.getActivityResult(any()) } returns null
     }
 
     @After
@@ -119,8 +123,25 @@ class SalesResultViewModelTest {
 
     @Test
     fun `save should validate summary before repository call`() = runTest {
+        coEvery { activityRepo.getActivityById("A1") } returns Result.success(
+            listOf(
+                SalesActivity(
+                    activityId = "A1",
+                    userId = "U1",
+                    customerId = "C1",
+                    projectId = "PRJ-1",
+                    activityType = "Visit",
+                    activityDate = "2026-04-01",
+                    status = "planned"
+                )
+            )
+        )
+        coEvery { projectRepo.getProjectById("PRJ-1") } returns Result.success(
+            Project(projectId = "PRJ-1", custId = "C1", projectName = "Project A")
+        )
+
         val vm = SalesResultViewModel(
-            SavedStateHandle(mapOf("activityId" to "A1", "projectId" to "PRJ-1")),
+            SavedStateHandle(mapOf("activityId" to "A1")),
             projectRepo,
             activityRepo,
             authRepo
@@ -162,7 +183,22 @@ class SalesResultViewModelTest {
     }
 
     @Test
-    fun `save should validate missing customer`() = runTest {
+    fun `save should allow missing customer`() = runTest {
+        coEvery { activityRepo.getActivityById("A1") } returns Result.success(
+            listOf(
+                SalesActivity(
+                    activityId = "A1",
+                    userId = "U1",
+                    customerId = null,
+                    projectId = null,
+                    activityType = "Visit",
+                    activityDate = "2026-04-01",
+                    status = "planned"
+                )
+            )
+        )
+        coEvery { activityRepo.saveActivityResult(any(), any()) } returns Result.success(Unit)
+
         val vm = SalesResultViewModel(
             SavedStateHandle(mapOf("activityId" to "A1")),
             projectRepo,
@@ -173,8 +209,11 @@ class SalesResultViewModelTest {
         vm.onSummaryChanged("summary")
 
         vm.save()
+        advanceUntilIdle()
 
-        assertEquals("ไม่พบข้อมูลลูกค้า", vm.uiState.value.error)
+        assertTrue(vm.uiState.value.isSaved)
+        assertNull(vm.uiState.value.error)
+        coVerify(exactly = 1) { activityRepo.saveActivityResult(any(), any()) }
     }
 
     @Test
@@ -280,7 +319,7 @@ class SalesResultViewModelTest {
         advanceUntilIdle()
 
         val s = vm.uiState.value
-        assertEquals("Decision Making", s.newStatus)
+        assertEquals("Make a Decision", s.newStatus)
         assertEquals("สูง (HOT)", s.opportunityScore)
         assertEquals("ลูกค้าเลือกเราเป็นตัวหลัก คู่แข่งอื่นเป็นแค่ backup", s.dealPosition)
         assertEquals("ใช้คู่แข่งอยู่และไม่มีปัญหา", s.previousSolution)
@@ -291,11 +330,13 @@ class SalesResultViewModelTest {
         assertEquals(2, s.competitorCount)
         assertTrue(s.dmInvolved)
         assertEquals("mapped summary", s.visitSummary)
-        assertEquals("https://img/p.jpg", s.photoUrl)
-        assertEquals("2026:04:03 10:00:00", s.photoTakenAt)
-        assertEquals(13.7, s.photoLat)
-        assertEquals(100.5, s.photoLng)
-        assertEquals("Pixel", s.photoDeviceModel)
+        val cover = s.photos.firstOrNull()
+        assertNotNull(cover)
+        assertEquals("https://img/p.jpg", cover?.url)
+        assertEquals("2026:04:03 10:00:00", cover?.takenAt)
+        assertEquals(13.7, cover?.lat)
+        assertEquals(100.5, cover?.lng)
+        assertEquals("Pixel", cover?.deviceModel)
     }
 
     @Ignore("Method not yet implemented: projectRepo.updateProjectFields() does not exist in ProjectRepository")

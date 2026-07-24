@@ -5,6 +5,7 @@ import com.example.pp68_salestrackingapp.data.model.*
 import com.example.pp68_salestrackingapp.data.remote.ApiService
 import com.example.pp68_salestrackingapp.data.remote.AuthService
 import com.example.pp68_salestrackingapp.di.TokenManager
+import com.example.pp68_salestrackingapp.data.repository.SyncManager
 import io.mockk.*
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.runTest
@@ -24,10 +25,11 @@ class AuthRepositoryTest {
     private val authService: AuthService = mockk()
     private val tokenManager: TokenManager = mockk(relaxed = true)
     private val database: AppDatabase = mockk(relaxed = true)
+    private val syncManager: SyncManager = mockk(relaxed = true)
 
     @Before
     fun setUp() {
-        repository = AuthRepository(apiService, authService, tokenManager, database)
+        repository = AuthRepository(apiService, authService, tokenManager, database, syncManager)
     }
 
     @Test
@@ -39,7 +41,6 @@ class AuthRepositoryTest {
         val userDetail = UserDto(
             userId = "user1",
             fullName = "John Doe",
-            email = email,
             branchId = "branch1"
         )
         val branch = Branch(branchId = "branch1", branchName = "Main Branch")
@@ -83,7 +84,7 @@ class AuthRepositoryTest {
         // Arrange
         val email = "new@example.com"
         val loginResponse = LoginResponse(token = "new_token", userId = "user2", role = "user")
-        val userDetail = UserDto(userId = "user2", fullName = "Jane Doe", email = email, branchId = "B1")
+        val userDetail = UserDto(userId = "user2", fullName = "Jane Doe", branchId = "B1")
         val branch = Branch(branchId = "B1", branchName = "Branch 1")
 
         coEvery { authService.register(any()) } returns Response.success(loginResponse)

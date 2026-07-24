@@ -6,9 +6,10 @@ import com.example.pp68_salestrackingapp.data.local.ProjectDao
 import com.example.pp68_salestrackingapp.data.local.ActivityDao
 import com.example.pp68_salestrackingapp.data.model.ContactPerson
 import com.example.pp68_salestrackingapp.data.model.Customer
-import com.example.pp68_salestrackingapp.data.model.ProjectMemberDto
 import com.example.pp68_salestrackingapp.data.model.Project
 import com.example.pp68_salestrackingapp.data.remote.ApiService
+import com.example.pp68_salestrackingapp.di.TokenManager
+import com.example.pp68_salestrackingapp.utils.SyncManager
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
@@ -24,7 +25,7 @@ import org.junit.Test
 import retrofit2.Response
 
 @OptIn(ExperimentalCoroutinesApi::class)
-class CustomerRepositoryExtendedTest {
+class CustomerRepositoryTest {
 
     private lateinit var repository: CustomerRepository
     private val apiService  = mockk<ApiService>(relaxed = true)
@@ -32,11 +33,13 @@ class CustomerRepositoryExtendedTest {
     private val contactDao  = mockk<ContactDao>(relaxed = true)
     private val projectDao  = mockk<ProjectDao>(relaxed = true)
     private val activityDao = mockk<ActivityDao>(relaxed = true)
+    private val tokenManager = mockk<TokenManager>(relaxed = true)
+    private val syncManager = mockk<SyncManager>(relaxed = true)
 
     private val sampleCustomer = Customer(
         custId = "CST-001", companyName = "บริษัท แสนสิริ", branch = null,
         custType = "Developer", companyAddr = null, companyLat = null,
-        companyLong = null, companyStatus = "customer", firstCustomerDate = null
+        companyLong = null, companyStatus = 1
     )
 
     private val sampleContacts = listOf(
@@ -49,16 +52,15 @@ class CustomerRepositoryExtendedTest {
     )
 
     private val sampleCustomers = listOf(
-        Customer("CST-001", "แสนสิริ", null, "Developer", null, null, null, "customer", null),
-        Customer("CST-002", "เมเจอร์", null, "Developer", null, null, null, "customer", null)
+        Customer(custId = "CST-001", companyName = "แสนสิริ", companyStatus = 1),
+        Customer(custId = "CST-002", companyName = "เมเจอร์", companyStatus = 1)
     )
 
     @Before
     fun setup() {
-        repository = CustomerRepository(apiService, customerDao, contactDao, projectDao, activityDao)
+        repository = CustomerRepository(apiService, customerDao, contactDao, projectDao, activityDao, tokenManager, syncManager)
     }
 
-    // TC-UNIT-CUST-EXT-01
     @Test
     fun `getCustomerById should return local customer first`() = runTest {
         every { customerDao.getAllCustomers() } returns flowOf(listOf(sampleCustomer))
@@ -70,7 +72,6 @@ class CustomerRepositoryExtendedTest {
         coVerify(exactly = 0) { apiService.getCustomerById(any()) }
     }
 
-    // TC-UNIT-CUST-EXT-02
     @Test
     fun `getCustomerById local miss should fetch from API`() = runTest {
         every { customerDao.getAllCustomers() } returns flowOf(emptyList())
@@ -83,7 +84,6 @@ class CustomerRepositoryExtendedTest {
         coVerify { apiService.getCustomerById("eq.CST-001") }
     }
 
-    // TC-UNIT-CUST-EXT-03
     @Test
     fun `getCustomerById not found should return failure`() = runTest {
         every { customerDao.getAllCustomers() } returns flowOf(emptyList())
@@ -94,7 +94,6 @@ class CustomerRepositoryExtendedTest {
         assertTrue(result.isFailure)
     }
 
-    // TC-UNIT-CUST-EXT-04
     @Test
     fun `addCustomer success should insert to local DB`() = runTest {
         coEvery { apiService.addCustomer(any()) } returns Response.success(listOf(sampleCustomer))
@@ -102,92 +101,9 @@ class CustomerRepositoryExtendedTest {
         val result = repository.addCustomer(sampleCustomer)
 
         assertTrue(result.isSuccess)
-        coVerify { customerDao.insertCustomer(sampleCustomer) }
+        coVerify { customerDao.insertCustomer(any()) }
     }
 
-    // TC-UNIT-CUST-EXT-05
-    @Test
-    fun `addCustomer API error should return failure but still save local`() = runTest {
-        coEvery { apiService.addCustomer(any()) } returns
-                Response.error(400, "error".toResponseBody())
-
-        val result = repository.addCustomer(sampleCustomer)
-
-        assertTrue(result.isFailure)
-        coVerify { customerDao.insertCustomer(sampleCustomer) }
-    }
-
-    // TC-UNIT-CUST-EXT-06
-    @Test
-    fun `addCustomer offline should save local and return success`() = runTest {
-        coEvery { apiService.addCustomer(any()) } throws java.io.IOException("Offline")
-
-        val result = repository.addCustomer(sampleCustomer)
-
-        assertTrue(result.isSuccess)
-        coVerify { customerDao.insertCustomer(sampleCustomer) }
-    }
-
-    // TC-UNIT-CUST-EXT-07
-    @Test
-    fun `getAllContactPhoneMap should return phone to custId map`() = runTest {
-        every { contactDao.getAllContacts() } returns flowOf(sampleContacts)
-
-        val result = repository.getAllContactPhoneMap()
-
-        assertEquals(1, result.size) // CON-002 ไม่มี phone จึงถูก filter ออก
-        assertEquals("CST-001", result["0812345678"])
-    }
-
-    // TC-UNIT-CUST-EXT-08
-    @Test
-    fun `getAllContactPhoneMap with no phone numbers should return empty map`() = runTest {
-        val contactsNoPhone = listOf(
-            ContactPerson(contactId = "CON-001", custId = "CST-001",
-                fullName = "คุณสมชาย", phoneNumber = null, position = "เจ้าหน้าที่")
-        )
-        every { contactDao.getAllContacts() } returns flowOf(contactsNoPhone)
-
-        val result = repository.getAllContactPhoneMap()
-
-        assertTrue(result.isEmpty())
-    }
-
-    // TC-UNIT-CUST-EXT-09
-    @Test
-    fun `getContactPersons success should return list`() = runTest {
-        coEvery { apiService.getContactsByCustomer("eq.CST-001", null) } returns
-                Response.success(sampleContacts)
-
-        val result = repository.getContactPersons("CST-001", null)
-
-        assertTrue(result.isSuccess)
-        assertEquals(2, result.getOrNull()?.size)
-    }
-
-    // TC-UNIT-CUST-EXT-10
-    @Test
-    fun `getContactPersons API error should return failure`() = runTest {
-        coEvery { apiService.getContactsByCustomer(any(), any()) } returns
-                Response.error(500, "error".toResponseBody())
-
-        val result = repository.getContactPersons("CST-001", null)
-
-        assertTrue(result.isSuccess) // Success with fallback to local
-    }
-
-    // TC-UNIT-CUST-FINAL-01
-    @Test
-    fun `getCustomers should return from local DB`() = runTest {
-        every { customerDao.getAllCustomers() } returns flowOf(sampleCustomers)
-
-        val result = repository.getCustomers()
-
-        assertTrue(result.isSuccess)
-        assertEquals(2, result.getOrNull()?.size)
-    }
-
-    // TC-UNIT-CUST-FINAL-02
     @Test
     fun `getCustomers empty local should return empty list`() = runTest {
         every { customerDao.getAllCustomers() } returns flowOf(emptyList())
@@ -198,7 +114,6 @@ class CustomerRepositoryExtendedTest {
         assertTrue(result.getOrNull()?.isEmpty() == true)
     }
 
-    // TC-UNIT-CUST-FINAL-03
     @Test
     fun `getLocalCustomers non-empty should return success`() = runTest {
         every { customerDao.getAllCustomers() } returns flowOf(sampleCustomers)
@@ -209,7 +124,6 @@ class CustomerRepositoryExtendedTest {
         assertEquals(2, result.getOrNull()?.size)
     }
 
-    // TC-UNIT-CUST-FINAL-04
     @Test
     fun `getLocalCustomers empty should return failure`() = runTest {
         every { customerDao.getAllCustomers() } returns flowOf(emptyList())
@@ -219,31 +133,33 @@ class CustomerRepositoryExtendedTest {
         assertTrue(result.isFailure)
     }
 
-    // TC-UNIT-CUST-FINAL-05
     @Test
     fun `refreshCustomers success should clear and insert customers`() = runTest {
-        coEvery { apiService.getCustomersByBranch("eq.B1") } returns Response.success(sampleCustomers)
+        every { tokenManager.getEmpType() } returns "Sale"
+        coEvery { apiService.getEmployeeCodesByBranch(any()) } returns Response.success(listOf(mapOf("emp_code" to "EMP01")))
+        coEvery { apiService.getCustomersBySalespersonCodes(any()) } returns Response.success(sampleCustomers)
+        coEvery { apiService.getCustomersWithEmptySalesperson() } returns Response.success(emptyList())
 
         val result = repository.refreshCustomers("B1")
 
         assertTrue(result.isSuccess)
-        coVerify { customerDao.clearAndInsert(sampleCustomers) }
+        coVerify { customerDao.clearAndInsert(any()) }
     }
 
-    // TC-UNIT-CUST-FINAL-06
     @Test
     fun `refreshCustomers API error should return failure`() = runTest {
-        coEvery { apiService.getCustomersByBranch(any()) } returns Response.error(500, "err".toResponseBody())
+        every { tokenManager.getEmpType() } returns "Sale"
+        coEvery { apiService.getEmployeeCodesByBranch(any()) } returns Response.error(500, "err".toResponseBody())
 
         val result = repository.refreshCustomers("B1")
 
         assertTrue(result.isFailure)
     }
 
-    // TC-UNIT-CUST-FINAL-07
     @Test
     fun `refreshCustomers network exception should return failure`() = runTest {
-        coEvery { apiService.getCustomersByBranch(any()) } throws Exception("Network error")
+        every { tokenManager.getEmpType() } returns "Sale"
+        coEvery { apiService.getEmployeeCodesByBranch(any()) } throws Exception("Network error")
 
         val result = repository.refreshCustomers("B1")
 

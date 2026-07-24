@@ -60,11 +60,12 @@ class HomeViewModelTest {
         val nowMonth = YearMonth.now()
         val validDate = "${nowMonth}-10"
 
-        every { authRepo.currentUser() } returns AuthUser("U1", "u@test.com", "sale")
+        every { authRepo.currentUser() } returns AuthUser("U1", "u@test.com", "sale", teamId = "T1")
         coEvery { customerRepo.getAllContactPhoneMap() } returns mapOf("0812345678" to "C1")
         coEvery { callLogRepo.syncCallLogs(any()) } returns Result.success(1)
         coEvery { activityRepo.refreshActivities("U1") } returns Result.success(Unit)
-        coEvery { customerRepo.refreshCustomers("U1") } returns Result.success(Unit)
+        coEvery { activityRepo.refreshResults("U1") } returns Result.success(Unit)
+        coEvery { customerRepo.refreshCustomers("T1") } returns Result.success(Unit)
         coEvery { projectRepo.refreshProjects("U1") } returns Result.success(Unit)
         every { activityRepo.getAllActivitiesFlow() } returns flowOf(emptyList())
         every { customerRepo.getAllCustomersFlow() } returns flowOf(emptyList())
@@ -93,7 +94,7 @@ class HomeViewModelTest {
         assertFalse(vm.uiState.value.isLoading)
         assertTrue(vm.uiState.value.groupedCards.isNotEmpty())
         coVerify(exactly = 1) { activityRepo.refreshActivities("U1") }
-        coVerify(exactly = 1) { customerRepo.refreshCustomers("U1") }
+        coVerify(exactly = 1) { customerRepo.refreshCustomers("T1") }
         coVerify(exactly = 1) { projectRepo.refreshProjects("U1") }
         coVerify(exactly = 1) { callLogRepo.syncCallLogs(any()) }
     }

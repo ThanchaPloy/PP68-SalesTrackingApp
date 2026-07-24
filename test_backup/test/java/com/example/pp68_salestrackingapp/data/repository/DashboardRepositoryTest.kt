@@ -24,8 +24,8 @@ class DashboardRepositoryTest {
     private val activityDao = mockk<ActivityDao>(relaxed = true)
 
     private val sampleCustomers = listOf(
-        Customer("CST-001", "แสนสิริ", null, "Developer", null, null, null, "customer", null),
-        Customer("CST-002", "เมเจอร์", null, "Developer", null, null, null, "customer", null)
+        Customer(custId = "CST-001", companyName = "แสนสิริ", companyStatus = 1),
+        Customer(custId = "CST-002", companyName = "เมเจอร์", companyStatus = 1)
     )
 
     private val sampleProjects = listOf(
@@ -131,7 +131,7 @@ class DashboardRepositoryTest {
     @Test
     fun `getDashboardSummary with single customer should return count 1`() = runTest {
         val oneCustomer = listOf(
-            Customer("CST-001", "แสนสิริ", null, "Developer", null, null, null, "customer", null)
+            Customer(custId = "CST-001", companyName = "แสนสิริ", companyStatus = 1)
         )
         every { customerDao.getAllCustomers() } returns flowOf(oneCustomer)
         every { projectDao.getAllProjects()   } returns flowOf(emptyList())

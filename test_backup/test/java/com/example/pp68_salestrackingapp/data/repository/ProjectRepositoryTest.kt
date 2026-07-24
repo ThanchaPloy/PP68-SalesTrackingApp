@@ -1,10 +1,14 @@
 package com.example.pp68_salestrackingapp.data.repository
 
 import com.example.pp68_salestrackingapp.data.local.ProjectDao
+import com.example.pp68_salestrackingapp.data.local.ProjectContactDao
+import com.example.pp68_salestrackingapp.data.local.ProjectSalesMemberDao
+import com.example.pp68_salestrackingapp.data.local.ContactDao
 import com.example.pp68_salestrackingapp.data.model.Project
 import com.example.pp68_salestrackingapp.data.model.UserDto
 import com.example.pp68_salestrackingapp.data.remote.ApiService
 import com.example.pp68_salestrackingapp.data.remote.FirebaseRealtimeService
+import com.example.pp68_salestrackingapp.utils.SyncManager
 import io.mockk.*
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.runTest
@@ -15,12 +19,16 @@ import org.junit.Test
 import retrofit2.Response
 
 @OptIn(ExperimentalCoroutinesApi::class)
-class ProjectRepositoryExtendedTest {
+class ProjectRepositoryTest {
 
     private lateinit var repository: ProjectRepository
     private val apiService      = mockk<ApiService>(relaxed = true)
     private val projectDao      = mockk<ProjectDao>(relaxed = true)
+    private val projectContactDao = mockk<ProjectContactDao>(relaxed = true)
+    private val projectSalesMemberDao = mockk<ProjectSalesMemberDao>(relaxed = true)
+    private val contactDao = mockk<ContactDao>(relaxed = true)
     private val firebaseService = mockk<FirebaseRealtimeService>(relaxed = true)
+    private val syncManager = mockk<SyncManager>(relaxed = true)
 
     private val sampleProject = Project(
         projectId     = "BK6705001",
@@ -32,7 +40,15 @@ class ProjectRepositoryExtendedTest {
 
     @Before
     fun setup() {
-        repository = ProjectRepository(apiService, projectDao, firebaseService)
+        repository = ProjectRepository(
+            apiService,
+            projectDao,
+            projectContactDao,
+            projectSalesMemberDao,
+            contactDao,
+            firebaseService,
+            syncManager
+        )
     }
 
     @Test
@@ -69,8 +85,8 @@ class ProjectRepositoryExtendedTest {
     @Test
     fun `getMembersByBranch success should return list of pairs`() = runTest {
         val users = listOf(
-            UserDto("USR-001", "สมศรี เซลล์", "BK-0001", "sale", "somsri@company.com", null),
-            UserDto("USR-002", "สมชาย ผจก", "BK-0001", "manager", "somchai@company.com", null)
+            UserDto(userId = "USR-001", fullName = "สมศรี เซลล์", branchId = "BK-0001", role = "sale"),
+            UserDto(userId = "USR-002", fullName = "สมชาย ผจก", branchId = "BK-0001", role = "manager")
         )
         coEvery { apiService.getUsersByBranch("eq.BK-0001") } returns Response.success(users)
 
@@ -81,32 +97,11 @@ class ProjectRepositoryExtendedTest {
     }
 
     @Test
-    fun `countProjectsByPrefix should call DAO with correct prefix`() = runTest {
-        val prefix = "BK6705"
-        coEvery { projectDao.getProjectCountByPrefix(prefix) } returns 5
+    fun `getMembersByBranch error should return failure`() = runTest {
+        coEvery { apiService.getUsersByBranch(any()) } returns Response.error(500, "err".toResponseBody())
 
-        val result = repository.countProjectsByPrefix(prefix)
+        val result = repository.getMembersByBranch("BK-0001")
 
-        assertEquals(5, result)
-        coVerify { projectDao.getProjectCountByPrefix(prefix) }
-    }
-
-    @Test
-    fun `createProject should generate ID and insert to local DB`() = runTest {
-        val userId = "USR-001"
-        val branchId = "BK-001"
-        // Mock prefix check for ID generation
-        coEvery { projectDao.getProjectCountByPrefix(any()) } returns 0
-        coEvery { apiService.addProject(any()) } returns Response.success(listOf(sampleProject))
-
-        val result = repository.createProject(sampleProject.copy(branchId = branchId), userId)
-
-        assertTrue(result.isSuccess)
-        val created = result.getOrNull()
-        assertNotNull(created)
-        // Format: BB YY MM XXX -> BK 67 05 001 (example)
-        assertTrue(created!!.projectId.startsWith("BK"))
-        assertEquals(9, created.projectId.length) // BK + YY(2) + MM(2) + XXX(3) = 9
-        coVerify { projectDao.insertProject(any()) }
+        assertTrue(result.isFailure)
     }
 }

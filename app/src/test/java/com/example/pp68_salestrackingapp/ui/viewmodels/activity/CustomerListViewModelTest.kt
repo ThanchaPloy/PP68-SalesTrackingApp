@@ -61,18 +61,18 @@ class CustomerListViewModelTest {
 
     @Test
     fun `init should refresh by current user and clear loading`() = runTest {
-        coEvery { customerRepo.refreshCustomers("U1") } returns Result.success(Unit)
+        coEvery { customerRepo.refreshCustomers("T1") } returns Result.success(Unit)
         viewModel = CustomerListViewModel(customerRepo, authRepo)
         advanceUntilIdle()
 
         assertFalse(viewModel.isLoading.value)
         assertNull(viewModel.error.value)
-        coVerify(exactly = 1) { customerRepo.refreshCustomers("U1") }
+        coVerify(exactly = 1) { customerRepo.refreshCustomers("T1") }
     }
 
     @Test
     fun `refresh failure should set error`() = runTest {
-        coEvery { customerRepo.refreshCustomers("U1") } returns Result.failure(Exception("network down"))
+        coEvery { customerRepo.refreshCustomers("T1") } returns Result.failure(Exception("network down"))
         viewModel = CustomerListViewModel(customerRepo, authRepo)
         advanceUntilIdle()
 
@@ -82,7 +82,7 @@ class CustomerListViewModelTest {
 
     @Test
     fun `clearError should set error to null`() = runTest {
-        coEvery { customerRepo.refreshCustomers("U1") } returns Result.failure(Exception("boom"))
+        coEvery { customerRepo.refreshCustomers("T1") } returns Result.failure(Exception("boom"))
         viewModel = CustomerListViewModel(customerRepo, authRepo)
         advanceUntilIdle()
         assertEquals("boom", viewModel.error.value)
@@ -111,6 +111,8 @@ class CustomerListViewModelTest {
         advanceUntilIdle()
 
         viewModel.customers.test {
+            assertEquals(emptyList<Customer>(), awaitItem())
+            advanceUntilIdle()
             assertEquals(all, awaitItem())
             cancelAndIgnoreRemainingEvents()
         }

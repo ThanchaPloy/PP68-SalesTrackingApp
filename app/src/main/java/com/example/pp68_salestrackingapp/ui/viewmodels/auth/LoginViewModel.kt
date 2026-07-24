@@ -55,8 +55,21 @@ class LoginViewModel @Inject constructor(
             _uiState.value = LoginUiState.Loading
             val result = authRepository.login(currentUsername, currentPassword)
             result.onSuccess { response ->
+                val finalUserId = response.employee?.empCode ?: response.userId ?: ""
+                val finalRole = response.employee?.empPost ?: response.role ?: ""
+                val finalFullName = response.employee?.empName ?: response.fullName
+                val finalBranchId = response.employee?.empBrchCode ?: response.branchId
+                val finalEmpType = response.employee?.empPost ?: response.empType
+
                 _uiState.value = LoginUiState.Success(
-                    AuthUser(userId = response.userId, email = currentUsername, role = response.role)
+                    AuthUser(
+                        userId = finalUserId,
+                        email = currentUsername,
+                        role = finalRole,
+                        teamId = finalBranchId,
+                        fullName = finalFullName,
+                        empType = finalEmpType
+                    )
                 )
             }
             result.onFailure { exception ->

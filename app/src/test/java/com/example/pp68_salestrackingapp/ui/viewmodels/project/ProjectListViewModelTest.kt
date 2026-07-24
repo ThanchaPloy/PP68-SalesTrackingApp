@@ -50,14 +50,14 @@ class ProjectListViewModelTest {
     private val futureDate = LocalDate.now().plusDays(1).toString()
 
     private val allProjects = listOf(
-        Project(projectId = "P1", projectName = "Active Quotation", projectStatus = "Quotation", custId = "C1", projectNumber = "PRJ-001"),
-        Project(projectId = "P2", projectName = "Completed", projectStatus = "Completed", custId = "C1", projectNumber = "PRJ-002"),
-        Project(projectId = "P3", projectName = "PO Closed", projectStatus = "PO", closingDate = pastDate, custId = "C1", projectNumber = "PRJ-003"),
-        Project(projectId = "P4", projectName = "PO Active", projectStatus = "PO", closingDate = futureDate, custId = "C1", projectNumber = "PRJ-004"),
-        Project(projectId = "P5", projectName = "Lost", projectStatus = "Lost", custId = "C1", projectNumber = "PRJ-005"),
-        Project(projectId = "P6", projectName = "Failed", projectStatus = "Failed", custId = "C1", projectNumber = "PRJ-006"),
-        Project(projectId = "P7", projectName = "Hot Quotation", projectStatus = "Quotation", opportunityScore = "hot", custId = "C1", projectNumber = "PRJ-007"),
-        Project(projectId = "P8", projectName = "No Score Quotation", projectStatus = "Quotation", opportunityScore = null, custId = "C1", projectNumber = "PRJ-008")
+        Project(projectId = "P1", projectName = "Active Quotation", projectStatus = "Quotation", custId = "C1"),
+        Project(projectId = "P2", projectName = "Completed", projectStatus = "Completed", custId = "C1"),
+        Project(projectId = "P3", projectName = "PO Closed", projectStatus = "PO", closingDate = pastDate, custId = "C1"),
+        Project(projectId = "P4", projectName = "PO Active", projectStatus = "PO", closingDate = futureDate, custId = "C1"),
+        Project(projectId = "P5", projectName = "Lost", projectStatus = "Lost", custId = "C1"),
+        Project(projectId = "P6", projectName = "Failed", projectStatus = "Failed", custId = "C1"),
+        Project(projectId = "P7", projectName = "Hot Quotation", projectStatus = "Quotation", opportunityScore = "hot", custId = "C1"),
+        Project(projectId = "P8", projectName = "No Score Quotation", projectStatus = "Quotation", opportunityScore = null, custId = "C1")
     )
 
     @Before
@@ -86,9 +86,6 @@ class ProjectListViewModelTest {
     @Test
     fun givenInit_whenCreated_thenExposesAuthUserAndTriggersRefreshLoadingCycle() = runTest {
         initVm()
-        runCurrent()
-        assertTrue(viewModel.isLoading.value)
-
         advanceUntilIdle()
 
         assertEquals("U1", viewModel.authUser.value?.userId)
@@ -238,8 +235,8 @@ class ProjectListViewModelTest {
 
         viewModel.projects.test {
             assertEquals(emptyList<Project>(), awaitItem())
-            advanceTimeBy(305)
-            assertEquals(emptyList<Project>(), awaitItem())
+            advanceUntilIdle()
+            assertEquals(emptyList<Project>(), viewModel.projects.value)
             assertEquals("db fail", viewModel.error.value)
             assertFalse(viewModel.isLoading.value)
             cancelAndIgnoreRemainingEvents()

@@ -92,7 +92,7 @@ class ProductRepositoryTest {
     // TC-UNIT-PROD-06
     @Test
     fun `addProductToProject success should return success`() = runTest {
-        coEvery { apiService.addProductToProject(any()) } returns Response.success(emptyList())
+        coEvery { apiService.addProductToProject(any()) } returns Response.success(Unit)
 
         val result = repository.addProductToProject("PJ-001", "PRD-001", 10.0, "2026-04-01", "BR-001")
 
@@ -112,7 +112,7 @@ class ProductRepositoryTest {
     // TC-UNIT-PROD-08
     @Test
     fun `addProductToProject null wantedDate should still call API`() = runTest {
-        coEvery { apiService.addProductToProject(any()) } returns Response.success(emptyList())
+        coEvery { apiService.addProductToProject(any()) } returns Response.success(Unit)
 
         val result = repository.addProductToProject("PJ-001", "PRD-001", 5.0, null, "BR-001")
 
@@ -123,7 +123,7 @@ class ProductRepositoryTest {
     // TC-UNIT-PROD-09
     @Test
     fun `addProductToProject blank wantedDate should treat as null`() = runTest {
-        coEvery { apiService.addProductToProject(any()) } returns Response.success(emptyList())
+        coEvery { apiService.addProductToProject(any()) } returns Response.success(Unit)
 
         val result = repository.addProductToProject("PJ-001", "PRD-001", 5.0, "", "BR-001")
 
@@ -133,7 +133,7 @@ class ProductRepositoryTest {
     // TC-UNIT-PROD-10: Update Product
     @Test
     fun `updateProjectProduct success should return success`() = runTest {
-        coEvery { apiService.updateProjectProduct(any(), any(), any()) } returns Response.success(emptyList())
+        coEvery { apiService.updateProjectProduct(any(), any(), any()) } returns Response.success(Unit)
 
         val result = repository.updateProjectProduct("PJ-001", "PRD-001", mapOf("quantity" to 25.0))
 
@@ -173,7 +173,7 @@ class ExportRepositoryTest {
         )
     )
     private val sampleCustomers = listOf(
-        Customer("CST-001", "บริษัท แสนสิริ", null, "Developer", null, null, null, "customer", null)
+        Customer(custId = "CST-001", companyName = "บริษัท แสนสิริ", companyStatus = 1)
     )
     private val sampleProjects = listOf(
         Project(projectId = "PJ-001", custId = "CST-001", projectName = "คอนโด XT")

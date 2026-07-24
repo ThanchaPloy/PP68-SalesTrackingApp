@@ -45,7 +45,7 @@ class LoginViewModelTest {
     // TC-UNIT-VM-LOGIN-02
     @Test
     fun `login with blank email should emit Error state`() {
-        viewModel.onEmailChange("")
+        viewModel.onUsernameChange("")
         viewModel.onPasswordChange("password123")
 
         viewModel.login()
@@ -60,7 +60,7 @@ class LoginViewModelTest {
     // TC-UNIT-VM-LOGIN-03
     @Test
     fun `login with blank password should emit Error state`() {
-        viewModel.onEmailChange("test@example.com")
+        viewModel.onUsernameChange("test@example.com")
         viewModel.onPasswordChange("")
 
         viewModel.login()
@@ -75,7 +75,7 @@ class LoginViewModelTest {
     // TC-UNIT-VM-LOGIN-04
     @Test
     fun `login with both fields blank should emit Error state`() {
-        viewModel.onEmailChange("")
+        viewModel.onUsernameChange("")
         viewModel.onPasswordChange("")
 
         viewModel.login()
@@ -98,7 +98,7 @@ class LoginViewModelTest {
         coEvery { authRepository.login("test@example.com", "password123") } returns
                 Result.success(loginResponse)
 
-        viewModel.onEmailChange("test@example.com")
+        viewModel.onUsernameChange("test@example.com")
         viewModel.onPasswordChange("password123")
         viewModel.login()
 
@@ -118,7 +118,7 @@ class LoginViewModelTest {
         coEvery { authRepository.login(any(), any()) } returns
                 Result.failure(Exception("อีเมลหรือรหัสผ่านไม่ถูกต้อง"))
 
-        viewModel.onEmailChange("test@example.com")
+        viewModel.onUsernameChange("test@example.com")
         viewModel.onPasswordChange("wrongpassword")
         viewModel.login()
 
@@ -140,7 +140,7 @@ class LoginViewModelTest {
             Result.success(LoginResponse("t", "u", "r"))
         }
 
-        viewModel.onEmailChange("test@example.com")
+        viewModel.onUsernameChange("test@example.com")
         viewModel.onPasswordChange("password123")
         viewModel.login()
 
@@ -157,7 +157,7 @@ class LoginViewModelTest {
         coEvery { authRepository.login(any(), any()) } returns
                 Result.success(LoginResponse("t", "u", "r"))
 
-        viewModel.onEmailChange("test@example.com")
+        viewModel.onUsernameChange("test@example.com")
         viewModel.onPasswordChange("password123")
         viewModel.login()
         testDispatcher.scheduler.advanceUntilIdle()
@@ -165,27 +165,27 @@ class LoginViewModelTest {
         viewModel.resetState()
 
         assertTrue(viewModel.uiState.value is LoginUiState.Idle)
-        assertEquals("", viewModel.email.value)
+        assertEquals("", viewModel.username.value)
         assertEquals("", viewModel.password.value)
     }
 
     // TC-UNIT-VM-LOGIN-09
     @Test
-    fun `onEmailChange should update email StateFlow`() {
-        viewModel.onEmailChange("new@example.com")
+    fun `onUsernameChange should update email StateFlow`() {
+        viewModel.onUsernameChange("new@example.com")
 
-        assertEquals("new@example.com", viewModel.email.value)
+        assertEquals("new@example.com", viewModel.username.value)
     }
 
     // TC-UNIT-VM-LOGIN-10
     @Test
-    fun `onEmailChange after Error should clear error state to Idle`() {
-        viewModel.onEmailChange("")
+    fun `onUsernameChange after Error should clear error state to Idle`() {
+        viewModel.onUsernameChange("")
         viewModel.onPasswordChange("pass")
         viewModel.login()
         assertTrue(viewModel.uiState.value is LoginUiState.Error)
 
-        viewModel.onEmailChange("fix@example.com")
+        viewModel.onUsernameChange("fix@example.com")
 
         assertTrue(viewModel.uiState.value is LoginUiState.Idle)
     }
@@ -204,7 +204,7 @@ class LoginViewModelTest {
         coEvery { authRepository.login(any(), any()) } returns
                 Result.failure(Exception())
 
-        viewModel.onEmailChange("test@example.com")
+        viewModel.onUsernameChange("test@example.com")
         viewModel.onPasswordChange("password123")
         viewModel.login()
         testDispatcher.scheduler.advanceUntilIdle()
@@ -217,19 +217,7 @@ class LoginViewModelTest {
         )
     }
 
-    // TC-UNIT-VM-LOGIN-13
-    @Test
-    fun `login with invalid email format should emit Error and skip repository call`() {
-        viewModel.onEmailChange("invalid-email")
-        viewModel.onPasswordChange("password123")
 
-        viewModel.login()
-
-        val state = viewModel.uiState.value
-        assertTrue(state is LoginUiState.Error)
-        assertEquals("รูปแบบอีเมลไม่ถูกต้อง", (state as LoginUiState.Error).message)
-        coVerify(exactly = 0) { authRepository.login(any(), any()) }
-    }
 
     // TC-UNIT-VM-LOGIN-14
     @Test
@@ -242,7 +230,7 @@ class LoginViewModelTest {
         coEvery { authRepository.login("trim@example.com", "password123") } returns
             Result.success(loginResponse)
 
-        viewModel.onEmailChange("  trim@example.com  ")
+        viewModel.onUsernameChange("  trim@example.com  ")
         viewModel.onPasswordChange("password123")
         viewModel.login()
         testDispatcher.scheduler.advanceUntilIdle()
@@ -250,14 +238,14 @@ class LoginViewModelTest {
         val state = viewModel.uiState.value
         assertTrue(state is LoginUiState.Success)
         assertEquals("trim@example.com", (state as LoginUiState.Success).user.email)
-        assertEquals("  trim@example.com  ", viewModel.email.value)
+        assertEquals("  trim@example.com  ", viewModel.username.value)
         coVerify(exactly = 1) { authRepository.login("trim@example.com", "password123") }
     }
 
     // TC-UNIT-VM-LOGIN-15
     @Test
     fun `onPasswordChange after Error should clear error state to Idle`() {
-        viewModel.onEmailChange("invalid-email")
+        viewModel.onUsernameChange("invalid-email")
         viewModel.onPasswordChange("password123")
         viewModel.login()
         assertTrue(viewModel.uiState.value is LoginUiState.Error)
@@ -273,7 +261,7 @@ class LoginViewModelTest {
         coEvery { authRepository.login(any(), any()) } returns
             Result.failure(Exception("Network error"))
 
-        viewModel.onEmailChange("test@example.com")
+        viewModel.onUsernameChange("test@example.com")
         viewModel.onPasswordChange("password123")
         viewModel.login()
         testDispatcher.scheduler.advanceUntilIdle()

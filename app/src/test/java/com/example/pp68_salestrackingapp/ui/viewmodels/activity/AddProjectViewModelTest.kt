@@ -23,6 +23,7 @@ class AddProjectViewModelTest {
     private val testDispatcher = StandardTestDispatcher()
     private val projectRepo = mockk<ProjectRepository>()
     private val customerRepo = mockk<CustomerRepository>()
+    private val contactRepo = mockk<ContactRepository>(relaxed = true)
     private val authRepo = mockk<AuthRepository>()
     private val branchRepo = mockk<BranchRepository>()
     private val apiService = mockk<ApiService>(relaxed = true)
@@ -31,8 +32,6 @@ class AddProjectViewModelTest {
     @Before
     fun setup() {
         Dispatchers.setMain(testDispatcher)
-        mockkStatic(Dispatchers::class)
-        every { Dispatchers.IO } returns testDispatcher
 
         val user = AuthUser("USR-001", "test@test.com", "sale", "TS-001")
         every { authRepo.currentUser() } returns user
@@ -41,11 +40,14 @@ class AddProjectViewModelTest {
         coEvery { branchRepo.syncFromRemote() } coAnswers { Result.success(Unit) }
         coEvery { branchRepo.observeBranches() } coAnswers { emptyList() }
         coEvery { projectRepo.getMembersByBranch(any()) } coAnswers { Result.success(emptyList()) }
+        coEvery { projectRepo.getBranchMembersRpc(any()) } returns Result.success(emptyList())
+        coEvery { projectRepo.getProjectMembersDetailed(any()) } returns emptyList()
         coEvery { customerRepo.getContactPersons(any()) } coAnswers { Result.success(emptyList()) }
         coEvery { branchRepo.getBranchById(any()) } returns null
         coEvery { projectRepo.createProject(any(), any()) } returns Result.success(
             Project(projectId = "PJ-001", custId = "C1", projectName = "Default")
         )
+        coEvery { projectRepo.updateProject(any()) } returns Result.success(Unit)
         coEvery { projectRepo.updateProject(any(), any()) } returns Result.success(Unit)
         coEvery { projectRepo.addProjectMembers(any(), any(), any()) } returns Result.success(Unit)
         coEvery { projectRepo.saveProjectContacts(any(), any()) } returns Result.success(Unit)
@@ -62,14 +64,15 @@ class AddProjectViewModelTest {
     }
 
     private fun initViewModel() {
-        viewModel = AddProjectViewModel(projectRepo, customerRepo, authRepo, branchRepo, apiService)
+        viewModel = AddProjectViewModel(projectRepo, customerRepo, contactRepo, authRepo, branchRepo, apiService)
     }
 
     @Test
     fun `init when user in PJ-001 should auto select project team and load members`() = runTest {
         every { authRepo.currentUser() } returns AuthUser("U1", "u@test.com", "sale", "PJ-001")
         coEvery { branchRepo.getBranchById("PJ-001") } returns Branch("PJ-001", "Project Team", "Bangkok")
-        coEvery { projectRepo.getMembersByBranch("PJ-001") } returns Result.success(
+        coEvery { branchRepo.observeBranches() } returns listOf(Branch("PJ-001", "Project Team", "Bangkok"))
+        coEvery { projectRepo.getBranchMembersRpc("U1") } returns Result.success(
             listOf("U1" to "Owner", "U2" to "Support")
         )
 
@@ -93,7 +96,7 @@ class AddProjectViewModelTest {
             Branch("TS-002", "North B", "North"),
             Branch("TS-003", "South A", "South")
         )
-        coEvery { projectRepo.getMembersByBranch("TS-001") } returns Result.success(listOf("U1" to "Me"))
+        coEvery { projectRepo.getBranchMembersRpc("U1") } returns Result.success(listOf("U1" to "Me"))
 
         initViewModel()
         advanceUntilIdle()
@@ -126,7 +129,7 @@ class AddProjectViewModelTest {
             Branch("TS-001", "North A", "North"),
             Branch("TS-003", "South A", "South")
         )
-        coEvery { projectRepo.getMembersByBranch("TS-001") } returns Result.success(listOf("U1" to "Owner"))
+        coEvery { projectRepo.getBranchMembersRpc("U1") } returns Result.success(listOf("U1" to "Owner"))
 
         initViewModel()
         advanceUntilIdle()
@@ -159,9 +162,9 @@ class AddProjectViewModelTest {
 
     @Test
     fun `customerSelected should reset contacts and load customer contacts`() = runTest {
-        coEvery { customerRepo.getContactPersons("C1") } returns Result.success(
-            listOf(ContactPerson("CT-1", "C1", "John"), ContactPerson("CT-2", "C1", "Jane"))
-        )
+        coEvery { customerRepo.getContactPersons("C1", any()) } returns Result.success(listOf(
+            ContactPerson("CT-1", "C1", "John"), ContactPerson("CT-2", "C1", "Jane")
+        ))
         initViewModel()
         advanceUntilIdle()
 
@@ -178,7 +181,7 @@ class AddProjectViewModelTest {
 
     @Test
     fun `customerSelected when contacts fail should keep options empty and stop loading`() = runTest {
-        coEvery { customerRepo.getContactPersons("C1") } returns Result.failure(Exception("contact load failed"))
+        coEvery { customerRepo.getContactPersons("C1", any()) } returns Result.failure(Exception("boom"))
         initViewModel()
         advanceUntilIdle()
 
@@ -279,7 +282,6 @@ class AddProjectViewModelTest {
                 custId = "C1",
                 projectName = "Old Name",
                 projectStatus = "Lead",
-                projectNumber = "NUM-001",
                 branchId = "TS-001"
             )
         )
@@ -317,7 +319,7 @@ class AddProjectViewModelTest {
         advanceUntilIdle()
 
         coVerify(exactly = 1) {
-            projectRepo.addProjectMembers(any(), match { it.toSet() == setOf("U9", "U8") }, "owner")
+            projectRepo.addProjectMembers(any(), match { it.toSet() == setOf("U9", "U8", "USR-001") }, "owner")
         }
         assertTrue(viewModel.uiState.value.isSaved)
     }

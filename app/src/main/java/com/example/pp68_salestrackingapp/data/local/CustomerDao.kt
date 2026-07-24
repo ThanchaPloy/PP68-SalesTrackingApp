@@ -49,11 +49,19 @@ interface CustomerDao {
 
     @Transaction
     suspend fun clearAndInsert(customers: List<Customer>) {
-        deleteAllSynced()
+        val incomingIds = customers.map { it.custId }
+        if (incomingIds.isNotEmpty()) {
+            deleteSyncedCustomersNotIn(incomingIds)
+        } else {
+            deleteAllSynced()
+        }
         if (customers.isNotEmpty()) {
             insertCustomers(customers)
         }
     }
+
+    @Query("DELETE FROM customer WHERE is_synced = 1 AND cust_id NOT IN (:incomingIds)")
+    suspend fun deleteSyncedCustomersNotIn(incomingIds: List<String>)
 
     @Query("SELECT * FROM customer WHERE is_synced = 0")
     suspend fun getUnsyncedCustomers(): List<Customer>

@@ -35,8 +35,7 @@ class AdditionalModelCoverageTest {
             companyAddr = null,
             companyLat = null,
             companyLong = null,
-            companyStatus = "new lead",
-            firstCustomerDate = null
+            companyStatus = 0
         )
         val c2 = c1.copy()
 

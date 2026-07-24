@@ -97,7 +97,9 @@ class ProjectDetailViewModel @Inject constructor(
 
     private fun syncProjectFromServer(id: String) {
         viewModelScope.launch {
-            projectRepo.getProjectById(id)
+            projectRepo.getProjectById(id).onFailure { e ->
+                _uiState.update { it.copy(isLoading = false, error = e.message) }
+            }
         }
     }
 
@@ -147,8 +149,20 @@ class ProjectDetailViewModel @Inject constructor(
                 val actMap = activities.associateBy { it.activityId }
 
                 // 2. ประวัติกิจกรรม (History)
-                // ✅ กรองรายการที่ซ้ำซ้อนอย่างรัดกุมที่สุด
-                val history = results
+                val completedActivities = activities.filter { it.status.lowercase() == "completed" }
+                val activityHistoryItems = completedActivities.map { act ->
+                    HistoryItem(
+                        activityId   = act.activityId,
+                        title        = "นัดหมาย",
+                        description  = act.detail ?: "",
+                        plannedDate  = act.activityDate ?: "",
+                        planStatus   = "completed",
+                        activityType = act.activityType ?: "visit",
+                        contactName  = act.contactName ?: "ไม่ระบุชื่อผู้ติดต่อ"
+                    )
+                }
+
+                val resultHistoryItems = results
                     .sortedWith(
                         compareByDescending<com.example.pp68_salestrackingapp.data.model.ActivityResult> { it.reportDate ?: "" }
                             .thenByDescending { it.resultId }
@@ -169,18 +183,9 @@ class ProjectDetailViewModel @Inject constructor(
                             contactName  = act?.contactName ?: "ไม่ระบุชื่อผู้ติดต่อ"
                         )
                     }
-                    .distinctBy { item ->
-                        // กุญแจในการยุบรวม:
-                        // - ถ้ามีนัดหมาย (ActivityId) จะแสดงแค่อันเดียวต่อนัดหมายนั้น
-                        // - ถ้าเป็นบันทึก Standalone จะยุบรวมด้วย วันที่ + หัวข้อ + เนื้อหาที่ลบช่องว่างออกทั้งหมด
-                        val isActivity = actMap.containsKey(item.activityId)
-                        if (isActivity) {
-                            item.activityId
-                        } else {
-                            val normalizedContent = (item.description ?: "").replace("\\s".toRegex(), "")
-                            "${item.plannedDate}_${item.title}_$normalizedContent"
-                        }
-                    }
+
+                val history = (resultHistoryItems + activityHistoryItems)
+                    .distinctBy { it.activityId }
                     .sortedByDescending { it.plannedDate }
 
                 tasks to history

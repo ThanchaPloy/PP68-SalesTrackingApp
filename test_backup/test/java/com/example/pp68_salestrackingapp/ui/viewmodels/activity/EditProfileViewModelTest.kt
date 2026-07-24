@@ -189,7 +189,7 @@ class EditProfileViewModelTest {
         coVerify(exactly = 1) {
             apiService.updateUserProfile(
                 "eq.U1",
-                match { it["full_name"] == "New Name" && !it.containsKey("phone_number") }
+                match { it["emp_name"] == "New Name" && !it.containsKey("phone_number") }
             )
         }
         assertTrue(vm.uiState.value.isSaved)

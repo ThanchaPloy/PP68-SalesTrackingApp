@@ -73,7 +73,7 @@ object NetworkModule {
                 !path.contains("register-api") && 
                 !path.contains("change-password-api")) {
                 
-                if (originalRequest.url.host.contains("postgrest")) {
+                if (originalRequest.url.host.contains("postgrest") || originalRequest.url.encodedPath.contains("/db/")) {
                     requestBuilder
                         .header("Accept-Profile", "public")
                         .header("Content-Profile", "public")

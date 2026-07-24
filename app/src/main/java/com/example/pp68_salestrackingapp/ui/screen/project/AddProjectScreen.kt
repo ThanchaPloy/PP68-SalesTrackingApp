@@ -315,8 +315,8 @@ fun AddProjectContent(
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     // ใช้ GoogleMapPickerField จาก MapComponents.kt ที่มีระบบค้นหา
                     GoogleMapPickerField(
-                        lat = uiState.siteLat ?: 13.7563,
-                        lng = uiState.siteLong ?: 100.5018,
+                        lat = uiState.siteLat,
+                        lng = uiState.siteLong,
                         onLocationPicked = { lat, lng ->
                             onEvent(AddProjectEvent.LocationPicked(lat, lng))
                         }

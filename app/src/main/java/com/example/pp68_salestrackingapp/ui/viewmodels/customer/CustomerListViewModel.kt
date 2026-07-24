@@ -11,6 +11,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import android.util.Log
 import javax.inject.Inject
 
 @OptIn(FlowPreview::class, ExperimentalCoroutinesApi::class)
@@ -85,7 +86,10 @@ class CustomerListViewModel @Inject constructor(
             }
             // ✅ แก้ไขให้ส่ง branchId แทน userId เพื่อให้ดึงข้อมูลลูกค้าในระดับสาขา
             val result = repo.refreshCustomers(branchId)
-            result.onFailure { _error.value = it.message }
+            result.onFailure { 
+                Log.e("PLOY_DEBUG", "ViewModel refreshCustomers failed: ${it.message}", it)
+                _error.value = it.message 
+            }
             _isLoading.value = false
         }
     }

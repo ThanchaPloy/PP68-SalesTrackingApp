@@ -81,7 +81,7 @@ sealed class CreateAppointmentEvent {
     data class DateChanged(val value: String)               : CreateAppointmentEvent()
     data class StartTimeSelected(val value: String)         : CreateAppointmentEvent()
     data class EndTimeSelected(val value: String)           : CreateAppointmentEvent()
-    data class LocationPicked(val lat: Double, val lng: Double) : CreateAppointmentEvent()
+    data class LocationPicked(val lat: Double?, val lng: Double?) : CreateAppointmentEvent()
     object ShowStartTimePicker  : CreateAppointmentEvent()
     object ShowEndTimePicker    : CreateAppointmentEvent()
     object DismissTimePicker    : CreateAppointmentEvent()
@@ -233,14 +233,18 @@ class CreateAppointmentViewModel @Inject constructor(
                     _uiState.update {
                         it.copy(
                             contactOptions    = contacts
-                                .filter { c -> c.isActive == true }
+                                .filter { c -> c.isActive != false }
                                 .map { c ->
                                     ContactOption(
                                         c.contactId,
                                         c.fullName ?: c.nickname ?: c.contactId
                                     )
                                 },
-                            selectedContactIds = if (selectedContactIds.isNotEmpty()) selectedContactIds else it.selectedContactIds,
+                            selectedContactIds = if (selectedContactIds.isNotEmpty()) {
+                                selectedContactIds
+                            } else {
+                                it.selectedContactIds
+                            },
                             isLoadingContacts = false
                         )
                     }
@@ -395,8 +399,16 @@ class CreateAppointmentViewModel @Inject constructor(
             is CreateAppointmentEvent.TitleChanged ->
                 _uiState.update { it.copy(titleTopic = event.value) }
 
-            is CreateAppointmentEvent.TypeChanged ->
-                _uiState.update { it.copy(activityType = event.value) }
+            is CreateAppointmentEvent.TypeChanged -> {
+                val newType = event.value
+                _uiState.update {
+                    if (newType != "onsite") {
+                        it.copy(activityType = newType, lat = null, lng = null)
+                    } else {
+                        it.copy(activityType = newType)
+                    }
+                }
+            }
 
             is CreateAppointmentEvent.ContactToggled -> {
                 val current = _uiState.value.selectedContactIds.toMutableSet()

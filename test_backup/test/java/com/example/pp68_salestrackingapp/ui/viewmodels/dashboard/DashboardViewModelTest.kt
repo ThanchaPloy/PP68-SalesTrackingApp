@@ -8,12 +8,14 @@ import com.example.pp68_salestrackingapp.data.repository.CustomerRepository
 import com.example.pp68_salestrackingapp.data.repository.DashboardRepository
 import com.example.pp68_salestrackingapp.data.repository.DashboardSummary
 import com.example.pp68_salestrackingapp.data.repository.ProjectRepository
+import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
@@ -42,6 +44,9 @@ class DashboardViewModelTest {
     fun setup() {
         Dispatchers.setMain(testDispatcher)
         every { dashboardRepository.getDashboardSummary() } returns flowOf(DashboardSummary(3, 2, 1))
+        coEvery { customerRepo.refreshCustomers(any()) } returns Result.success(Unit)
+        coEvery { projectRepo.refreshProjects(any()) } returns Result.success(Unit)
+        coEvery { activityRepo.refreshActivities(any()) } returns Result.success(Unit)
     }
 
     @After
@@ -51,12 +56,12 @@ class DashboardViewModelTest {
 
     @Test
     fun `init should refresh all repos when user exists`() = runTest {
-        every { authRepo.currentUser() } returns AuthUser(userId = "USR-001", email = "x@test.com", role = "sale")
+        every { authRepo.currentUser() } returns AuthUser(userId = "USR-001", email = "x@test.com", role = "sale", teamId = "BRANCH-001")
 
         DashboardViewModel(dashboardRepository, customerRepo, projectRepo, activityRepo, authRepo)
         advanceUntilIdle()
 
-        coVerify(exactly = 1) { customerRepo.refreshCustomers("USR-001") }
+        coVerify(exactly = 1) { customerRepo.refreshCustomers("BRANCH-001") }
         coVerify(exactly = 1) { projectRepo.refreshProjects("USR-001") }
         coVerify(exactly = 1) { activityRepo.refreshActivities("USR-001") }
     }
@@ -77,23 +82,25 @@ class DashboardViewModelTest {
     fun `summary state should expose repository values`() = runTest {
         every { authRepo.currentUser() } returns null
         val vm = DashboardViewModel(dashboardRepository, customerRepo, projectRepo, activityRepo, authRepo)
+        val job = launch { vm.summary.collect {} }
         advanceUntilIdle()
 
         assertEquals(3, vm.summary.value.totalCustomers)
         assertEquals(2, vm.summary.value.activeProjects)
         assertEquals(1, vm.summary.value.completedActivities)
+        job.cancel()
     }
 
     @Test
     fun `refreshAllData when called directly should refresh repos for current user`() = runTest {
-        every { authRepo.currentUser() } returns AuthUser(userId = "USR-009", email = "u@test.com", role = "sale")
+        every { authRepo.currentUser() } returns AuthUser(userId = "USR-009", email = "u@test.com", role = "sale", teamId = "BRANCH-009")
         val vm = DashboardViewModel(dashboardRepository, customerRepo, projectRepo, activityRepo, authRepo)
         advanceUntilIdle()
 
         vm.refreshAllData()
         advanceUntilIdle()
 
-        coVerify(exactly = 2) { customerRepo.refreshCustomers("USR-009") } // init + explicit call
+        coVerify(exactly = 2) { customerRepo.refreshCustomers("BRANCH-009") } // init + explicit call
         coVerify(exactly = 2) { projectRepo.refreshProjects("USR-009") }
         coVerify(exactly = 2) { activityRepo.refreshActivities("USR-009") }
     }

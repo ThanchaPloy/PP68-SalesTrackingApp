@@ -46,6 +46,7 @@ class CustomerDetailViewModelTest {
     @Before
     fun setup() {
         Dispatchers.setMain(testDispatcher)
+        every { authRepo.currentUser() } returns null
         viewModel = CustomerDetailViewModel(customerRepo, projectRepo, authRepo)
     }
 
@@ -58,11 +59,11 @@ class CustomerDetailViewModelTest {
     @Test
     fun `load should fetch data and split projects accurately`() = runTest {
         val custId = "C1"
-        val mockCustomer = Customer(custId, "Corp A", null, "Owner", "BKK", 13.0, 100.0, "customer", null)
+        val mockCustomer = Customer(custId = custId, companyName = "Corp A", companyLat = 13.0, companyLong = 100.0)
         val mockContacts = listOf(ContactPerson("CP1", custId, "John", null, null, null))
         val mockProjects = listOf(
-            Project(projectId = "P1", custId = custId, projectNumber = "PJ01", projectName = "Active", projectStatus = "Quotation"),
-            Project(projectId = "P2", custId = custId, projectNumber = "PJ02", projectName = "Done", projectStatus = "Completed")
+            Project(projectId = "P1", custId = custId, projectName = "Active", projectStatus = "Quotation"),
+            Project(projectId = "P2", custId = custId, projectName = "Done", projectStatus = "Completed")
         )
 
         // ✅ ฟังก์ชัน suspend ใช้ coEvery
@@ -112,7 +113,7 @@ class CustomerDetailViewModelTest {
 
     @Test
     fun `load should succeed even if getContactPersons fails`() = runTest {
-        val mockCustomer = Customer("C1", "Corp A", null, "Owner", "BKK", 13.0, 100.0, "customer", null)
+        val mockCustomer = Customer(custId = "C1", companyName = "Corp A", companyLat = 13.0, companyLong = 100.0)
 
         coEvery { customerRepo.getCustomerById(any()) } returns Result.success(mockCustomer)
         coEvery { customerRepo.getContactPersons(any()) } returns Result.failure(Exception("Database Error"))

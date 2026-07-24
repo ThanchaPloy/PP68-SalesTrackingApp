@@ -194,13 +194,8 @@ class AddProjectViewModel @Inject constructor(
     }
 
     private suspend fun loadContactsAndReturn(custId: String): List<Pair<String, String>> {
-        val local = contactRepo.getContactsByCustomerId(custId)
-        if (local.isNotEmpty()) return local.map { it.contactId.trim() to (it.fullName ?: "") }
-        return try {
-            val resp = apiService.getContactsByCustomerIds("eq.$custId")
-            if (resp.isSuccessful) resp.body().orEmpty().map { it.contactId.trim() to (it.fullName ?: "") }
-            else emptyList()
-        } catch (e: Exception) { emptyList() }
+        val result = customerRepo.getContactPersons(custId)
+        return result.getOrNull()?.map { it.contactId.trim() to (it.fullName ?: it.nickname ?: "") } ?: emptyList()
     }
 
     private fun loadProject(id: String) {
@@ -470,11 +465,14 @@ class AddProjectViewModel @Inject constructor(
                     createBy              = userId
                 )
 
+                var finalProjectId = s.projectId ?: ""
+
                 val result = if (s.projectId != null) {
                     projectRepo.updateProject(projectToSave)
                 } else {
                     projectRepo.createProject(projectToSave, userId).fold(
                         onSuccess = { createdProject ->
+                            finalProjectId = createdProject.projectId
                             _uiState.update { it.copy(projectId = createdProject.projectId) }
                             kotlin.Result.success(Unit)
                         },
@@ -483,16 +481,26 @@ class AddProjectViewModel @Inject constructor(
                 }
 
                 result.onSuccess {
-                    val finalProjectId = _uiState.value.projectId ?: ""
-                    // always include own userId so getMyProjectIds can find this project after sync
-                    val memberIds = (s.selectedMemberIds.map { it.trim() } + userId.trim()).distinct()
+                    if (finalProjectId.isNotBlank()) {
+                        // always include own userId so getMyProjectIds can find this project after sync
+                        val memberIds = (s.selectedMemberIds.map { it.trim() } + userId.trim()).distinct()
 
-                    projectRepo.addProjectMembers(
-                        projectId = finalProjectId,
-                        userIds   = memberIds,
-                        role      = "owner"
-                    )
-                    projectRepo.saveProjectContacts(finalProjectId, s.selectedContactIds.map { it.trim() })
+                        val memberResult = projectRepo.addProjectMembers(
+                            projectId = finalProjectId,
+                            userIds   = memberIds,
+                            role      = "owner"
+                        )
+                        val contactResult = projectRepo.saveProjectContacts(finalProjectId, s.selectedContactIds.map { it.trim() })
+
+                        if (memberResult.isFailure || contactResult.isFailure) {
+                            val errorMsg = listOfNotNull(
+                                memberResult.exceptionOrNull()?.message,
+                                contactResult.exceptionOrNull()?.message
+                            ).joinToString(", ")
+                            _uiState.update { it.copy(isLoading = false, saveError = "บันทึกสมาชิก/ผู้ติดต่อล้มเหลว: $errorMsg") }
+                            return@onSuccess
+                        }
+                    }
                     _uiState.update { it.copy(isLoading = false, isSaved = true) }
                 }.onFailure { e ->
                     _uiState.update { it.copy(isLoading = false, saveError = e.message) }

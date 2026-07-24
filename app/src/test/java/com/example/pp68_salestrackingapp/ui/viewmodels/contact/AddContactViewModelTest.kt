@@ -7,6 +7,7 @@ import com.example.pp68_salestrackingapp.data.model.Project
 import com.example.pp68_salestrackingapp.data.repository.ContactRepository
 import com.example.pp68_salestrackingapp.data.repository.CustomerRepository
 import com.example.pp68_salestrackingapp.data.repository.ProjectRepository
+import com.example.pp68_salestrackingapp.data.repository.AuthRepository
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
@@ -31,16 +32,17 @@ class AddContactViewModelTest {
     private val contactRepository = mockk<ContactRepository>(relaxed = true)
     private val customerRepository = mockk<CustomerRepository>(relaxed = true)
     private val projectRepository = mockk<ProjectRepository>(relaxed = true)
+    private val authRepository = mockk<AuthRepository>(relaxed = true)
     private lateinit var viewModel: AddContactViewModel
 
     private val mockCustomers = listOf(
-        Customer("CUST-01", "Acme Corp", null, "CEO", "Bangkok", 13.0, 100.0, "customer", null),
-        Customer("CUST-02", "Globex", null, "CTO", "Chiang Mai", 19.0, 99.0, "customer", null)
+        Customer(custId = "CUST-01", companyName = "Acme Corp", companyLat = 13.0, companyLong = 100.0),
+        Customer(custId = "CUST-02", companyName = "Globex", companyLat = 19.0, companyLong = 99.0)
     )
 
     private val mockProjects = listOf(
-        Project(projectId = "P01", custId = "CUST-01", projectNumber = "ProjectA", projectName = "Alpha", projectStatus = "New Project"),
-        Project(projectId = "P02", custId = "CUST-02", projectNumber = "ProjectB", projectName = "Beta", projectStatus = "Quotation")
+        Project(projectId = "P01", custId = "CUST-01", projectName = "Alpha", projectStatus = "New Project"),
+        Project(projectId = "P02", custId = "CUST-02", projectName = "Beta", projectStatus = "Quotation")
     )
 
     @Before
@@ -54,7 +56,7 @@ class AddContactViewModelTest {
     }
 
     private fun createViewModel() {
-        viewModel = AddContactViewModel(contactRepository, customerRepository, projectRepository)
+        viewModel = AddContactViewModel(contactRepository, customerRepository, projectRepository, authRepository)
     }
 
     // TC-UNIT-VM-ADDCNT-01
@@ -338,6 +340,7 @@ class AddContactViewModelTest {
         )
         coEvery { customerRepository.getCustomers() } returns Result.success(mockCustomers)
         every { contactRepository.getAllContactsFlow() } returns flowOf(listOf(contact))
+        coEvery { contactRepository.getContactById("CNT-1") } returns contact
         coEvery { customerRepository.getCustomerById("CUST-01") } returns Result.success(
             Customer("CUST-01", "Acme Corp", null, null, null, null, null, null, null)
         )
@@ -367,6 +370,7 @@ class AddContactViewModelTest {
     fun `load contact when id not found should set save error`() = runTest {
         coEvery { customerRepository.getCustomers() } returns Result.success(mockCustomers)
         every { contactRepository.getAllContactsFlow() } returns flowOf(emptyList())
+        coEvery { contactRepository.getContactById("MISSING") } returns null
         createViewModel()
         testDispatcher.scheduler.advanceUntilIdle()
 
