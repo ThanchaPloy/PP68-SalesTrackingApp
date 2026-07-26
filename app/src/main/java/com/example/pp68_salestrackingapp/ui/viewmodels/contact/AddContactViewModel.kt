@@ -143,10 +143,7 @@ class AddContactViewModel @Inject constructor(
     }
 
     private fun save() {
-        if (_uiState.value.selectedCompanyId.isNullOrBlank()) {
-            _uiState.update { it.copy(companyError = "กรุณาเลือกบริษัท") }
-            return
-        }
+        // ❌ เอาการเช็ค selectedCompanyId ออก เพื่อให้ไม่บังคับเลือกบริษัทตามที่ผู้ใช้แจ้ง
         if (_uiState.value.fullName.isBlank()) {
             _uiState.update { it.copy(fullNameError = "กรุณากรอกชื่อ") }
             return
@@ -162,7 +159,7 @@ class AddContactViewModel @Inject constructor(
             val currentUserId = authRepo.currentUser()?.userId
             val contactToSave = ContactPerson(
                 contactId   = s.contactId ?: ("TEMP-" + UUID.randomUUID().toString().take(8).uppercase()),
-                custId      = s.selectedCompanyId!!,
+                custId      = s.selectedCompanyId ?: "",
                 fullName    = s.fullName,
                 nickname    = s.nickname.ifBlank { null },
                 position    = s.position.ifBlank { null },

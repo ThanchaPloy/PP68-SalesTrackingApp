@@ -62,6 +62,14 @@ class ContactListViewModel @Inject constructor(
         _uiState.update { it.copy(searchQuery = query) }
     }
 
+    fun deleteContact(contactId: String) {
+        viewModelScope.launch {
+            repo.deleteContact(contactId).onFailure { e ->
+                _uiState.update { it.copy(error = e.message) }
+            }
+        }
+    }
+
     fun logout() {
         viewModelScope.launch { authRepo.logout() }
     }

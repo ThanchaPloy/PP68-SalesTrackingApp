@@ -66,7 +66,7 @@ class ContactRepository @Inject constructor(
             contactDao.insertContact(localContact)
             try {
                 val fields = buildMap<String, Any?> {
-                    put("customer_code", localContact.custId)
+                    put("customer_code", localContact.custId.ifBlank { null })
                     localContact.fullName?.let { put("contact_name", it) }
                     localContact.phoneNumber?.let { put("mobile_phone", it) }
                     localContact.email?.let { put("email", it) }
@@ -125,6 +125,22 @@ class ContactRepository @Inject constructor(
             } catch (e: IOException) {
                 syncManager.scheduleSync()
                 kotlin.Result.success(Unit)
+            } catch (e: Exception) {
+                kotlin.Result.failure(e)
+            }
+        }
+    }
+
+    suspend fun deleteContact(contactId: String): kotlin.Result<Unit> {
+        return withContext(Dispatchers.IO) {
+            try {
+                val response = apiService.deleteContact("eq.$contactId")
+                if (response.isSuccessful) {
+                    contactDao.deleteContactById(contactId)
+                    kotlin.Result.success(Unit)
+                } else {
+                    kotlin.Result.failure(Exception("HTTP ${response.code()}"))
+                }
             } catch (e: Exception) {
                 kotlin.Result.failure(e)
             }

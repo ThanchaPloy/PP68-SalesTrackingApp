@@ -87,6 +87,7 @@ fun ContactListScreen(
         onContactClick = { contact -> selectedContact = contact },
         onAddClick = onAddClick,
         onEditClick = onEditClick,
+        onDeleteClick = viewModel::deleteContact,
         onNotificationClick = onNotificationClick,
         onSettingsClick = onSettingsClick,
         onLogoutClick = {
@@ -113,6 +114,7 @@ fun ContactListScreenContent(
     onContactClick: (ContactPerson) -> Unit,
     onAddClick: () -> Unit,
     onEditClick: (String) -> Unit,
+    onDeleteClick: (String) -> Unit = {},
     onNotificationClick: () -> Unit,
     onSettingsClick: () -> Unit,
     onLogoutClick: () -> Unit,
@@ -121,6 +123,31 @@ fun ContactListScreenContent(
 ) {
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
+    var contactToDelete by remember { mutableStateOf<ContactPerson?>(null) }
+
+    if (contactToDelete != null) {
+        AlertDialog(
+            onDismissRequest = { contactToDelete = null },
+            title = { Text("ลบผู้ติดต่อ?", fontWeight = FontWeight.Bold) },
+            text = { Text("คุณต้องการลบผู้ติดต่อ ${contactToDelete?.fullName ?: ""} หรือไม่? การลบนี้ไม่สามารถย้อนกลับได้") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        onDeleteClick(contactToDelete!!.contactId)
+                        contactToDelete = null
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = AccentIndigo)
+                ) {
+                    Text("ลบ", color = Color.White)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { contactToDelete = null }) {
+                    Text("ยกเลิก", color = TextGray)
+                }
+            }
+        )
+    }
 
     val sortedContacts = remember(contacts) {
         contacts.sortedBy { (it.fullName ?: "").stripThaiPrefix() }
@@ -177,7 +204,8 @@ fun ContactListScreenContent(
                             ContactCard(
                                 contact = contact,
                                 onClick = { onContactClick(contact) },
-                                onEdit = { onEditClick(contact.contactId) }
+                                onEdit = { onEditClick(contact.contactId) },
+                                onDelete = { contactToDelete = contact }
                             )
                         }
                         item { Spacer(Modifier.height(80.dp)) }
@@ -256,7 +284,7 @@ fun ContactListScreenContent(
 }
 
 @Composable
-private fun ContactCard(contact: ContactPerson, onClick: () -> Unit, onEdit: () -> Unit) {
+private fun ContactCard(contact: ContactPerson, onClick: () -> Unit, onEdit: () -> Unit, onDelete: () -> Unit) {
     Card(
         modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
         shape = RoundedCornerShape(12.dp),
@@ -284,6 +312,9 @@ private fun ContactCard(contact: ContactPerson, onClick: () -> Unit, onEdit: () 
                 }
                 IconButton(onClick = onEdit) {
                     Icon(Icons.Default.Edit, null, modifier = Modifier.size(18.dp), tint = TextGray)
+                }
+                IconButton(onClick = onDelete) {
+                    Icon(Icons.Default.Delete, "ลบ", modifier = Modifier.size(18.dp), tint = AccentIndigo)
                 }
             }
 

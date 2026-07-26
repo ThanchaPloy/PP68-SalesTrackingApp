@@ -407,10 +407,7 @@ class AddProjectViewModel @Inject constructor(
             _uiState.update { it.copy(projectNameError = "กรุณากรอกชื่อโครงการ") }
             valid = false
         }
-        if (s.selectedCustomerId.isNullOrBlank()) {
-            _uiState.update { it.copy(customerError = "กรุณาเลือกลูกค้า") }
-            valid = false
-        }
+        // ❌ เอาการเช็ค selectedCustomerId ออก เพื่อให้ไม่บังคับเลือกลูกค้าตามที่ผู้ใช้แจ้ง
         if (s.projectStatus.isNullOrBlank()) {
             _uiState.update { it.copy(statusError = "กรุณาเลือกสถานะ") }
             valid = false
