@@ -208,8 +208,20 @@ class ProjectRepository @Inject constructor(
                     val addResp = apiService.addProjectMembers(remoteRows)
                     Log.d("ProjectRepo", "addProjectMembers API status: ${addResp.code()}")
                     if (!addResp.isSuccessful) {
-                        val errMsg = addResp.errorBody()?.string() ?: ""
-                        return@withContext Result.failure(Exception("บันทึกสมาชิกหลักล้มเหลว: HTTP ${addResp.code()} $errMsg"))
+                        // ponytail: backend's POST /project_sales_member always 500s on the
+                        // response step even though the row is actually committed (confirmed
+                        // by direct curl testing against api-ploy.cskmitl.com) — verify the
+                        // real DB state instead of trusting the broken status code
+                        val verifyResp = apiService.getProjectMembers("eq.$projectId")
+                        val actualIds = if (verifyResp.isSuccessful) {
+                            verifyResp.body()?.mapNotNull { it.userId?.trim() }?.toSet() ?: emptySet()
+                        } else emptySet()
+                        val expectedIds = userIds.map { it.trim() }.toSet()
+                        if (actualIds != expectedIds) {
+                            val errMsg = addResp.errorBody()?.string() ?: ""
+                            return@withContext Result.failure(Exception("บันทึกสมาชิกหลักล้มเหลว: HTTP ${addResp.code()} $errMsg"))
+                        }
+                        Log.w("ProjectRepo", "addProjectMembers got HTTP ${addResp.code()} but DB write verified OK — treating as success")
                     }
                 }
                 Result.success(Unit)
@@ -294,8 +306,20 @@ class ProjectRepository @Inject constructor(
 
     suspend fun getProjectMembersDetailed(projectId: String): List<Pair<String, String>> {
         return withContext(Dispatchers.IO) {
-            // ponytail: read Room only — API emp_code column stores user_ids (USR-XXX), not real
-            // emp_codes; pulling from API would overwrite our local emp_code chip selections
+            // อัพเดท Room จาก API ก่อน (ถ้าทำได้) — เดิม select ผิดคอลัมน์ (emp_code,sales_role
+            // ไม่มีจริง จริงคือ user_id,role) ทำให้ได้ list ว่างเสมอ จึงเคย bypass มาอ่าน Room อย่างเดียว
+            if (!projectId.startsWith("TEMP-")) {
+                try {
+                    val resp = apiService.getProjectMembers("eq.$projectId")
+                    if (resp.isSuccessful) {
+                        val rows = (resp.body() ?: emptyList()).mapNotNull { m ->
+                            m.userId?.trim()?.takeIf { it.isNotBlank() }?.let { ProjectSalesMember(projectId, it, m.saleRole ?: "support") }
+                        }
+                        projectSalesMemberDao.deleteByProject(projectId)
+                        if (rows.isNotEmpty()) projectSalesMemberDao.insertAll(rows)
+                    }
+                } catch (_: Exception) { /* offline — ใช้ค่าที่มีใน Room */ }
+            }
             val ids = projectSalesMemberDao.getMemberIdsByProject(projectId)
             ids.map { it to it }   // names resolved at display time via teamMemberOptions
         }

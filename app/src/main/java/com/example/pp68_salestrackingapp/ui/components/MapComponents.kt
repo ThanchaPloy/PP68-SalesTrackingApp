@@ -44,6 +44,7 @@ import com.google.android.libraries.places.api.model.AutocompletePrediction
 import com.google.android.libraries.places.api.model.Place
 import com.google.android.libraries.places.api.net.FetchPlaceRequest
 import com.google.android.libraries.places.api.net.FindAutocompletePredictionsRequest
+import com.google.android.libraries.places.api.net.PlacesClient
 import com.google.maps.android.compose.*
 import com.example.pp68_salestrackingapp.ui.theme.AppColors
 import kotlinx.coroutines.Job
@@ -55,6 +56,28 @@ private val TextDark    = Color(0xFF1A1A1A)
 private val TextGray    = Color(0xFF888888)
 private val BgField     = Color(0xFFF8F8F8)
 private val BorderGray  = Color(0xFFE8E8E8)
+
+// ponytail: Places.createClient() opens a gRPC channel the SDK never closes — creating a
+// new one every time this composable enters composition (e.g. re-navigating to this screen)
+// leaks a channel each time ("Previous channel was not shutdown properly"). Cache one client
+// for the process lifetime instead of one per composable instance.
+private val placesClientLock = Any()
+@Volatile private var cachedPlacesClient: PlacesClient? = null
+
+private fun getOrCreatePlacesClient(context: android.content.Context): PlacesClient? {
+    cachedPlacesClient?.let { return it }
+    return synchronized(placesClientLock) {
+        cachedPlacesClient ?: try {
+            if (!Places.isInitialized()) {
+                Places.initialize(context.applicationContext, BuildConfig.MAPS_API_KEY)
+            }
+            Places.createClient(context.applicationContext).also { cachedPlacesClient = it }
+        } catch (e: Exception) {
+            Log.e("MapComponents", "Failed to initialize Places Client", e)
+            null
+        }
+    }
+}
 
 @Composable
 fun GoogleMapPickerField(
@@ -157,24 +180,13 @@ fun GoogleMapPickerField(
         }
     }
 
-    // ── Places Client ────────────────────────────────────────
+    // ── Places Client (cached process-wide — see getOrCreatePlacesClient) ─────
     val placesClient = remember {
         if (isPreview) {
             Log.d("MapComponents", "Preview mode: skipping Places client initialization")
             null
         } else {
-            try {
-                if (!Places.isInitialized()) {
-                    val keyLength = BuildConfig.MAPS_API_KEY.length
-                    val maskedKey = if (keyLength > 8) BuildConfig.MAPS_API_KEY.take(4) + "..." + BuildConfig.MAPS_API_KEY.takeLast(4) else "short_key"
-                    Log.d("MapComponents", "Initializing Places with API Key: $maskedKey (length: $keyLength)")
-                    Places.initialize(context, BuildConfig.MAPS_API_KEY)
-                }
-                Places.createClient(context)
-            } catch (e: Exception) {
-                Log.e("MapComponents", "Failed to initialize Places Client", e)
-                null
-            }
+            getOrCreatePlacesClient(context)
         }
     }
 

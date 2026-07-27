@@ -172,8 +172,13 @@ fun SearchableDropdownField(
 
     val filtered = remember(query, options) {
         val q = query.trim()
-        if (q.isBlank()) options.take(80)
-        else options.filter { it.contains(q, ignoreCase = true) }.take(80)
+        // ponytail: was take(80) on the unfiltered list — Thai text sorts after every
+        // Latin/digit string (higher Unicode code points), so any list with 80+ Latin-named
+        // entries (e.g. brand codes like "3DI", "555") hid every Thai-named option until
+        // the user typed something. 300 comfortably covers categorical lists (brands,
+        // groups, units); genuinely huge lists (customers) still get bounded.
+        if (q.isBlank()) options.take(300)
+        else options.filter { it.contains(q, ignoreCase = true) }.take(300)
     }
 
     ExposedDropdownMenuBox(

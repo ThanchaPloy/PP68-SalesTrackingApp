@@ -164,7 +164,10 @@ class CustomerRepository @Inject constructor(
                     val errBody = response.errorBody()?.string()
                     Log.e("CustomerRepo", "POST failed ${response.code()}: $errBody")
                     syncManager.scheduleSync()
-                    kotlin.Result.success(Unit)
+                    // ponytail: temporary diagnostic — surface real HTTP failures to the UI
+                    // instead of silently reporting success; revert to Result.success(Unit)
+                    // once the api-ploy migration is confirmed working.
+                    kotlin.Result.failure(Exception("HTTP ${response.code()}: $errBody"))
                 }
             } catch (e: IOException) {
                 syncManager.scheduleSync()

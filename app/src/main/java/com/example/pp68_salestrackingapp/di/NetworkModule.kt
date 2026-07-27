@@ -73,10 +73,17 @@ object NetworkModule {
                 !path.contains("register-api") && 
                 !path.contains("change-password-api")) {
                 
-                if (originalRequest.url.host.contains("postgrest") || originalRequest.url.encodedPath.contains("/db/")) {
-                    requestBuilder
-                        .header("Accept-Profile", "public")
-                        .header("Content-Profile", "public")
+                val postgrestHost = try { java.net.URL(POSTGREST_URL).host } catch (e: Exception) { "" }
+                val requestHost = originalRequest.url.host
+                if (requestHost.contains("postgrest") || 
+                    (postgrestHost.isNotEmpty() && requestHost == postgrestHost) || 
+                    originalRequest.url.encodedPath.contains("/db/")) {
+                    
+                    if (!path.contains("upload-visit-photo")) {
+                        requestBuilder
+                            .header("Accept-Profile", "public")
+                            .header("Content-Profile", "public")
+                    }
                 }
 
                 val token = tokenManager.getToken()
