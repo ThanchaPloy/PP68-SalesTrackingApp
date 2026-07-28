@@ -1,8 +1,11 @@
 package com.example.pp68_salestrackingapp.ui.navigation
 
+import android.widget.Toast
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.ui.platform.LocalContext
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
@@ -37,6 +40,14 @@ fun SalesTrackingApp() {
     val onLogout = {
         navController.navigate(Route.Login.path) {
             popUpTo(0) { inclusive = true }
+        }
+    }
+
+    val context = LocalContext.current
+    LaunchedEffect(Unit) {
+        appViewModel.sessionExpired.collect {
+            Toast.makeText(context, "เซสชันหมดอายุ กรุณาเข้าสู่ระบบใหม่", Toast.LENGTH_LONG).show()
+            onLogout()
         }
     }
 

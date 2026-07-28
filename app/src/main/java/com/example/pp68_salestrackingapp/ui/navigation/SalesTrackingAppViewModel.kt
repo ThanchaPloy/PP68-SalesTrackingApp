@@ -10,4 +10,5 @@ class SalesTrackingAppViewModel @Inject constructor(
     private val authRepo: AuthRepository
 ) : ViewModel() {
     fun isLoggedIn(): Boolean = authRepo.isUserLoggedIn()
+    val sessionExpired = authRepo.sessionExpired
 }

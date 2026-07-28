@@ -168,6 +168,8 @@ class AuthRepository @Inject constructor(
 
     fun isUserLoggedIn(): Boolean = !tokenManager.getToken().isNullOrEmpty()
 
+    val sessionExpired = tokenManager.sessionExpired
+
     fun currentUser(): AuthUser? = tokenManager.getUserData()
 
     fun updateLocalUser(user: AuthUser) {

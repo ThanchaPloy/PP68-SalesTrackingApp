@@ -91,7 +91,13 @@ object NetworkModule {
                 }
             }
 
-            chain.proceed(requestBuilder.build())
+            val response = chain.proceed(requestBuilder.build())
+            // ✅ 401 จาก endpoint ที่ต้อง auth หมายถึง token หมดอายุ/ไม่ถูกต้องเสมอ (ต่างจาก
+            // login-api ที่ 401 หมายถึงรหัสผ่านผิด) — เคลียร์ token แล้วแจ้งให้เด้งไปหน้า Login
+            if (response.code == 401 && !path.contains("login-api") && !path.contains("register-api")) {
+                tokenManager.notifySessionExpired()
+            }
+            response
         }
     }
 

@@ -4,6 +4,10 @@ import android.content.Context
 import android.content.SharedPreferences
 import com.example.pp68_salestrackingapp.data.model.AuthUser
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -12,6 +16,16 @@ class TokenManager @Inject constructor(
     @ApplicationContext context: Context
 ) {
     private val prefs: SharedPreferences = context.getSharedPreferences("sales_prefs", Context.MODE_PRIVATE)
+
+    // ✅ ยิง event เมื่อ token หมดอายุ/ไม่ถูกต้อง (401 จาก endpoint ที่ต้อง auth) — ให้ NavGraph
+    // เด้งกลับไปหน้า Login ทันที แทนที่จะปล่อยให้แอปเงียบๆ ใช้งานไม่ได้โดยไม่มีคำอธิบาย
+    private val _sessionExpired = MutableSharedFlow<Unit>(extraBufferCapacity = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
+    val sessionExpired: SharedFlow<Unit> = _sessionExpired.asSharedFlow()
+
+    fun notifySessionExpired() {
+        clearToken()
+        _sessionExpired.tryEmit(Unit)
+    }
 
     fun saveToken(token: String) {
         prefs.edit().putString("jwt_token", token).apply()
