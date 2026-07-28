@@ -69,9 +69,8 @@ object NetworkModule {
 
             val path = originalRequest.url.encodedPath
             // ✅ ไม่ใส่ Header สำหรับ API ที่เกี่ยวกับการยืนยันตัวตน
-            if (!path.contains("login-api") && 
-                !path.contains("register-api") && 
-                !path.contains("change-password-api")) {
+            if (!path.contains("login-api") &&
+                !path.contains("register-api")) {
                 
                 val postgrestHost = try { java.net.URL(POSTGREST_URL).host } catch (e: Exception) { "" }
                 val requestHost = originalRequest.url.host
