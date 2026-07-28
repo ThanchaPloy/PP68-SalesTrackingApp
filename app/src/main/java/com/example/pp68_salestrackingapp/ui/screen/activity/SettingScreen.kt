@@ -23,6 +23,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.example.pp68_salestrackingapp.BuildConfig
 import com.example.pp68_salestrackingapp.data.model.AuthUser
 import com.example.pp68_salestrackingapp.ui.theme.SalesTrackingTheme
 import com.example.pp68_salestrackingapp.ui.viewmodels.activity.SettingsViewModel
@@ -88,7 +89,7 @@ fun SettingScreenContent(
             - หน้า Company — จัดการข้อมูลลูกค้าและบริษัท
             - หน้า Contact — จัดการผู้ติดต่อของแต่ละบริษัท
             - หน้า Project — ติดตามโครงการและ pipeline การขาย
-            - หน้า Dashboard — ดูสถิติและผลงานการขาย
+            - หน้า Stats — ดูสถิติและผลงานการขาย
             
             📋 การสร้างแผนการเข้าพบ
             1. กดปุ่ม + ที่หน้า Home
@@ -105,9 +106,7 @@ fun SettingScreenContent(
             - หลัง Finish แล้วกด "บันทึกผล" ที่หน้า Home
             
             📞 ติดต่อทีม Support
-            - Email: support@company.com
-            - โทร: 02-xxx-xxxx
-            - เวลาทำการ: จันทร์-ศุกร์ 9:00-18:00
+            - Email: 66050762@kmitl.ac.th
                 """.trimIndent(),
             onBack = { activeSubScreen = null }
         )
@@ -116,12 +115,8 @@ fun SettingScreenContent(
             title   = "About App",
             content = """
             Sales Tracking App
-            Version 1.0.0
-            
-            พัฒนาโดย: ทีมพัฒนา PP68
-            สถาบัน: สถาบันเทคโนโลยีพระจอมเกล้าเจ้าคุณทหารลาดกระบัง (KMITL)
-            ปีการศึกษา: 2568
-            
+            Version ${BuildConfig.VERSION_NAME}
+
             📱 เกี่ยวกับแอปพลิเคชัน
             แอปพลิเคชันสำหรับพนักงานขายในการติดตามและบริหารจัดการกิจกรรมการขาย ครอบคลุมตั้งแต่การจัดการลูกค้า โครงการ การนัดหมาย และการวิเคราะห์ผลงาน
             
@@ -160,11 +155,8 @@ fun SettingScreenContent(
             เราไม่แบ่งปันข้อมูลส่วนตัวกับบุคคลภายนอก ยกเว้นผู้บังคับบัญชาในองค์กรที่มีสิทธิ์เข้าถึง
             
             4. ความปลอดภัย
-            ข้อมูลทั้งหมดถูกเข้ารหัสและจัดเก็บบน Google Cloud Platform ที่ได้มาตรฐานความปลอดภัยสากล
-            
-            5. สิทธิ์ของผู้ใช้
-            คุณมีสิทธิ์ขอดู แก้ไข หรือลบข้อมูลส่วนตัวได้โดยติดต่อ support@company.com
-            
+            ข้อมูลทั้งหมดถูกเข้ารหัสและจัดเก็บบน Server ที่ได้มาตรฐานความปลอดภัย
+             
             6. การเปลี่ยนแปลงนโยบาย
             เราอาจอัปเดตนโยบายนี้เป็นครั้งคราว โดยจะแจ้งให้ทราบผ่านแอปพลิเคชัน
             """.trimIndent(),
@@ -206,7 +198,7 @@ fun SettingScreenContent(
 
                     SettingGroup(title = "ช่วยเหลือและข้อมูล") {
                         SettingItem(icon = Icons.Default.Help, label = "ศูนย์ช่วยเหลือ", onClick = { activeSubScreen = "help" })
-                        SettingItem(icon = Icons.Default.Info, label = "เกี่ยวกับแอป", value = "v1.0.5", onClick = { activeSubScreen = "about" })
+                        SettingItem(icon = Icons.Default.Info, label = "เกี่ยวกับแอป", value = "v${BuildConfig.VERSION_NAME}", onClick = { activeSubScreen = "about" })
                         SettingItem(icon = Icons.Default.Policy, label = "นโยบายความเป็นส่วนตัว", onClick = { activeSubScreen = "privacy" })
                     }
 
