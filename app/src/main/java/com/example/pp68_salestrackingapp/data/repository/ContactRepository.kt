@@ -70,6 +70,11 @@ class ContactRepository @Inject constructor(
                     localContact.fullName?.let { put("contact_name", it) }
                     localContact.phoneNumber?.let { put("mobile_phone", it) }
                     localContact.email?.let { put("email", it) }
+                    localContact.nickname?.let { put("nickname", it) }
+                    localContact.position?.let { put("position", it) }
+                    localContact.line?.let { put("line", it) }
+                    put("is_active", localContact.isActive)
+                    put("is_dm_confirmed", localContact.isDmConfirmed)
                 }
                 val response = apiService.addContact(fields)
                 Log.d("ContactRepo", "POST contact → HTTP ${response.code()}, custId=${localContact.custId}")

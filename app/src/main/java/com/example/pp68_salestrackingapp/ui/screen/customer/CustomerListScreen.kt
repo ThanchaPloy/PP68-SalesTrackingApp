@@ -400,7 +400,7 @@ fun CustomerFilterModal(
     onDismiss: () -> Unit
 ) {
     val bizGroups = listOf("R" to "Retail", "W" to "Wholesale", "I" to "Industry", "P" to "Project")
-    val custTypes = listOf("Owner", "Developer", "Main Constructor", "Sub Constructor", "Installer")
+    val custTypes = CUSTOMER_TYPES
 
     ModalBottomSheet(onDismissRequest = onDismiss, containerColor = Color.White) {
         Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp).padding(bottom = 40.dp)) {

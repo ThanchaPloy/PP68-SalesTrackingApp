@@ -106,6 +106,8 @@ class SyncManager @Inject constructor(
                 contact.nickname?.let { put("nickname", it) }
                 contact.position?.let { put("position", it) }
                 contact.line?.let { put("line", it) }
+                put("is_active", contact.isActive)
+                put("is_dm_confirmed", contact.isDmConfirmed)
             }
             val response = apiService.addContact(fields)
             if (response.isSuccessful) {
