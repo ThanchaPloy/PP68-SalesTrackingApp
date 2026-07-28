@@ -122,8 +122,8 @@ fun SettingScreenContent(
             
             🛠 เทคโนโลยีที่ใช้
             - Android: Kotlin + Jetpack Compose
-            - Backend: PostgREST + Google Cloud Functions
-            - Database: PostgreSQL บน Google Cloud SQL
+            - Backend: Kotlin + Ktor
+            - Database: PostgreSQL
             - Authentication: JWT
             - Push Notification: Firebase Cloud Messaging
 
