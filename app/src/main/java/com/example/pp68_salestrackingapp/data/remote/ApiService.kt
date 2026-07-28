@@ -19,8 +19,6 @@ interface ApiService {
     @PATCH("user/fcm-token")
     suspend fun updateFcmToken(@Query("emp_code") userId: String, @Body updates: Map<String, String>): Response<Map<String, String>>
 
-    // ponytail: backend has no generic profile-update route (only /user/fcm-token) and no
-    // phone_number column — this keeps 404ing until the backend adds one.
     @PATCH("user")
     suspend fun updateUserProfile(@Query("user_id") userId: String, @Body updates: Map<String, String>): Response<List<UserDto>>
 

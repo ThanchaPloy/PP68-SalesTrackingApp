@@ -48,6 +48,7 @@ fun EditProfileScreen(
         onBack = onBack,
         onFullNameChange = viewModel::onFullNameChange,
         onPhoneChange = viewModel::onPhoneChange,
+        onEmailChange = viewModel::onEmailChange,
         onSaveClick = viewModel::save
     )
 }
@@ -59,6 +60,7 @@ fun EditProfileContent(
     onBack: () -> Unit,
     onFullNameChange: (String) -> Unit,
     onPhoneChange: (String) -> Unit,
+    onEmailChange: (String) -> Unit,
     onSaveClick: () -> Unit
 ) {
     Scaffold(
@@ -108,6 +110,21 @@ fun EditProfileContent(
             )
             Spacer(Modifier.height(16.dp))
 
+            // ✅ รหัสพนักงาน — read only, แยกจากอีเมล
+            OutlinedTextField(
+                value         = s.empCode,
+                onValueChange = {},
+                label         = { Text("รหัสพนักงาน") },
+                modifier      = Modifier.fillMaxWidth(),
+                shape         = RoundedCornerShape(12.dp),
+                enabled       = false,
+                colors        = OutlinedTextFieldDefaults.colors(
+                    disabledBorderColor    = Color.LightGray,
+                    disabledContainerColor = Color(0xFFF0F0F0)
+                )
+            )
+            Spacer(Modifier.height(16.dp))
+
             // ✅ Phone — แก้ได้
             OutlinedTextField(
                 value         = s.phoneNumber,
@@ -133,18 +150,13 @@ fun EditProfileContent(
             )
             Spacer(Modifier.height(16.dp))
 
-            // ✅ Email — read only
+            // ✅ Email — แก้ได้
             OutlinedTextField(
                 value         = s.email,
-                onValueChange = {},
+                onValueChange = onEmailChange,
                 label         = { Text("อีเมล") },
                 modifier      = Modifier.fillMaxWidth(),
-                shape         = RoundedCornerShape(12.dp),
-                enabled       = false,
-                colors        = OutlinedTextFieldDefaults.colors(
-                    disabledBorderColor    = Color.LightGray,
-                    disabledContainerColor = Color(0xFFF0F0F0)
-                )
+                shape         = RoundedCornerShape(12.dp)
             )
 
             if (s.error != null) {
@@ -447,6 +459,7 @@ fun EditProfileScreenPreview() {
         EditProfileContent(
             s = EditProfileUiState(
                 fullName = "John Doe",
+                empCode = "10387",
                 email = "john@example.com",
                 phoneNumber = "0812345678",
                 branchName = "Main Branch"
@@ -454,6 +467,7 @@ fun EditProfileScreenPreview() {
             onBack = {},
             onFullNameChange = {},
             onPhoneChange = {},
+            onEmailChange = {},
             onSaveClick = {}
         )
     }

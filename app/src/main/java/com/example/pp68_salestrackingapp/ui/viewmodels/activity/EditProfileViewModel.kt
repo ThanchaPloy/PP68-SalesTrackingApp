@@ -14,6 +14,7 @@ import javax.inject.Inject
 
 data class EditProfileUiState(
     val fullName:    String  = "",
+    val empCode:     String  = "",
     val email:       String  = "",
     val phoneNumber: String  = "",
     val branchName:  String  = "",
@@ -39,16 +40,19 @@ class EditProfileViewModel @Inject constructor(
             _uiState.update {
                 it.copy(
                     fullName   = user.fullName   ?: "",
-                    email      = user.email,
+                    empCode    = user.userId,
                     branchName = user.branchName ?: ""
                 )
             }
-            // ดึง phone_number จาก API
+            // ดึง phone_number/email จริงจาก API (AuthUser.email เป็นแค่รหัสพนักงานที่ใช้ล็อกอิน ไม่ใช่อีเมลจริง)
             try {
                 val resp = apiService.getUserById("eq.${user.userId}")
                 val userDto = resp.body()?.firstOrNull()
                 _uiState.update {
-                    it.copy(phoneNumber = userDto?.phoneNumber ?: "")
+                    it.copy(
+                        phoneNumber = userDto?.phoneNumber ?: "",
+                        email       = userDto?.email ?: ""
+                    )
                 }
             } catch (e: Exception) { }
         }
@@ -56,6 +60,7 @@ class EditProfileViewModel @Inject constructor(
 
     fun onFullNameChange(v: String)    = _uiState.update { it.copy(fullName = v) }
     fun onPhoneChange(v: String)       = _uiState.update { it.copy(phoneNumber = v) }
+    fun onEmailChange(v: String)       = _uiState.update { it.copy(email = v) }
 
     fun save() {
         viewModelScope.launch {
@@ -74,6 +79,9 @@ class EditProfileViewModel @Inject constructor(
                 )
                 if (_uiState.value.phoneNumber.isNotBlank()) {
                     updates["phone_number"] = _uiState.value.phoneNumber.trim()
+                }
+                if (_uiState.value.email.isNotBlank()) {
+                    updates["email"] = _uiState.value.email.trim()
                 }
 
                 val response = apiService.updateUserProfile("eq.$userId", updates)
