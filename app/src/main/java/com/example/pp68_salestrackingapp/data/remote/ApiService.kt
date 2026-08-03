@@ -47,7 +47,7 @@ interface ApiService {
 
     // ── Customer ─────────────────────────────────────────────────
     @GET("v_unified_customer")
-    suspend fun getCustomers(@Query("limit") limit: Int = 1000): Response<List<Customer>>
+    suspend fun getCustomers(@Query("limit") limit: Int = 5000): Response<List<Customer>>
 
     @GET("v_unified_customer")
     suspend fun getCustomersByIds(@Query("customer_code") custIds: String, @Query("limit") limit: Int = 1000): Response<List<Customer>>
@@ -138,7 +138,7 @@ interface ApiService {
     suspend fun getProjectsByIds(@Query("project_code") projectIds: String, @Query("limit") limit: Int = 1000): Response<List<Project>>
 
     @GET("project")
-    suspend fun getProjectsByCreator(@Query("create_by") userId: String, @Query("limit") limit: Int = 1000): Response<List<Project>>
+    suspend fun getProjectsByCreator(@Query("create_by") userId: String, @Query("limit") limit: Int = 5000): Response<List<Project>>
 
     @GET("project")
     suspend fun getProjectById(@Query("project_code") projectId: String, @Query("limit") limit: Int = 1): Response<List<Project>>
@@ -228,7 +228,7 @@ interface ApiService {
 
     // ── Appointment ──────────────────────────────────────────────
     @GET("appointment")
-    suspend fun getMyAppointments(@Query("emp_code") userId: String, @Query("limit") limit: Int = 1000, @Query("order") order: String = "planned_date.desc"): Response<List<SalesActivity>>
+    suspend fun getMyAppointments(@Query("emp_code") userId: String, @Query("limit") limit: Int = 5000, @Query("order") order: String = "planned_date.desc"): Response<List<SalesActivity>>
 
     @POST("appointment")
     @Headers("Prefer: return=representation", "Content-Profile: public")
@@ -255,7 +255,7 @@ interface ApiService {
     suspend fun getMasterActivities(@Query("is_active") isActive: String = "eq.true", @Query("limit") limit: Int = 100): Response<List<ActivityMasterDto>>
 
     @GET("project_sales_member")
-    suspend fun getMyProjectIds(@Query("emp_code") userId: String, @Query("select") select: String = "project_code", @Query("limit") limit: Int = 1000): Response<List<ProjectMemberDto>>
+    suspend fun getMyProjectIds(@Query("emp_code") userId: String, @Query("select") select: String = "project_code", @Query("limit") limit: Int = 5000): Response<List<ProjectMemberDto>>
 
     // ── Activity Result ──────────────────────────────────────────
     @POST("activity_result")
@@ -283,7 +283,7 @@ interface ApiService {
     suspend fun updateActivityResult(@Query("result_id") resultId: String, @Body updates: @JvmSuppressWildcards Map<String, Any?>): Response<Unit>
 
     @GET("activity_result")
-    suspend fun getResultsByUser(@Query("created_by") userId: String, @Query("limit") limit: Int = 1000): Response<List<ActivityResult>>
+    suspend fun getResultsByUser(@Query("created_by") userId: String, @Query("limit") limit: Int = 5000): Response<List<ActivityResult>>
 
     @GET("activity_result")
     suspend fun getResultById(@Query("result_id") resultId: String, @Query("limit") limit: Int = 1): Response<List<ActivityResult>>
