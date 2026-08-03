@@ -13,8 +13,8 @@ interface ApiService {
     // ── User ─────────────────────────────────────────────────────
     // Real DB table is "employee", but the deployed Ktor backend exposes it at /user
     // with params user_id / branch_id and raw emp_code/emp_name/... JSON keys (see UserDto).
-    @GET("user")
-    suspend fun getUserById(@Query("user_id") userId: String): Response<List<UserDto>>
+    @GET("employee")
+    suspend fun getUserById(@Query("emp_code") userId: String): Response<List<UserDto>>
 
     @PATCH("user/fcm-token")
     suspend fun updateFcmToken(@Query("emp_code") userId: String, @Body updates: Map<String, String>): Response<Map<String, String>>
@@ -59,9 +59,9 @@ interface ApiService {
         @Query("offset") offset: Int
     ): Response<List<Customer>>
 
-    @GET("user")
+    @GET("employee")
     suspend fun getEmployeeCodesByBranch(
-        @Query("branch_id") branchCode: String  // format: eq.90HO
+        @Query("emp_brch_code") branchCode: String  // format: eq.90HO
     ): Response<List<Map<String, String>>>
 
     @GET("v_unified_customer")
