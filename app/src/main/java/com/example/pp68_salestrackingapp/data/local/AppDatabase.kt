@@ -20,7 +20,7 @@ import com.example.pp68_salestrackingapp.data.model.*
         ProjectSalesMember::class,
         ActivityResultPhoto::class
     ],
-    version = 44,
+    version = 45,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -284,6 +284,12 @@ abstract class AppDatabase : RoomDatabase() {
                     )
                 """.trimIndent())
                 db.execSQL("CREATE INDEX IF NOT EXISTS `index_activity_result_photo_result_id` ON `activity_result_photo`(`result_id`)")
+            }
+        }
+
+        val MIGRATION_44_45 = object : Migration(44, 45) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE customer ADD COLUMN is_lead INTEGER NOT NULL DEFAULT 0")
             }
         }
     }

@@ -72,6 +72,7 @@ fun CustomerListScreen(
     val authUser         by viewModel.authUser.collectAsState(initial = null)
     val selectedBizGroup by viewModel.selectedBizGroup.collectAsState(initial = null)
     val selectedCustType by viewModel.selectedCustType.collectAsState(initial = null)
+    val selectedListTab  by viewModel.selectedTab.collectAsState()
 
     var showFilterModal by remember { mutableStateOf(false) }
 
@@ -82,6 +83,8 @@ fun CustomerListScreen(
         error = error,
         authUser = authUser,
         hasActiveFilter = selectedBizGroup != null || selectedCustType != null,
+        selectedListTab = selectedListTab,
+        onListTabChange = viewModel::onTabSelected,
         onSearchChange = viewModel::onSearchChange,
         onFilterClick = { showFilterModal = true },
         onCustomerClick = onCustomerClick,
@@ -116,6 +119,8 @@ fun CustomerListContent(
     error: String?,
     authUser: AuthUser?,
     hasActiveFilter: Boolean,
+    selectedListTab: Int,
+    onListTabChange: (Int) -> Unit,
     onSearchChange: (String) -> Unit,
     onFilterClick: () -> Unit,
     onCustomerClick: (String) -> Unit,
@@ -197,6 +202,35 @@ fun CustomerListContent(
                 }
             }
             Spacer(Modifier.height(4.dp))
+
+            TabRow(
+                selectedTabIndex = selectedListTab,
+                containerColor = Color.Transparent,
+                contentColor = CustAccent,
+                modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)
+            ) {
+                Tab(
+                    selected = selectedListTab == 0,
+                    onClick = { onListTabChange(0) },
+                    text = { Text("รวม", fontWeight = FontWeight.Bold, fontSize = 15.sp) },
+                    selectedContentColor = CustAccent,
+                    unselectedContentColor = Color.Gray
+                )
+                Tab(
+                    selected = selectedListTab == 1,
+                    onClick = { onListTabChange(1) },
+                    text = { Text("Lead", fontWeight = FontWeight.Bold, fontSize = 15.sp) },
+                    selectedContentColor = CustAccent,
+                    unselectedContentColor = Color.Gray
+                )
+                Tab(
+                    selected = selectedListTab == 2,
+                    onClick = { onListTabChange(2) },
+                    text = { Text("ลูกค้า", fontWeight = FontWeight.Bold, fontSize = 15.sp) },
+                    selectedContentColor = CustAccent,
+                    unselectedContentColor = Color.Gray
+                )
+            }
 
             error?.let {
                 Text(it, color = Color.Red, fontSize = 13.sp,
@@ -343,6 +377,14 @@ fun CustomerListItem(customer: Customer, onClick: () -> Unit) {
             ) {
                 TypeTag(customer.custType)
                 BizGroupBadge(customer.branchId)
+                if (customer.isLead) {
+                    Surface(
+                        shape = RoundedCornerShape(4.dp),
+                        color = Color(0xFFE8F5E9)
+                    ) {
+                        Text("LEAD", color = Color(0xFF2E7D32), fontSize = 10.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
+                    }
+                }
             }
         }
     }
@@ -380,6 +422,8 @@ fun CustomerListScreenPreview() {
             customers = sampleCustomers, isLoading = false,
             searchQuery = "", error = null, authUser = null,
             hasActiveFilter = false,
+            selectedListTab = 0,
+            onListTabChange = {},
             onSearchChange = {}, onFilterClick = {},
             onCustomerClick = {}, onAddClick = {}, onNotificationClick = {},
             onSettingsClick = {}, onLogoutClick = {},

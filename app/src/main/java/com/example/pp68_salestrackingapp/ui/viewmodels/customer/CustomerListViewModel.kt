@@ -34,6 +34,9 @@ class CustomerListViewModel @Inject constructor(
     val authUser:         StateFlow<AuthUser?> = _authUser.asStateFlow()
     val selectedBizGroup: StateFlow<String?>  = _selectedBizGroup.asStateFlow()
     val selectedCustType: StateFlow<String?>  = _selectedCustType.asStateFlow()
+    
+    private val _selectedTab = MutableStateFlow(0)
+    val selectedTab: StateFlow<Int> = _selectedTab.asStateFlow()
 
     init {
         refreshDataFromApi()
@@ -44,11 +47,19 @@ class CustomerListViewModel @Inject constructor(
             if (query.isBlank()) repo.getAllCustomersFlow() else repo.searchCustomersFlow(query)
         },
         _selectedBizGroup,
-        _selectedCustType
-    ) { list, bizGroup, custType ->
+        _selectedCustType,
+        _selectedTab
+    ) { list, bizGroup, custType, tab ->
         list
             .let { if (bizGroup != null) it.filter { c -> c.branchId == bizGroup } else it }
             .let { if (custType != null) it.filter { c -> c.custType == custType } else it }
+            .let { 
+                when(tab) {
+                    1 -> it.filter { c -> c.isLead }
+                    2 -> it.filter { c -> !c.isLead }
+                    else -> it
+                }
+            }
     }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5000),
@@ -56,6 +67,10 @@ class CustomerListViewModel @Inject constructor(
     )
 
     fun onSearchChange(query: String) { _searchQuery.value = query }
+
+    fun onTabSelected(index: Int) {
+        _selectedTab.value = index
+    }
 
     fun onBizGroupFilter(code: String?) {
         _selectedBizGroup.value = if (_selectedBizGroup.value == code) null else code

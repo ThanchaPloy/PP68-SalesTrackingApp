@@ -48,5 +48,9 @@ data class Customer(
     val grade: Int? = null,
 
     @ColumnInfo(name = "is_synced")
-    val isSynced: Boolean = true
+    val isSynced: Boolean = true,
+
+    @ColumnInfo(name = "is_lead")
+    @SerializedName("is_lead")
+    val isLead: Boolean = false
 )
