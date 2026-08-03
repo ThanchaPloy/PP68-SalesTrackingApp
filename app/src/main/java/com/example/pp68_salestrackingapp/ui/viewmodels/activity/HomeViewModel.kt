@@ -174,7 +174,10 @@ class HomeViewModel @Inject constructor(
 
     fun deleteActivity(activityId: String) {
         viewModelScope.launch {
-            activityRepo.deleteActivity(activityId)
+            val result = activityRepo.deleteActivity(activityId)
+            if (result.isFailure) {
+                _uiState.update { it.copy(error = result.exceptionOrNull()?.message) }
+            }
             loadActivities()
         }
     }

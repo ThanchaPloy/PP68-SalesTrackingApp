@@ -358,12 +358,25 @@ class ActivityRepository @Inject constructor(
     suspend fun deleteActivity(activityId: String): kotlin.Result<Unit> {
         return withContext(Dispatchers.IO) {
             try {
-                apiService.deleteActivity("eq.$activityId")
-                activityDao.deleteActivityById(activityId)
-                kotlin.Result.success(Unit)
+                if (activityId.startsWith("TEMP-")) {
+                    activityDao.deleteActivityById(activityId)
+                    return@withContext kotlin.Result.success(Unit)
+                }
+                val response = apiService.deleteActivity("eq.$activityId")
+                if (response.isSuccessful) {
+                    activityDao.deleteActivityById(activityId)
+                    kotlin.Result.success(Unit)
+                } else {
+                    kotlin.Result.failure(Exception("ลบนัดหมายบนเซิร์ฟเวอร์ไม่สำเร็จ"))
+                }
             } catch (e: Exception) {
-                activityDao.deleteActivityById(activityId)
-                kotlin.Result.success(Unit)
+                if (activityId.startsWith("TEMP-")) {
+                    activityDao.deleteActivityById(activityId)
+                    kotlin.Result.success(Unit)
+                } else {
+                    // หากออฟไลน์ ห้ามลบข้อมูลที่ซิงค์แล้วในเครื่อง ไม่งั้นจะเป็น Zombie Data (ดึงกลับมาใหม่เมื่อออนไลน์)
+                    kotlin.Result.failure(Exception("ไม่สามารถลบนัดหมายที่ซิงค์แล้วขณะออฟไลน์ได้"))
+                }
             }
         }
     }
