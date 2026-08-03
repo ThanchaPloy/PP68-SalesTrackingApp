@@ -155,9 +155,10 @@ class CustomerRepository @Inject constructor(
                         // server generated a new ID — replace TEMP record in Room
                         contactDao.updateCustIdForContacts(tempId, realCustId)
                         customerDao.deleteCustomerById(tempId)
-                        customerDao.insertCustomer(localCustomer.copy(custId = realCustId, isSynced = true))
+                        customerDao.insertCustomer(localCustomer.copy(custId = realCustId, isSynced = true, isLead = true))
                     } else {
                         customerDao.updateSyncStatus(tempId, true)
+                        customerDao.updateLeadStatus(tempId, true)
                     }
                     kotlin.Result.success(Unit)
                 } else {

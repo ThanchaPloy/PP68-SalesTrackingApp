@@ -68,4 +68,7 @@ interface CustomerDao {
 
     @Query("UPDATE customer SET is_synced = :isSynced WHERE cust_id = :customerId")
     suspend fun updateSyncStatus(customerId: String, isSynced: Boolean)
+
+    @Query("UPDATE customer SET is_lead = :isLead WHERE cust_id = :customerId")
+    suspend fun updateLeadStatus(customerId: String, isLead: Boolean)
 }

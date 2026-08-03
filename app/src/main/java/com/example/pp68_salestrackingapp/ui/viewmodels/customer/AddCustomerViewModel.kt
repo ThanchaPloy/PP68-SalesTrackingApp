@@ -181,7 +181,8 @@ class AddCustomerViewModel @Inject constructor(
                     else       -> 1
                 },
                 createdBy     = userEmpCode,
-                createdAt     = s.custId?.let { null } ?: LocalDate.now().toString()
+                createdAt     = s.custId?.let { null } ?: LocalDate.now().toString(),
+                isLead        = true
             )
 
             // ✅ Create = POST, Edit = PATCH
