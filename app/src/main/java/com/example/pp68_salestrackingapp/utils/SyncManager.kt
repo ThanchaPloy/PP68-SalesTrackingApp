@@ -252,7 +252,14 @@ class SyncManager @Inject constructor(
                         activity.plannedEndTime?.let { put("planned_end_time", it) }
                         activity.plannedLat?.let { put("planned_lat", it) }
                         activity.plannedLong?.let { put("planned_long", it) }
-                        activity.note?.let { put("note", it) }
+                        val noteToSync = activity.weeklyNote ?: activity.note
+                        noteToSync?.let { put("note", it) }
+                        
+                        activity.checkInLat?.let { put("check_in_lat", it) }
+                        activity.checkInLong?.let { put("check_in_long", it) }
+                        activity.checkInTime?.let { put("check_in_time", it) }
+                        put("is_location_verified", activity.isLocationVerified)
+                        activity.distanceDeviation?.let { put("distance_deviation", it) }
                     }
                     val response = apiService.updateActivity("eq.${activity.activityId}", patchBody)
                     if (response.isSuccessful) activityDao.updateSyncStatus(activity.activityId, true)

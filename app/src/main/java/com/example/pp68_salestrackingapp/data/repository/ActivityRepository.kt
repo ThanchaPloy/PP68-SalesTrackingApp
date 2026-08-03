@@ -285,16 +285,18 @@ class ActivityRepository @Inject constructor(
     suspend fun checkIn(activityId: String, lat: Double, lng: Double, isVerified: Boolean, distanceDeviation: Double? = null): kotlin.Result<Unit> {
         return withContext(Dispatchers.IO) {
             try {
-                val updates = mutableMapOf<String, Any>("check_in_lat" to lat, "check_in_long" to lng, "check_in_time" to java.time.Instant.now().toString(), "plan_status" to "checked_in", "is_location_verified" to isVerified)
+                val nowStr = java.time.Instant.now().toString()
+                val updates = mutableMapOf<String, Any>("check_in_lat" to lat, "check_in_long" to lng, "check_in_time" to nowStr, "plan_status" to "checked_in", "is_location_verified" to isVerified)
                 distanceDeviation?.let { updates["distance_deviation"] = it }
                 apiService.updateActivity("eq.$activityId", updates)
                 activityDao.getActivityById(activityId)?.let {
-                    activityDao.insertActivity(it.copy(status = "checked_in", checkInLat = lat, checkInLong = lng, isLocationVerified = isVerified, distanceDeviation = distanceDeviation, isSynced = true))
+                    activityDao.insertActivity(it.copy(status = "checked_in", checkInLat = lat, checkInLong = lng, checkInTime = nowStr, isLocationVerified = isVerified, distanceDeviation = distanceDeviation, isSynced = true))
                 }
                 kotlin.Result.success(Unit)
             } catch (e: Exception) {
+                val nowStr = java.time.Instant.now().toString()
                 activityDao.getActivityById(activityId)?.let {
-                    activityDao.insertActivity(it.copy(status = "checked_in", checkInLat = lat, checkInLong = lng, isLocationVerified = isVerified, distanceDeviation = distanceDeviation, isSynced = false))
+                    activityDao.insertActivity(it.copy(status = "checked_in", checkInLat = lat, checkInLong = lng, checkInTime = nowStr, isLocationVerified = isVerified, distanceDeviation = distanceDeviation, isSynced = false))
                     syncManager.scheduleSync()
                 }
                 kotlin.Result.success(Unit)
@@ -312,7 +314,7 @@ class ActivityRepository @Inject constructor(
                 note?.let { updates["note"] = it }
                 val response = apiService.updateActivity("eq.$activityId", updates)
                 activityDao.getActivityById(activityId)?.let {
-                    activityDao.insertActivity(it.copy(status = "completed", weeklyNote = note, isSynced = response.isSuccessful))
+                    activityDao.insertActivity(it.copy(status = "completed", note = note, weeklyNote = note, isSynced = response.isSuccessful))
                     if (!response.isSuccessful) syncManager.scheduleSync()
                 }
                 kotlin.Result.success(Unit)
