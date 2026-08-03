@@ -136,8 +136,8 @@ fun AddProjectContent(
                 )
             }
 
-            // ── Customer/Company * ────────────────────────────
-            FormField("ลูกค้า/บริษัท", required = true) {
+            // ── Customer/Company ────────────────────────────
+            FormField("ลูกค้า/บริษัท") {
                 if (uiState.isLoadingCustomers) LoadingFieldProject()
                 else Column {
                     SearchableDropdownField(
