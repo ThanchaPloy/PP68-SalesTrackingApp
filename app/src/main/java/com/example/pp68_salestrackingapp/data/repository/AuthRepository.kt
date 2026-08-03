@@ -126,8 +126,7 @@ class AuthRepository @Inject constructor(
         val fcmToken = tokenManager.getFcmToken()
         if (!fcmToken.isNullOrBlank()) {
             try {
-                apiService.updateFcmToken(
-                    userId  = "eq.$userId",
+                authService.updateFcmToken(
                     updates = mapOf("fcm_token" to fcmToken)
                 )
             } catch (e: Exception) {

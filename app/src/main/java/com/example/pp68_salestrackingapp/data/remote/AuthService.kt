@@ -5,6 +5,7 @@ import com.example.pp68_salestrackingapp.data.model.*
 import retrofit2.Response
 import retrofit2.http.Body
 import retrofit2.http.POST
+import retrofit2.http.PATCH
 
 interface AuthService {
     @POST("login-api")
@@ -15,4 +16,7 @@ interface AuthService {
 
     @POST("change-password-api")
     suspend fun changePassword(@Body request: ChangePasswordRequest): Response<ChangePasswordResponse>
+
+    @PATCH("user/fcm-token")
+    suspend fun updateFcmToken(@Body updates: Map<String, String>): Response<Map<String, String>>
 }

@@ -14,7 +14,7 @@ import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
-import com.example.pp68_salestrackingapp.data.remote.ApiService
+import com.example.pp68_salestrackingapp.data.remote.AuthService
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -24,7 +24,7 @@ import kotlinx.coroutines.launch
 class SalesTrackingFirebaseService : FirebaseMessagingService() {
 
     @Inject lateinit var tokenManager: TokenManager
-    @Inject lateinit var apiService:   ApiService
+    @Inject lateinit var authService:  AuthService
 
     // ✅ สร้าง scope สำหรับ coroutine
     private val serviceScope = CoroutineScope(Dispatchers.IO)
@@ -39,8 +39,7 @@ class SalesTrackingFirebaseService : FirebaseMessagingService() {
         // ✅ ส่ง token ไปยัง Server
         serviceScope.launch {
             try {
-                apiService.updateFcmToken(
-                    userId  = "eq.$userId",
+                authService.updateFcmToken(
                     updates = mapOf("fcm_token" to token)
                 )
                 Log.d("FCM", "อัปเดต FCM Token ไปยัง Server สำเร็จ")

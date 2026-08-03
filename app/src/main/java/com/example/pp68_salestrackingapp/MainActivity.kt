@@ -26,6 +26,7 @@ import javax.inject.Inject
 class MainActivity : ComponentActivity() {
 
     @Inject lateinit var apiService: ApiService
+    @Inject lateinit var authService: com.example.pp68_salestrackingapp.data.remote.AuthService
     @Inject lateinit var tokenManager: TokenManager
     @Inject lateinit var syncManager: SyncManager
 
@@ -106,7 +107,7 @@ class MainActivity : ComponentActivity() {
                 if (userId != null) {
                     lifecycleScope.launch {
                         try {
-                            apiService.updateFcmToken("eq.$userId", mapOf("fcm_token" to token))
+                            authService.updateFcmToken(mapOf("fcm_token" to token))
                             Log.d("FCM", "ส่ง Token ไป Server สำเร็จ")
                         } catch (e: Exception) {
                             Log.e("FCM", "ส่ง Token ล้มเหลว: ${e.message}")

@@ -16,8 +16,6 @@ interface ApiService {
     @GET("employee")
     suspend fun getUserById(@Query("emp_code") userId: String): Response<List<UserDto>>
 
-    @PATCH("user/fcm-token")
-    suspend fun updateFcmToken(@Query("emp_code") userId: String, @Body updates: Map<String, String>): Response<Map<String, String>>
 
     @PATCH("employee")
     suspend fun updateUserProfile(@Query("emp_code") userId: String, @Body updates: Map<String, String>): Response<List<UserDto>>
