@@ -51,7 +51,7 @@ class CustomerRepository @Inject constructor(
                 // 1. Fetch current user's own customers FIRST & insert into Room immediately
                 if (currentUserId.isNotBlank()) {
                     val ownCustResp = apiService.getCustomersBySalespersonCodes(
-                        codes = currentUserId,
+                        codes = "eq.$currentUserId",
                         limit = 1000,
                         offset = 0
                     )
@@ -66,13 +66,14 @@ class CustomerRepository @Inject constructor(
 
                 // 2. Fetch branch team member customers in background to enrich local database
                 if (branchId.isNotBlank()) {
-                    val empCodesResp = apiService.getEmployeeCodesByBranch(branchCode = branchId)
+                    val empCodesResp = apiService.getEmployeeCodesByBranch(branchCode = "eq.$branchId")
                     if (empCodesResp.isSuccessful) {
                         val empCodes = empCodesResp.body()?.mapNotNull { it["emp_code"] }?.filter { it.isNotBlank() && it != currentUserId } ?: emptyList()
-                        // Only fetch first 10 branch team members to avoid long loops
-                        for (empCode in empCodes.take(10)) {
+                        
+                        empCodes.chunked(50).forEach { chunk ->
+                            val codesString = "in.(${chunk.joinToString(",")})"
                             val custResp = apiService.getCustomersBySalespersonCodes(
-                                codes = empCode,
+                                codes = codesString,
                                 limit = 1000,
                                 offset = 0
                             )

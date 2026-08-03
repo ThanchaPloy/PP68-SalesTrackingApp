@@ -121,8 +121,9 @@ class ProjectDetailViewModel @Inject constructor(
                 if (project != null) {
                     _uiState.update { it.copy(isLoading = false, project = project, error = null) }
                     launch {
-                        val company = customerRepo.getCustomerById(project.custId)
-                            .getOrNull()?.companyName ?: ""
+                        val company = project.custId?.let { 
+                            customerRepo.getCustomerById(it).getOrNull()?.companyName 
+                        } ?: ""
                         _uiState.update { it.copy(companyName = company) }
                     }
                     launch {

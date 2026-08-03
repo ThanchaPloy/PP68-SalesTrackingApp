@@ -233,11 +233,13 @@ class AddProjectViewModel @Inject constructor(
                         )
                     }
 
-                    customerRepo.getCustomerById(project.custId).onSuccess { c ->
-                        _uiState.update { it.copy(selectedCustomerName = c.companyName) }
+                    project.custId?.let { cId ->
+                        customerRepo.getCustomerById(cId).onSuccess { c ->
+                            _uiState.update { it.copy(selectedCustomerName = c.companyName) }
+                        }
                     }
 
-                    val contactOptions = loadContactsAndReturn(project.custId)
+                    val contactOptions = project.custId?.let { loadContactsAndReturn(it) } ?: emptyList()
                     _uiState.update { it.copy(contactOptions = contactOptions, isLoadingContacts = false) }
 
                     projectRepo.getProjectContacts(id).onSuccess { contacts ->
@@ -407,10 +409,6 @@ class AddProjectViewModel @Inject constructor(
             _uiState.update { it.copy(projectNameError = "กรุณากรอกชื่อโครงการ") }
             valid = false
         }
-        if (s.selectedCustomerId.isNullOrBlank()) {
-            _uiState.update { it.copy(customerError = "กรุณาเลือกลูกค้า") }
-            valid = false
-        }
         if (s.projectStatus.isNullOrBlank()) {
             _uiState.update { it.copy(statusError = "กรุณาเลือกสถานะ") }
             valid = false
@@ -448,7 +446,7 @@ class AddProjectViewModel @Inject constructor(
                 // ✅ projectId จะถูกสร้างใน repository โดยใช้รูปแบบ project number
                 val projectToSave = Project(
                     projectId             = s.projectId ?: "",
-                    custId                = s.selectedCustomerId ?: "",
+                    custId                = if (s.selectedCustomerId.isNullOrBlank()) null else s.selectedCustomerId,
                     customerName          = s.selectedCustomerName,
                     branchId              = branchId,
                     billingBranchId       = s.selectedBillingBranchId,

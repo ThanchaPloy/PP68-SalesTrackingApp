@@ -20,7 +20,7 @@ import com.example.pp68_salestrackingapp.data.model.*
         ProjectSalesMember::class,
         ActivityResultPhoto::class
     ],
-    version = 45,
+    version = 46,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -290,6 +290,49 @@ abstract class AppDatabase : RoomDatabase() {
         val MIGRATION_44_45 = object : Migration(44, 45) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE customer ADD COLUMN is_lead INTEGER NOT NULL DEFAULT 0")
+            }
+        }
+
+        val MIGRATION_45_46 = object : Migration(45, 46) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("""
+                    CREATE TABLE project_new (
+                        projectId TEXT PRIMARY KEY NOT NULL,
+                        custId TEXT,
+                        customerName TEXT,
+                        branchId TEXT,
+                        billingBranchId TEXT,
+                        projectName TEXT NOT NULL,
+                        remark TEXT,
+                        expectedValue REAL,
+                        projectStatus TEXT,
+                        startDate TEXT,
+                        closingDate TEXT,
+                        desiredCompletionDate TEXT,
+                        projectLat REAL,
+                        projectLong REAL,
+                        opportunityScore TEXT,
+                        progressPct INTEGER,
+                        createdAt TEXT,
+                        updatedAt TEXT,
+                        lossReason TEXT,
+                        user_id TEXT,
+                        create_by TEXT,
+                        is_synced INTEGER NOT NULL DEFAULT 1
+                    )
+                """)
+                db.execSQL("""
+                    INSERT INTO project_new SELECT
+                        projectId, custId, customerName, branchId, billingBranchId,
+                        projectName, remark, expectedValue, projectStatus,
+                        startDate, closingDate, desiredCompletionDate,
+                        projectLat, projectLong, opportunityScore,
+                        progressPct, createdAt, updatedAt, lossReason,
+                        user_id, create_by, is_synced
+                    FROM project
+                """)
+                db.execSQL("DROP TABLE project")
+                db.execSQL("ALTER TABLE project_new RENAME TO project")
             }
         }
     }

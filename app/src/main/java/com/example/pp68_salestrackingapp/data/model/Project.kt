@@ -14,7 +14,7 @@ data class Project(
 
     @ColumnInfo(name = "custId")
     @SerializedName("customer_code")
-    val custId: String,
+    val custId: String? = null,
 
     @ColumnInfo(name = "customerName")
     @SerializedName("customer_name")

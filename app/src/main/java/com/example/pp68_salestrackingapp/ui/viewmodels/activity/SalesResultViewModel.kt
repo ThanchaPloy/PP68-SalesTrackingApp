@@ -85,7 +85,7 @@ class SalesResultViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(SalesResultUiState())
     val uiState: StateFlow<SalesResultUiState> = _uiState
 
-    private var custId: String = ""
+    private var custId: String? = null
 
     val lossReasonOptions = listOf(
         "ผลิตไม่ได้/ผลิตไม่ทัน",

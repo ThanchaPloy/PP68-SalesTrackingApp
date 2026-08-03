@@ -46,13 +46,13 @@ interface ApiService {
     suspend fun getBranchById(@Query("branch_code") branchId: String, @Query("limit") limit: Int = 1): Response<List<Branch>>
 
     // ── Customer ─────────────────────────────────────────────────
-    @GET("customer")
+    @GET("v_unified_customer")
     suspend fun getCustomers(@Query("limit") limit: Int = 1000): Response<List<Customer>>
 
-    @GET("customer")
+    @GET("v_unified_customer")
     suspend fun getCustomersByIds(@Query("customer_code") custIds: String, @Query("limit") limit: Int = 1000): Response<List<Customer>>
 
-    @GET("customer")
+    @GET("v_unified_customer")
     suspend fun getCustomersBySalespersonCodes(
         @Query("salesperson_code") codes: String,   // format: in.(code1,code2,...)
         @Query("limit") limit: Int,
@@ -64,7 +64,7 @@ interface ApiService {
         @Query("branch_id") branchCode: String  // format: eq.90HO
     ): Response<List<Map<String, String>>>
 
-    @GET("customer")
+    @GET("v_unified_customer")
     // ponytail: backend's /customer route checks customer_code before salesperson_code and
     // has no ilike support — sending both together always 404s (customer_code treated as a
     // literal exact-match lookup). Filter by branch suffix client-side instead (see CustomerRepository).
@@ -74,7 +74,7 @@ interface ApiService {
         @Query("offset") offset: Int
     ): Response<List<Customer>>
 
-    @GET("customer")
+    @GET("v_unified_customer")
     suspend fun getCustomerById(@Query("customer_code") custId: String, @Query("limit") limit: Int = 1): Response<List<Customer>>
 
     @POST("customer")

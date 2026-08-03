@@ -62,8 +62,8 @@ class ProjectInventoryViewModel @Inject constructor(
             try {
                 // 1. Load Project Details
                 val project = projectRepo.getProjectById(currentId).getOrNull()
-                val companyName = project?.let { 
-                    customerRepo.getCustomerById(it.custId).getOrNull()?.companyName
+                val companyName = project?.let { p ->
+                    p.custId?.let { cId -> customerRepo.getCustomerById(cId).getOrNull()?.companyName }
                 } ?: ""
                 
                 // 2. Load Products for this Project via ApiService
