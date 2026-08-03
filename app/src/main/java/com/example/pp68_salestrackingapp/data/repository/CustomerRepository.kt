@@ -66,31 +66,12 @@ class CustomerRepository @Inject constructor(
 
                 // 2. Fetch branch team member customers in background to enrich local database
                 if (branchId.isNotBlank()) {
-                    if (branchId == "90HO") {
-                        // Project Sales team members need ALL customers in the branch, including those
-                        // created by inactive employees. The Ktor backend intercepts a generic /customer
-                        // request and returns v_project_sales_customers if the user is 90HO.
-                        val custResp = apiService.getCustomers(limit = 5000)
-                        if (custResp.isSuccessful && custResp.body() != null) {
-                            customers.addAll(custResp.body()!!)
-                        }
-                    } else {
-                        val empCodesResp = apiService.getEmployeeCodesByBranch(branchCode = "eq.$branchId")
-                        if (empCodesResp.isSuccessful) {
-                            val empCodes = empCodesResp.body()?.mapNotNull { it["emp_code"] }?.filter { it.isNotBlank() && it != currentUserId } ?: emptyList()
-                            
-                            empCodes.chunked(50).forEach { chunk ->
-                                val codesString = "in.(${chunk.joinToString(",")})"
-                                val custResp = apiService.getCustomersBySalespersonCodes(
-                                    codes = codesString,
-                                    limit = 1000,
-                                    offset = 0
-                                )
-                                if (custResp.isSuccessful && custResp.body() != null) {
-                                    customers.addAll(custResp.body()!!)
-                                }
-                            }
-                        }
+                    // All branches now fetch their entire branch customer list directly via Ktor
+                    // backend's branch_id parameter. This ensures customers from inactive employees
+                    // are also included, which wouldn't happen if we fetched active employee codes first.
+                    val custResp = apiService.getCustomersByBranchId(branchId = "eq.$branchId", limit = 5000)
+                    if (custResp.isSuccessful && custResp.body() != null) {
+                        customers.addAll(custResp.body()!!)
                     }
                 }
 

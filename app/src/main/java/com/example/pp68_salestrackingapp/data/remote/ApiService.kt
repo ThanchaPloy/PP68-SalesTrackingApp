@@ -57,6 +57,12 @@ interface ApiService {
         @Query("offset") offset: Int
     ): Response<List<Customer>>
 
+    @GET("customer")
+    suspend fun getCustomersByBranchId(
+        @Query("branch_id") branchId: String,  // format: eq.90HO
+        @Query("limit") limit: Int = 5000
+    ): Response<List<Customer>>
+
     @GET("user")
     suspend fun getEmployeeCodesByBranch(
         @Query("branch_id") branchCode: String  // format: eq.90HO
