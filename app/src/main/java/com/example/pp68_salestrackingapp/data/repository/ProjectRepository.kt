@@ -51,10 +51,20 @@ class ProjectRepository @Inject constructor(
                 // ponytail: never clear local cache on empty — missing records would silently wipe all local data
                 if (allIds.isEmpty()) return@withContext Result.success(Unit)
 
-                val memberProjects = if (allIds.isNotEmpty()) {
-                    val r = apiService.getProjectsByIds(projectIds = "in.(${allIds.joinToString(",")})")
-                    if (r.isSuccessful) r.body() ?: emptyList() else emptyList()
-                } else emptyList()
+                val memberProjects = mutableListOf<Project>()
+                if (allIds.isNotEmpty()) {
+                    val chunks = allIds.chunked(50)
+                    for (chunk in chunks) {
+                        try {
+                            val r = apiService.getProjectsByIds(projectIds = "in.(${chunk.joinToString(",")})")
+                            if (r.isSuccessful && r.body() != null) {
+                                memberProjects.addAll(r.body()!!)
+                            }
+                        } catch (e: Exception) {
+                            Log.e("ProjectRepo", "Batch project fetch error: ${e.message}")
+                        }
+                    }
+                }
 
                 val merged = (memberProjects + creatorProjects).distinctBy { it.projectId }
                     .map { it.copy(isSynced = true) }

@@ -61,12 +61,15 @@ class ActivityRepository @Inject constructor(
                         appointmentContactDao.insertAppointmentContacts(unsyncedContacts)
                     // Fetch all contacts from server in one call
                     if (activities.isNotEmpty()) {
-                        try {
-                            val ids = activities.map { it.activityId }
-                            val cr = apiService.getAppointmentContacts("in.(${ids.joinToString(",")})")
-                            if (cr.isSuccessful && !cr.body().isNullOrEmpty())
-                                appointmentContactDao.insertAppointmentContacts(cr.body()!!)
-                        } catch (_: Exception) {}
+                        val ids = activities.map { it.activityId }
+                        val chunks = ids.chunked(50)
+                        for (chunk in chunks) {
+                            try {
+                                val cr = apiService.getAppointmentContacts("in.(${chunk.joinToString(",")})")
+                                if (cr.isSuccessful && !cr.body().isNullOrEmpty())
+                                    appointmentContactDao.insertAppointmentContacts(cr.body()!!)
+                            } catch (_: Exception) {}
+                        }
                     }
                     kotlin.Result.success(Unit)
                 } else {
@@ -91,11 +94,14 @@ class ActivityRepository @Inject constructor(
                     // ✅ clearAndInsert ลบ+สร้างแถว activity_result ใหม่ ซึ่ง cascade ลบ activity_result_photo ที่ผูกอยู่ไปด้วย
                     // ต้องดึงรูปกลับมาจาก server ใหม่ทุกครั้งหลัง sync ไม่งั้นจะเหลือแค่รูปปก (photo_url บน activity_result เอง)
                     if (results.isNotEmpty()) {
-                        try {
-                            val ids = results.map { it.resultId }
-                            val pr = apiService.getResultPhotos("in.(${ids.joinToString(",")})", limit = ids.size * 5)
-                            if (pr.isSuccessful && !pr.body().isNullOrEmpty()) photoDao.insertPhotos(pr.body()!!)
-                        } catch (_: Exception) {}
+                        val ids = results.map { it.resultId }
+                        val chunks = ids.chunked(50)
+                        for (chunk in chunks) {
+                            try {
+                                val pr = apiService.getResultPhotos("in.(${chunk.joinToString(",")})", limit = chunk.size * 5)
+                                if (pr.isSuccessful && !pr.body().isNullOrEmpty()) photoDao.insertPhotos(pr.body()!!)
+                            } catch (_: Exception) {}
+                        }
                     }
                     kotlin.Result.success(Unit)
                 } else {
