@@ -113,34 +113,40 @@ class ExportViewModel @Inject constructor(
                 val projectsMap = projectRepo.getAllProjectsFlow().first().associateBy { it.projectId }
                 val exportItems = mutableListOf<ExportActivityItem>()
 
-                // 1. ✅ ประมวลผลกิจกรรมที่มีนัดหมาย (ดึงรายละเอียดบันทึกหลังการขาย + รูปภาพทั้งหมด)
+                // 1. ✅ ประมวลผลกิจกรรมที่มีนัดหมาย (ดึงเฉพาะบันทึกหลังการขายเวอร์ชันล่าสุด + รูปภาพทั้งหมด)
                 filteredActivities.forEach { act ->
                     val matchedResults = allResults.filter { it.activityId == act.activityId }
-                    val resultDetailsList = matchedResults.map { res ->
-                        val photos = (listOfNotNull(res.photoUrl) + activityRepo.getResultPhotos(res.resultId)).filter { it.isNotBlank() }.distinct()
-                        ExportResultDetail(
-                            resultId = res.resultId,
-                            reportDate = res.reportDate,
-                            newStatus = res.newStatus,
-                            opportunityScore = res.opportunityScore,
-                            dmInvolved = res.dmInvolved,
-                            isProposalSent = res.isProposalSent,
-                            proposalDate = res.proposalDate,
-                            competitorCount = res.competitorCount,
-                            responseSpeed = res.responseSpeed,
-                            dealPosition = res.dealPosition,
-                            previousSolution = res.previousSolution,
-                            counterpartyMultiplier = res.counterpartyMultiplier,
-                            summary = res.summary,
-                            lossReason = res.lossReason,
-                            photoUrls = photos
+                    val latestResult = matchedResults
+                        .filter { it.isLatest == true }
+                        .ifEmpty { matchedResults }
+                        .maxByOrNull { res -> res.version ?: res.reportDate ?: res.resultId }
+
+                    val resultDetailsList = if (latestResult != null) {
+                        val photos = (listOfNotNull(latestResult.photoUrl) + activityRepo.getResultPhotos(latestResult.resultId)).filter { it.isNotBlank() }.distinct()
+                        listOf(
+                            ExportResultDetail(
+                                resultId = latestResult.resultId,
+                                reportDate = latestResult.reportDate,
+                                newStatus = latestResult.newStatus,
+                                opportunityScore = latestResult.opportunityScore,
+                                dmInvolved = latestResult.dmInvolved,
+                                isProposalSent = latestResult.isProposalSent,
+                                proposalDate = latestResult.proposalDate,
+                                competitorCount = latestResult.competitorCount,
+                                responseSpeed = latestResult.responseSpeed,
+                                dealPosition = latestResult.dealPosition,
+                                previousSolution = latestResult.previousSolution,
+                                counterpartyMultiplier = latestResult.counterpartyMultiplier,
+                                summary = latestResult.summary,
+                                lossReason = latestResult.lossReason,
+                                photoUrls = photos
+                            )
                         )
-                    }
+                    } else emptyList()
 
                     val summaryList = if (resultDetailsList.isNotEmpty()) {
                         resultDetailsList.mapNotNull { it.summary }.filter { it.isNotBlank() }
                     } else {
-                        val latestResult = matchedResults.maxByOrNull { it.reportDate ?: "" }
                         if (latestResult?.summary != null) listOf(latestResult.summary) else emptyList()
                     }
 
@@ -158,16 +164,19 @@ class ExportViewModel @Inject constructor(
                     )
                 }
 
-                // 2. ✅ ประมวลผลบันทึกที่ไม่มีนัดหมาย (Standalone Results + รูปภาพทั้งหมด)
+                // 2. ✅ ประมวลผลบันทึกที่ไม่มีนัดหมาย (Standalone Results เวอร์ชันล่าสุด + รูปภาพทั้งหมด)
                 val appIdsInWeek = filteredActivities.map { it.activityId }.toSet()
                 val standaloneResults = filteredResults
                     .filter { it.activityId == null || it.activityId !in appIdsInWeek }
-                    .sortedByDescending { it.reportDate ?: "" }
-                    .distinctBy { res ->
+                    .groupBy { res ->
                         val dateKey = res.reportDate?.take(10) ?: "no_date"
                         val contentKey = res.summary?.replace("\\s".toRegex(), "") ?: ""
                         "${res.projectId}_${dateKey}_$contentKey"
                     }
+                    .mapNotNull { (_, group) ->
+                        group.filter { it.isLatest == true }.ifEmpty { group }.maxByOrNull { res -> res.version ?: res.reportDate ?: res.resultId }
+                    }
+                    .sortedByDescending { it.reportDate ?: "" }
 
                 standaloneResults.forEach { res ->
                     val project = projectsMap[res.projectId]
@@ -250,14 +259,34 @@ class ExportViewModel @Inject constructor(
     fun generateActivityCsvString(): String {
         val activities = _uiState.value.activities
         val builder = StringBuilder()
-        builder.append("Date,Project Name,Company Name,Topic,Note,Status,Results\n")
-        activities.forEach {
-            val safeProject = it.projectName?.replace("\"", "\"\"") ?: ""
-            val safeCompany = it.companyName?.replace("\"", "\"\"") ?: ""
-            val safeTopic = it.topic?.replace("\"", "\"\"") ?: ""
-            val safeNote = it.note?.replace("\"", "\"\"") ?: ""
-            val safeResults = it.results.joinToString("; ").replace("\"", "\"\"")
-            builder.append("${it.date},\"$safeProject\",\"$safeCompany\",\"$safeTopic\",\"$safeNote\",${it.status},\"$safeResults\"\n")
+        builder.append("Date,Project Name,Company Name,Topic,Note,Status,New Status,Opportunity Score,Proposal Sent,Proposal Date,DM Involved,Competitor Count,Response Speed,Deal Position,Solution,Loss Reason,Summary,Photo URLs\n")
+        activities.forEach { item ->
+            val safeProject = item.projectName?.replace("\"", "\"\"") ?: ""
+            val safeCompany = item.companyName?.replace("\"", "\"\"") ?: ""
+            val safeTopic = item.topic?.replace("\"", "\"\"") ?: ""
+            val safeNote = item.note?.replace("\"", "\"\"")?.replace("\n", " ") ?: ""
+
+            if (item.resultDetails.isNotEmpty()) {
+                item.resultDetails.forEach { res ->
+                    val newStatus = res.newStatus ?: ""
+                    val score = res.opportunityScore ?: ""
+                    val propSent = if (res.isProposalSent) "Yes" else "No"
+                    val propDate = res.proposalDate ?: ""
+                    val dm = if (res.dmInvolved) "Yes" else "No"
+                    val comp = res.competitorCount.toString()
+                    val speed = res.responseSpeed ?: ""
+                    val dealPos = res.dealPosition ?: ""
+                    val sol = res.previousSolution?.replace("\"", "\"\"") ?: ""
+                    val loss = res.lossReason?.replace("\"", "\"\"") ?: ""
+                    val summary = res.summary?.replace("\"", "\"\"")?.replace("\n", " ") ?: ""
+                    val photos = res.photoUrls.joinToString("; ").replace("\"", "\"\"")
+
+                    builder.append("${item.date},\"$safeProject\",\"$safeCompany\",\"$safeTopic\",\"$safeNote\",${item.status},\"$newStatus\",\"$score\",\"$propSent\",\"$propDate\",\"$dm\",\"$comp\",\"$speed\",\"$dealPos\",\"$sol\",\"$loss\",\"$summary\",\"$photos\"\n")
+                }
+            } else {
+                val safeResults = item.results.joinToString("; ").replace("\"", "\"\"")
+                builder.append("${item.date},\"$safeProject\",\"$safeCompany\",\"$safeTopic\",\"$safeNote\",${item.status},\"\",\"\",\"No\",\"\",\"No\",\"0\",\"\",\"\",\"\",\"\",\"$safeResults\",\"\"\n")
+            }
         }
         return builder.toString()
     }

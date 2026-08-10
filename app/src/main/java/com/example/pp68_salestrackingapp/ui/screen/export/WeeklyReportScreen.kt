@@ -630,7 +630,7 @@ fun exportToPdf(context: Context, fileName: String, activities: List<ExportActiv
         // Results as bullets
         if (item.resultDetails.isNotEmpty()) {
             item.resultDetails.forEach { res ->
-                if (y > 800) {
+                if (y > 780) {
                     doc.finishPage(page)
                     pageNum++
                     pageInfo = PdfDocument.PageInfo.Builder(595, 842, pageNum).create()
@@ -639,11 +639,25 @@ fun exportToPdf(context: Context, fileName: String, activities: List<ExportActiv
                     y        = 50f
                 }
                 val summaryText = res.summary ?: "N/A"
-                val shortRes = if (summaryText.length > 60) summaryText.take(57) + "..." else summaryText
-                val statusInfo = if (!res.newStatus.isNullOrBlank()) " [Status: ${res.newStatus}]" else ""
-                val photoInfo = if (res.photoUrls.isNotEmpty()) " (${res.photoUrls.size} photos)" else ""
-                canvas.drawText("  • $shortRes$statusInfo$photoInfo", 170f, y, resultPaint)
-                y += 15f
+                val shortRes = if (summaryText.length > 55) summaryText.take(52) + "..." else summaryText
+                canvas.drawText("  • ผลการทำงาน: $shortRes", 170f, y, resultPaint)
+                y += 14f
+
+                val detailParts = mutableListOf<String>()
+                if (!res.newStatus.isNullOrBlank()) detailParts.add("สถานะ: ${res.newStatus}")
+                if (!res.opportunityScore.isNullOrBlank()) detailParts.add("โอกาส: ${res.opportunityScore}")
+                if (res.isProposalSent) detailParts.add("ใบเสนอราคา: ส่งแล้ว")
+                if (res.dmInvolved) detailParts.add("DM ร่วมประชุม")
+                if (res.competitorCount > 0) detailParts.add("คู่แข่ง: ${res.competitorCount}")
+                if (!res.lossReason.isNullOrBlank()) detailParts.add("สาเหตุที่ไม่สำเร็จ: ${res.lossReason}")
+                if (res.photoUrls.isNotEmpty()) detailParts.add("รูปภาพ: ${res.photoUrls.size} รูป")
+
+                if (detailParts.isNotEmpty()) {
+                    val detailLine = "    รายละเอียด: " + detailParts.joinToString(" | ")
+                    val shortDetail = if (detailLine.length > 70) detailLine.take(67) + "..." else detailLine
+                    canvas.drawText(shortDetail, 170f, y, subPaint)
+                    y += 14f
+                }
             }
         } else {
             item.results.forEach { res ->

@@ -273,4 +273,47 @@ class ExportViewModelTest {
         assertEquals("Meeting summary note", detail.summary)
         assertEquals(listOf("https://example.com/photo1.jpg", "https://example.com/photo2.jpg"), detail.photoUrls)
     }
+
+    @Test
+    fun `loadWeeklyData should take only the latest result version when duplicate results exist`() = runTest {
+        val activity = ActivityCard(
+            activityId = "A1",
+            activityType = "visit",
+            projectName = "Project Beta",
+            companyName = "Company B",
+            contactName = null,
+            objective = "Discussion",
+            planStatus = "completed",
+            plannedDate = "2026-04-08",
+            plannedTime = null,
+            plannedEndTime = null
+        )
+        val oldResult = com.example.pp68_salestrackingapp.data.model.ActivityResult(
+            resultId = "RES-01",
+            activityId = "A1",
+            reportDate = "2026-04-08",
+            version = 1,
+            isLatest = false,
+            summary = "Old version summary"
+        )
+        val newResult = com.example.pp68_salestrackingapp.data.model.ActivityResult(
+            resultId = "RES-02",
+            activityId = "A1",
+            reportDate = "2026-04-08",
+            version = 2,
+            isLatest = true,
+            summary = "Latest version summary"
+        )
+        coEvery { activityRepo.getMyActivitiesWithDetails() } returns Result.success(listOf(activity))
+        every { activityRepo.getAllResultsFlow() } returns flowOf(listOf(oldResult, newResult))
+
+        viewModel.loadWeeklyData(LocalDate.parse("2026-04-08"))
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertEquals(1, state.activities.size)
+        val item = state.activities.first()
+        assertEquals(1, item.resultDetails.size)
+        assertEquals("Latest version summary", item.resultDetails.first().summary)
+    }
 }
