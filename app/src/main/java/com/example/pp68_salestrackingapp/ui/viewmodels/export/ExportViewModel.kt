@@ -119,7 +119,7 @@ class ExportViewModel @Inject constructor(
                     val latestResult = matchedResults
                         .filter { it.isLatest == true }
                         .ifEmpty { matchedResults }
-                        .maxByOrNull { res -> res.version ?: res.reportDate ?: res.resultId }
+                        .maxByOrNull { res -> res.version ?: 0 }
 
                     val resultDetailsList = if (latestResult != null) {
                         val photos = (listOfNotNull(latestResult.photoUrl) + activityRepo.getResultPhotos(latestResult.resultId)).filter { it.isNotBlank() }.distinct()
@@ -174,7 +174,7 @@ class ExportViewModel @Inject constructor(
                         "${res.projectId}_${dateKey}_$contentKey"
                     }
                     .mapNotNull { (_, group) ->
-                        group.filter { it.isLatest == true }.ifEmpty { group }.maxByOrNull { res -> res.version ?: res.reportDate ?: res.resultId }
+                        group.filter { it.isLatest == true }.ifEmpty { group }.maxByOrNull { res -> res.version ?: 0 }
                     }
                     .sortedByDescending { it.reportDate ?: "" }
 
