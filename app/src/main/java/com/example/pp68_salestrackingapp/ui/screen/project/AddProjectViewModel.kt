@@ -307,29 +307,16 @@ class AddProjectViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.update { it.copy(isLoadingMembers = true) }
             val currentUser = authRepo.currentUser()
-            val empCode = currentUser?.userId ?: return@launch
             projectRepo.getProjectSalesEmployees().fold(
                 onSuccess = { list ->
-                    val members = if (list.isEmpty() && currentUser != null) {
-                        listOf(currentUser.userId.trim() to (currentUser.fullName ?: currentUser.userId))
-                    } else list.map { it.first.trim() to it.second }
+                    val members = list.map { it.first.trim() to it.second }
                     _uiState.update { it.copy(teamMemberOptions = members, isLoadingMembers = false) }
                 },
                 onFailure = {
-                    projectRepo.getBranchMembersRpc(empCode).fold(
-                        onSuccess = { list ->
-                            val members = if (list.isEmpty() && currentUser != null) {
-                                listOf(currentUser.userId.trim() to (currentUser.fullName ?: currentUser.userId))
-                            } else list.map { it.first.trim() to it.second }
-                            _uiState.update { it.copy(teamMemberOptions = members, isLoadingMembers = false) }
-                        },
-                        onFailure = {
-                            val fallback = if (currentUser != null)
-                                listOf(currentUser.userId.trim() to (currentUser.fullName ?: currentUser.userId))
-                            else emptyList()
-                            _uiState.update { it.copy(teamMemberOptions = fallback, isLoadingMembers = false) }
-                        }
-                    )
+                    val fallback = if (currentUser != null)
+                        listOf(currentUser.userId.trim() to (currentUser.fullName ?: currentUser.userId))
+                    else emptyList()
+                    _uiState.update { it.copy(teamMemberOptions = fallback, isLoadingMembers = false) }
                 }
             )
         }
