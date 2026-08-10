@@ -68,6 +68,11 @@ interface ApiService {
         @Query("branch_id") branchCode: String  // format: eq.90HO
     ): Response<List<Map<String, String>>>
 
+    @GET("user")
+    suspend fun getProjectSalesEmployees(
+        @Query("is_project_sales") isProjectSales: String = "eq.true"
+    ): Response<List<UserDto>>
+
     @GET("customer")
     // ponytail: backend's /customer route checks customer_code before salesperson_code and
     // has no ilike support — sending both together always 404s (customer_code treated as a

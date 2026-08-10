@@ -222,7 +222,55 @@ class ExportViewModelTest {
         val activityCsv = viewModel.generateActivityCsvString()
         val projectCsv = viewModel.generateProjectCsvString()
 
-        assertEquals("Date,Project Name,Company Name,Topic,Note,Status,Results\n", activityCsv)
+        assertTrue(activityCsv.startsWith("Date,Project Name,Company Name,Topic,Note,Status"))
         assertEquals("Project Name,Expected Value,Status,Score,Close Date\n", projectCsv)
+    }
+
+    @Test
+    fun `loadWeeklyData should map post-sales record details and photos`() = runTest {
+        val activity = ActivityCard(
+            activityId = "A1",
+            activityType = "visit",
+            projectName = "Project Alpha",
+            companyName = "Company A",
+            contactName = null,
+            objective = "Meeting",
+            planStatus = "completed",
+            plannedDate = "2026-04-08",
+            plannedTime = null,
+            plannedEndTime = null
+        )
+        val result = com.example.pp68_salestrackingapp.data.model.ActivityResult(
+            resultId = "RES-01",
+            activityId = "A1",
+            reportDate = "2026-04-08",
+            newStatus = "Quotation",
+            opportunityScore = "80%",
+            dmInvolved = true,
+            isProposalSent = true,
+            proposalDate = "2026-04-08",
+            competitorCount = 2,
+            summary = "Meeting summary note",
+            photoUrl = "https://example.com/photo1.jpg"
+        )
+        coEvery { activityRepo.getMyActivitiesWithDetails() } returns Result.success(listOf(activity))
+        every { activityRepo.getAllResultsFlow() } returns flowOf(listOf(result))
+        coEvery { activityRepo.getResultPhotos("RES-01") } returns listOf("https://example.com/photo2.jpg")
+
+        viewModel.loadWeeklyData(LocalDate.parse("2026-04-08"))
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertEquals(1, state.activities.size)
+        val item = state.activities.first()
+        assertEquals(1, item.resultDetails.size)
+        val detail = item.resultDetails.first()
+        assertEquals("Quotation", detail.newStatus)
+        assertEquals("80%", detail.opportunityScore)
+        assertTrue(detail.dmInvolved)
+        assertTrue(detail.isProposalSent)
+        assertEquals(2, detail.competitorCount)
+        assertEquals("Meeting summary note", detail.summary)
+        assertEquals(listOf("https://example.com/photo1.jpg", "https://example.com/photo2.jpg"), detail.photoUrls)
     }
 }

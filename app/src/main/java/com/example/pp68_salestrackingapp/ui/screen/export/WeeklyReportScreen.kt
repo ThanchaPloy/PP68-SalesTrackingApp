@@ -6,9 +6,11 @@ import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.pdf.PdfDocument
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -17,14 +19,18 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.window.Dialog
 import androidx.core.content.FileProvider
 import androidx.hilt.navigation.compose.hiltViewModel
+import coil.compose.AsyncImage
 import com.example.pp68_salestrackingapp.ui.theme.SalesTrackingTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -324,6 +330,12 @@ private fun ExportButton(
 // ── Activity card ────────────────────────────────────────────
 @Composable
 fun ReportActivityCard(item: ExportActivityItem) {
+    var previewPhotoUrl by remember { mutableStateOf<String?>(null) }
+
+    previewPhotoUrl?.let { url ->
+        ImagePreviewDialog(imageUrl = url, onDismiss = { previewPhotoUrl = null })
+    }
+
     Surface(
         shape           = RoundedCornerShape(12.dp),
         color           = Color.White,
@@ -374,8 +386,15 @@ fun ReportActivityCard(item: ExportActivityItem) {
                 }
             }
 
-            // ── บันทึกผลหลังการขาย (Results) ──────────────────
-            if (item.results.isNotEmpty()) {
+            // ── บันทึกผลหลังการขาย (Results & Photos) ──────────────────
+            if (item.resultDetails.isNotEmpty()) {
+                Spacer(Modifier.height(12.dp))
+                Text("บันทึกผลการทำงาน / หลังการขาย:", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF424242))
+                item.resultDetails.forEach { detail ->
+                    Spacer(Modifier.height(6.dp))
+                    PostSalesResultDetailCard(detail = detail, onPhotoClick = { previewPhotoUrl = it })
+                }
+            } else if (item.results.isNotEmpty()) {
                 Spacer(Modifier.height(12.dp))
                 Text("บันทึกผลการทำงาน:", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF424242))
                 item.results.forEach { res ->
@@ -389,19 +408,165 @@ fun ReportActivityCard(item: ExportActivityItem) {
     }
 }
 
+@Composable
+private fun PostSalesResultDetailCard(
+    detail: ExportResultDetail,
+    onPhotoClick: (String) -> Unit
+) {
+    Surface(
+        shape = RoundedCornerShape(8.dp),
+        color = Color(0xFFF8F9FA),
+        modifier = Modifier
+            .fillMaxWidth()
+            .border(1.dp, Color(0xFFE0E0E0), RoundedCornerShape(8.dp))
+    ) {
+        Column(modifier = Modifier.padding(10.dp)) {
+            // Badges row
+            LazyRow(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                if (!detail.newStatus.isNullOrBlank()) {
+                    item { DetailChip(label = "สถานะใหม่: ${detail.newStatus}", color = Color(0xFFE3F2FD), textColor = Color(0xFF1565C0)) }
+                }
+                if (!detail.opportunityScore.isNullOrBlank()) {
+                    item { DetailChip(label = "โอกาส: ${detail.opportunityScore}", color = Color(0xFFFFF8E1), textColor = Color(0xFFF57F17)) }
+                }
+                if (!detail.dealPosition.isNullOrBlank()) {
+                    item { DetailChip(label = "สถานะดีล: ${detail.dealPosition}", color = Color(0xFFEDE7F6), textColor = Color(0xFF512DA8)) }
+                }
+                if (detail.isProposalSent) {
+                    item { DetailChip(label = "ใบเสนอราคา: ส่งแล้ว (${detail.proposalDate ?: ""})", color = Color(0xFFE8F5E9), textColor = Color(0xFF2E7D32)) }
+                }
+                if (detail.dmInvolved) {
+                    item { DetailChip(label = "DM ร่วมประชุม", color = Color(0xFFE0F7FA), textColor = Color(0xFF00838F)) }
+                }
+                if (detail.competitorCount > 0) {
+                    item { DetailChip(label = "คู่แข่ง: ${detail.competitorCount} ราย", color = Color(0xFFFFF3E0), textColor = Color(0xFFE65100)) }
+                }
+                if (!detail.responseSpeed.isNullOrBlank()) {
+                    item { DetailChip(label = "ตอบสนอง: ${detail.responseSpeed}", color = Color(0xFFF3E5F5), textColor = Color(0xFF6A1B9A)) }
+                }
+                if (!detail.previousSolution.isNullOrBlank()) {
+                    item { DetailChip(label = "โซลูชันเดิม: ${detail.previousSolution}", color = Color(0xFFECEFF1), textColor = Color(0xFF37474F)) }
+                }
+                if (!detail.lossReason.isNullOrBlank()) {
+                    item { DetailChip(label = "เหตุผลแพ้: ${detail.lossReason}", color = Color(0xFFFFEBEE), textColor = Color(0xFFC62828)) }
+                }
+            }
+
+            if (!detail.summary.isNullOrBlank()) {
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    text = detail.summary,
+                    fontSize = 12.sp,
+                    color = Color(0xFF333333)
+                )
+            }
+
+            // Photos gallery
+            if (detail.photoUrls.isNotEmpty()) {
+                Spacer(Modifier.height(8.dp))
+                Text("รูปถ่ายยืนยัน (${detail.photoUrls.size} รูป):", fontSize = 11.sp, color = Color.Gray, fontWeight = FontWeight.Medium)
+                Spacer(Modifier.height(4.dp))
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    items(detail.photoUrls) { photoUrl ->
+                        AsyncImage(
+                            model = photoUrl,
+                            contentDescription = "รูปถ่ายบันทึกหลังการขาย",
+                            modifier = Modifier
+                                .size(72.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .border(1.dp, Color.LightGray, RoundedCornerShape(8.dp))
+                                .clickable { onPhotoClick(photoUrl) },
+                            contentScale = ContentScale.Crop
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DetailChip(label: String, color: Color, textColor: Color) {
+    Surface(
+        shape = RoundedCornerShape(4.dp),
+        color = color
+    ) {
+        Text(
+            text = label,
+            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+            fontSize = 10.sp,
+            fontWeight = FontWeight.Medium,
+            color = textColor
+        )
+    }
+}
+
+@Composable
+fun ImagePreviewDialog(imageUrl: String, onDismiss: () -> Unit) {
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(
+            shape = RoundedCornerShape(12.dp),
+            color = Color.Black
+        ) {
+            Column(
+                modifier = Modifier.padding(12.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    IconButton(onClick = onDismiss) {
+                        Icon(Icons.Default.Close, contentDescription = "ปิด", tint = Color.White)
+                    }
+                }
+                AsyncImage(
+                    model = imageUrl,
+                    contentDescription = "ดูรูปใหญ่",
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 450.dp)
+                        .clip(RoundedCornerShape(8.dp)),
+                    contentScale = ContentScale.Fit
+                )
+            }
+        }
+    }
+}
+
 // ── Export functions ─────────────────────────────────────────
 fun exportToCsv(context: Context, fileName: String, activities: List<ExportActivityItem>) {
-    val header  = "Date,Company,Project,Topic,Status,Note,Results\n"
-    val content = activities.joinToString("\n") {
-        val note = it.note?.replace(",", ";")?.replace("\n", " ")?.replace("\"", "'") ?: ""
-        val results = it.results.joinToString("; ").replace(",", ";").replace("\n", " ")
-        "\"${it.date}\"," +
-                "\"${it.companyName?.replace(",", ";") ?: ""}\"," +
-                "\"${it.projectName?.replace(",", ";") ?: ""}\"," +
-                "\"${it.topic?.replace(",", ";") ?: ""}\"," +
-                "\"${it.status}\"," +
-                "\"$note\"," +
-                "\"$results\""
+    val header  = "Date,Company,Project,Topic,Status,Note,New Status,Score,Proposal Sent,Proposal Date,DM Involved,Competitor Count,Solution,Loss Reason,Summary,Photo URLs\n"
+    val content = activities.joinToString("\n") { item ->
+        val date = item.date
+        val company = item.companyName?.replace(",", ";") ?: ""
+        val project = item.projectName?.replace(",", ";") ?: ""
+        val topic = item.topic?.replace(",", ";") ?: ""
+        val status = item.status
+        val note = item.note?.replace(",", ";")?.replace("\n", " ")?.replace("\"", "'") ?: ""
+
+        if (item.resultDetails.isNotEmpty()) {
+            item.resultDetails.joinToString("\n") { res ->
+                val newStatus = res.newStatus ?: ""
+                val score = res.opportunityScore ?: ""
+                val propSent = if (res.isProposalSent) "Yes" else "No"
+                val propDate = res.proposalDate ?: ""
+                val dm = if (res.dmInvolved) "Yes" else "No"
+                val comp = res.competitorCount.toString()
+                val sol = res.previousSolution?.replace(",", ";") ?: ""
+                val loss = res.lossReason?.replace(",", ";") ?: ""
+                val summary = res.summary?.replace(",", ";")?.replace("\n", " ")?.replace("\"", "'") ?: ""
+                val photos = res.photoUrls.joinToString("; ")
+
+                "\"$date\",\"$company\",\"$project\",\"$topic\",\"$status\",\"$note\",\"$newStatus\",\"$score\",\"$propSent\",\"$propDate\",\"$dm\",\"$comp\",\"$sol\",\"$loss\",\"$summary\",\"$photos\""
+            }
+        } else {
+            val results = item.results.joinToString("; ").replace(",", ";").replace("\n", " ")
+            "\"$date\",\"$company\",\"$project\",\"$topic\",\"$status\",\"$note\",\"\",\"\",\"No\",\"\",\"No\",\"0\",\"\",\"\",\"$results\",\"\""
+        }
     }
     val file = File(context.cacheDir, "$fileName.csv")
     file.writeText(header + content, Charsets.UTF_8)
@@ -463,11 +628,37 @@ fun exportToPdf(context: Context, fileName: String, activities: List<ExportActiv
         y += 20f
 
         // Results as bullets
-        item.results.forEach { res ->
-            if (y > 800) { /* new page logic simplified for brevity */ }
-            val shortRes = if(res.length > 70) res.take(67)+"..." else res
-            canvas.drawText("  • $shortRes", 170f, y, resultPaint)
-            y += 15f
+        if (item.resultDetails.isNotEmpty()) {
+            item.resultDetails.forEach { res ->
+                if (y > 800) {
+                    doc.finishPage(page)
+                    pageNum++
+                    pageInfo = PdfDocument.PageInfo.Builder(595, 842, pageNum).create()
+                    page     = doc.startPage(pageInfo)
+                    canvas   = page.canvas
+                    y        = 50f
+                }
+                val summaryText = res.summary ?: "N/A"
+                val shortRes = if (summaryText.length > 60) summaryText.take(57) + "..." else summaryText
+                val statusInfo = if (!res.newStatus.isNullOrBlank()) " [Status: ${res.newStatus}]" else ""
+                val photoInfo = if (res.photoUrls.isNotEmpty()) " (${res.photoUrls.size} photos)" else ""
+                canvas.drawText("  • $shortRes$statusInfo$photoInfo", 170f, y, resultPaint)
+                y += 15f
+            }
+        } else {
+            item.results.forEach { res ->
+                if (y > 800) {
+                    doc.finishPage(page)
+                    pageNum++
+                    pageInfo = PdfDocument.PageInfo.Builder(595, 842, pageNum).create()
+                    page     = doc.startPage(pageInfo)
+                    canvas   = page.canvas
+                    y        = 50f
+                }
+                val shortRes = if(res.length > 70) res.take(67)+"..." else res
+                canvas.drawText("  • $shortRes", 170f, y, resultPaint)
+                y += 15f
+            }
         }
         
         y += 10f
@@ -504,16 +695,18 @@ fun WeeklyReportPreview() {
                         topic = "Meeting with client",
                         note = "Discuss about the project requirements.",
                         status = "completed",
-                        results = listOf("ลูกค้าสนใจเพิ่ม Module A", "นัดคุยราคาต่ออาทิตย์หน้า")
-                    ),
-                    ExportActivityItem(
-                        date = "2023-10-24",
-                        projectName = "Project Beta",
-                        companyName = "Company B",
-                        topic = "บันทึกผลการพบลูกค้า (ไม่มีแผน)",
-                        note = "",
-                        status = "completed",
-                        results = listOf("เข้าไปแนะนำตัวเบื้องต้น")
+                        results = listOf("ลูกค้าสนใจเพิ่ม Module A", "นัดคุยราคาต่ออาทิตย์หน้า"),
+                        resultDetails = listOf(
+                            ExportResultDetail(
+                                summary = "ลูกค้าสนใจเพิ่ม Module A",
+                                newStatus = "Quotation",
+                                opportunityScore = "80%",
+                                isProposalSent = true,
+                                proposalDate = "2023-10-24",
+                                dmInvolved = true,
+                                photoUrls = listOf("https://example.com/photo1.jpg")
+                            )
+                        )
                     )
                 ),
                 weekRangeText = "23 ต.ค. 2023 - 29 ต.ค. 2023"

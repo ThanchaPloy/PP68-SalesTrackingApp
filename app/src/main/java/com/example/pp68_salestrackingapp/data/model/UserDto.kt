@@ -10,6 +10,7 @@ data class UserDto(
     @SerializedName("emp_name")      val fullName:    String? = null,
     @SerializedName("emp_brch_code") val branchId:    String? = null,
     @SerializedName("emp_post")      val role:        String? = null,
-    @SerializedName("phone_number")  val phoneNumber: String? = null,
-    @SerializedName("email")         val email:       String? = null
+    @SerializedName("phone_number")     val phoneNumber:    String?  = null,
+    @SerializedName("email")            val email:          String?  = null,
+    @SerializedName("is_project_sales") val isProjectSales: Boolean  = false
 )

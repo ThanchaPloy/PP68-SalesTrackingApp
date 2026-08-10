@@ -26,6 +26,24 @@ data class ExportUiState(
     val error: String? = null
 )
 
+data class ExportResultDetail(
+    val resultId: String? = null,
+    val reportDate: String? = null,
+    val newStatus: String? = null,
+    val opportunityScore: String? = null,
+    val dmInvolved: Boolean = false,
+    val isProposalSent: Boolean = false,
+    val proposalDate: String? = null,
+    val competitorCount: Int = 0,
+    val responseSpeed: String? = null,
+    val dealPosition: String? = null,
+    val previousSolution: String? = null,
+    val counterpartyMultiplier: String? = null,
+    val summary: String? = null,
+    val lossReason: String? = null,
+    val photoUrls: List<String> = emptyList()
+)
+
 data class ExportActivityItem(
     val date: String,
     val projectName: String?,
@@ -33,7 +51,8 @@ data class ExportActivityItem(
     val topic: String?,
     val note: String?,
     val status: String,
-    val results: List<String> = emptyList()
+    val results: List<String> = emptyList(),
+    val resultDetails: List<ExportResultDetail> = emptyList()
 )
 
 data class ExportProjectItem(
@@ -94,11 +113,36 @@ class ExportViewModel @Inject constructor(
                 val projectsMap = projectRepo.getAllProjectsFlow().first().associateBy { it.projectId }
                 val exportItems = mutableListOf<ExportActivityItem>()
 
-                // 1. ✅ ประมวลผลกิจกรรมที่มีนัดหมาย (เอาเฉพาะบันทึกสรุปล่าสุด)
+                // 1. ✅ ประมวลผลกิจกรรมที่มีนัดหมาย (ดึงรายละเอียดบันทึกหลังการขาย + รูปภาพทั้งหมด)
                 filteredActivities.forEach { act ->
-                    val latestResult = allResults
-                        .filter { it.activityId == act.activityId }
-                        .maxByOrNull { it.reportDate ?: "" }
+                    val matchedResults = allResults.filter { it.activityId == act.activityId }
+                    val resultDetailsList = matchedResults.map { res ->
+                        val photos = (listOfNotNull(res.photoUrl) + activityRepo.getResultPhotos(res.resultId)).filter { it.isNotBlank() }.distinct()
+                        ExportResultDetail(
+                            resultId = res.resultId,
+                            reportDate = res.reportDate,
+                            newStatus = res.newStatus,
+                            opportunityScore = res.opportunityScore,
+                            dmInvolved = res.dmInvolved,
+                            isProposalSent = res.isProposalSent,
+                            proposalDate = res.proposalDate,
+                            competitorCount = res.competitorCount,
+                            responseSpeed = res.responseSpeed,
+                            dealPosition = res.dealPosition,
+                            previousSolution = res.previousSolution,
+                            counterpartyMultiplier = res.counterpartyMultiplier,
+                            summary = res.summary,
+                            lossReason = res.lossReason,
+                            photoUrls = photos
+                        )
+                    }
+
+                    val summaryList = if (resultDetailsList.isNotEmpty()) {
+                        resultDetailsList.mapNotNull { it.summary }.filter { it.isNotBlank() }
+                    } else {
+                        val latestResult = matchedResults.maxByOrNull { it.reportDate ?: "" }
+                        if (latestResult?.summary != null) listOf(latestResult.summary) else emptyList()
+                    }
 
                     exportItems.add(
                         ExportActivityItem(
@@ -108,18 +152,18 @@ class ExportViewModel @Inject constructor(
                             topic = act.objective,
                             note = act.weeklyNote ?: "", 
                             status = act.planStatus,
-                            results = if (latestResult?.summary != null) listOf(latestResult.summary) else emptyList()
+                            results = summaryList,
+                            resultDetails = resultDetailsList
                         )
                     )
                 }
 
-                // 2. ✅ ประมวลผลบันทึกที่ไม่มีนัดหมาย (ยุบรวมรายการซ้ำ)
+                // 2. ✅ ประมวลผลบันทึกที่ไม่มีนัดหมาย (Standalone Results + รูปภาพทั้งหมด)
                 val appIdsInWeek = filteredActivities.map { it.activityId }.toSet()
                 val standaloneResults = filteredResults
                     .filter { it.activityId == null || it.activityId !in appIdsInWeek }
                     .sortedByDescending { it.reportDate ?: "" }
                     .distinctBy { res ->
-                        // ยุบรวมด้วยกุญแจ: โปรเจค + วันที่ + เนื้อหา (ลบช่องว่าง)
                         val dateKey = res.reportDate?.take(10) ?: "no_date"
                         val contentKey = res.summary?.replace("\\s".toRegex(), "") ?: ""
                         "${res.projectId}_${dateKey}_$contentKey"
@@ -127,6 +171,25 @@ class ExportViewModel @Inject constructor(
 
                 standaloneResults.forEach { res ->
                     val project = projectsMap[res.projectId]
+                    val photos = (listOfNotNull(res.photoUrl) + activityRepo.getResultPhotos(res.resultId)).filter { it.isNotBlank() }.distinct()
+                    val detail = ExportResultDetail(
+                        resultId = res.resultId,
+                        reportDate = res.reportDate,
+                        newStatus = res.newStatus,
+                        opportunityScore = res.opportunityScore,
+                        dmInvolved = res.dmInvolved,
+                        isProposalSent = res.isProposalSent,
+                        proposalDate = res.proposalDate,
+                        competitorCount = res.competitorCount,
+                        responseSpeed = res.responseSpeed,
+                        dealPosition = res.dealPosition,
+                        previousSolution = res.previousSolution,
+                        counterpartyMultiplier = res.counterpartyMultiplier,
+                        summary = res.summary,
+                        lossReason = res.lossReason,
+                        photoUrls = photos
+                    )
+
                     exportItems.add(
                         ExportActivityItem(
                             date = res.reportDate ?: "",
@@ -135,7 +198,8 @@ class ExportViewModel @Inject constructor(
                             topic = "บันทึกผลการทำงาน",
                             note = "",
                             status = "completed",
-                            results = listOfNotNull(res.summary)
+                            results = listOfNotNull(res.summary),
+                            resultDetails = listOf(detail)
                         )
                     )
                 }

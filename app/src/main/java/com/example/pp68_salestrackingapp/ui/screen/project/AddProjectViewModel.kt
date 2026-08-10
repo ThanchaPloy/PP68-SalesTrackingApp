@@ -308,7 +308,7 @@ class AddProjectViewModel @Inject constructor(
             _uiState.update { it.copy(isLoadingMembers = true) }
             val currentUser = authRepo.currentUser()
             val empCode = currentUser?.userId ?: return@launch
-            projectRepo.getBranchMembersRpc(empCode).fold(
+            projectRepo.getProjectSalesEmployees().fold(
                 onSuccess = { list ->
                     val members = if (list.isEmpty() && currentUser != null) {
                         listOf(currentUser.userId.trim() to (currentUser.fullName ?: currentUser.userId))
@@ -316,10 +316,20 @@ class AddProjectViewModel @Inject constructor(
                     _uiState.update { it.copy(teamMemberOptions = members, isLoadingMembers = false) }
                 },
                 onFailure = {
-                    val fallback = if (currentUser != null)
-                        listOf(currentUser.userId.trim() to (currentUser.fullName ?: currentUser.userId))
-                    else emptyList()
-                    _uiState.update { it.copy(teamMemberOptions = fallback, isLoadingMembers = false) }
+                    projectRepo.getBranchMembersRpc(empCode).fold(
+                        onSuccess = { list ->
+                            val members = if (list.isEmpty() && currentUser != null) {
+                                listOf(currentUser.userId.trim() to (currentUser.fullName ?: currentUser.userId))
+                            } else list.map { it.first.trim() to it.second }
+                            _uiState.update { it.copy(teamMemberOptions = members, isLoadingMembers = false) }
+                        },
+                        onFailure = {
+                            val fallback = if (currentUser != null)
+                                listOf(currentUser.userId.trim() to (currentUser.fullName ?: currentUser.userId))
+                            else emptyList()
+                            _uiState.update { it.copy(teamMemberOptions = fallback, isLoadingMembers = false) }
+                        }
+                    )
                 }
             )
         }

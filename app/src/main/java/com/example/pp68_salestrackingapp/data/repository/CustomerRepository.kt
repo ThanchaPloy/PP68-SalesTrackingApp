@@ -134,6 +134,8 @@ class CustomerRepository @Inject constructor(
                     "company_long"          to localCustomer.companyLong,
                     "customer_status"       to localCustomer.companyStatus,
                     "create_date"           to localCustomer.createdAt,
+                    "created_at"            to localCustomer.createdAt,
+                    "create_by"             to localCustomer.createdBy,
                     "salesperson_code"      to localCustomer.createdBy,
                     "grade"                 to localCustomer.grade,
                     "vat_registration_no"   to localCustomer.vatRegistrationNo
@@ -185,6 +187,8 @@ class CustomerRepository @Inject constructor(
                     put("company_long", customer.companyLong)
                     put("customer_status", customer.companyStatus)
                     put("create_date", customer.createdAt)
+                    put("created_at", customer.createdAt)
+                    put("create_by", customer.createdBy)
                     put("salesperson_code", customer.createdBy)
                     put("grade", customer.grade)
                     put("vat_registration_no", customer.vatRegistrationNo)

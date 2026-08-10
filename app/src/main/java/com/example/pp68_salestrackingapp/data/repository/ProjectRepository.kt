@@ -349,7 +349,21 @@ class ProjectRepository @Inject constructor(
         } catch (e: Exception) { Result.failure(e) }
     }
 
-    suspend fun countProjectsByPrefix(prefix: String): Int = projectDao.getProjectCountByPrefix(prefix)
+    suspend fun getProjectSalesEmployees(): Result<List<Pair<String, String>>> {
+        return withContext(Dispatchers.IO) {
+            try {
+                val resp = apiService.getProjectSalesEmployees("eq.true")
+                if (resp.isSuccessful && !resp.body().isNullOrEmpty()) {
+                    val result = resp.body()!!.map { u ->
+                        u.userId.trim() to (u.fullName?.trim()?.ifBlank { null } ?: u.userId.trim())
+                    }
+                    Result.success(result)
+                } else {
+                    Result.failure(Exception("No project sales employees found"))
+                }
+            } catch (e: Exception) { Result.failure(e) }
+        }
+    }
 
     suspend fun getBranchMembersRpc(empCode: String): Result<List<Pair<String, String>>> {
         return withContext(Dispatchers.IO) {

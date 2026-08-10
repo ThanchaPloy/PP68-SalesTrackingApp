@@ -79,6 +79,8 @@ class SyncManager @Inject constructor(
                     "company_long"          to customer.companyLong,
                     "customer_status"       to customer.companyStatus,
                     "create_date"           to customer.createdAt,
+                    "created_at"            to customer.createdAt,
+                    "create_by"             to customer.createdBy,
                     "salesperson_code"      to customer.createdBy,
                     "grade"                 to customer.grade,
                     "vat_registration_no"   to customer.vatRegistrationNo
