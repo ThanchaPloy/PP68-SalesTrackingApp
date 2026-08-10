@@ -1,13 +1,18 @@
 package com.example.pp68_salestrackingapp.utils
 
+import com.example.pp68_salestrackingapp.BuildConfig
+
 fun formatPhotoUrl(rawUrl: String): String {
     if (rawUrl.isBlank()) return rawUrl
     val url = rawUrl.trim()
+    val uploadBase = BuildConfig.UPLOAD_URL.removeSuffix("/")
+    val defaultBase = if (uploadBase.isNotBlank() && !uploadBase.contains("localhost")) uploadBase else "http://192.168.15.182:8080"
+
     return when {
         url.startsWith("http://") || url.startsWith("https://") || url.startsWith("content://") -> url
         url.startsWith("file://") -> url
         url.startsWith("/") && (url.contains("/storage/") || url.contains("/data/")) -> "file://$url"
-        url.startsWith("/") -> "http://192.168.15.182:8080$url"
-        else -> "http://192.168.15.182:8080/$url"
+        url.startsWith("/") -> "$defaultBase$url"
+        else -> "$defaultBase/$url"
     }
 }

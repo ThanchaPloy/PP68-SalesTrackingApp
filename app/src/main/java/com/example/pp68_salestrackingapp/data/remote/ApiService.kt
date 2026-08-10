@@ -68,7 +68,7 @@ interface ApiService {
         @Query("branch_id") branchCode: String  // format: eq.90HO
     ): Response<List<Map<String, String>>>
 
-    @GET("user")
+    @GET("employee")
     suspend fun getProjectSalesEmployees(
         @Query("is_project_sales") isProjectSales: String = "eq.true"
     ): Response<List<UserDto>>
