@@ -17,12 +17,14 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
+import com.example.pp68_salestrackingapp.data.remote.AuthService
 import java.io.IOException
 import java.time.LocalDate
 import javax.inject.Inject
 
 class ProjectRepository @Inject constructor(
     private val apiService: ApiService,
+    private val authService: AuthService,
     private val projectDao: ProjectDao,
     private val projectContactDao: ProjectContactDao,
     private val projectSalesMemberDao: ProjectSalesMemberDao,
@@ -352,6 +354,14 @@ class ProjectRepository @Inject constructor(
     suspend fun getProjectSalesEmployees(): Result<List<Pair<String, String>>> {
         return withContext(Dispatchers.IO) {
             try {
+                val ktorResp = authService.getProjectSalesEmployees("true")
+                if (ktorResp.isSuccessful && !ktorResp.body().isNullOrEmpty()) {
+                    val result = ktorResp.body()!!.map { u ->
+                        u.userId.trim() to (u.fullName?.trim()?.ifBlank { null } ?: u.userId.trim())
+                    }
+                    return@withContext Result.success(result)
+                }
+
                 val resp = apiService.getProjectSalesEmployees("eq.true")
                 if (resp.isSuccessful && !resp.body().isNullOrEmpty()) {
                     val result = resp.body()!!.map { u ->

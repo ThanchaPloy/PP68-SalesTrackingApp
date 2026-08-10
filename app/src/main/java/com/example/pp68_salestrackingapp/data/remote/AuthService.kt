@@ -1,11 +1,12 @@
 package com.example.pp68_salestrackingapp.data.remote
 
-
 import com.example.pp68_salestrackingapp.data.model.*
 import retrofit2.Response
 import retrofit2.http.Body
+import retrofit2.http.GET
 import retrofit2.http.POST
 import retrofit2.http.PATCH
+import retrofit2.http.Query
 
 interface AuthService {
     @POST("login-api")
@@ -19,4 +20,9 @@ interface AuthService {
 
     @PATCH("user/fcm-token")
     suspend fun updateFcmToken(@Body updates: Map<String, String>): Response<Map<String, String>>
+
+    @GET("user")
+    suspend fun getProjectSalesEmployees(
+        @Query("is_project_sales") isProjectSales: String = "true"
+    ): Response<List<UserDto>>
 }
