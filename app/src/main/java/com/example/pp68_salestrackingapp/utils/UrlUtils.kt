@@ -1,7 +1,7 @@
 package com.example.pp68_salestrackingapp.utils
 
-fun formatPhotoUrl(rawUrl: String?): String? {
-    if (rawUrl.isNullOrBlank()) return null
+fun formatPhotoUrl(rawUrl: String): String {
+    if (rawUrl.isBlank()) return rawUrl
     val url = rawUrl.trim()
     return when {
         url.startsWith("http://") || url.startsWith("https://") || url.startsWith("content://") -> url
