@@ -36,6 +36,7 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.example.pp68_salestrackingapp.utils.formatPhotoUrl
 import coil.compose.AsyncImage
 import com.example.pp68_salestrackingapp.ui.components.DatePickerField
 import com.example.pp68_salestrackingapp.ui.components.DropdownField
@@ -622,7 +623,7 @@ private fun PhotoUploadSection(
             itemsIndexed(photos) { index, photo ->
                 Box(modifier = Modifier.size(96.dp)) {
                     AsyncImage(
-                        model = photo.url ?: photo.localUri,
+                        model = photo.url?.let { formatPhotoUrl(it) } ?: photo.localUri,
                         contentDescription = null,
                         modifier = Modifier
                             .fillMaxSize()
