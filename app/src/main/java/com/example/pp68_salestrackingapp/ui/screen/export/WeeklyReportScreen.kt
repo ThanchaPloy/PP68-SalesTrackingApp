@@ -471,14 +471,15 @@ private fun PostSalesResultDetailCard(
                 Spacer(Modifier.height(4.dp))
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     items(detail.photoUrls) { photoUrl ->
+                        val formattedUrl = formatPhotoUrl(photoUrl)
                         AsyncImage(
-                            model = photoUrl,
+                            model = formattedUrl,
                             contentDescription = "รูปถ่ายบันทึกหลังการขาย",
                             modifier = Modifier
                                 .size(72.dp)
                                 .clip(RoundedCornerShape(8.dp))
                                 .border(1.dp, Color.LightGray, RoundedCornerShape(8.dp))
-                                .clickable { onPhotoClick(photoUrl) },
+                                .clickable { onPhotoClick(formattedUrl) },
                             contentScale = ContentScale.Crop
                         )
                     }
@@ -504,6 +505,18 @@ private fun DetailChip(label: String, color: Color, textColor: Color) {
     }
 }
 
+fun formatPhotoUrl(rawUrl: String): String {
+    val url = rawUrl.trim()
+    if (url.isBlank()) return url
+    return when {
+        url.startsWith("http://") || url.startsWith("https://") || url.startsWith("content://") -> url
+        url.startsWith("file://") -> url
+        url.startsWith("/") && (url.contains("/storage/") || url.contains("/data/")) -> "file://$url"
+        url.startsWith("/") -> "http://192.168.15.182:8080$url"
+        else -> "http://192.168.15.182:8080/$url"
+    }
+}
+
 @Composable
 fun ImagePreviewDialog(imageUrl: String, onDismiss: () -> Unit) {
     Dialog(onDismissRequest = onDismiss) {
@@ -524,7 +537,7 @@ fun ImagePreviewDialog(imageUrl: String, onDismiss: () -> Unit) {
                     }
                 }
                 AsyncImage(
-                    model = imageUrl,
+                    model = formatPhotoUrl(imageUrl),
                     contentDescription = "ดูรูปใหญ่",
                     modifier = Modifier
                         .fillMaxWidth()
