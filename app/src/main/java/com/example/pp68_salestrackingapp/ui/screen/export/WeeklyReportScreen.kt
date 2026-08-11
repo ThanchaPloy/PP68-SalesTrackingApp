@@ -542,14 +542,13 @@ fun ImagePreviewDialog(imageUrl: String, onDismiss: () -> Unit) {
 
 // ── Export functions ─────────────────────────────────────────
 fun exportToCsv(context: Context, fileName: String, activities: List<ExportActivityItem>) {
-    val header  = "Date,Company,Project,Topic,Status,Note,New Status,Score,Proposal Sent,Proposal Date,DM Involved,Competitor Count,Solution,Loss Reason,Summary,Photo URLs\n"
+    val header  = "\uFEFFDate,Company,Project,Topic,Status,New Status,Score,Proposal Sent,Proposal Date,DM Involved,Competitor Count,Solution,Loss Reason,Summary,Photo URLs\n"
     val content = activities.joinToString("\n") { item ->
         val date = item.date
         val company = item.companyName?.replace(",", ";") ?: ""
         val project = item.projectName?.replace(",", ";") ?: ""
         val topic = item.topic?.replace(",", ";") ?: ""
         val status = item.status
-        val note = item.note?.replace(",", ";")?.replace("\n", " ")?.replace("\"", "'") ?: ""
 
         if (item.resultDetails.isNotEmpty()) {
             item.resultDetails.joinToString("\n") { res ->
@@ -562,13 +561,13 @@ fun exportToCsv(context: Context, fileName: String, activities: List<ExportActiv
                 val sol = res.previousSolution?.replace(",", ";") ?: ""
                 val loss = res.lossReason?.replace(",", ";") ?: ""
                 val summary = res.summary?.replace(",", ";")?.replace("\n", " ")?.replace("\"", "'") ?: ""
-                val photos = res.photoUrls.joinToString("; ")
+                val photos = res.photoUrls.map { formatPhotoUrl(it) }.joinToString("; ")
 
-                "\"$date\",\"$company\",\"$project\",\"$topic\",\"$status\",\"$note\",\"$newStatus\",\"$score\",\"$propSent\",\"$propDate\",\"$dm\",\"$comp\",\"$sol\",\"$loss\",\"$summary\",\"$photos\""
+                "\"$date\",\"$company\",\"$project\",\"$topic\",\"$status\",\"$newStatus\",\"$score\",\"$propSent\",\"$propDate\",\"$dm\",\"$comp\",\"$sol\",\"$loss\",\"$summary\",\"$photos\""
             }
         } else {
             val results = item.results.joinToString("; ").replace(",", ";").replace("\n", " ")
-            "\"$date\",\"$company\",\"$project\",\"$topic\",\"$status\",\"$note\",\"\",\"\",\"No\",\"\",\"No\",\"0\",\"\",\"\",\"$results\",\"\""
+            "\"$date\",\"$company\",\"$project\",\"$topic\",\"$status\",\"\",\"\",\"No\",\"\",\"No\",\"0\",\"\",\"\",\"$results\",\"\""
         }
     }
     val file = File(context.cacheDir, "$fileName.csv")
@@ -591,7 +590,7 @@ fun exportToPdf(context: Context, fileName: String, activities: List<ExportActiv
     val headerPaint = Paint().apply { textSize = 12f; isFakeBoldText = true }
     val bodyPaint   = Paint().apply { textSize = 11f }
     val subPaint    = Paint().apply { textSize = 10f; color = android.graphics.Color.DKGRAY }
-    val resultPaint = Paint().apply { textSize = 9f; color = android.graphics.Color.GRAY }
+    val resultPaint = Paint().apply { textSize = 9f; color = android.graphics.Color.BLACK }
 
     var pageNum  = 1
     var pageInfo = PdfDocument.PageInfo.Builder(595, 842, pageNum).create()
@@ -601,13 +600,13 @@ fun exportToPdf(context: Context, fileName: String, activities: List<ExportActiv
 
     canvas.drawText("Weekly Performance Report", 50f, y, titlePaint); y += 40f
     canvas.drawText("Date",    50f,  y, headerPaint)
-    canvas.drawText("Activity / Project", 150f, y, headerPaint)
+    canvas.drawText("Activity / Project Details", 150f, y, headerPaint)
     canvas.drawText("Status",  500f, y, headerPaint)
     y += 20f
     canvas.drawLine(50f, y, 550f, y, paint); y += 25f
 
     activities.forEach { item ->
-        if (y > 750) {
+        if (y > 730) {
             doc.finishPage(page)
             pageNum++
             pageInfo = PdfDocument.PageInfo.Builder(595, 842, pageNum).create()
@@ -633,7 +632,7 @@ fun exportToPdf(context: Context, fileName: String, activities: List<ExportActiv
         // Results as bullets
         if (item.resultDetails.isNotEmpty()) {
             item.resultDetails.forEach { res ->
-                if (y > 780) {
+                if (y > 750) {
                     doc.finishPage(page)
                     pageNum++
                     pageInfo = PdfDocument.PageInfo.Builder(595, 842, pageNum).create()
@@ -642,29 +641,39 @@ fun exportToPdf(context: Context, fileName: String, activities: List<ExportActiv
                     y        = 50f
                 }
                 val summaryText = res.summary ?: "N/A"
-                val shortRes = if (summaryText.length > 55) summaryText.take(52) + "..." else summaryText
-                canvas.drawText("  • ผลการทำงาน: $shortRes", 170f, y, resultPaint)
+                val shortRes = if (summaryText.length > 60) summaryText.take(57) + "..." else summaryText
+                canvas.drawText("  • สรุปผล: $shortRes", 160f, y, resultPaint)
                 y += 14f
 
                 val detailParts = mutableListOf<String>()
-                if (!res.newStatus.isNullOrBlank()) detailParts.add("สถานะ: ${res.newStatus}")
+                if (!res.newStatus.isNullOrBlank()) detailParts.add("สถานะใหม่: ${res.newStatus}")
                 if (!res.opportunityScore.isNullOrBlank()) detailParts.add("โอกาส: ${res.opportunityScore}")
-                if (res.isProposalSent) detailParts.add("ใบเสนอราคา: ส่งแล้ว")
+                if (!res.dealPosition.isNullOrBlank()) detailParts.add("ดีล: ${res.dealPosition}")
+                if (res.isProposalSent) detailParts.add("ส่งใบเสนอราคา (${res.proposalDate ?: ""})")
                 if (res.dmInvolved) detailParts.add("DM ร่วมประชุม")
-                if (res.competitorCount > 0) detailParts.add("คู่แข่ง: ${res.competitorCount}")
-                if (!res.lossReason.isNullOrBlank()) detailParts.add("สาเหตุที่ไม่สำเร็จ: ${res.lossReason}")
-                if (res.photoUrls.isNotEmpty()) detailParts.add("รูปภาพ: ${res.photoUrls.size} รูป")
+                if (res.competitorCount > 0) detailParts.add("คู่แข่ง: ${res.competitorCount} ราย")
+                if (!res.responseSpeed.isNullOrBlank()) detailParts.add("ตอบสนอง: ${res.responseSpeed}")
+                if (!res.previousSolution.isNullOrBlank()) detailParts.add("โซลูชันเดิม: ${res.previousSolution}")
+                if (!res.lossReason.isNullOrBlank()) detailParts.add("เหตุผลแพ้: ${res.lossReason}")
 
                 if (detailParts.isNotEmpty()) {
                     val detailLine = "    รายละเอียด: " + detailParts.joinToString(" | ")
                     val shortDetail = if (detailLine.length > 70) detailLine.take(67) + "..." else detailLine
-                    canvas.drawText(shortDetail, 170f, y, subPaint)
+                    canvas.drawText(shortDetail, 160f, y, subPaint)
+                    y += 14f
+                }
+
+                if (res.photoUrls.isNotEmpty()) {
+                    val formattedPhotos = res.photoUrls.map { formatPhotoUrl(it) }
+                    val photoLine = "    รูปภาพ (${formattedPhotos.size} รูป): " + formattedPhotos.joinToString(", ")
+                    val shortPhoto = if (photoLine.length > 75) photoLine.take(72) + "..." else photoLine
+                    canvas.drawText(shortPhoto, 160f, y, subPaint)
                     y += 14f
                 }
             }
         } else {
             item.results.forEach { res ->
-                if (y > 800) {
+                if (y > 780) {
                     doc.finishPage(page)
                     pageNum++
                     pageInfo = PdfDocument.PageInfo.Builder(595, 842, pageNum).create()
@@ -673,7 +682,7 @@ fun exportToPdf(context: Context, fileName: String, activities: List<ExportActiv
                     y        = 50f
                 }
                 val shortRes = if(res.length > 70) res.take(67)+"..." else res
-                canvas.drawText("  • $shortRes", 170f, y, resultPaint)
+                canvas.drawText("  • $shortRes", 160f, y, resultPaint)
                 y += 15f
             }
         }

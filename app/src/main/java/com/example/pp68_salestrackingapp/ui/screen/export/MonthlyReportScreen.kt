@@ -375,7 +375,7 @@ fun ProjectReportCard(project: ExportProjectItem) {
 
 // ── Export functions (No logic change) ────────────────────────
 fun exportProjectsToCsv(context: Context, fileName: String, projects: List<ExportProjectItem>) {
-    val header  = "Project Name,Status,Value,Opportunity,Expected Close\n"
+    val header  = "\uFEFFProject Name,Status,Value,Opportunity,Expected Close\n"
     val content = projects.joinToString("\n") {
         "\"${it.projectName.replace(",", ";")}\",\"${it.status}\"," +
                 "\"${it.value}\",\"${it.score ?: ""}\",\"${it.closeDate ?: ""}\""

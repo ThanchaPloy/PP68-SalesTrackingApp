@@ -259,12 +259,11 @@ class ExportViewModel @Inject constructor(
     fun generateActivityCsvString(): String {
         val activities = _uiState.value.activities
         val builder = StringBuilder()
-        builder.append("Date,Project Name,Company Name,Topic,Note,Status,New Status,Opportunity Score,Proposal Sent,Proposal Date,DM Involved,Competitor Count,Response Speed,Deal Position,Solution,Loss Reason,Summary,Photo URLs\n")
+        builder.append("\uFEFFDate,Project Name,Company Name,Topic,Status,New Status,Opportunity Score,Proposal Sent,Proposal Date,DM Involved,Competitor Count,Response Speed,Deal Position,Solution,Loss Reason,Summary,Photo URLs\n")
         activities.forEach { item ->
             val safeProject = item.projectName?.replace("\"", "\"\"") ?: ""
             val safeCompany = item.companyName?.replace("\"", "\"\"") ?: ""
             val safeTopic = item.topic?.replace("\"", "\"\"") ?: ""
-            val safeNote = item.note?.replace("\"", "\"\"")?.replace("\n", " ") ?: ""
 
             if (item.resultDetails.isNotEmpty()) {
                 item.resultDetails.forEach { res ->
@@ -279,13 +278,13 @@ class ExportViewModel @Inject constructor(
                     val sol = res.previousSolution?.replace("\"", "\"\"") ?: ""
                     val loss = res.lossReason?.replace("\"", "\"\"") ?: ""
                     val summary = res.summary?.replace("\"", "\"\"")?.replace("\n", " ") ?: ""
-                    val photos = res.photoUrls.joinToString("; ").replace("\"", "\"\"")
+                    val photos = res.photoUrls.map { com.example.pp68_salestrackingapp.utils.UrlUtils.formatPhotoUrl(it) }.joinToString("; ").replace("\"", "\"\"")
 
-                    builder.append("${item.date},\"$safeProject\",\"$safeCompany\",\"$safeTopic\",\"$safeNote\",${item.status},\"$newStatus\",\"$score\",\"$propSent\",\"$propDate\",\"$dm\",\"$comp\",\"$speed\",\"$dealPos\",\"$sol\",\"$loss\",\"$summary\",\"$photos\"\n")
+                    builder.append("${item.date},\"$safeProject\",\"$safeCompany\",\"$safeTopic\",${item.status},\"$newStatus\",\"$score\",\"$propSent\",\"$propDate\",\"$dm\",\"$comp\",\"$speed\",\"$dealPos\",\"$sol\",\"$loss\",\"$summary\",\"$photos\"\n")
                 }
             } else {
                 val safeResults = item.results.joinToString("; ").replace("\"", "\"\"")
-                builder.append("${item.date},\"$safeProject\",\"$safeCompany\",\"$safeTopic\",\"$safeNote\",${item.status},\"\",\"\",\"No\",\"\",\"No\",\"0\",\"\",\"\",\"\",\"\",\"$safeResults\",\"\"\n")
+                builder.append("${item.date},\"$safeProject\",\"$safeCompany\",\"$safeTopic\",${item.status},\"\",\"\",\"No\",\"\",\"No\",\"0\",\"\",\"\",\"\",\"\",\"$safeResults\",\"\"\n")
             }
         }
         return builder.toString()
@@ -294,7 +293,7 @@ class ExportViewModel @Inject constructor(
     fun generateProjectCsvString(): String {
         val projects = _uiState.value.projects
         val builder = StringBuilder()
-        builder.append("Project Name,Expected Value,Status,Score,Close Date\n")
+        builder.append("\uFEFFProject Name,Expected Value,Status,Score,Close Date\n")
         projects.forEach {
             val safeProject = it.projectName.replace("\"", "\"\"")
             builder.append("\"$safeProject\",${it.value},${it.status},${it.score ?: ""},${it.closeDate ?: ""}\n")
