@@ -613,7 +613,7 @@ private fun PhotoUploadSection(
 
     Column(modifier = Modifier.fillMaxWidth()) {
         Text(
-            "ถ่ายรูป หรือเลือกรูปที่ถ่ายจากกล้องไว้ในอัลบั้มได้สูงสุด $MAX_RESULT_PHOTOS รูป (ต้องเป็นรูปที่ถ่ายจากกล้องเท่านั้น ไม่ใช่รูปดาวน์โหลด/จากอินเทอร์เน็ต)",
+            "ถ่ายรูปบันทึกการเข้าพบได้สูงสุด $MAX_RESULT_PHOTOS รูป (ต้องถ่ายจากกล้องในแอปเท่านั้น)",
             fontSize = 12.sp,
             color = TextGray
         )
@@ -672,6 +672,8 @@ private fun PhotoUploadSection(
                         }
                     }
                 }
+                /*
+                // คอมเมนต์ปิดการเลือกรูปจากอัลบั้มชั่วคราว ให้เหลือเฉพาะถ่ายรูปจากกล้อง
                 item {
                     Box(
                         modifier = Modifier
@@ -690,6 +692,7 @@ private fun PhotoUploadSection(
                         }
                     }
                 }
+                */
             }
         }
         Spacer(Modifier.height(4.dp))
