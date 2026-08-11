@@ -70,7 +70,7 @@ interface ApiService {
 
     @GET("employee")
     suspend fun getProjectSalesEmployees(
-        @Query("is_project_sales") isProjectSales: String = "eq.true"
+        @Query("emp_type") empType: String = "eq.Project"
     ): Response<List<UserDto>>
 
     @GET("customer")
