@@ -26,9 +26,6 @@ data class AddCustomerUiState(
     val selectedLng:         Double? = null,
     val custType:            String? = null,
     val companyStatus:       String  = "customer",
-    val selectedProjectId:   String? = null,
-    val selectedProjectName: String? = null,
-    val projectOptions:      List<Pair<String, String>> = emptyList(),
 
     // validation
     val companyNameError: String? = null,
@@ -37,8 +34,7 @@ data class AddCustomerUiState(
     // ui
     val isLoading:    Boolean = false,
     val isSaved:      Boolean = false,
-    val saveError:    String? = null,
-    val projectNumber: String = ""
+    val saveError:    String? = null
 )
 
 // ─── Events ───────────────────────────────────────────────────
@@ -50,7 +46,6 @@ sealed class AddCustomerEvent {
     data class LocationPicked(val lat: Double, val lng: Double) : AddCustomerEvent()
     data class CustTypeChanged(val value: String)    : AddCustomerEvent()
     data class StatusChanged(val value: String)      : AddCustomerEvent()
-    data class ProjectSelected(val id: String, val name: String) : AddCustomerEvent()
     object UseCurrentLocation : AddCustomerEvent()
     object Save               : AddCustomerEvent()
 }
@@ -59,25 +54,11 @@ sealed class AddCustomerEvent {
 @HiltViewModel
 class AddCustomerViewModel @Inject constructor(
     private val customerRepo: CustomerRepository,
-    private val projectRepo:  ProjectRepository,
     private val authRepo:     AuthRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(AddCustomerUiState())
     val uiState: StateFlow<AddCustomerUiState> = _uiState
-
-    init { loadProjectOptions() }
-
-    private fun loadProjectOptions() {
-        viewModelScope.launch {
-            try {
-                val projects = projectRepo.getAllProjectsFlow().first()
-                _uiState.update {
-                    it.copy(projectOptions = projects.map { p -> p.projectId to p.projectName })
-                }
-            } catch (_: Exception) {}
-        }
-    }
 
     private fun loadCustomer(id: String) {
         viewModelScope.launch {
@@ -132,8 +113,7 @@ class AddCustomerViewModel @Inject constructor(
             is AddCustomerEvent.StatusChanged ->
                 _uiState.update { it.copy(companyStatus = event.value) }
 
-            is AddCustomerEvent.ProjectSelected ->
-                _uiState.update { it.copy(selectedProjectId = event.id, selectedProjectName = event.name) }
+
 
             is AddCustomerEvent.UseCurrentLocation ->
                 _uiState.update { it.copy(selectedLat = 13.7563, selectedLng = 100.5018) }

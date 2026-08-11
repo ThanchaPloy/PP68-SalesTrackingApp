@@ -145,20 +145,7 @@ fun AddCustomerContent(
                 }
             )
 
-            // ── Select Project (Optional) ─────────────────────
-            FormField("เลือกโครงการ (ไม่บังคับ)") {
-                DropdownField(
-                    value       = uiState.selectedProjectName ?: "",
-                    placeholder = "เลือกโครงการ",
-                    options     = uiState.projectOptions.map { it.second },
-                    onSelect    = { idx ->
-                        onEvent(AddCustomerEvent.ProjectSelected(
-                            uiState.projectOptions[idx].first,
-                            uiState.projectOptions[idx].second
-                        ))
-                    }
-                )
-            }
+
 
             // ── Customer Type * ───────────────────────────────
             FormField("ประเภทลูกค้า", required = true) {
