@@ -14,7 +14,7 @@ import java.time.LocalDate
 import java.time.YearMonth
 import java.time.format.DateTimeFormatter
 import java.time.temporal.WeekFields
-import java.util.Locale
+import com.example.pp68_salestrackingapp.utils.UrlUtils
 import javax.inject.Inject
 
 data class ExportUiState(
@@ -278,7 +278,7 @@ class ExportViewModel @Inject constructor(
                     val sol = res.previousSolution?.replace("\"", "\"\"") ?: ""
                     val loss = res.lossReason?.replace("\"", "\"\"") ?: ""
                     val summary = res.summary?.replace("\"", "\"\"")?.replace("\n", " ") ?: ""
-                    val photos = res.photoUrls.map { com.example.pp68_salestrackingapp.utils.UrlUtils.formatPhotoUrl(it) }.joinToString("; ").replace("\"", "\"\"")
+                    val photos = res.photoUrls.joinToString("; ") { UrlUtils.formatPhotoUrl(it) }.replace("\"", "\"\"")
 
                     builder.append("${item.date},\"$safeProject\",\"$safeCompany\",\"$safeTopic\",${item.status},\"$newStatus\",\"$score\",\"$propSent\",\"$propDate\",\"$dm\",\"$comp\",\"$speed\",\"$dealPos\",\"$sol\",\"$loss\",\"$summary\",\"$photos\"\n")
                 }
