@@ -477,8 +477,8 @@ class AddProjectViewModel @Inject constructor(
 
                 result.onSuccess {
                     if (finalProjectId.isNotBlank()) {
-                        // always include own userId so getMyProjectIds can find this project after sync
-                        val memberIds = (s.selectedMemberIds.map { it.trim() } + userId.trim()).distinct()
+                        // Each project has strictly 1 sales person: the logged-in user who creates it
+                        val memberIds = listOf(userId.trim())
 
                         val memberResult = projectRepo.addProjectMembers(
                             projectId = finalProjectId,

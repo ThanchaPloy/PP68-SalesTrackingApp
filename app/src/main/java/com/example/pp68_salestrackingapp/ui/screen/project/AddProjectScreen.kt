@@ -218,19 +218,7 @@ fun AddProjectContent(
                         }
                     )
 
-                    if (uiState.selectedTeamId != null) {
-                        if (uiState.isLoadingMembers) {
-                            LoadingFieldProject()
-                        } else if (uiState.teamMemberOptions.isNotEmpty()) {
-                            Text("เลือกสมาชิกที่รับผิดชอบ",
-                                fontSize = 12.sp, color = AppColors.TextSecondary)
-                            MemberChipGrid(
-                                options     = uiState.teamMemberOptions,
-                                selectedIds = uiState.selectedMemberIds,
-                                onToggle    = { onEvent(AddProjectEvent.MemberToggled(it)) }
-                            )
-                        }
-                    }
+
                 }
             }
 
