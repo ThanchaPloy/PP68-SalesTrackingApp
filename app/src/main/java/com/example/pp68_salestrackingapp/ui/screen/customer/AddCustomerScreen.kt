@@ -239,8 +239,7 @@ fun AddCustomerScreenPreview() {
         companyName = "Example Company",
         vatRegistrationNo = "0105556123456",
         address = "123 Example St, Bangkok",
-        custType = "Owner",
-        projectOptions = listOf("1" to "Project A", "2" to "Project B")
+        custType = "Owner"
     )
     SalesTrackingTheme {
         AddCustomerContent(
