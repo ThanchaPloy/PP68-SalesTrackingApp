@@ -188,7 +188,8 @@ fun ProjectDetailContent(
                 verticalArrangement = Arrangement.spacedBy(12.dp),
                 horizontalAlignment = Alignment.End
             ) {
-                // FAB 1 — Inventory/Products
+                /*
+                // FAB 1 — Inventory/Products (ปิดการใช้งานชั่วคราว)
                 FloatingActionButton(
                     onClick        = { s.project?.let { onInventoryClick(it.projectId) } },
                     containerColor = RedDark,
@@ -199,6 +200,7 @@ fun ProjectDetailContent(
                     Icon(Icons.Default.ShoppingCart, "สินค้าในโครงการ",
                         modifier = Modifier.size(22.dp))
                 }
+                */
                 
                 // FAB 2 — สร้างกิจกรรม (บวก)
                 FloatingActionButton(
