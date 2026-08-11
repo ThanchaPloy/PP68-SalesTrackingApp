@@ -213,7 +213,7 @@ class ExportViewModelTest {
         advanceUntilIdle()
 
         val csv = viewModel.generateProjectCsvString()
-        assertTrue(csv.startsWith("Project Name,Expected Value,Status,Score,Close Date"))
+        assertTrue(csv.startsWith("\uFEFFProject Name,Expected Value,Status,Score,Close Date"))
         assertTrue(csv.contains("\"Name \"\"X\"\"\",50.0,Lead,HOT,2026-04-09"))
     }
 
@@ -222,8 +222,8 @@ class ExportViewModelTest {
         val activityCsv = viewModel.generateActivityCsvString()
         val projectCsv = viewModel.generateProjectCsvString()
 
-        assertTrue(activityCsv.startsWith("Date,Project Name,Company Name,Topic,Note,Status"))
-        assertEquals("Project Name,Expected Value,Status,Score,Close Date\n", projectCsv)
+        assertTrue(activityCsv.startsWith("\uFEFFDate,Project Name,Company Name,Topic,Status"))
+        assertEquals("\uFEFFProject Name,Expected Value,Status,Score,Close Date\n", projectCsv)
     }
 
     @Test

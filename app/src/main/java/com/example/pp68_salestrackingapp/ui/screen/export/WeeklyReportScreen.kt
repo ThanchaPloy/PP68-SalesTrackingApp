@@ -540,6 +540,49 @@ fun ImagePreviewDialog(imageUrl: String, onDismiss: () -> Unit) {
     }
 }
 
+private fun wrapTextLines(text: String, paint: Paint, maxWidth: Float): List<String> {
+    if (text.isBlank()) return emptyList()
+    val lines = mutableListOf<String>()
+    val rawLines = text.split("\n")
+    for (raw in rawLines) {
+        if (raw.isBlank()) continue
+        val words = raw.split(" ")
+        var currentLine = StringBuilder()
+
+        for (word in words) {
+            val testLine = if (currentLine.isEmpty()) word else "$currentLine $word"
+            if (paint.measureText(testLine) <= maxWidth) {
+                if (currentLine.isNotEmpty()) currentLine.append(" ")
+                currentLine.append(word)
+            } else {
+                if (currentLine.isNotEmpty()) {
+                    lines.add(currentLine.toString())
+                    currentLine = StringBuilder()
+                }
+                // If single word exceeds maxWidth (like long URLs), break character by character
+                if (paint.measureText(word) > maxWidth) {
+                    var charLine = StringBuilder()
+                    for (ch in word) {
+                        if (paint.measureText(charLine.toString() + ch) > maxWidth) {
+                            lines.add(charLine.toString())
+                            charLine = StringBuilder(ch.toString())
+                        } else {
+                            charLine.append(ch)
+                        }
+                    }
+                    if (charLine.isNotEmpty()) currentLine = charLine
+                } else {
+                    currentLine.append(word)
+                }
+            }
+        }
+        if (currentLine.isNotEmpty()) {
+            lines.add(currentLine.toString())
+        }
+    }
+    return if (lines.isEmpty()) listOf(text) else lines
+}
+
 // ── Export functions ─────────────────────────────────────────
 fun exportToCsv(context: Context, fileName: String, activities: List<ExportActivityItem>) {
     val header  = "\uFEFFDate,Company,Project,Topic,Status,New Status,Score,Proposal Sent,Proposal Date,DM Involved,Competitor Count,Solution,Loss Reason,Summary,Photo URLs\n"
@@ -586,10 +629,10 @@ fun exportToCsv(context: Context, fileName: String, activities: List<ExportActiv
 fun exportToPdf(context: Context, fileName: String, activities: List<ExportActivityItem>) {
     val doc         = PdfDocument()
     val paint       = Paint()
-    val titlePaint  = Paint().apply { textSize = 20f; isFakeBoldText = true }
-    val headerPaint = Paint().apply { textSize = 12f; isFakeBoldText = true }
-    val bodyPaint   = Paint().apply { textSize = 11f }
-    val subPaint    = Paint().apply { textSize = 10f; color = android.graphics.Color.DKGRAY }
+    val titlePaint  = Paint().apply { textSize = 18f; isFakeBoldText = true }
+    val headerPaint = Paint().apply { textSize = 11f; isFakeBoldText = true }
+    val bodyPaint   = Paint().apply { textSize = 10f; isFakeBoldText = true }
+    val subPaint    = Paint().apply { textSize = 9f; color = android.graphics.Color.DKGRAY }
     val resultPaint = Paint().apply { textSize = 9f; color = android.graphics.Color.BLACK }
 
     var pageNum  = 1
@@ -598,15 +641,8 @@ fun exportToPdf(context: Context, fileName: String, activities: List<ExportActiv
     var canvas: Canvas = page.canvas
     var y = 50f
 
-    canvas.drawText("Weekly Performance Report", 50f, y, titlePaint); y += 40f
-    canvas.drawText("Date",    50f,  y, headerPaint)
-    canvas.drawText("Activity / Project Details", 150f, y, headerPaint)
-    canvas.drawText("Status",  500f, y, headerPaint)
-    y += 20f
-    canvas.drawLine(50f, y, 550f, y, paint); y += 25f
-
-    activities.forEach { item ->
-        if (y > 730) {
+    val checkPageBreak: (Float) -> Unit = { neededHeight ->
+        if (y + neededHeight > 780f) {
             doc.finishPage(page)
             pageNum++
             pageInfo = PdfDocument.PageInfo.Builder(595, 842, pageNum).create()
@@ -614,36 +650,53 @@ fun exportToPdf(context: Context, fileName: String, activities: List<ExportActiv
             canvas   = page.canvas
             y        = 50f
         }
+    }
+
+    canvas.drawText("Weekly Performance Report", 50f, y, titlePaint); y += 35f
+    canvas.drawText("Date",    50f,  y, headerPaint)
+    canvas.drawText("Activity / Project Details", 150f, y, headerPaint)
+    canvas.drawText("Status",  500f, y, headerPaint)
+    y += 15f
+    canvas.drawLine(50f, y, 550f, y, paint); y += 20f
+
+    activities.forEach { item ->
+        checkPageBreak(50f)
         
         // Date
         canvas.drawText(item.date.take(10), 50f, y, bodyPaint)
         
-        // Topic & Company
-        val topic = item.topic ?: "N/A"
-        canvas.drawText(if(topic.length > 45) topic.take(42)+"..." else topic, 150f, y, bodyPaint)
-        y += 18f
-        val projectComp = "${item.companyName ?: ""} (${item.projectName ?: ""})"
-        canvas.drawText(if(projectComp.length > 55) projectComp.take(52)+"..." else projectComp, 160f, y, subPaint)
-        
         // Status
-        canvas.drawText(item.status, 500f, y - 10f, bodyPaint)
-        y += 20f
+        canvas.drawText(item.status, 500f, y, bodyPaint)
+
+        // Topic (Wrapped)
+        val topicLines = wrapTextLines(item.topic ?: "N/A", bodyPaint, 330f)
+        topicLines.forEach { line ->
+            checkPageBreak(14f)
+            canvas.drawText(line, 150f, y, bodyPaint)
+            y += 14f
+        }
+        
+        // Company & Project Name (Wrapped)
+        val projectComp = "${item.companyName ?: ""} (${item.projectName ?: ""})"
+        val compLines = wrapTextLines(projectComp, subPaint, 330f)
+        compLines.forEach { line ->
+            checkPageBreak(13f)
+            canvas.drawText(line, 150f, y, subPaint)
+            y += 13f
+        }
+
+        y += 4f
 
         // Results as bullets
         if (item.resultDetails.isNotEmpty()) {
             item.resultDetails.forEach { res ->
-                if (y > 750) {
-                    doc.finishPage(page)
-                    pageNum++
-                    pageInfo = PdfDocument.PageInfo.Builder(595, 842, pageNum).create()
-                    page     = doc.startPage(pageInfo)
-                    canvas   = page.canvas
-                    y        = 50f
-                }
                 val summaryText = res.summary ?: "N/A"
-                val shortRes = if (summaryText.length > 60) summaryText.take(57) + "..." else summaryText
-                canvas.drawText("  • สรุปผล: $shortRes", 160f, y, resultPaint)
-                y += 14f
+                val summaryLines = wrapTextLines("• สรุปผล: $summaryText", resultPaint, 370f)
+                summaryLines.forEach { line ->
+                    checkPageBreak(13f)
+                    canvas.drawText(line, 160f, y, resultPaint)
+                    y += 13f
+                }
 
                 val detailParts = mutableListOf<String>()
                 if (!res.newStatus.isNullOrBlank()) detailParts.add("สถานะใหม่: ${res.newStatus}")
@@ -657,39 +710,46 @@ fun exportToPdf(context: Context, fileName: String, activities: List<ExportActiv
                 if (!res.lossReason.isNullOrBlank()) detailParts.add("เหตุผลแพ้: ${res.lossReason}")
 
                 if (detailParts.isNotEmpty()) {
-                    val detailLine = "    รายละเอียด: " + detailParts.joinToString(" | ")
-                    val shortDetail = if (detailLine.length > 70) detailLine.take(67) + "..." else detailLine
-                    canvas.drawText(shortDetail, 160f, y, subPaint)
-                    y += 14f
+                    val detailLine = "รายละเอียด: " + detailParts.joinToString(" | ")
+                    val dLines = wrapTextLines(detailLine, subPaint, 370f)
+                    dLines.forEach { line ->
+                        checkPageBreak(13f)
+                        canvas.drawText(line, 160f, y, subPaint)
+                        y += 13f
+                    }
                 }
 
                 if (res.photoUrls.isNotEmpty()) {
-                    val formattedPhotos = res.photoUrls.map { formatPhotoUrl(it) }
-                    val photoLine = "    รูปภาพ (${formattedPhotos.size} รูป): " + formattedPhotos.joinToString(", ")
-                    val shortPhoto = if (photoLine.length > 75) photoLine.take(72) + "..." else photoLine
-                    canvas.drawText(shortPhoto, 160f, y, subPaint)
-                    y += 14f
+                    checkPageBreak(13f)
+                    canvas.drawText("รูปภาพแนบ (${res.photoUrls.size} รูป):", 160f, y, subPaint)
+                    y += 13f
+
+                    res.photoUrls.forEachIndexed { idx, pUrl ->
+                        val formattedUrl = formatPhotoUrl(pUrl)
+                        val pLines = wrapTextLines("  [${idx + 1}] $formattedUrl", subPaint, 360f)
+                        pLines.forEach { line ->
+                            checkPageBreak(12f)
+                            canvas.drawText(line, 160f, y, subPaint)
+                            y += 12f
+                        }
+                    }
                 }
+                y += 4f
             }
         } else {
             item.results.forEach { res ->
-                if (y > 780) {
-                    doc.finishPage(page)
-                    pageNum++
-                    pageInfo = PdfDocument.PageInfo.Builder(595, 842, pageNum).create()
-                    page     = doc.startPage(pageInfo)
-                    canvas   = page.canvas
-                    y        = 50f
+                val resLines = wrapTextLines("• $res", resultPaint, 370f)
+                resLines.forEach { line ->
+                    checkPageBreak(13f)
+                    canvas.drawText(line, 160f, y, resultPaint)
+                    y += 13f
                 }
-                val shortRes = if(res.length > 70) res.take(67)+"..." else res
-                canvas.drawText("  • $shortRes", 160f, y, resultPaint)
-                y += 15f
             }
         }
         
-        y += 10f
-        canvas.drawLine(150f, y-5f, 550f, y-5f, Paint().apply { strokeWidth=0.5f; color=android.graphics.Color.LTGRAY })
-        y += 15f
+        y += 6f
+        canvas.drawLine(50f, y, 550f, y, Paint().apply { strokeWidth=0.5f; color=android.graphics.Color.LTGRAY })
+        y += 14f
     }
     doc.finishPage(page)
 
