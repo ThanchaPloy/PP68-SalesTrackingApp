@@ -26,11 +26,11 @@ class TokenManager @Inject constructor(
             val lastVersion = prefs.getInt("last_installed_version_code", -1)
             val currentVersion = com.example.pp68_salestrackingapp.BuildConfig.VERSION_CODE
 
-            if (lastVersion != -1 && currentVersion > lastVersion) {
+            if (lastVersion != currentVersion) {
                 // ✅ APK มีการอัปเดตเวอร์ชันใหม่ -> เคลียร์ Session ให้บังคับผู้ใช้ Login ใหม่
                 clearToken()
+                prefs.edit().putInt("last_installed_version_code", currentVersion).apply()
             }
-            prefs.edit().putInt("last_installed_version_code", currentVersion).apply()
         } catch (_: Exception) {}
     }
 
