@@ -23,6 +23,6 @@ interface AuthService {
 
     @GET("user")
     suspend fun getProjectSalesEmployees(
-        @Query("emp_type") empType: String = "Project"
+        @Query("emp_type") empType: String = "P"
     ): Response<List<UserDto>>
 }
