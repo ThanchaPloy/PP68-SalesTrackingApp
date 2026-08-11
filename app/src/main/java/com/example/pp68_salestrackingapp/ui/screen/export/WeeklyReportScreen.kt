@@ -634,6 +634,11 @@ fun exportToPdf(context: Context, fileName: String, activities: List<ExportActiv
     val bodyPaint   = Paint().apply { textSize = 10f; isFakeBoldText = true }
     val subPaint    = Paint().apply { textSize = 9f; color = android.graphics.Color.DKGRAY }
     val resultPaint = Paint().apply { textSize = 9f; color = android.graphics.Color.BLACK }
+    val linkPaint   = Paint().apply {
+        textSize = 9f
+        color = android.graphics.Color.parseColor("#1A73E8")
+        isUnderlineText = true
+    }
 
     var pageNum  = 1
     var pageInfo = PdfDocument.PageInfo.Builder(595, 842, pageNum).create()
@@ -726,10 +731,10 @@ fun exportToPdf(context: Context, fileName: String, activities: List<ExportActiv
 
                     res.photoUrls.forEachIndexed { idx, pUrl ->
                         val formattedUrl = formatPhotoUrl(pUrl)
-                        val pLines = wrapTextLines("  [${idx + 1}] $formattedUrl", subPaint, 360f)
+                        val pLines = wrapTextLines("  [${idx + 1}] $formattedUrl", linkPaint, 360f)
                         pLines.forEach { line ->
                             checkPageBreak(12f)
-                            canvas.drawText(line, 160f, y, subPaint)
+                            canvas.drawText(line, 160f, y, linkPaint)
                             y += 12f
                         }
                     }
