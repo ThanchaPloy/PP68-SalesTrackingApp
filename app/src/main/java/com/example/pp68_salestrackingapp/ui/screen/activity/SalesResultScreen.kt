@@ -4,7 +4,6 @@ import android.Manifest
 import android.content.pm.PackageManager
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
@@ -607,10 +606,6 @@ private fun PhotoUploadSection(
         if (hasPermission) launchCamera() else permissionLauncher.launch(Manifest.permission.CAMERA)
     }
 
-    val galleryLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.PickMultipleVisualMedia()
-    ) { uris -> if (uris.isNotEmpty()) onPhotosPicked(uris) }
-
     Column(modifier = Modifier.fillMaxWidth()) {
         Text(
             "ถ่ายรูปบันทึกการเข้าพบได้สูงสุด $MAX_RESULT_PHOTOS รูป (ต้องถ่ายจากกล้องในแอปเท่านั้น)",
@@ -672,27 +667,6 @@ private fun PhotoUploadSection(
                         }
                     }
                 }
-                /*
-                // คอมเมนต์ปิดการเลือกรูปจากอัลบั้มชั่วคราว ให้เหลือเฉพาะถ่ายรูปจากกล้อง
-                item {
-                    Box(
-                        modifier = Modifier
-                            .size(96.dp)
-                            .clip(RoundedCornerShape(10.dp))
-                            .border(1.dp, BorderGray, RoundedCornerShape(10.dp))
-                            .clickable {
-                                galleryLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
-                            },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Icon(Icons.Default.PhotoLibrary, null, tint = TextGray, modifier = Modifier.size(26.dp))
-                            Spacer(Modifier.height(4.dp))
-                            Text("เลือกจากอัลบั้ม", fontSize = 11.sp, color = TextGray)
-                        }
-                    }
-                }
-                */
             }
         }
         Spacer(Modifier.height(4.dp))

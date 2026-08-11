@@ -17,6 +17,23 @@ class TokenManager @Inject constructor(
 ) {
     private val prefs: SharedPreferences = context.getSharedPreferences("sales_prefs", Context.MODE_PRIVATE)
 
+    init {
+        checkAppVersionAndForceRelogin()
+    }
+
+    private fun checkAppVersionAndForceRelogin() {
+        try {
+            val lastVersion = prefs.getInt("last_installed_version_code", -1)
+            val currentVersion = com.example.pp68_salestrackingapp.BuildConfig.VERSION_CODE
+
+            if (lastVersion != -1 && currentVersion > lastVersion) {
+                // ✅ APK มีการอัปเดตเวอร์ชันใหม่ -> เคลียร์ Session ให้บังคับผู้ใช้ Login ใหม่
+                clearToken()
+            }
+            prefs.edit().putInt("last_installed_version_code", currentVersion).apply()
+        } catch (_: Exception) {}
+    }
+
     // ✅ ยิง event เมื่อ token หมดอายุ/ไม่ถูกต้อง (401 จาก endpoint ที่ต้อง auth) — ให้ NavGraph
     // เด้งกลับไปหน้า Login ทันที แทนที่จะปล่อยให้แอปเงียบๆ ใช้งานไม่ได้โดยไม่มีคำอธิบาย
     private val _sessionExpired = MutableSharedFlow<Unit>(extraBufferCapacity = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
