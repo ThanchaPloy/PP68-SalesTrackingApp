@@ -264,9 +264,17 @@ fun DatePickerField(
                     Icons.Default.CalendarMonth, null,
                     tint = AppColors.TextHint, modifier = Modifier.size(18.dp)
                 )
+                val displayDate = remember(selectedDate) {
+                    if (selectedDate.isNullOrBlank()) null
+                    else try {
+                        val localDate = java.time.LocalDate.parse(selectedDate.take(10))
+                        val formatter = java.time.format.DateTimeFormatter.ofPattern("d MMM yyyy", java.util.Locale("th", "TH"))
+                        localDate.format(formatter)
+                    } catch (e: Exception) { selectedDate }
+                }
                 Text(
-                    text = selectedDate ?: placeholder,
-                    color = if (selectedDate == null) AppColors.TextHint else AppColors.TextPrimary,
+                    text = displayDate ?: placeholder,
+                    color = if (displayDate == null) AppColors.TextHint else AppColors.TextPrimary,
                     fontSize = 14.sp
                 )
             }
@@ -288,9 +296,10 @@ fun DatePickerField(
         val initialMillis = remember(selectedDate) {
             selectedDate?.let { s ->
                 try {
+                    val dateStr = if (s.length >= 10) s.take(10) else s
                     SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
                         .apply { timeZone = TimeZone.getTimeZone("UTC") }
-                        .parse(s)?.time
+                        .parse(dateStr)?.time
                 } catch (_: Exception) { null }
             } ?: System.currentTimeMillis()
         }

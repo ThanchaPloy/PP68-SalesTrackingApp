@@ -75,8 +75,8 @@ class SyncManager @Inject constructor(
                     "gen_bus_posting_group" to customer.branchId,
                     "cust_type"             to customer.custType,
                     "address"               to customer.companyAddr,
-                    "company_lat"           to customer.companyLat,
-                    "company_long"          to customer.companyLong,
+                    "latitude"              to customer.companyLat,
+                    "longitude"             to customer.companyLong,
                     "customer_status"       to customer.companyStatus,
                     "create_date"           to customer.createdAt,
                     "created_at"            to customer.createdAt,
@@ -85,15 +85,27 @@ class SyncManager @Inject constructor(
                     "grade"                 to customer.grade,
                     "vat_registration_no"   to customer.vatRegistrationNo
                 ).filterValues { it != null }
-                val response = apiService.addCustomer(body)
-                if (response.isSuccessful) {
-                    val realCustId = response.body()?.firstOrNull()?.custId
-                    if (realCustId != null && realCustId != customer.custId) {
-                        contactDao.updateCustIdForContacts(customer.custId, realCustId)
-                        activityDao.updateCustIdForActivities(customer.custId, realCustId)
-                        customerDao.deleteCustomerById(customer.custId)
-                        customerDao.insertCustomer(customer.copy(custId = realCustId, isSynced = true))
+
+                if (customer.custId.startsWith("TEMP-")) {
+                    val response = apiService.addCustomer(body)
+                    if (response.isSuccessful) {
+                        val realCustId = response.body()?.firstOrNull()?.custId
+                        if (realCustId != null && realCustId != customer.custId) {
+                            contactDao.updateCustIdForContacts(customer.custId, realCustId)
+                            activityDao.updateCustIdForActivities(customer.custId, realCustId)
+                            customerDao.deleteCustomerById(customer.custId)
+                            customerDao.insertCustomer(customer.copy(custId = realCustId, isSynced = true))
+                        } else {
+                            customerDao.updateSyncStatus(customer.custId, true)
+                        }
+                    }
+                } else {
+                    val response = if (customer.isLead) {
+                        apiService.updateLeadCustomer("eq.${customer.custId}", body)
                     } else {
+                        apiService.updateCustomer("eq.${customer.custId}", body)
+                    }
+                    if (response.isSuccessful && response.body()?.isNotEmpty() == true) {
                         customerDao.updateSyncStatus(customer.custId, true)
                     }
                 }
@@ -116,7 +128,12 @@ class SyncManager @Inject constructor(
                     put("is_active", contact.isActive)
                     put("is_dm_confirmed", contact.isDmConfirmed)
                 }
-                val response = apiService.addContact(fields)
+                val response = if (contact.contactId.startsWith("TEMP-")) {
+                    apiService.addContact(fields)
+                } else {
+                    apiService.updateContact("eq.${contact.contactId}", fields)
+                }
+                
                 if (response.isSuccessful) {
                     val serverContact = response.body()?.firstOrNull()
                     if (serverContact != null && serverContact.contactId != contact.contactId) {
@@ -134,6 +151,7 @@ class SyncManager @Inject constructor(
         val unsyncedProjects = projectDao.getUnsyncedProjects()
         for (project in unsyncedProjects) {
             try {
+                val isUpdate = !project.projectId.startsWith("TEMP-")
                 val body = mutableMapOf<String, Any?>(
                     "customer_code"     to project.custId,
                     "customer_name"     to project.customerName,
@@ -148,26 +166,44 @@ class SyncManager @Inject constructor(
                     "project_long"      to project.projectLong,
                     "opportunity_score" to project.opportunityScore,
                     "remark"            to project.remark,
-                    "create_by"         to project.createBy,
-                    "created_at"        to project.createdAt
-                ).filterValues { it != null }
-                val response = apiService.addProject(body)
+                    "loss_reason"       to project.lossReason
+                ).filterValues { it != null }.toMutableMap()
+
+                if (!isUpdate) {
+                    body["create_by"] = project.createBy
+                    body["created_at"] = project.createdAt
+                } else {
+                    body["updated_at"] = java.time.Instant.now().toString()
+                }
+
+                val response = if (isUpdate) {
+                    apiService.updateProject("eq.${project.projectId}", body)
+                } else {
+                    apiService.addProject(body)
+                }
+
                 if (!response.isSuccessful) {
                     Log.e("SyncManager", "Project sync failed ${response.code()}: custId=${project.custId} err=${response.errorBody()?.string()}")
                 }
+                
                 if (response.isSuccessful) {
-                    val realId = response.body()?.firstOrNull()?.projectId
-                    val finalId = if (realId != null && realId != project.projectId) {
-                        val oldId = project.projectId
-                        activityDao.updateProjectIdForActivities(oldId, realId)
-                        projectDao.insertProject(project.copy(projectId = realId, isSynced = true))
-                        projectContactDao.updateProjectId(oldId, realId)
-                        projectSalesMemberDao.updateProjectId(oldId, realId)
-                        projectDao.deleteProjectById(oldId)
-                        realId
-                    } else {
+                    val finalId = if (isUpdate) {
                         projectDao.updateSyncStatus(project.projectId, true)
                         project.projectId
+                    } else {
+                        val realId = response.body()?.firstOrNull()?.projectId
+                        if (realId != null && realId != project.projectId) {
+                            val oldId = project.projectId
+                            activityDao.updateProjectIdForActivities(oldId, realId)
+                            projectDao.insertProject(project.copy(projectId = realId, isSynced = true))
+                            projectContactDao.updateProjectId(oldId, realId)
+                            projectSalesMemberDao.updateProjectId(oldId, realId)
+                            projectDao.deleteProjectById(oldId)
+                            realId
+                        } else {
+                            projectDao.updateSyncStatus(project.projectId, true)
+                            project.projectId
+                        }
                     }
 
                     // Sync contacts to remote
@@ -264,7 +300,9 @@ class SyncManager @Inject constructor(
                         activity.distanceDeviation?.let { put("distance_deviation", it) }
                     }
                     val response = apiService.updateActivity("eq.${activity.activityId}", patchBody)
-                    if (response.isSuccessful) activityDao.updateSyncStatus(activity.activityId, true)
+                    if (response.isSuccessful && response.body()?.isNotEmpty() == true) {
+                        activityDao.updateSyncStatus(activity.activityId, true)
+                    }
                 }
             } catch (e: Exception) {
                 Log.e("SyncManager", "Failed to sync activity ${activity.activityId}: ${e.message}")
@@ -302,7 +340,7 @@ class SyncManager @Inject constructor(
                 } else {
                     val body = buildResultBody(res)
                     val response = apiService.upsertActivityResult(body)
-                    if (response.isSuccessful) resultDao.updateSyncStatus(res.resultId, true)
+                    if (response.isSuccessful && response.body()?.isNotEmpty() == true) resultDao.updateSyncStatus(res.resultId, true)
                 }
             } catch (e: Exception) {
                 Log.e("SyncManager", "Failed to sync result ${res.resultId}: ${e.message}")

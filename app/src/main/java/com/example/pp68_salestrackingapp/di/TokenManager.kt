@@ -29,7 +29,9 @@ class TokenManager @Inject constructor(
             if (lastVersion != currentVersion) {
                 // ✅ APK มีการอัปเดตเวอร์ชันใหม่ -> เคลียร์ Session ให้บังคับผู้ใช้ Login ใหม่
                 clearToken()
-                prefs.edit().putInt("last_installed_version_code", currentVersion).apply()
+                // ⚠️ ใช้ .commit() แทน .apply() เพื่อบังคับเซฟลง Disk ทันที
+                // ป้องกันปัญหา "ปัดแอปออกแล้วเซฟไม่ทัน" ทำให้มันเคลียร์ Token ซ้ำในรอบหน้า
+                prefs.edit().putInt("last_installed_version_code", currentVersion).commit()
             }
         } catch (_: Exception) {}
     }
@@ -80,7 +82,16 @@ class TokenManager @Inject constructor(
     fun getEmpType(): String? = prefs.getString("emp_type", null)
 
     fun clearToken() {
-        prefs.edit().clear().apply()
+        prefs.edit().apply {
+            remove("jwt_token")
+            remove("user_id")
+            remove("user_email")
+            remove("user_role")
+            remove("user_team")
+            remove("user_name")
+            remove("user_branch")
+            remove("emp_type")
+        }.apply()
     }
 
     // ✅ เพิ่ม FCM token functions

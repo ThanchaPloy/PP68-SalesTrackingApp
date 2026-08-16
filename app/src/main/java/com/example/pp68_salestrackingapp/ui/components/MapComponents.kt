@@ -137,30 +137,14 @@ fun GoogleMapPickerField(
 
     var permissionRequested by remember { mutableStateOf(false) }
 
-    // Sync camera if lat/lng changes from outside, and auto-fetch current location if not set yet
+    // Sync camera if lat/lng changes from outside
     LaunchedEffect(lat, lng) {
-        if (lat != null && lng != null && lat != 0.0 && lng != 0.0 && (lat != 13.7563 || lng != 100.5018)) {
+        if (lat != null && lng != null && lat != 0.0 && lng != 0.0) {
             val newPoint = LatLng(lat, lng)
             markerState.position = newPoint
             cameraPositionState.position = CameraPosition.fromLatLngZoom(newPoint, 15f)
         } else {
             searchQuery = ""
-            if ((lat == null || lng == null || lat == 0.0 || lng == 0.0 || (lat == 13.7563 && lng == 100.5018)) && !permissionRequested) {
-                permissionRequested = true
-                if (hasLocationPermission && fusedLocationClient != null) {
-                    fetchLocation(fusedLocationClient) { fetchedLat, fetchedLng ->
-                        onLocationPicked(fetchedLat, fetchedLng)
-                        scope.launch {
-                            cameraPositionState.animate(CameraUpdateFactory.newLatLngZoom(LatLng(fetchedLat, fetchedLng), 15f))
-                        }
-                    }
-                } else if (!isPreview) {
-                    permissionLauncher.launch(arrayOf(
-                        Manifest.permission.ACCESS_FINE_LOCATION,
-                        Manifest.permission.ACCESS_COARSE_LOCATION
-                    ))
-                }
-            }
         }
     }
 

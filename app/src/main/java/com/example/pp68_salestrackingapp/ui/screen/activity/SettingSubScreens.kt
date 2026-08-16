@@ -40,7 +40,10 @@ fun EditProfileScreen(
 
     // ✅ navigate กลับเมื่อ save สำเร็จ
     LaunchedEffect(s.isSaved) {
-        if (s.isSaved) onSave()
+        if (s.isSaved) {
+            viewModel.resetSavedState()
+            onSave()
+        }
     }
 
     EditProfileContent(
@@ -290,7 +293,10 @@ fun ChangePasswordScreen(
     val s by viewModel.uiState.collectAsState()
 
     LaunchedEffect(s.isSuccess) {
-        if (s.isSuccess) onSave()
+        if (s.isSuccess) {
+            viewModel.resetSuccessState()
+            onSave()
+        }
     }
 
     ChangePasswordContent(

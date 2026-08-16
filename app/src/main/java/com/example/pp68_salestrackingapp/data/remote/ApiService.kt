@@ -25,7 +25,7 @@ interface ApiService {
     suspend fun addProjectMembers(@Body members: List<ProjectMemberInsertDto>): Response<List<ProjectMemberInsertDto>>
 
     @DELETE("project_sales_member")
-    suspend fun deleteProjectMembers(@Query("project_id") projectId: String): Response<Unit>
+    suspend fun deleteProjectMembers(@Query("project_code") projectId: String): Response<Unit>
 
     @GET("project_sales_member")
     suspend fun getProjectMembers(@Query("project_id") projectId: String, @Query("select") select: String = "emp_code,sales_role"): Response<List<ProjectMemberDto>>
@@ -86,13 +86,20 @@ interface ApiService {
     @GET("customer")
     suspend fun getCustomerById(@Query("customer_code") custId: String, @Query("limit") limit: Int = 1): Response<List<Customer>>
 
-    @POST("customer")
+    @POST("lead_customer")
     @Headers("Prefer: return=representation", "Content-Profile: public")
     suspend fun addCustomer(@Body fields: @JvmSuppressWildcards Map<String, Any?>): Response<List<Customer>>
 
     @PATCH("customer")
     @Headers("Prefer: return=representation", "Content-Profile: public")
     suspend fun updateCustomer(
+        @Query("customer_code") custId: String,
+        @Body updates: @JvmSuppressWildcards Map<String, Any?>
+    ): Response<List<Customer>>
+
+    @PATCH("lead_customer")
+    @Headers("Prefer: return=representation", "Content-Profile: public")
+    suspend fun updateLeadCustomer(
         @Query("customer_code") custId: String,
         @Body updates: @JvmSuppressWildcards Map<String, Any?>
     ): Response<List<Customer>>
@@ -158,13 +165,13 @@ interface ApiService {
 
     @PATCH("project")
     @Headers("Prefer: return=representation", "Content-Profile: public")
-    suspend fun updateProject(@Query("project_id") projectId: String, @Body updates: @JvmSuppressWildcards Map<String, Any?>): Response<List<Project>>
+    suspend fun updateProject(@Query("project_code") projectId: String, @Body updates: @JvmSuppressWildcards Map<String, Any?>): Response<List<Project>>
 
     @DELETE("project")
-    suspend fun deleteProject(@Query("project_id") projectId: String): Response<Unit>
+    suspend fun deleteProject(@Query("project_code") projectId: String): Response<Unit>
 
     @DELETE("project")
-    suspend fun deleteProjectsByCustomer(@Query("cust_id") custId: String): Response<Unit>
+    suspend fun deleteProjectsByCustomer(@Query("customer_code") custId: String): Response<Unit>
 
     // ── Project Contact ──────────────────────────────────────────
     @GET("project_contact")
@@ -175,7 +182,7 @@ interface ApiService {
     suspend fun addProjectContacts(@Body contacts: List<ProjectContact>): Response<Unit>
 
     @DELETE("project_contact")
-    suspend fun deleteProjectContacts(@Query("project_id") projectId: String): Response<Unit>
+    suspend fun deleteProjectContacts(@Query("project_code") projectId: String): Response<Unit>
 
     // ── Products ─────────────────────────────────────────────────
     @GET("item_silver")
@@ -233,7 +240,10 @@ interface ApiService {
     suspend fun getProjectProductsByStatus(@Query("project_id") projectId: String, @Query("status") status: String): Response<List<ProjectProductDto>>
 
     @DELETE("project_product")
-    suspend fun deleteProjectProduct(@Query("project_id") projectId: String, @Query("product_id") productId: String): Response<Unit>
+    suspend fun deleteProjectProduct(@Query("project_code") projectId: String, @Query("product_id") productId: String): Response<Unit>
+
+    @DELETE("project_product")
+    suspend fun deleteProjectProductsByProject(@Query("project_code") projectId: String): Response<Unit>
 
     // ── Appointment ──────────────────────────────────────────────
     @GET("appointment")

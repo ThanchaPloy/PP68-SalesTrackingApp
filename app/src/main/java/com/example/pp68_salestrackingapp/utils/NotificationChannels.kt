@@ -7,14 +7,14 @@ import android.os.Build
 
 object NotificationChannels {
     const val SALES_TRACKING_CHANNEL_ID = "sales_tracking_channel"
+    const val LOCATION_ALERT_CHANNEL_ID = "location_alert_channel"
+    const val APPOINTMENT_TIME_CHANNEL_ID = "appointment_time_channel"
 
-    // ✅ ต้องสร้าง channel นี้ตั้งแต่แอปเปิดครั้งแรก ไม่ใช่รอตอน onMessageReceived
-    // เพราะถ้าแอปอยู่ background/killed ตอน FCM ส่ง payload ที่มีทั้ง notification + data block มา
-    // ระบบ Android จะแสดง notification เองโดยไม่เรียก onMessageReceived เลย ถ้า channel ยังไม่มีอยู่จริง
-    // notification จะถูก drop เงียบๆ ไม่แสดงอะไรเลย
     fun ensureCreated(context: Context) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
-        val channel = NotificationChannel(
+        val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+
+        val salesChannel = NotificationChannel(
             SALES_TRACKING_CHANNEL_ID,
             "Sales Tracking Notifications",
             NotificationManager.IMPORTANCE_HIGH
@@ -23,7 +23,29 @@ object NotificationChannels {
             enableVibration(true)
             lockscreenVisibility = android.app.Notification.VISIBILITY_PUBLIC
         }
-        val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        manager.createNotificationChannel(channel)
+
+        val locationChannel = NotificationChannel(
+            LOCATION_ALERT_CHANNEL_ID,
+            "แจ้งเตือนพิกัดนัดหมาย (Location Alert)",
+            NotificationManager.IMPORTANCE_HIGH
+        ).apply {
+            description = "แจ้งเตือนเมื่อเดินทางเข้าใกล้สถานที่ปักหมุดนัดหมาย"
+            enableVibration(true)
+            lockscreenVisibility = android.app.Notification.VISIBILITY_PUBLIC
+        }
+
+        val appointmentChannel = NotificationChannel(
+            APPOINTMENT_TIME_CHANNEL_ID,
+            "แจ้งเตือนเวลานัดหมาย (Appointment Time Alert)",
+            NotificationManager.IMPORTANCE_HIGH
+        ).apply {
+            description = "แจ้งเตือนเมื่อใกล้ถึงเวลานัดหมาย"
+            enableVibration(true)
+            lockscreenVisibility = android.app.Notification.VISIBILITY_PUBLIC
+        }
+
+        manager.createNotificationChannel(salesChannel)
+        manager.createNotificationChannel(locationChannel)
+        manager.createNotificationChannel(appointmentChannel)
     }
 }

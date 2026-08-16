@@ -30,10 +30,10 @@ data class Customer(
     @SerializedName("address") val companyAddr: String? = null,
 
     @ColumnInfo(name = "company_lat")
-    @SerializedName("company_lat") val companyLat: Double? = null,
+    @SerializedName("latitude") val companyLat: Double? = null,
 
     @ColumnInfo(name = "company_long")
-    @SerializedName("company_long") val companyLong: Double? = null,
+    @SerializedName("longitude") val companyLong: Double? = null,
 
     @ColumnInfo(name = "company_status")
     @SerializedName("customer_status") val companyStatus: Int? = null,

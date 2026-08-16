@@ -100,13 +100,14 @@ class HomeViewModel @Inject constructor(
                         card.copy(hasResult = card.activityId in resultIds)
                     }.filter { card ->
                         try {
-                            if (card.plannedDate.isNullOrBlank()) false
+                            if (card.plannedDate.isNullOrBlank()) true
                             else {
-                                val date = LocalDate.parse(card.plannedDate.take(10))
+                                val dateStr = card.plannedDate.take(10)
+                                val date = LocalDate.parse(dateStr)
                                 YearMonth.from(date) == currentMonth
                             }
                         } catch (e: Exception) {
-                            false
+                            true // Don't hide activity cards with unparseable dates
                         }
                     }
 

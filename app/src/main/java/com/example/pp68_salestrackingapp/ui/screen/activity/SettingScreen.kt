@@ -51,7 +51,8 @@ fun SettingScreen(
         onLogout = {
             viewModel.logout()
             onLogout()
-        }
+        },
+        onRefreshUser = { viewModel.refreshUser() }
     )
 }
 
@@ -60,11 +61,18 @@ fun SettingScreen(
 fun SettingScreenContent(
     uiState: SettingsUiState,
     onBack: () -> Unit,
-    onLogout: () -> Unit
+    onLogout: () -> Unit,
+    onRefreshUser: () -> Unit = {}
 ) {
     // State สำหรับควบคุมว่ากำลังแสดงหน้าย่อยไหน
     var activeSubScreen by remember { mutableStateOf<String?>(null) }
     var showLanguageDialog by remember { mutableStateOf(false) }
+
+    LaunchedEffect(activeSubScreen) {
+        if (activeSubScreen == null) {
+            onRefreshUser()
+        }
+    }
 
     // เลือกแสดงผลตาม State
     when (activeSubScreen) {
@@ -115,7 +123,7 @@ fun SettingScreenContent(
             title   = "About App",
             content = """
             Sales Tracking App
-            Version ${BuildConfig.VERSION_NAME}
+            Version ${BuildConfig.VERSION_NAME} (Build ${BuildConfig.VERSION_CODE})
 
             📱 เกี่ยวกับแอปพลิเคชัน
             แอปพลิเคชันสำหรับพนักงานขายในการติดตามและบริหารจัดการกิจกรรมการขาย ครอบคลุมตั้งแต่การจัดการลูกค้า โครงการ การนัดหมาย และการวิเคราะห์ผลงาน
@@ -204,6 +212,13 @@ fun SettingScreenContent(
 
                     Spacer(Modifier.height(32.dp))
                     LogoutButton(onClick = onLogout)
+                    Spacer(Modifier.height(16.dp))
+                    Text(
+                        text = "Sales Tracking App v${BuildConfig.VERSION_NAME} (Build ${BuildConfig.VERSION_CODE})",
+                        fontSize = 12.sp,
+                        color = TextGray,
+                        modifier = Modifier.align(Alignment.CenterHorizontally)
+                    )
                     Spacer(Modifier.height(40.dp))
                 }
             }

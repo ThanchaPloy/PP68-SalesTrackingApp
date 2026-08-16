@@ -128,7 +128,8 @@ fun SalesTrackingApp() {
 
         composable(
             route = Route.ActivityDetail.path,
-            arguments = listOf(navArgument("activityId") { type = NavType.StringType })
+            arguments = listOf(navArgument("activityId") { type = NavType.StringType }),
+            deepLinks = listOf(androidx.navigation.navDeepLink { uriPattern = "salestracking://activity/{activityId}" })
         ) { backStackEntry ->
             val activityId = backStackEntry.arguments?.getString("activityId") ?: ""
             ActivityDetailScreen(

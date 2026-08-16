@@ -33,13 +33,20 @@ interface ProjectDao {
     @Update
     suspend fun updateProjectRaw(project: Project)
 
+    @Query("SELECT projectId FROM project WHERE is_synced = 0")
+    suspend fun getUnsyncedProjectIds(): List<String>
+
     @Transaction
     suspend fun insertProjects(projects: List<Project>) {
         val insertResults = insertProjectsRaw(projects)
         val updateList = mutableListOf<Project>()
+        var unsyncedIds: Set<String>? = null
         for (i in insertResults.indices) {
             if (insertResults[i] == -1L) {
-                updateList.add(projects[i])
+                if (unsyncedIds == null) unsyncedIds = getUnsyncedProjectIds().toSet()
+                if (!unsyncedIds.contains(projects[i].projectId)) {
+                    updateList.add(projects[i])
+                }
             }
         }
         if (updateList.isNotEmpty()) {

@@ -120,7 +120,7 @@ class ContactRepository @Inject constructor(
                     put("is_dm_confirmed", contact.isDmConfirmed)
                 }.filterValues { it != null }
                 val response = apiService.updateContact("eq.$contactId", updates)
-                if (response.isSuccessful) {
+                if (response.isSuccessful && response.body()?.isNotEmpty() == true) {
                     contactDao.updateSyncStatus(contactId, true)
                     kotlin.Result.success(Unit)
                 } else {

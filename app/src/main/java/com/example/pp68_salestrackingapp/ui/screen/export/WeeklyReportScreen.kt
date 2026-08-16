@@ -41,6 +41,11 @@ import java.io.FileOutputStream
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
+import org.apache.poi.ss.usermodel.*
+import org.apache.poi.xssf.usermodel.XSSFWorkbook
+import java.io.ByteArrayOutputStream
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 
 private val RedReport = Color(0xFFAE2138)
 
@@ -52,13 +57,13 @@ fun WeeklyReportScreen(
     val s by viewModel.uiState.collectAsState()
 
     LaunchedEffect(Unit) {
-        viewModel.loadWeeklyData(LocalDate.now())
+        viewModel.loadWeeklyData(LocalDate.now().minusDays(6), LocalDate.now())
     }
 
     WeeklyReportContent(
         state = s,
         onBack = onBack,
-        onDateSelected = { viewModel.loadWeeklyData(it) }
+        onDateRangeSelected = { start, end -> viewModel.loadWeeklyData(start, end) }
     )
 }
 
@@ -67,25 +72,26 @@ fun WeeklyReportScreen(
 fun WeeklyReportContent(
     state: ExportUiState,
     onBack: () -> Unit,
-    onDateSelected: (LocalDate) -> Unit
+    onDateRangeSelected: (LocalDate, LocalDate) -> Unit
 ) {
     val context       = LocalContext.current
     val scope         = rememberCoroutineScope()
     val snackbarState = remember { SnackbarHostState() }
 
-    var csvLoading    by remember { mutableStateOf(false) }
+    var excelLoading  by remember { mutableStateOf(false) }
     var pdfLoading    by remember { mutableStateOf(false) }
-    val isAnyExporting = csvLoading || pdfLoading
+    val isAnyExporting = excelLoading || pdfLoading
 
     var showDatePicker by remember { mutableStateOf(false) }
-    val datePickerState = rememberDatePickerState(
-        initialSelectedDateMillis = state.selectedDate.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+    val datePickerState = rememberDateRangePickerState(
+        initialSelectedStartDateMillis = state.startDate.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli(),
+        initialSelectedEndDateMillis = state.endDate.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
     )
 
     fun doExport(
         setLoading: (Boolean) -> Unit,
         label: String,
-        block: () -> Unit
+        block: suspend () -> Unit
     ) {
         if (isAnyExporting) return
         scope.launch {
@@ -112,9 +118,12 @@ fun WeeklyReportContent(
             onDismissRequest = { showDatePicker = false },
             confirmButton = {
                 TextButton(onClick = {
-                    datePickerState.selectedDateMillis?.let { millis ->
-                        val selectedDate = Instant.ofEpochMilli(millis).atZone(ZoneId.systemDefault()).toLocalDate()
-                        onDateSelected(selectedDate)
+                    val startMillis = datePickerState.selectedStartDateMillis
+                    val endMillis = datePickerState.selectedEndDateMillis
+                    if (startMillis != null && endMillis != null) {
+                        val startDate = Instant.ofEpochMilli(startMillis).atZone(ZoneId.systemDefault()).toLocalDate()
+                        val endDate = Instant.ofEpochMilli(endMillis).atZone(ZoneId.systemDefault()).toLocalDate()
+                        onDateRangeSelected(startDate, endDate)
                     }
                     showDatePicker = false
                 }) { Text("ตกลง", color = RedReport) }
@@ -123,7 +132,10 @@ fun WeeklyReportContent(
                 TextButton(onClick = { showDatePicker = false }) { Text("ยกเลิก") }
             }
         ) {
-            DatePicker(state = datePickerState)
+            DateRangePicker(
+                state = datePickerState,
+                modifier = Modifier.weight(1f)
+            )
         }
     }
 
@@ -166,20 +178,20 @@ fun WeeklyReportContent(
                     if (state.activities.isNotEmpty()) {
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
 
-                            // ── CSV button ────────────────────
+                            // ── Excel button ───────────────────
                             ExportButton(
-                                label     = "CSV",
-                                color     = Color(0xFF388E3C),
-                                isLoading = csvLoading,
+                                label     = "Excel",
+                                color     = Color(0xFF1E6B38),
+                                isLoading = excelLoading,
                                 enabled   = !isAnyExporting,
                                 onClick   = {
                                     doExport(
-                                        setLoading = { csvLoading = it },
-                                        label      = "CSV"
+                                        setLoading = { excelLoading = it },
+                                        label      = "Excel"
                                     ) {
-                                        exportToCsv(
+                                        exportToExcel(
                                             context,
-                                            "Weekly_Report_${state.selectedDate}",
+                                            "Weekly_Report_${state.startDate}_to_${state.endDate}",
                                             state.activities
                                         )
                                     }
@@ -200,7 +212,7 @@ fun WeeklyReportContent(
                                     ) {
                                         exportToPdf(
                                             context,
-                                            "Weekly_Report_${state.selectedDate}",
+                                            "Weekly_Report_${state.startDate}_to_${state.endDate}",
                                             state.activities
                                         )
                                     }
@@ -584,49 +596,230 @@ private fun wrapTextLines(text: String, paint: Paint, maxWidth: Float): List<Str
 }
 
 // ── Export functions ─────────────────────────────────────────
-fun exportToCsv(context: Context, fileName: String, activities: List<ExportActivityItem>) {
-    val header  = "\uFEFFDate,Company,Project,Topic,Status,New Status,Score,Proposal Sent,Proposal Date,DM Involved,Competitor Count,Solution,Loss Reason,Summary,Photo URLs\n"
-    val content = activities.joinToString("\n") { item ->
-        val date = item.date
-        val company = item.companyName?.replace(",", ";") ?: ""
-        val project = item.projectName?.replace(",", ";") ?: ""
-        val topic = item.topic?.replace(",", ";") ?: ""
-        val status = item.status
 
-        if (item.resultDetails.isNotEmpty()) {
-            item.resultDetails.joinToString("\n") { res ->
-                val newStatus = res.newStatus ?: ""
-                val score = res.opportunityScore ?: ""
-                val propSent = if (res.isProposalSent) "Yes" else "No"
-                val propDate = res.proposalDate ?: ""
-                val dm = if (res.dmInvolved) "Yes" else "No"
-                val comp = res.competitorCount.toString()
-                val sol = res.previousSolution?.replace(",", ";") ?: ""
-                val loss = res.lossReason?.replace(",", ";") ?: ""
-                val summary = res.summary?.replace(",", ";")?.replace("\n", " ")?.replace("\"", "'") ?: ""
-                val photos = res.photoUrls.map { formatPhotoUrl(it) }.joinToString("; ")
-
-                "\"$date\",\"$company\",\"$project\",\"$topic\",\"$status\",\"$newStatus\",\"$score\",\"$propSent\",\"$propDate\",\"$dm\",\"$comp\",\"$sol\",\"$loss\",\"$summary\",\"$photos\""
+private suspend fun getPhotoBytes(context: Context, photoUrl: String): ByteArray? {
+    val formattedUrl = formatPhotoUrl(photoUrl)
+    return try {
+        if (formattedUrl.startsWith("file://") || formattedUrl.startsWith("/storage/") || formattedUrl.startsWith("/data/")) {
+            val filePath = formattedUrl.removePrefix("file://")
+            val file = File(filePath)
+            if (file.exists()) {
+                withContext(Dispatchers.IO) { file.readBytes() }
+            } else null
+        } else if (formattedUrl.startsWith("content://")) {
+            val uri = android.net.Uri.parse(formattedUrl)
+            withContext(Dispatchers.IO) {
+                context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
             }
         } else {
-            val results = item.results.joinToString("; ").replace(",", ";").replace("\n", " ")
-            "\"$date\",\"$company\",\"$project\",\"$topic\",\"$status\",\"\",\"\",\"No\",\"\",\"No\",\"0\",\"\",\"\",\"$results\",\"\""
+            // For remote URLs, fetch bytes directly
+            withContext(Dispatchers.IO) {
+                val url = java.net.URL(formattedUrl)
+                val connection = url.openConnection() as java.net.HttpURLConnection
+                connection.connectTimeout = 15000
+                connection.readTimeout = 15000
+                connection.doInput = true
+                connection.connect()
+                if (connection.responseCode == java.net.HttpURLConnection.HTTP_OK) {
+                    connection.inputStream.use { it.readBytes() }
+                } else {
+                    null
+                }
+            }
         }
+    } catch (e: Exception) {
+        null
     }
-    val file = File(context.cacheDir, "$fileName.csv")
-    file.writeText(header + content, Charsets.UTF_8)
-
-    val uri    = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
-    val intent = Intent(Intent.ACTION_SEND).apply {
-        type = "text/csv"
-        putExtra(Intent.EXTRA_SUBJECT, fileName)
-        putExtra(Intent.EXTRA_STREAM, uri)
-        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-    }
-    context.startActivity(Intent.createChooser(intent, "Share CSV Report"))
 }
 
-fun exportToPdf(context: Context, fileName: String, activities: List<ExportActivityItem>) {
+suspend fun exportToExcel(context: Context, fileName: String, activities: List<ExportActivityItem>) {
+    withContext(Dispatchers.IO) {
+        val workbook = XSSFWorkbook()
+        val sheet = workbook.createSheet("Weekly Report")
+        
+        // Setup styles
+        val headerStyle = workbook.createCellStyle().apply {
+            fillForegroundColor = IndexedColors.DARK_RED.index
+            fillPattern = FillPatternType.SOLID_FOREGROUND
+            val font = workbook.createFont().apply {
+                color = IndexedColors.WHITE.index
+                bold = true
+            }
+            setFont(font)
+            alignment = HorizontalAlignment.CENTER
+            verticalAlignment = VerticalAlignment.CENTER
+            borderBottom = BorderStyle.THIN
+            borderTop = BorderStyle.THIN
+            borderLeft = BorderStyle.THIN
+            borderRight = BorderStyle.THIN
+        }
+
+        val baseCellStyle = workbook.createCellStyle().apply {
+            verticalAlignment = VerticalAlignment.TOP
+            wrapText = true
+            borderBottom = BorderStyle.THIN
+            borderTop = BorderStyle.THIN
+            borderLeft = BorderStyle.THIN
+            borderRight = BorderStyle.THIN
+        }
+
+        val statusCompletedStyle = workbook.createCellStyle().apply {
+            cloneStyleFrom(baseCellStyle)
+            fillForegroundColor = IndexedColors.LIGHT_GREEN.index
+            fillPattern = FillPatternType.SOLID_FOREGROUND
+            alignment = HorizontalAlignment.CENTER
+            val font = workbook.createFont().apply {
+                color = IndexedColors.DARK_GREEN.index
+                bold = true
+            }
+            setFont(font)
+        }
+
+        val statusPendingStyle = workbook.createCellStyle().apply {
+            cloneStyleFrom(baseCellStyle)
+            fillForegroundColor = IndexedColors.LIGHT_ORANGE.index
+            fillPattern = FillPatternType.SOLID_FOREGROUND
+            alignment = HorizontalAlignment.CENTER
+            val font = workbook.createFont().apply {
+                color = IndexedColors.ORANGE.index
+                bold = true
+            }
+            setFont(font)
+        }
+
+        // Headers
+        val headers = listOf(
+            "วันที่ (Date)", "บริษัท (Company)", "โครงการ (Project)", "หัวข้อ (Topic)",
+            "สถานะ (Status)", "สถานะใหม่ (New Status)", "โอกาส", "ใบเสนอราคา",
+            "วันที่เสนอราคา", "DM ร่วมประชุม", "จำนวนคู่แข่ง", "โซลูชันเดิม",
+            "เหตุผลแพ้", "สรุปผลการทำงาน", "รูปภาพแนบ (Photos)"
+        )
+        val headerRow = sheet.createRow(0)
+        headers.forEachIndexed { i, title ->
+            val cell = headerRow.createCell(i)
+            cell.setCellValue(title)
+            cell.cellStyle = headerStyle
+            sheet.setColumnWidth(i, 4000)
+        }
+        sheet.setColumnWidth(13, 8000) // summary column wider
+        sheet.setColumnWidth(14, 6000) // photos column wider
+
+        val drawing = sheet.createDrawingPatriarch()
+        val creationHelper = workbook.creationHelper
+        var rowNum = 1
+
+        for (item in activities) {
+            val isCompleted = item.status.equals("completed", ignoreCase = true)
+            
+            if (item.resultDetails.isNotEmpty()) {
+                for (res in item.resultDetails) {
+                    val row = sheet.createRow(rowNum)
+                    // Set default row height if there are photos
+                    if (res.photoUrls.isNotEmpty()) {
+                        row.height = (120 * 15).toShort() // ~120px height
+                    }
+                    
+                    row.createCell(0).apply { setCellValue(item.date); this.cellStyle = baseCellStyle }
+                    row.createCell(1).apply { setCellValue(item.companyName ?: ""); this.cellStyle = baseCellStyle }
+                    row.createCell(2).apply { setCellValue(item.projectName ?: ""); this.cellStyle = baseCellStyle }
+                    row.createCell(3).apply { setCellValue(item.topic ?: ""); this.cellStyle = baseCellStyle }
+                    
+                    row.createCell(4).apply {
+                        setCellValue(item.status)
+                        cellStyle = if (isCompleted) statusCompletedStyle else statusPendingStyle
+                    }
+                    
+                    row.createCell(5).apply { setCellValue(res.newStatus ?: ""); this.cellStyle = baseCellStyle }
+                    row.createCell(6).apply { setCellValue(res.opportunityScore ?: ""); this.cellStyle = baseCellStyle }
+                    row.createCell(7).apply { setCellValue(if (res.isProposalSent) "ส่งแล้ว" else "ยังไม่ส่ง"); this.cellStyle = baseCellStyle }
+                    row.createCell(8).apply { setCellValue(res.proposalDate ?: ""); this.cellStyle = baseCellStyle }
+                    row.createCell(9).apply { setCellValue(if (res.dmInvolved) "มี" else "ไม่มี"); this.cellStyle = baseCellStyle }
+                    row.createCell(10).apply { setCellValue(res.competitorCount.toString()); this.cellStyle = baseCellStyle }
+                    row.createCell(11).apply { setCellValue(res.previousSolution ?: ""); this.cellStyle = baseCellStyle }
+                    row.createCell(12).apply { setCellValue(res.lossReason ?: ""); this.cellStyle = baseCellStyle }
+                    row.createCell(13).apply { setCellValue(res.summary ?: ""); this.cellStyle = baseCellStyle }
+                    
+                    val photoCell = row.createCell(14).apply { this.cellStyle = baseCellStyle }
+
+                    // Insert Photos side by side
+                    if (res.photoUrls.isNotEmpty()) {
+                        var colOffset = 0
+                        for (url in res.photoUrls) {
+                            val bytes = getPhotoBytes(context, url)
+                            if (bytes != null) {
+                                val pictureIdx = workbook.addPicture(bytes, Workbook.PICTURE_TYPE_JPEG)
+                                val anchor = creationHelper.createClientAnchor()
+                                
+                                // Anchor within the cell (14)
+                                anchor.setCol1(14)
+                                anchor.setRow1(rowNum)
+                                anchor.setCol2(14)
+                                anchor.setRow2(rowNum)
+                                
+                                // Calculate offsets for multiple images
+                                // POI XSSF uses EMU units (1 pixel = 9525 EMUs)
+                                val emuPerPx = 9525
+                                val imgSizePx = 100
+                                val paddingPx = 10
+                                
+                                anchor.dx1 = (colOffset * (imgSizePx + paddingPx) + paddingPx) * emuPerPx
+                                anchor.dy1 = paddingPx * emuPerPx
+                                anchor.dx2 = anchor.dx1 + (imgSizePx * emuPerPx)
+                                anchor.dy2 = anchor.dy1 + (imgSizePx * emuPerPx)
+                                
+                                drawing.createPicture(anchor, pictureIdx)
+                                colOffset++
+                            }
+                        }
+                    }
+                    rowNum++
+                }
+            } else {
+                val row = sheet.createRow(rowNum)
+                row.createCell(0).apply { setCellValue(item.date); this.cellStyle = baseCellStyle }
+                row.createCell(1).apply { setCellValue(item.companyName ?: ""); this.cellStyle = baseCellStyle }
+                row.createCell(2).apply { setCellValue(item.projectName ?: ""); this.cellStyle = baseCellStyle }
+                row.createCell(3).apply { setCellValue(item.topic ?: ""); this.cellStyle = baseCellStyle }
+                row.createCell(4).apply {
+                    setCellValue(item.status)
+                    cellStyle = if (isCompleted) statusCompletedStyle else statusPendingStyle
+                }
+                row.createCell(5).apply { setCellValue(""); this.cellStyle = baseCellStyle }
+                row.createCell(6).apply { setCellValue(""); this.cellStyle = baseCellStyle }
+                row.createCell(7).apply { setCellValue("ยังไม่ส่ง"); this.cellStyle = baseCellStyle }
+                row.createCell(8).apply { setCellValue(""); this.cellStyle = baseCellStyle }
+                row.createCell(9).apply { setCellValue("ไม่มี"); this.cellStyle = baseCellStyle }
+                row.createCell(10).apply { setCellValue("0"); this.cellStyle = baseCellStyle }
+                row.createCell(11).apply { setCellValue(""); this.cellStyle = baseCellStyle }
+                row.createCell(12).apply { setCellValue(""); this.cellStyle = baseCellStyle }
+                row.createCell(13).apply { setCellValue(item.results.joinToString("\n")); this.cellStyle = baseCellStyle }
+                row.createCell(14).apply { setCellValue(""); this.cellStyle = baseCellStyle }
+                rowNum++
+            }
+        }
+
+        val file = File(context.cacheDir, "$fileName.xlsx")
+        FileOutputStream(file).use { out ->
+            workbook.write(out)
+        }
+        workbook.close()
+
+        val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+        
+        // Launch intent on main thread
+        withContext(Dispatchers.Main) {
+            val intent = Intent(Intent.ACTION_SEND).apply {
+                type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                putExtra(Intent.EXTRA_SUBJECT, fileName)
+                putExtra(Intent.EXTRA_STREAM, uri)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            context.startActivity(Intent.createChooser(intent, "Share Excel Report"))
+        }
+    }
+}
+
+suspend fun exportToPdf(context: Context, fileName: String, activities: List<ExportActivityItem>) {
     val doc         = PdfDocument()
     val paint       = Paint()
     val titlePaint  = Paint().apply { textSize = 18f; isFakeBoldText = true }
@@ -705,22 +898,25 @@ fun exportToPdf(context: Context, fileName: String, activities: List<ExportActiv
 
                 val detailParts = mutableListOf<String>()
                 if (!res.newStatus.isNullOrBlank()) detailParts.add("สถานะใหม่: ${res.newStatus}")
-                if (!res.opportunityScore.isNullOrBlank()) detailParts.add("โอกาส: ${res.opportunityScore}")
-                if (!res.dealPosition.isNullOrBlank()) detailParts.add("ดีล: ${res.dealPosition}")
-                if (res.isProposalSent) detailParts.add("ส่งใบเสนอราคา (${res.proposalDate ?: ""})")
-                if (res.dmInvolved) detailParts.add("DM ร่วมประชุม")
+                if (!res.opportunityScore.isNullOrBlank()) detailParts.add("โอกาส: ${res.opportunityScore}%")
+                if (res.isProposalSent) {
+                    detailParts.add("proposal: ใช่ (${res.proposalDate ?: ""})")
+                } else {
+                    detailParts.add("proposal: ไม่ใช่")
+                }
+                if (res.dmInvolved) detailParts.add("DM ร่วมประชุม: มี")
                 if (res.competitorCount > 0) detailParts.add("คู่แข่ง: ${res.competitorCount} ราย")
-                if (!res.responseSpeed.isNullOrBlank()) detailParts.add("ตอบสนอง: ${res.responseSpeed}")
                 if (!res.previousSolution.isNullOrBlank()) detailParts.add("โซลูชันเดิม: ${res.previousSolution}")
                 if (!res.lossReason.isNullOrBlank()) detailParts.add("เหตุผลแพ้: ${res.lossReason}")
 
                 if (detailParts.isNotEmpty()) {
-                    val detailLine = "รายละเอียด: " + detailParts.joinToString(" | ")
-                    val dLines = wrapTextLines(detailLine, subPaint, 370f)
-                    dLines.forEach { line ->
-                        checkPageBreak(13f)
-                        canvas.drawText(line, 160f, y, subPaint)
-                        y += 13f
+                    detailParts.forEach { detail ->
+                        val dLines = wrapTextLines("  - $detail", subPaint, 370f)
+                        dLines.forEach { line ->
+                            checkPageBreak(13f)
+                            canvas.drawText(line, 160f, y, subPaint)
+                            y += 13f
+                        }
                     }
                 }
 
@@ -729,14 +925,52 @@ fun exportToPdf(context: Context, fileName: String, activities: List<ExportActiv
                     canvas.drawText("รูปภาพแนบ (${res.photoUrls.size} รูป):", 160f, y, subPaint)
                     y += 13f
 
-                    res.photoUrls.forEachIndexed { idx, pUrl ->
-                        val formattedUrl = formatPhotoUrl(pUrl)
-                        val pLines = wrapTextLines("  [${idx + 1}] $formattedUrl", linkPaint, 360f)
-                        pLines.forEach { line ->
-                            checkPageBreak(12f)
-                            canvas.drawText(line, 160f, y, linkPaint)
-                            y += 12f
+                    res.photoUrls.chunked(2).forEach { rowUrls ->
+                        val rowItems = rowUrls.map { pUrl ->
+                            val formattedUrl = formatPhotoUrl(pUrl)
+                            val bytes = getPhotoBytes(context, pUrl)
+                            val originalBitmap = bytes?.let {
+                                BitmapFactory.decodeByteArray(it, 0, it.size)
+                            }
+                            Pair(formattedUrl, originalBitmap)
                         }
+
+                        var rowMaxH = 0f
+                        val renderItems = rowItems.map { (url, bitmap) ->
+                            if (bitmap != null) {
+                                val maxW = 190f
+                                val maxH = 190f
+                                val scale = minOf(maxW / bitmap.width, maxH / bitmap.height)
+                                val finalW = (bitmap.width * scale).toInt()
+                                val finalH = (bitmap.height * scale).toInt()
+                                val scaledBitmap = android.graphics.Bitmap.createScaledBitmap(bitmap, finalW, finalH, true)
+                                rowMaxH = maxOf(rowMaxH, finalH.toFloat())
+                                Triple(url, scaledBitmap, finalH.toFloat())
+                            } else {
+                                val pLines = wrapTextLines(url, linkPaint, 190f)
+                                val textH = pLines.size * 12f
+                                rowMaxH = maxOf(rowMaxH, textH)
+                                Triple(url, null, textH)
+                            }
+                        }
+
+                        checkPageBreak(rowMaxH + 10f)
+
+                        var currentX = 160f
+                        renderItems.forEach { (url, scaledBitmap, _) ->
+                            if (scaledBitmap != null) {
+                                canvas.drawBitmap(scaledBitmap, currentX, y, null)
+                            } else {
+                                val pLines = wrapTextLines(url, linkPaint, 190f)
+                                var tempY = y + 12f
+                                pLines.forEach { line ->
+                                    canvas.drawText(line, currentX, tempY, linkPaint)
+                                    tempY += 12f
+                                }
+                            }
+                            currentX += 200f
+                        }
+                        y += rowMaxH + 10f
                     }
                 }
                 y += 4f
@@ -800,10 +1034,12 @@ fun WeeklyReportPreview() {
                         )
                     )
                 ),
+                startDate = LocalDate.now().minusDays(6),
+                endDate = LocalDate.now(),
                 weekRangeText = "23 ต.ค. 2023 - 29 ต.ค. 2023"
             ),
             onBack = {},
-            onDateSelected = {}
+            onDateRangeSelected = { _, _ -> }
         )
     }
 }

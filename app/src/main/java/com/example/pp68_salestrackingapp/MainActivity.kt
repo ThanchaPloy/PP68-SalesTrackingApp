@@ -60,6 +60,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        com.example.pp68_salestrackingapp.utils.NotificationChannels.ensureCreated(this)
         askNotificationPermission()
         askCallLogPermission()
 

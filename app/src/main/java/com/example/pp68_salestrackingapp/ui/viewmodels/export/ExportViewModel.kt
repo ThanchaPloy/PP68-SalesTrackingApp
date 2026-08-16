@@ -22,7 +22,8 @@ data class ExportUiState(
     val isLoading: Boolean = false,
     val activities: List<ExportActivityItem> = emptyList(),
     val projects: List<ExportProjectItem> = emptyList(),
-    val selectedDate: LocalDate = LocalDate.now(),
+    val startDate: LocalDate = LocalDate.now().minusDays(6),
+    val endDate: LocalDate = LocalDate.now(),
     val weekRangeText: String = "",
     val error: String? = null
 )
@@ -76,28 +77,26 @@ class ExportViewModel @Inject constructor(
 
     private val dateFormatter = DateTimeFormatter.ofPattern("d MMM yyyy", Locale("th", "TH"))
 
-    fun loadWeeklyData(date: LocalDate) {
-        val weekFields = WeekFields.of(Locale.getDefault())
-        val startOfWeek = date.with(weekFields.dayOfWeek(), 1L)
-        val endOfWeek = date.with(weekFields.dayOfWeek(), 7L)
-
-        val rangeText = "${startOfWeek.format(dateFormatter)} - ${endOfWeek.format(dateFormatter)}"
-
-        _uiState.update { it.copy(selectedDate = date, weekRangeText = rangeText) }
-
+    fun loadWeeklyData(start: LocalDate, end: LocalDate) {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, error = null) }
-            
             try {
+                // Formatting for display
+                val startStr = start.format(DateTimeFormatter.ofPattern("d MMM yyyy", Locale("th", "TH")))
+                val endStr = end.format(DateTimeFormatter.ofPattern("d MMM yyyy", Locale("th", "TH")))
+                val weekRangeStr = "$startStr - $endStr"
+
+                _uiState.update { it.copy(startDate = start, endDate = end, weekRangeText = weekRangeStr) }
+            
                 val activitiesResult = activityRepo.getMyActivitiesWithDetails()
                 val allActivities = activitiesResult.getOrThrow()
                 val allResults = activityRepo.getAllResultsFlow().first()
 
-                val filteredActivities = allActivities.filter { card ->
+                val filteredActivities = allActivities.filter { act ->
                     try {
-                        if (card.plannedDate.isNullOrBlank()) false else {
-                            val d = LocalDate.parse(card.plannedDate.take(10))
-                            !d.isBefore(startOfWeek) && !d.isAfter(endOfWeek)
+                        if (act.plannedDate.isNullOrBlank()) false else {
+                            val d = LocalDate.parse(act.plannedDate.take(10))
+                            !d.isBefore(start) && !d.isAfter(end)
                         }
                     } catch (e: Exception) { false }
                 }
@@ -106,7 +105,7 @@ class ExportViewModel @Inject constructor(
                     try {
                         if (res.reportDate.isNullOrBlank()) false else {
                             val d = LocalDate.parse(res.reportDate.take(10))
-                            !d.isBefore(startOfWeek) && !d.isAfter(endOfWeek)
+                            !d.isBefore(start) && !d.isAfter(end)
                         }
                     } catch (e: Exception) { false }
                 }

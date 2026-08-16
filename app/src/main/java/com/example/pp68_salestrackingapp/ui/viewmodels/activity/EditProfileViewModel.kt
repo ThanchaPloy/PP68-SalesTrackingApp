@@ -62,6 +62,10 @@ class EditProfileViewModel @Inject constructor(
     fun onPhoneChange(v: String)       = _uiState.update { it.copy(phoneNumber = v) }
     fun onEmailChange(v: String)       = _uiState.update { it.copy(email = v) }
 
+    fun resetSavedState() {
+        _uiState.update { it.copy(isSaved = false) }
+    }
+
     fun save() {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, error = null) }

@@ -5,11 +5,15 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.READ_CALL_LOG" />
     <uses-permission android:name="android.permission.READ_CONTACTS" />
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-feature android:name="android.hardware.camera" android:required="false" />
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
 
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES"/>
     <!-- ✅ ต้องใช้สำหรับอ่านตำแหน่ง GPS จาก EXIF ใน Android 10+ -->
@@ -40,7 +44,21 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="salestracking" android:host="activity" />
+            </intent-filter>
         </activity>
+
+        <receiver
+            android:name=".receiver.GeofenceBroadcastReceiver"
+            android:exported="false" />
+
+        <receiver
+            android:name=".receiver.AppointmentAlarmReceiver"
+            android:exported="false" />
 
         <service
             android:name=".service.SalesTrackingFirebaseService"

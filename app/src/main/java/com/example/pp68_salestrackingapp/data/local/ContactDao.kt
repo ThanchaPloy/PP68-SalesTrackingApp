@@ -5,6 +5,7 @@ import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Transaction
+import androidx.room.Update
 import com.example.pp68_salestrackingapp.data.model.ContactPerson
 import kotlinx.coroutines.flow.Flow
 
@@ -41,8 +42,32 @@ interface ContactDao {
     @Query("SELECT * FROM contact_person WHERE custId = :customerId")
     fun getContactsByCustomer(customerId: String): Flow<List<ContactPerson>>
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertAll(contacts: List<ContactPerson>)
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertAllRaw(contacts: List<ContactPerson>): List<Long>
+
+    @Update
+    suspend fun updateContacts(contacts: List<ContactPerson>)
+
+    @Query("SELECT contactId FROM contact_person WHERE is_synced = 0")
+    suspend fun getUnsyncedContactIds(): List<String>
+
+    @Transaction
+    suspend fun insertAll(contacts: List<ContactPerson>) {
+        val insertResults = insertAllRaw(contacts)
+        val updateList = mutableListOf<ContactPerson>()
+        var unsyncedIds: Set<String>? = null
+        for (i in insertResults.indices) {
+            if (insertResults[i] == -1L) {
+                if (unsyncedIds == null) unsyncedIds = getUnsyncedContactIds().toSet()
+                if (!unsyncedIds.contains(contacts[i].contactId)) {
+                    updateList.add(contacts[i])
+                }
+            }
+        }
+        if (updateList.isNotEmpty()) {
+            updateContacts(updateList)
+        }
+    }
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertContact(contact: ContactPerson)

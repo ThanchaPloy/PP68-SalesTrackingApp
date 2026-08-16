@@ -44,6 +44,9 @@ class ActivityDetailViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(ActivityDetailUiState())
     val uiState: StateFlow<ActivityDetailUiState> = _uiState
 
+    private var lastLat: Double? = null
+    private var lastLng: Double? = null
+
     fun loadActivity(id: String) {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, error = null) }
@@ -79,6 +82,12 @@ class ActivityDetailViewModel @Inject constructor(
                 )
             }
 
+            lastLat?.let { lat ->
+                lastLng?.let { lng ->
+                    updateCurrentLocation(lat, lng)
+                }
+            }
+
             if (actResult.isFailure) {
                 _uiState.update {
                     it.copy(error = "ไม่สามารถโหลดข้อมูลได้: ${actResult.exceptionOrNull()?.message}")
@@ -99,7 +108,6 @@ class ActivityDetailViewModel @Inject constructor(
         if (timeStr.isNullOrBlank()) return null
         return try {
             val cleanTime = timeStr.trim()
-            // รองรับทั้ง HH:mm:ss และ hh:mm a
             val inputFormats = listOf("HH:mm:ss", "HH:mm", "hh:mm:ss a", "hh:mm a")
             var parsedDate: java.util.Date? = null
 
@@ -120,6 +128,8 @@ class ActivityDetailViewModel @Inject constructor(
     }
 
     fun updateCurrentLocation(lat: Double, lng: Double) {
+        lastLat = lat
+        lastLng = lng
         val act = _uiState.value.activity ?: return
         val plannedLat = act.plannedLat ?: return
         val plannedLng = act.plannedLong ?: return

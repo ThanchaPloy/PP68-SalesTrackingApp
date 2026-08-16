@@ -90,6 +90,7 @@ sealed class CreateAppointmentEvent {
 
 @HiltViewModel
 class CreateAppointmentViewModel @Inject constructor(
+    @dagger.hilt.android.qualifiers.ApplicationContext private val context: android.content.Context,
     private val activityRepo: ActivityRepository,
     private val projectRepo:  ProjectRepository,
     private val customerRepo: CustomerRepository,
@@ -276,7 +277,7 @@ class CreateAppointmentViewModel @Inject constructor(
                         selectedCustomerId = activity.customerId,
                         titleTopic        = activity.detail ?: "",
                         activityType      = activity.activityType,
-                        plannedDate       = formatDateForUI(activity.activityDate),
+                        plannedDate       = activity.activityDate,
                         startTime         = activity.plannedTime,
                         endTime           = activity.plannedEndTime,
                         lat               = activity.plannedLat,
@@ -519,7 +520,7 @@ class CreateAppointmentViewModel @Inject constructor(
             }
 
             val isEditMode = s.activityId != null
-            val isoDate = s.plannedDate?.let { parseToIsoDate(it) } ?: LocalDate.now().toString()
+            val isoDate = s.plannedDate?.let { if (it.length >= 10) it.take(10) else parseToIsoDate(it) } ?: LocalDate.now().toString()
 
             val selectedContactNames = s.allContactOptions
                 .filter { it.id in s.selectedContactIds }
@@ -598,6 +599,44 @@ class CreateAppointmentViewModel @Inject constructor(
 
             if (planItems.isNotEmpty()) {
                 activityRepo.savePlanItems(finalId, planItems)
+            }
+
+            // ⏰ ตั้งเวลาแจ้งเตือนล่วงหน้า 30 นาที
+            try {
+                val alarmScheduler = com.example.pp68_salestrackingapp.utils.AppointmentAlarmScheduler(context)
+                alarmScheduler.scheduleAlarm(
+                    activityId = finalId,
+                    companyName = s.selectedCompanyName ?: "สถานที่นัดหมาย",
+                    topic = s.titleTopic,
+                    plannedDateStr = isoDate,
+                    plannedTimeStr = s.startTime ?: "09:00"
+                )
+            } catch (e: Exception) {
+                android.util.Log.e("CreateApptVM", "ตั้ง Alarm ไม่สำเร็จ: ${e.message}")
+            }
+
+            // 📍 ตั้ง Geofence แจ้งเตือนเมื่อเข้าใกล้สถานที่
+            try {
+                var targetLat = s.lat
+                var targetLng = s.lng
+                if ((targetLat == null || targetLng == null) && customerId != null) {
+                    val cust = customerRepo.getCustomerById(customerId).getOrNull()
+                    targetLat = cust?.companyLat
+                    targetLng = cust?.companyLong
+                }
+                if (targetLat != null && targetLng != null) {
+                    val geofenceManager = com.example.pp68_salestrackingapp.utils.GeofenceManager(context)
+                    geofenceManager.addGeofenceForActivity(
+                        activityId = finalId,
+                        companyName = s.selectedCompanyName ?: "สถานที่นัดหมาย",
+                        lat = targetLat,
+                        lng = targetLng,
+                        plannedDate = isoDate,
+                        plannedTime = s.startTime ?: ""
+                    )
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("CreateApptVM", "ตั้ง Geofence ไม่สำเร็จ: ${e.message}")
             }
 
             _uiState.update { it.copy(isLoading = false, isSaved = true) }

@@ -606,6 +606,16 @@ private fun PhotoUploadSection(
         if (hasPermission) launchCamera() else permissionLauncher.launch(Manifest.permission.CAMERA)
     }
 
+    val galleryLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.PickMultipleVisualMedia(MAX_RESULT_PHOTOS)
+    ) { uris ->
+        if (uris.isNotEmpty()) onPhotosPicked(uris)
+    }
+
+    fun launchGallery() {
+        galleryLauncher.launch(androidx.activity.result.PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+    }
+
     Column(modifier = Modifier.fillMaxWidth()) {
         Text(
             "ถ่ายรูปบันทึกการเข้าพบได้สูงสุด $MAX_RESULT_PHOTOS รูป (ต้องถ่ายจากกล้องในแอปเท่านั้น)",
@@ -652,18 +662,39 @@ private fun PhotoUploadSection(
 
             if (photos.size < MAX_RESULT_PHOTOS) {
                 item {
-                    Box(
-                        modifier = Modifier
-                            .size(96.dp)
-                            .clip(RoundedCornerShape(10.dp))
-                            .border(1.dp, BorderGray, RoundedCornerShape(10.dp))
-                            .clickable { requestCameraCapture() },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Icon(Icons.Default.PhotoCamera, null, tint = TextGray, modifier = Modifier.size(26.dp))
-                            Spacer(Modifier.height(4.dp))
-                            Text("ถ่ายรูป", fontSize = 11.sp, color = TextGray)
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Box(
+                            modifier = Modifier
+                                .size(96.dp)
+                                .clip(RoundedCornerShape(10.dp))
+                                .border(1.dp, BorderGray, RoundedCornerShape(10.dp))
+                                .clickable { requestCameraCapture() },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Icon(Icons.Default.PhotoCamera, null, tint = TextGray, modifier = Modifier.size(26.dp))
+                                Spacer(Modifier.height(4.dp))
+                                Text("ถ่ายรูป", fontSize = 11.sp, color = TextGray)
+                            }
+                        }
+                    }
+                }
+                
+                item {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Box(
+                            modifier = Modifier
+                                .size(96.dp)
+                                .clip(RoundedCornerShape(10.dp))
+                                .border(1.dp, BorderGray, RoundedCornerShape(10.dp))
+                                .clickable { launchGallery() },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Icon(Icons.Default.PhotoLibrary, null, tint = TextGray, modifier = Modifier.size(26.dp))
+                                Spacer(Modifier.height(4.dp))
+                                Text("เลือกจากคลัง", fontSize = 11.sp, color = TextGray)
+                            }
                         }
                     }
                 }

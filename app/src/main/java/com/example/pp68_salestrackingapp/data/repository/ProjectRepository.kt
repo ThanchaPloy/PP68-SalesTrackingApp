@@ -112,15 +112,21 @@ class ProjectRepository @Inject constructor(
                     val realId = response.body()?.firstOrNull()?.projectId
                     Log.d("ProjectRepo", "realId=$realId tempId=$tempId")
                     val finalProject = if (realId != null && realId != tempId) {
-                        val real = tempProject.copy(projectId = realId, isSynced = true)
+                        val returnedProject = response.body()?.first()
+                        val real = (returnedProject ?: tempProject.copy(projectId = realId)).copy(isSynced = true)
                         projectDao.insertProject(real)
                         projectContactDao.updateProjectId(tempId, realId)
                         projectSalesMemberDao.updateProjectId(tempId, realId)
                         projectDao.deleteProjectById(tempId)
                         real
                     } else {
-                        projectDao.updateSyncStatus(tempId, true)
-                        tempProject
+                        val returnedProject = response.body()?.firstOrNull()
+                        if (returnedProject != null) {
+                            projectDao.insertProject(returnedProject.copy(isSynced = true))
+                        } else {
+                            projectDao.updateSyncStatus(tempId, true)
+                        }
+                        returnedProject?.copy(isSynced = true) ?: tempProject
                     }
                     try {
                         apiService.addProjectMembers(listOf(ProjectMemberInsertDto(finalProject.projectId, userId, "owner")))
@@ -167,8 +173,9 @@ class ProjectRepository @Inject constructor(
                 project.projectLong?.let { updates["project_long"] = it }
 
                 val response = apiService.updateProject("eq.${project.projectId}", updates)
-                if (response.isSuccessful) {
-                    projectDao.updateSyncStatus(project.projectId, true)
+                if (response.isSuccessful && response.body()?.isNotEmpty() == true) {
+                    val returnedProject = response.body()!!.first().copy(isSynced = true)
+                    projectDao.insertProject(returnedProject)
                     firebaseService.updateProjectStatus(project.projectId, project.projectStatus ?: "", project.projectName, updatedBy)
                     kotlin.Result.success(Unit)
                 } else {
@@ -185,8 +192,17 @@ class ProjectRepository @Inject constructor(
     suspend fun deleteProject(projectId: String): Result<Unit> {
         return withContext(Dispatchers.IO) {
             try {
+                if (projectId.startsWith("TEMP-")) {
+                    projectDao.deleteProjectById(projectId)
+                    return@withContext Result.success(Unit)
+                }
                 apiService.deleteProjectMembers("eq.$projectId")
                 apiService.deleteProjectContacts("eq.$projectId")
+                try {
+                    apiService.deleteProjectProductsByProject("eq.$projectId")
+                } catch (e: Exception) {
+                    Log.e("ProjectRepo", "Failed to delete project products: ${e.message}")
+                }
                 val response = apiService.deleteProject("eq.$projectId")
                 if (response.isSuccessful) {
                     projectDao.deleteProjectById(projectId)
@@ -340,11 +356,12 @@ class ProjectRepository @Inject constructor(
     suspend fun updateProjectFields(projectId: String, fields: Map<String, Any?>): Result<Unit> {
         return try {
             val response = apiService.updateProject("eq.$projectId", fields)
-            if (response.isSuccessful) {
+            if (response.isSuccessful && response.body()?.isNotEmpty() == true) {
+                val returnedProject = response.body()!!.first().copy(isSynced = true)
+                projectDao.insertProject(returnedProject)
                 val newStatus = fields["project_status"] as? String
                 if (newStatus != null) {
-                    val project = projectDao.getProjectById(projectId)
-                    project?.let { firebaseService.updateProjectStatus(projectId, newStatus, it.projectName, "") }
+                    firebaseService.updateProjectStatus(projectId, newStatus, returnedProject.projectName, "")
                 }
                 Result.success(Unit)
             } else Result.failure(Exception("API Error: ${response.code()}"))

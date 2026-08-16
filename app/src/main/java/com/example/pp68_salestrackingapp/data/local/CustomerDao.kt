@@ -5,6 +5,7 @@ import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Transaction
+import androidx.room.Update
 import com.example.pp68_salestrackingapp.data.model.Customer
 import kotlinx.coroutines.flow.Flow
 
@@ -23,8 +24,32 @@ interface CustomerDao {
     @Query("SELECT * FROM customer WHERE cust_id = :customerId")
     suspend fun getCustomerById(customerId: String): Customer?
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertCustomers(customers: List<Customer>)
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertCustomersRaw(customers: List<Customer>): List<Long>
+
+    @Update
+    suspend fun updateCustomers(customers: List<Customer>)
+
+    @Query("SELECT cust_id FROM customer WHERE is_synced = 0")
+    suspend fun getUnsyncedCustomerIds(): List<String>
+
+    @Transaction
+    suspend fun insertCustomers(customers: List<Customer>) {
+        val insertResults = insertCustomersRaw(customers)
+        val updateList = mutableListOf<Customer>()
+        var unsyncedIds: Set<String>? = null
+        for (i in insertResults.indices) {
+            if (insertResults[i] == -1L) {
+                if (unsyncedIds == null) unsyncedIds = getUnsyncedCustomerIds().toSet()
+                if (!unsyncedIds.contains(customers[i].custId)) {
+                    updateList.add(customers[i])
+                }
+            }
+        }
+        if (updateList.isNotEmpty()) {
+            updateCustomers(updateList)
+        }
+    }
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertCustomer(customer: Customer)

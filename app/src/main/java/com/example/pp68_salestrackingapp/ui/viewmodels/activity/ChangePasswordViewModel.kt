@@ -31,6 +31,10 @@ class ChangePasswordViewModel @Inject constructor(
     fun onNewPasswordChange(v: String) = _uiState.update { it.copy(newPassword = v, error = null) }
     fun onConfirmPasswordChange(v: String) = _uiState.update { it.copy(confirmPassword = v, error = null) }
 
+    fun resetSuccessState() {
+        _uiState.update { it.copy(isSuccess = false, oldPassword = "", newPassword = "", confirmPassword = "") }
+    }
+
     fun save() {
         val s = _uiState.value
 

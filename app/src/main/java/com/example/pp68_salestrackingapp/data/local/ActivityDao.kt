@@ -38,13 +38,20 @@ interface ActivityDao {
     @Update
     suspend fun updateActivityRaw(activity: SalesActivity)
 
+    @Query("SELECT appointment_id FROM activity_table WHERE is_synced = 0")
+    suspend fun getUnsyncedActivityIds(): List<String>
+
     @Transaction
     suspend fun insertActivities(activities: List<SalesActivity>) {
         val insertResults = insertActivitiesRaw(activities)
         val updateList = mutableListOf<SalesActivity>()
+        var unsyncedIds: Set<String>? = null
         for (i in insertResults.indices) {
             if (insertResults[i] == -1L) {
-                updateList.add(activities[i])
+                if (unsyncedIds == null) unsyncedIds = getUnsyncedActivityIds().toSet()
+                if (!unsyncedIds.contains(activities[i].activityId)) {
+                    updateList.add(activities[i])
+                }
             }
         }
         if (updateList.isNotEmpty()) {

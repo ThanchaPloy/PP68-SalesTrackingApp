@@ -32,6 +32,10 @@ class SettingsViewModel @Inject constructor(
         _uiState.value = SettingsUiState(user = currentUser)
     }
 
+    fun refreshUser() {
+        loadUser()
+    }
+
     fun logout() {
         viewModelScope.launch {
             authRepo.logout()

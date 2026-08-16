@@ -34,15 +34,15 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         val postgrestUrl = localProperties.getProperty("POSTGREST_URL")
-            ?: "https://postgrest-279493695905.asia-southeast1.run.app/"
+            ?: "https://api-ploy.cskmitl.com/"
         val jwtSecret    = localProperties.getProperty("JWT_SECRET") ?: ""
         val baseAuthUrl  = localProperties.getProperty("BASE_AUTH_URL")
-            ?: "https://pp68-backend-279493695905.asia-southeast1.run.app/"
+            ?: "https://api-ploy.cskmitl.com/"
         val uploadUrl    = localProperties.getProperty("UPLOAD_URL")
-            ?: "https://upload-visit-photo-279493695905.asia-southeast1.run.app/"
+            ?: "https://api-ploy.cskmitl.com/"
         buildConfigField("String", "POSTGREST_URL", "\"$postgrestUrl\"")
         buildConfigField("String", "JWT_SECRET",    "\"$jwtSecret\"")
-        buildConfigField("String", "GCP_ENDPOINT", "\"https://postgrest-279493695905.asia-southeast1.run.app\"")
+        buildConfigField("String", "GCP_ENDPOINT", "\"https://api-ploy.cskmitl.com\"")
         buildConfigField("String", "BASE_AUTH_URL", "\"$baseAuthUrl\"")
         buildConfigField("String", "UPLOAD_URL",    "\"$uploadUrl\"")
 
@@ -183,6 +183,10 @@ dependencies {
     //photo
     implementation("io.coil-kt:coil-compose:2.5.0")
     implementation("androidx.exifinterface:exifinterface:1.3.7")
+    
+    // Apache POI for Excel export
+    implementation("org.apache.poi:poi:5.2.5")
+    implementation("org.apache.poi:poi-ooxml:5.2.5")
 }
 
 tasks.register<JacocoReport>("jacocoTestReport") {

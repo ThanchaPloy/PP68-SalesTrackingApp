@@ -78,8 +78,8 @@ fun CreateAppointmentScreen(
         }
     }
 
-    LaunchedEffect(state.activityType) {
-        if (state.activityType == "onsite" && state.lat == null && state.lng == null) {
+    LaunchedEffect(state.activityType, activityId) {
+        if (activityId == null && state.activityType == "onsite" && state.lat == null && state.lng == null) {
             if (hasLocationPermission) {
                 fetchLocation(fusedLocationClient) { lat, lng ->
                     onEvent(CreateAppointmentEvent.LocationPicked(lat, lng))
@@ -316,7 +316,8 @@ fun CreateAppointmentScreen(
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.SpaceBetween
                             ) {
-                                Text(state.startTime ?: "เริ่ม", fontSize = 14.sp, color = if (state.startTime == null) TextGray else TextDark)
+                                val displayStart = state.startTime?.take(5) ?: "เริ่ม"
+                                Text(displayStart, fontSize = 14.sp, color = if (state.startTime == null) TextGray else TextDark)
                                 Icon(Icons.Default.AccessTime, null, modifier = Modifier.size(18.dp), tint = TextGray)
                             }
                         }
@@ -332,7 +333,8 @@ fun CreateAppointmentScreen(
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.SpaceBetween
                             ) {
-                                Text(state.endTime ?: "สิ้นสุด", fontSize = 14.sp, color = if (state.endTime == null) TextGray else TextDark)
+                                val displayEnd = state.endTime?.take(5) ?: "สิ้นสุด"
+                                Text(displayEnd, fontSize = 14.sp, color = if (state.endTime == null) TextGray else TextDark)
                                 Icon(Icons.Default.AccessTime, null, modifier = Modifier.size(18.dp), tint = TextGray)
                             }
                         }
@@ -487,10 +489,13 @@ fun CreateAppointmentScreen(
     }
 
     if (state.showStartTimePicker) {
+        val (h, m) = parseTimeStringToHourMinute(state.startTime)
         TimePickerDialogWrapper(
-            onConfirm = { h, m ->
+            initialHour = h,
+            initialMinute = m,
+            onConfirm = { hour, minute ->
                 onEvent(CreateAppointmentEvent.StartTimeSelected(
-                    "%02d:%02d %s".format(if (h > 12) h - 12 else if (h == 0) 12 else h, m, if (h >= 12) "PM" else "AM")
+                    "%02d:%02d:00".format(hour, minute)
                 ))
             },
             onDismiss = { onEvent(CreateAppointmentEvent.DismissTimePicker) }
@@ -498,10 +503,13 @@ fun CreateAppointmentScreen(
     }
 
     if (state.showEndTimePicker) {
+        val (h, m) = parseTimeStringToHourMinute(state.endTime)
         TimePickerDialogWrapper(
-            onConfirm = { h, m ->
+            initialHour = h,
+            initialMinute = m,
+            onConfirm = { hour, minute ->
                 onEvent(CreateAppointmentEvent.EndTimeSelected(
-                    "%02d:%02d %s".format(if (h > 12) h - 12 else if (h == 0) 12 else h, m, if (h >= 12) "PM" else "AM")
+                    "%02d:%02d:00".format(hour, minute)
                 ))
             },
             onDismiss = { onEvent(CreateAppointmentEvent.DismissTimePicker) }
@@ -524,13 +532,36 @@ private fun fetchLocation(
     }
 }
 
+fun parseTimeStringToHourMinute(timeStr: String?): Pair<Int, Int> {
+    if (timeStr.isNullOrBlank()) return Pair(12, 0)
+    return try {
+        if (timeStr.length >= 5 && timeStr[2] == ':') {
+            val h = timeStr.substring(0, 2).toIntOrNull() ?: 12
+            val m = timeStr.substring(3, 5).toIntOrNull() ?: 0
+            if (timeStr.contains("PM", ignoreCase = true) && h < 12) {
+                Pair(h + 12, m)
+            } else if (timeStr.contains("AM", ignoreCase = true) && h == 12) {
+                Pair(0, m)
+            } else {
+                Pair(h, m)
+            }
+        } else {
+            Pair(12, 0)
+        }
+    } catch (e: Exception) {
+        Pair(12, 0)
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TimePickerDialogWrapper(
+    initialHour: Int = 12,
+    initialMinute: Int = 0,
     onConfirm: (Int, Int) -> Unit,
     onDismiss: () -> Unit
 ) {
-    val state = rememberTimePickerState()
+    val state = rememberTimePickerState(initialHour = initialHour, initialMinute = initialMinute, is24Hour = true)
     AlertDialog(
         onDismissRequest = onDismiss,
         confirmButton = {

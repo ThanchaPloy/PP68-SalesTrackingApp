@@ -189,7 +189,7 @@ class ActivityRepository @Inject constructor(
                     return@withContext kotlin.Result.success(Unit)
                 }
                 val response = apiService.updateActivity("eq.$activityId", updates)
-                if (response.isSuccessful) {
+                if (response.isSuccessful && response.body()?.isNotEmpty() == true) {
                     activityDao.updateSyncStatus(activityId, true)
                     kotlin.Result.success(Unit)
                 } else {
@@ -313,9 +313,10 @@ class ActivityRepository @Inject constructor(
                 val updates = mutableMapOf<String, Any>("plan_status" to "completed")
                 note?.let { updates["note"] = it }
                 val response = apiService.updateActivity("eq.$activityId", updates)
+                val isActuallyUpdated = response.isSuccessful && response.body()?.isNotEmpty() == true
                 activityDao.getActivityById(activityId)?.let {
-                    activityDao.insertActivity(it.copy(status = "completed", note = note, weeklyNote = note, isSynced = response.isSuccessful))
-                    if (!response.isSuccessful) syncManager.scheduleSync()
+                    activityDao.insertActivity(it.copy(status = "completed", note = note, weeklyNote = note, isSynced = isActuallyUpdated))
+                    if (!isActuallyUpdated) syncManager.scheduleSync()
                 }
                 kotlin.Result.success(Unit)
             } catch (e: Exception) {

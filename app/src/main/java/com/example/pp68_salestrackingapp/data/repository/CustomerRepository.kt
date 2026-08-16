@@ -130,8 +130,8 @@ class CustomerRepository @Inject constructor(
                     "gen_bus_posting_group" to localCustomer.branchId,
                     "cust_type"             to localCustomer.custType,
                     "address"               to localCustomer.companyAddr,
-                    "company_lat"           to localCustomer.companyLat,
-                    "company_long"          to localCustomer.companyLong,
+                    "latitude"              to localCustomer.companyLat,
+                    "longitude"             to localCustomer.companyLong,
                     "customer_status"       to localCustomer.companyStatus,
                     "create_date"           to localCustomer.createdAt,
                     "created_at"            to localCustomer.createdAt,
@@ -183,8 +183,8 @@ class CustomerRepository @Inject constructor(
                     put("gen_bus_posting_group", customer.branchId)
                     put("cust_type", customer.custType)
                     put("address", customer.companyAddr)
-                    put("company_lat", customer.companyLat)
-                    put("company_long", customer.companyLong)
+                    put("latitude", customer.companyLat)
+                    put("longitude", customer.companyLong)
                     put("customer_status", customer.companyStatus)
                     put("create_date", customer.createdAt)
                     put("created_at", customer.createdAt)
@@ -193,8 +193,12 @@ class CustomerRepository @Inject constructor(
                     put("grade", customer.grade)
                     put("vat_registration_no", customer.vatRegistrationNo)
                 }.filterValues { it != null }
-                val response = apiService.updateCustomer("eq.$custId", updates)
-                if (response.isSuccessful) {
+                val response = if (customer.isLead) {
+                    apiService.updateLeadCustomer("eq.$custId", updates)
+                } else {
+                    apiService.updateCustomer("eq.$custId", updates)
+                }
+                if (response.isSuccessful && response.body()?.isNotEmpty() == true) {
                     customerDao.updateSyncStatus(custId, true)
                     kotlin.Result.success(Unit)
                 } else {

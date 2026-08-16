@@ -37,8 +37,32 @@ interface ActivityResultDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertResult(result: ActivityResult)
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertAll(results: List<ActivityResult>)
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertAllRaw(results: List<ActivityResult>): List<Long>
+
+    @Update
+    suspend fun updateResults(results: List<ActivityResult>)
+
+    @Query("SELECT result_id FROM activity_result WHERE is_synced = 0")
+    suspend fun getUnsyncedResultIds(): List<String>
+
+    @Transaction
+    suspend fun insertAll(results: List<ActivityResult>) {
+        val insertResults = insertAllRaw(results)
+        val updateList = mutableListOf<ActivityResult>()
+        var unsyncedIds: Set<String>? = null
+        for (i in insertResults.indices) {
+            if (insertResults[i] == -1L) {
+                if (unsyncedIds == null) unsyncedIds = getUnsyncedResultIds().toSet()
+                if (!unsyncedIds.contains(results[i].resultId)) {
+                    updateList.add(results[i])
+                }
+            }
+        }
+        if (updateList.isNotEmpty()) {
+            updateResults(updateList)
+        }
+    }
 
     @Query("DELETE FROM activity_result")
     suspend fun deleteAll()
