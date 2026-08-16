@@ -40,8 +40,8 @@ class GeofenceBroadcastReceiver : BroadcastReceiver() {
                 val lastTriggerTime = prefs.getLong("last_trigger_$activityId", 0L)
                 val currentTime = System.currentTimeMillis()
                 
-                // If triggered within the last 2 hours (7200000 ms), ignore it to prevent spam
-                if (currentTime - lastTriggerTime < 7200000L) {
+                // If triggered within the last 1 hour (3600000 ms), ignore it to prevent spam
+                if (currentTime - lastTriggerTime < 3600000L) {
                     Log.d("GeofenceReceiver", "Geofence for $activityId ignored (already triggered recently)")
                     continue
                 }
