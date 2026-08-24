@@ -1,4 +1,4 @@
-package com.example.pp68_salestrackingapp.ui.screen.dashboard
+﻿package com.example.pp68_salestrackingapp.ui.screen.dashboard
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -220,6 +220,8 @@ fun DashboardScreenContent(
                     label = "คาดว่าจะปิดในเดือนนี้",
                     icon = Icons.Default.Event,
                     modifier = Modifier.fillMaxWidth()
+                Spacer(Modifier.height(4.dp))
+                VisitCountCard(count = s.monthlyVisitCount, label = "จำนวนการเข้าพบเดือนนี้")
                 )
             }
 
@@ -325,7 +327,7 @@ private fun StatCard(
 
 // ── Visit count card — full width ────────────────────────────
 @Composable
-private fun VisitCountCard(count: Int) {
+private fun VisitCountCard(count: Int, label: String = "จำนวนการเข้าพบสัปดาห์นี้") {
     Surface(
         shape    = RoundedCornerShape(14.dp),
         color    = White,
@@ -338,7 +340,7 @@ private fun VisitCountCard(count: Int) {
         ) {
             Column {
                 Text("$count", fontWeight = FontWeight.Bold, fontSize = 28.sp, color = TextDark)
-                Text("จำนวนการเข้าพบสัปดาห์นี้", fontSize = 12.sp, color = TextGray)
+                Text(label, fontSize = 12.sp, color = TextGray)
             }
             Icon(Icons.Default.DirectionsWalk, null,
                 tint = RedPrimary, modifier = Modifier.size(36.dp))

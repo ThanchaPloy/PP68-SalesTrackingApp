@@ -1,4 +1,4 @@
-package com.example.pp68_salestrackingapp.ui.screen.export
+﻿package com.example.pp68_salestrackingapp.ui.screen.export
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -113,7 +113,7 @@ class ExportViewModel @Inject constructor(
                 val projectsMap = projectRepo.getAllProjectsFlow().first().associateBy { it.projectId }
                 val exportItems = mutableListOf<ExportActivityItem>()
 
-                // 1. ✅ ประมวลผลกิจกรรมที่มีนัดหมาย (ดึงเฉพาะบันทึกหลังการขายเวอร์ชันล่าสุด + รูปภาพทั้งหมด)
+                // 1. âœ… à¸›à¸£à¸°à¸¡à¸§à¸¥à¸œà¸¥à¸à¸´à¸ˆà¸à¸£à¸£à¸¡à¸—à¸µà¹ˆà¸¡à¸µà¸™à¸±à¸”à¸«à¸¡à¸²à¸¢ (à¸”à¸¶à¸‡à¹€à¸‰à¸žà¸²à¸°à¸šà¸±à¸™à¸—à¸¶à¸à¸«à¸¥à¸±à¸‡à¸à¸²à¸£à¸‚à¸²à¸¢à¹€à¸§à¸­à¸£à¹Œà¸Šà¸±à¸™à¸¥à¹ˆà¸²à¸ªà¸¸à¸” + à¸£à¸¹à¸›à¸ à¸²à¸žà¸—à¸±à¹‰à¸‡à¸«à¸¡à¸”)
                 filteredActivities.forEach { act ->
                     val matchedResults = allResults.filter { it.activityId == act.activityId }
                     val latestResult = matchedResults
@@ -164,7 +164,7 @@ class ExportViewModel @Inject constructor(
                     )
                 }
 
-                // 2. ✅ ประมวลผลบันทึกที่ไม่มีนัดหมาย (Standalone Results เวอร์ชันล่าสุด + รูปภาพทั้งหมด)
+                // 2. âœ… à¸›à¸£à¸°à¸¡à¸§à¸¥à¸œà¸¥à¸šà¸±à¸™à¸—à¸¶à¸à¸—à¸µà¹ˆà¹„à¸¡à¹ˆà¸¡à¸µà¸™à¸±à¸”à¸«à¸¡à¸²à¸¢ (Standalone Results à¹€à¸§à¸­à¸£à¹Œà¸Šà¸±à¸™à¸¥à¹ˆà¸²à¸ªà¸¸à¸” + à¸£à¸¹à¸›à¸ à¸²à¸žà¸—à¸±à¹‰à¸‡à¸«à¸¡à¸”)
                 val appIdsInWeek = filteredActivities.map { it.activityId }.toSet()
                 val standaloneResults = filteredResults
                     .filter { it.activityId == null || it.activityId !in appIdsInWeek }
@@ -204,7 +204,7 @@ class ExportViewModel @Inject constructor(
                             date = res.reportDate ?: "",
                             projectName = project?.projectName ?: "N/A",
                             companyName = null, 
-                            topic = "บันทึกผลการทำงาน",
+                            topic = "à¸šà¸±à¸™à¸—à¸¶à¸à¸œà¸¥à¸à¸²à¸£à¸—à¸³à¸‡à¸²à¸™",
                             note = "",
                             status = "completed",
                             results = listOfNotNull(res.summary),
@@ -259,7 +259,7 @@ class ExportViewModel @Inject constructor(
     fun generateActivityCsvString(): String {
         val activities = _uiState.value.activities
         val builder = StringBuilder()
-        builder.append("\uFEFFDate,Project Name,Company Name,Topic,Status,New Status,Opportunity Score,Proposal Sent,Proposal Date,DM Involved,Competitor Count,Response Speed,Deal Position,Solution,Loss Reason,Summary,Photo URLs\n")
+        builder.append("\uFEFFDate,Project Name,Company Name,Topic,Status,Check-in Time,New Status,Opportunity Score,Proposal Sent,Proposal Date,DM Involved,Competitor Count,Response Speed,Deal Position,Solution,Loss Reason,Summary,Photo URLs\n")
         activities.forEach { item ->
             val safeProject = item.projectName?.replace("\"", "\"\"") ?: ""
             val safeCompany = item.companyName?.replace("\"", "\"\"") ?: ""
@@ -301,3 +301,4 @@ class ExportViewModel @Inject constructor(
         return builder.toString()
     }
 }
+

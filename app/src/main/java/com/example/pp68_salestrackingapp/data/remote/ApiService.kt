@@ -1,4 +1,4 @@
-package com.example.pp68_salestrackingapp.data.remote
+﻿package com.example.pp68_salestrackingapp.data.remote
 
 import com.example.pp68_salestrackingapp.data.model.*
 import com.google.gson.annotations.SerializedName
@@ -185,7 +185,7 @@ interface ApiService {
     suspend fun deleteProjectContacts(@Query("project_code") projectId: String): Response<Unit>
 
     // ── Products ─────────────────────────────────────────────────
-    @GET("item_silver")
+    @GET("product")
     suspend fun getProductMaster(
         @Query("description") description: String? = null,
         @Query("product_brand_no") brandNo: String? = null,
@@ -194,31 +194,31 @@ interface ApiService {
         @Query("order") order: String = "description.asc"
     ): Response<List<ProductMasterDto>>
 
-    @GET("item_silver")
+    @GET("product")
     suspend fun getProductsByBrand(
         @Query("product_brand_no") brandNo: String,
         @Query("limit") limit: Int = 2000
     ): Response<List<ProductMasterDto>>
 
-    @GET("item_silver")
+    @GET("product")
     suspend fun getProductsByIds(
         @Query("item_no") ids: String,
         @Query("limit") limit: Int = 1000
     ): Response<List<ProductMasterDto>>
 
-    @GET("silver_productbrand_dx")
+    @GET("product_brand")
     suspend fun getProductBrands(@Query("limit") limit: Int = 500): Response<List<ProductBrandDxDto>>
 
-    @GET("silver_productgroup_dx")
+    @GET("product_group")
     suspend fun getProductGroups(@Query("limit") limit: Int = 500): Response<List<ProductGroupDxDto>>
 
-    @GET("silver_productsubgroup_dx")
+    @GET("product_subgroup")
     suspend fun getProductSubgroups(@Query("limit") limit: Int = 500): Response<List<ProductSubgroupDxDto>>
 
-    @GET("silver_productcolor_dx")
+    @GET("product_color")
     suspend fun getProductColors(@Query("limit") limit: Int = 500): Response<List<ProductColorDxDto>>
 
-    @GET("item_silver")
+    @GET("product")
     suspend fun getUnitOfMeasures(
         @Query("select") select: String = "base_unit_of_measure",
         @Query("limit") limit: Int = 2000,
@@ -406,3 +406,4 @@ data class ProductGroupDxDto(@SerializedName("product_group_no") val code: Strin
 data class ProductSubgroupDxDto(@SerializedName("product_subgroup_no") val code: String, @SerializedName("name") val name: String)
 data class ProductColorDxDto(@SerializedName("product_color_no") val code: String, @SerializedName("name") val name: String)
 data class UnitOfMeasureDto(@SerializedName("base_unit_of_measure") val code: String?)
+

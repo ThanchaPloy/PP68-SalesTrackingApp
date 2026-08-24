@@ -1,4 +1,4 @@
-package com.example.pp68_salestrackingapp.ui.viewmodels.dashboard
+﻿package com.example.pp68_salestrackingapp.ui.viewmodels.dashboard
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -61,7 +61,7 @@ class StatsViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(StatsUiState(authUser = authRepo.currentUser()))
     val uiState: StateFlow<StatsUiState> = _uiState
 
-    // ── Date Logic matching Export UI ────────────────────────────
+    // â”€â”€ Date Logic matching Export UI â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     private val today        = LocalDate.now(ZoneId.systemDefault())
     private val weekFields   = WeekFields.of(Locale.getDefault())
     private val weekStart    = today.with(weekFields.dayOfWeek(), 1L)
@@ -131,13 +131,13 @@ class StatsViewModel @Inject constructor(
         customers: List<Customer>,
         currentUserId: String
     ): StatsUiState {
-        // ✅ กรองข้อมูล Lead/Customer ให้เป็นของ User ปัจจุบันรายบุคคล
+        // âœ… à¸à¸£à¸­à¸‡à¸‚à¹‰à¸­à¸¡à¸¹à¸¥ Lead/Customer à¹ƒà¸«à¹‰à¹€à¸›à¹‡à¸™à¸‚à¸­à¸‡ User à¸›à¸±à¸ˆà¸ˆà¸¸à¸šà¸±à¸™à¸£à¸²à¸¢à¸šà¸¸à¸„à¸„à¸¥
         val myCustomers = customers.filter { it.createdBy == currentUserId }
         
-        // ✅ ใช้ข้อมูล Project ทั้งหมดใน DB (ซึ่งถูกกรองมาแล้วว่า User เป็นสมาชิกของโครงการนั้น)
+        // âœ… à¹ƒà¸Šà¹‰à¸‚à¹‰à¸­à¸¡à¸¹à¸¥ Project à¸—à¸±à¹‰à¸‡à¸«à¸¡à¸”à¹ƒà¸™ DB (à¸‹à¸¶à¹ˆà¸‡à¸–à¸¹à¸à¸à¸£à¸­à¸‡à¸¡à¸²à¹à¸¥à¹‰à¸§à¸§à¹ˆà¸² User à¹€à¸›à¹‡à¸™à¸ªà¸¡à¸²à¸Šà¸´à¸à¸‚à¸­à¸‡à¹‚à¸„à¸£à¸‡à¸à¸²à¸£à¸™à¸±à¹‰à¸™)
         val myProjects = projects
 
-        // ── Weekly ────────────────────────────────────────────────────
+        // â”€â”€ Weekly â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         val weeklyLeads = myCustomers.count { c ->
             isInRange(c.createdAt?.take(10), weekStart, weekEnd)
         }
@@ -150,7 +150,7 @@ class StatsViewModel @Inject constructor(
             a.status.lowercase() == "completed" && isInRange(a.activityDate, weekStart, weekEnd)
         }
 
-        // ── Monthly ───────────────────────────────────
+        // â”€â”€ Monthly â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         val closedSales = myProjects
             .filter { it.projectStatus in listOf("PO", "Completed") &&
                     isInRange(it.closingDate ?: it.startDate, monthStart, monthEnd) }
@@ -177,7 +177,7 @@ class StatsViewModel @Inject constructor(
                     isSameMonth(p.closingDate, currentMonth)
         }
 
-        // ── Pipeline stages ───────────────────────────
+        // â”€â”€ Pipeline stages â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         val stageOrder = listOf(
             "Lead", "New Project", "Quotation", "Bidding",
             "Make a Decision", "Assured", "PO", "Completed", "Lost", "Failed"
@@ -191,7 +191,7 @@ class StatsViewModel @Inject constructor(
             )
         }.filter { it.count > 0 }
 
-        // ── Opportunity HOT/WARM/COLD ─────────────────
+        // â”€â”€ Opportunity HOT/WARM/COLD â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         val scoreOrder = listOf("HOT", "WARM", "COLD")
         val oppGroups = scoreOrder.map { score ->
             val scored = myProjects.filter {
@@ -246,3 +246,4 @@ class StatsViewModel @Inject constructor(
         } catch (e: Exception) { false }
     }
 }
+

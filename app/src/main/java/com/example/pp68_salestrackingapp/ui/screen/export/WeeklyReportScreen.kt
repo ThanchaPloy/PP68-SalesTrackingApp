@@ -1,4 +1,4 @@
-package com.example.pp68_salestrackingapp.ui.screen.export
+﻿package com.example.pp68_salestrackingapp.ui.screen.export
 
 import android.content.Context
 import android.content.Intent
@@ -99,12 +99,12 @@ fun WeeklyReportContent(
             try {
                 withContext(Dispatchers.IO) { block() }
                 snackbarState.showSnackbar(
-                    message  = "✅ ส่งออก $label เรียบร้อยแล้ว",
+                    message  = "âœ… à¸ªà¹ˆà¸‡à¸­à¸­à¸ $label à¹€à¸£à¸µà¸¢à¸šà¸£à¹‰à¸­à¸¢à¹à¸¥à¹‰à¸§",
                     duration = SnackbarDuration.Short
                 )
             } catch (e: Exception) {
                 snackbarState.showSnackbar(
-                    message  = "❌ เกิดข้อผิดพลาด: ${e.message}",
+                    message  = "âŒ à¹€à¸à¸´à¸”à¸‚à¹‰à¸­à¸œà¸´à¸”à¸žà¸¥à¸²à¸”: ${e.message}",
                     duration = SnackbarDuration.Long
                 )
             } finally {
@@ -126,10 +126,10 @@ fun WeeklyReportContent(
                         onDateRangeSelected(startDate, endDate)
                     }
                     showDatePicker = false
-                }) { Text("ตกลง", color = RedReport) }
+                }) { Text("à¸•à¸à¸¥à¸‡", color = RedReport) }
             },
             dismissButton = {
-                TextButton(onClick = { showDatePicker = false }) { Text("ยกเลิก") }
+                TextButton(onClick = { showDatePicker = false }) { Text("à¸¢à¸à¹€à¸¥à¸´à¸") }
             }
         ) {
             DateRangePicker(
@@ -155,7 +155,7 @@ fun WeeklyReportContent(
     ) { padding ->
         Column(modifier = Modifier.fillMaxSize().padding(padding)) {
 
-            // ── Top bar ───────────────────────────────────────
+            // â”€â”€ Top bar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             Surface(
                 modifier        = Modifier.fillMaxWidth(),
                 color           = Color.White,
@@ -178,7 +178,7 @@ fun WeeklyReportContent(
                     if (state.activities.isNotEmpty()) {
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
 
-                            // ── Excel button ───────────────────
+                            // â”€â”€ Excel button â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                             ExportButton(
                                 label     = "Excel",
                                 color     = Color(0xFF1E6B38),
@@ -198,7 +198,7 @@ fun WeeklyReportContent(
                                 }
                             )
 
-                            // ── PDF button ────────────────────
+                            // â”€â”€ PDF button â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                             ExportButton(
                                 label     = "PDF",
                                 color     = RedReport,
@@ -223,7 +223,7 @@ fun WeeklyReportContent(
                 }
             }
 
-            // ── Date Selector ─────────────────────────────────
+            // â”€â”€ Date Selector â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             Surface(
                 modifier = Modifier.fillMaxWidth(),
                 color = Color.White
@@ -240,7 +240,7 @@ fun WeeklyReportContent(
                     Spacer(Modifier.width(8.dp))
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text(
-                            text = "สัปดาห์ที่เลือก",
+                            text = "à¸ªà¸±à¸›à¸”à¸²à¸«à¹Œà¸—à¸µà¹ˆà¹€à¸¥à¸·à¸­à¸",
                             fontSize = 12.sp,
                             color = Color.Gray
                         )
@@ -256,7 +256,7 @@ fun WeeklyReportContent(
                 }
             }
 
-            // ── Content ───────────────────────────────────────
+            // â”€â”€ Content â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             when {
                 state.isLoading -> Box(
                     Modifier.fillMaxSize(), contentAlignment = Alignment.Center
@@ -269,9 +269,9 @@ fun WeeklyReportContent(
                         Icon(Icons.Default.EventNote, null,
                             modifier = Modifier.size(64.dp), tint = Color.LightGray)
                         Spacer(Modifier.height(8.dp))
-                        Text("ไม่มีแผนงานหรือผลการทำงานในช่วงสัปดาห์นี้", color = Color.Gray)
+                        Text("à¹„à¸¡à¹ˆà¸¡à¸µà¹à¸œà¸™à¸‡à¸²à¸™à¸«à¸£à¸·à¸­à¸œà¸¥à¸à¸²à¸£à¸—à¸³à¸‡à¸²à¸™à¹ƒà¸™à¸Šà¹ˆà¸§à¸‡à¸ªà¸±à¸›à¸”à¸²à¸«à¹Œà¸™à¸µà¹‰", color = Color.Gray)
                         TextButton(onClick = { showDatePicker = true }) {
-                            Text("เลือกสัปดาห์อื่น", color = RedReport)
+                            Text("à¹€à¸¥à¸·à¸­à¸à¸ªà¸±à¸›à¸”à¸²à¸«à¹Œà¸­à¸·à¹ˆà¸™", color = RedReport)
                         }
                     }
                 }
@@ -283,7 +283,7 @@ fun WeeklyReportContent(
                 ) {
                     item {
                         Text(
-                            "สรุปกิจกรรม (${state.activities.size} รายการ)",
+                            "à¸ªà¸£à¸¸à¸›à¸à¸´à¸ˆà¸à¸£à¸£à¸¡ (${state.activities.size} à¸£à¸²à¸¢à¸à¸²à¸£)",
                             fontWeight = FontWeight.SemiBold,
                             fontSize   = 14.sp,
                             color      = Color.Gray,
@@ -298,7 +298,7 @@ fun WeeklyReportContent(
     }
 }
 
-// ── Shared export button ──────────────────────────────────────
+// â”€â”€ Shared export button â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 @Composable
 private fun ExportButton(
     label:     String,
@@ -340,7 +340,7 @@ private fun ExportButton(
     }
 }
 
-// ── Activity card ────────────────────────────────────────────
+// â”€â”€ Activity card â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 @Composable
 fun ReportActivityCard(item: ExportActivityItem) {
     var previewPhotoUrl by remember { mutableStateOf<String?>(null) }
@@ -378,7 +378,7 @@ fun ReportActivityCard(item: ExportActivityItem) {
             }
 
             Spacer(Modifier.height(8.dp))
-            Text(item.topic ?: "ไม่มีหัวข้อ",
+            Text(item.topic ?: "à¹„à¸¡à¹ˆà¸¡à¸µà¸«à¸±à¸§à¸‚à¹‰à¸­",
                 fontWeight = FontWeight.Bold, fontSize = 15.sp, color = Color(0xFF1A1A1A))
 
             if (!item.companyName.isNullOrBlank())
@@ -399,20 +399,20 @@ fun ReportActivityCard(item: ExportActivityItem) {
                 }
             }
 
-            // ── บันทึกผลหลังการขาย (Results & Photos) ──────────────────
+            // â”€â”€ à¸šà¸±à¸™à¸—à¸¶à¸à¸œà¸¥à¸«à¸¥à¸±à¸‡à¸à¸²à¸£à¸‚à¸²à¸¢ (Results & Photos) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             if (item.resultDetails.isNotEmpty()) {
                 Spacer(Modifier.height(12.dp))
-                Text("บันทึกผลการทำงาน / หลังการขาย:", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF424242))
+                Text("à¸šà¸±à¸™à¸—à¸¶à¸à¸œà¸¥à¸à¸²à¸£à¸—à¸³à¸‡à¸²à¸™ / à¸«à¸¥à¸±à¸‡à¸à¸²à¸£à¸‚à¸²à¸¢:", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF424242))
                 item.resultDetails.forEach { detail ->
                     Spacer(Modifier.height(6.dp))
                     PostSalesResultDetailCard(detail = detail, onPhotoClick = { previewPhotoUrl = it })
                 }
             } else if (item.results.isNotEmpty()) {
                 Spacer(Modifier.height(12.dp))
-                Text("บันทึกผลการทำงาน:", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF424242))
+                Text("à¸šà¸±à¸™à¸—à¸¶à¸à¸œà¸¥à¸à¸²à¸£à¸—à¸³à¸‡à¸²à¸™:", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF424242))
                 item.results.forEach { res ->
                     Row(modifier = Modifier.padding(top = 4.dp, start = 4.dp)) {
-                        Text("• ", fontSize = 12.sp, color = Color.Gray)
+                        Text("â€¢ ", fontSize = 12.sp, color = Color.Gray)
                         Text(res, fontSize = 12.sp, color = Color.DarkGray)
                     }
                 }
@@ -440,31 +440,31 @@ private fun PostSalesResultDetailCard(
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 if (!detail.newStatus.isNullOrBlank()) {
-                    item { DetailChip(label = "สถานะใหม่: ${detail.newStatus}", color = Color(0xFFE3F2FD), textColor = Color(0xFF1565C0)) }
+                    item { DetailChip(label = "à¸ªà¸–à¸²à¸™à¸°à¹ƒà¸«à¸¡à¹ˆ: ${detail.newStatus}", color = Color(0xFFE3F2FD), textColor = Color(0xFF1565C0)) }
                 }
                 if (!detail.opportunityScore.isNullOrBlank()) {
-                    item { DetailChip(label = "โอกาส: ${detail.opportunityScore}", color = Color(0xFFFFF8E1), textColor = Color(0xFFF57F17)) }
+                    item { DetailChip(label = "à¹‚à¸­à¸à¸²à¸ª: ${detail.opportunityScore}", color = Color(0xFFFFF8E1), textColor = Color(0xFFF57F17)) }
                 }
                 if (!detail.dealPosition.isNullOrBlank()) {
-                    item { DetailChip(label = "สถานะดีล: ${detail.dealPosition}", color = Color(0xFFEDE7F6), textColor = Color(0xFF512DA8)) }
+                    item { DetailChip(label = "à¸ªà¸–à¸²à¸™à¸°à¸”à¸µà¸¥: ${detail.dealPosition}", color = Color(0xFFEDE7F6), textColor = Color(0xFF512DA8)) }
                 }
                 if (detail.isProposalSent) {
-                    item { DetailChip(label = "ใบเสนอราคา: ส่งแล้ว (${detail.proposalDate ?: ""})", color = Color(0xFFE8F5E9), textColor = Color(0xFF2E7D32)) }
+                    item { DetailChip(label = "à¹ƒà¸šà¹€à¸ªà¸™à¸­à¸£à¸²à¸„à¸²: à¸ªà¹ˆà¸‡à¹à¸¥à¹‰à¸§ (${detail.proposalDate ?: ""})", color = Color(0xFFE8F5E9), textColor = Color(0xFF2E7D32)) }
                 }
                 if (detail.dmInvolved) {
-                    item { DetailChip(label = "DM ร่วมประชุม", color = Color(0xFFE0F7FA), textColor = Color(0xFF00838F)) }
+                    item { DetailChip(label = "DM à¸£à¹ˆà¸§à¸¡à¸›à¸£à¸°à¸Šà¸¸à¸¡", color = Color(0xFFE0F7FA), textColor = Color(0xFF00838F)) }
                 }
                 if (detail.competitorCount > 0) {
-                    item { DetailChip(label = "คู่แข่ง: ${detail.competitorCount} ราย", color = Color(0xFFFFF3E0), textColor = Color(0xFFE65100)) }
+                    item { DetailChip(label = "à¸„à¸¹à¹ˆà¹à¸‚à¹ˆà¸‡: ${detail.competitorCount} à¸£à¸²à¸¢", color = Color(0xFFFFF3E0), textColor = Color(0xFFE65100)) }
                 }
                 if (!detail.responseSpeed.isNullOrBlank()) {
-                    item { DetailChip(label = "ตอบสนอง: ${detail.responseSpeed}", color = Color(0xFFF3E5F5), textColor = Color(0xFF6A1B9A)) }
+                    item { DetailChip(label = "à¸•à¸­à¸šà¸ªà¸™à¸­à¸‡: ${detail.responseSpeed}", color = Color(0xFFF3E5F5), textColor = Color(0xFF6A1B9A)) }
                 }
                 if (!detail.previousSolution.isNullOrBlank()) {
-                    item { DetailChip(label = "โซลูชันเดิม: ${detail.previousSolution}", color = Color(0xFFECEFF1), textColor = Color(0xFF37474F)) }
+                    item { DetailChip(label = "à¹‚à¸‹à¸¥à¸¹à¸Šà¸±à¸™à¹€à¸”à¸´à¸¡: ${detail.previousSolution}", color = Color(0xFFECEFF1), textColor = Color(0xFF37474F)) }
                 }
                 if (!detail.lossReason.isNullOrBlank()) {
-                    item { DetailChip(label = "เหตุผลแพ้: ${detail.lossReason}", color = Color(0xFFFFEBEE), textColor = Color(0xFFC62828)) }
+                    item { DetailChip(label = "à¹€à¸«à¸•à¸¸à¸œà¸¥à¹à¸žà¹‰: ${detail.lossReason}", color = Color(0xFFFFEBEE), textColor = Color(0xFFC62828)) }
                 }
             }
 
@@ -480,14 +480,14 @@ private fun PostSalesResultDetailCard(
             // Photos gallery
             if (detail.photoUrls.isNotEmpty()) {
                 Spacer(Modifier.height(8.dp))
-                Text("รูปถ่ายยืนยัน (${detail.photoUrls.size} รูป):", fontSize = 11.sp, color = Color.Gray, fontWeight = FontWeight.Medium)
+                Text("à¸£à¸¹à¸›à¸–à¹ˆà¸²à¸¢à¸¢à¸·à¸™à¸¢à¸±à¸™ (${detail.photoUrls.size} à¸£à¸¹à¸›):", fontSize = 11.sp, color = Color.Gray, fontWeight = FontWeight.Medium)
                 Spacer(Modifier.height(4.dp))
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     items(detail.photoUrls) { photoUrl ->
                         val formattedUrl = formatPhotoUrl(photoUrl)
                         AsyncImage(
                             model = formattedUrl,
-                            contentDescription = "รูปถ่ายบันทึกหลังการขาย",
+                            contentDescription = "à¸£à¸¹à¸›à¸–à¹ˆà¸²à¸¢à¸šà¸±à¸™à¸—à¸¶à¸à¸«à¸¥à¸±à¸‡à¸à¸²à¸£à¸‚à¸²à¸¢",
                             modifier = Modifier
                                 .size(72.dp)
                                 .clip(RoundedCornerShape(8.dp))
@@ -535,12 +535,12 @@ fun ImagePreviewDialog(imageUrl: String, onDismiss: () -> Unit) {
                     horizontalArrangement = Arrangement.End
                 ) {
                     IconButton(onClick = onDismiss) {
-                        Icon(Icons.Default.Close, contentDescription = "ปิด", tint = Color.White)
+                        Icon(Icons.Default.Close, contentDescription = "à¸›à¸´à¸”", tint = Color.White)
                     }
                 }
                 AsyncImage(
                     model = formatPhotoUrl(imageUrl),
-                    contentDescription = "ดูรูปใหญ่",
+                    contentDescription = "à¸”à¸¹à¸£à¸¹à¸›à¹ƒà¸«à¸à¹ˆ",
                     modifier = Modifier
                         .fillMaxWidth()
                         .heightIn(max = 450.dp)
@@ -595,7 +595,7 @@ private fun wrapTextLines(text: String, paint: Paint, maxWidth: Float): List<Str
     return if (lines.isEmpty()) listOf(text) else lines
 }
 
-// ── Export functions ─────────────────────────────────────────
+// â”€â”€ Export functions â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 private suspend fun getPhotoBytes(context: Context, photoUrl: String): ByteArray? {
     val formattedUrl = formatPhotoUrl(photoUrl)
@@ -689,10 +689,10 @@ suspend fun exportToExcel(context: Context, fileName: String, activities: List<E
 
         // Headers
         val headers = listOf(
-            "วันที่ (Date)", "บริษัท (Company)", "โครงการ (Project)", "หัวข้อ (Topic)",
-            "สถานะ (Status)", "สถานะใหม่ (New Status)", "โอกาส", "ใบเสนอราคา",
-            "วันที่เสนอราคา", "DM ร่วมประชุม", "จำนวนคู่แข่ง", "โซลูชันเดิม",
-            "เหตุผลแพ้", "สรุปผลการทำงาน", "รูปภาพแนบ (Photos)"
+            "à¸§à¸±à¸™à¸—à¸µà¹ˆ (Date)", "à¸šà¸£à¸´à¸©à¸±à¸— (Company)", "à¹‚à¸„à¸£à¸‡à¸à¸²à¸£ (Project)", "à¸«à¸±à¸§à¸‚à¹‰à¸­ (Topic)",
+            "à¸ªà¸–à¸²à¸™à¸° (Status)", "à¸ªà¸–à¸²à¸™à¸°à¹ƒà¸«à¸¡à¹ˆ (New Status)", "à¹‚à¸­à¸à¸²à¸ª", "à¹ƒà¸šà¹€à¸ªà¸™à¸­à¸£à¸²à¸„à¸²",
+            "à¸§à¸±à¸™à¸—à¸µà¹ˆà¹€à¸ªà¸™à¸­à¸£à¸²à¸„à¸²", "DM à¸£à¹ˆà¸§à¸¡à¸›à¸£à¸°à¸Šà¸¸à¸¡", "à¸ˆà¸³à¸™à¸§à¸™à¸„à¸¹à¹ˆà¹à¸‚à¹ˆà¸‡", "à¹‚à¸‹à¸¥à¸¹à¸Šà¸±à¸™à¹€à¸”à¸´à¸¡",
+            "à¹€à¸«à¸•à¸¸à¸œà¸¥à¹à¸žà¹‰", "à¸ªà¸£à¸¸à¸›à¸œà¸¥à¸à¸²à¸£à¸—à¸³à¸‡à¸²à¸™", "à¸£à¸¹à¸›à¸ à¸²à¸žà¹à¸™à¸š (Photos)"
         )
         val headerRow = sheet.createRow(0)
         headers.forEachIndexed { i, title ->
@@ -701,8 +701,8 @@ suspend fun exportToExcel(context: Context, fileName: String, activities: List<E
             cell.cellStyle = headerStyle
             sheet.setColumnWidth(i, 4000)
         }
-        sheet.setColumnWidth(13, 8000) // summary column wider
-        sheet.setColumnWidth(14, 6000) // photos column wider
+        sheet.setColumnWidth(14, 8000) // summary column wider
+        sheet.setColumnWidth(15, 6000) // photos column wider
 
         val drawing = sheet.createDrawingPatriarch()
         val creationHelper = workbook.creationHelper
@@ -729,17 +729,18 @@ suspend fun exportToExcel(context: Context, fileName: String, activities: List<E
                         cellStyle = if (isCompleted) statusCompletedStyle else statusPendingStyle
                     }
                     
-                    row.createCell(5).apply { setCellValue(res.newStatus ?: ""); this.cellStyle = baseCellStyle }
-                    row.createCell(6).apply { setCellValue(res.opportunityScore ?: ""); this.cellStyle = baseCellStyle }
-                    row.createCell(7).apply { setCellValue(if (res.isProposalSent) "ส่งแล้ว" else "ยังไม่ส่ง"); this.cellStyle = baseCellStyle }
-                    row.createCell(8).apply { setCellValue(res.proposalDate ?: ""); this.cellStyle = baseCellStyle }
-                    row.createCell(9).apply { setCellValue(if (res.dmInvolved) "มี" else "ไม่มี"); this.cellStyle = baseCellStyle }
-                    row.createCell(10).apply { setCellValue(res.competitorCount.toString()); this.cellStyle = baseCellStyle }
-                    row.createCell(11).apply { setCellValue(res.previousSolution ?: ""); this.cellStyle = baseCellStyle }
-                    row.createCell(12).apply { setCellValue(res.lossReason ?: ""); this.cellStyle = baseCellStyle }
-                    row.createCell(13).apply { setCellValue(res.summary ?: ""); this.cellStyle = baseCellStyle }
+                    row.createCell(5).apply { setCellValue(if (item.activityType == "onsite" && item.checkInTime != null) { try { java.time.Instant.parse(item.checkInTime).atZone(java.time.ZoneId.systemDefault()).format(java.time.format.DateTimeFormatter.ofPattern("dd MMM HH:mm")) } catch(e: Exception) { item.checkInTime.take(16).replace("T", " ") } } else ""); this.cellStyle = baseCellStyle }
+                    row.createCell(6).apply { setCellValue(res.newStatus ?: ""); this.cellStyle = baseCellStyle }
+                    row.createCell(7).apply { setCellValue(res.opportunityScore ?: ""); this.cellStyle = baseCellStyle }
+                    row.createCell(8).apply { setCellValue(if (res.isProposalSent) "à¸ªà¹ˆà¸‡à¹à¸¥à¹‰à¸§" else "à¸¢à¸±à¸‡à¹„à¸¡à¹ˆà¸ªà¹ˆà¸‡"); this.cellStyle = baseCellStyle }
+                    row.createCell(9).apply { setCellValue(res.proposalDate ?: ""); this.cellStyle = baseCellStyle }
+                    row.createCell(10).apply { setCellValue(if (res.dmInvolved) "à¸¡à¸µ" else "à¹„à¸¡à¹ˆà¸¡à¸µ"); this.cellStyle = baseCellStyle }
+                    row.createCell(11).apply { setCellValue(res.competitorCount.toString()); this.cellStyle = baseCellStyle }
+                    row.createCell(12).apply { setCellValue(res.previousSolution ?: ""); this.cellStyle = baseCellStyle }
+                    row.createCell(13).apply { setCellValue(res.lossReason ?: ""); this.cellStyle = baseCellStyle }
+                    row.createCell(14).apply { setCellValue(res.summary ?: ""); this.cellStyle = baseCellStyle }
                     
-                    val photoCell = row.createCell(14).apply { this.cellStyle = baseCellStyle }
+                    val photoCell = row.createCell(15).apply { this.cellStyle = baseCellStyle }
 
                     // Insert Photos side by side
                     if (res.photoUrls.isNotEmpty()) {
@@ -784,18 +785,25 @@ suspend fun exportToExcel(context: Context, fileName: String, activities: List<E
                     setCellValue(item.status)
                     cellStyle = if (isCompleted) statusCompletedStyle else statusPendingStyle
                 }
-                row.createCell(5).apply { setCellValue(""); this.cellStyle = baseCellStyle }
+                    row.createCell(5).apply { setCellValue(if (item.activityType == "onsite" && item.checkInTime != null) { try { java.time.Instant.parse(item.checkInTime).atZone(java.time.ZoneId.systemDefault()).format(java.time.format.DateTimeFormatter.ofPattern("dd MMM HH:mm")) } catch(e: Exception) { item.checkInTime.take(16).replace("T", " ") } } else ""); this.cellStyle = baseCellStyle }
                 row.createCell(6).apply { setCellValue(""); this.cellStyle = baseCellStyle }
-                row.createCell(7).apply { setCellValue("ยังไม่ส่ง"); this.cellStyle = baseCellStyle }
-                row.createCell(8).apply { setCellValue(""); this.cellStyle = baseCellStyle }
-                row.createCell(9).apply { setCellValue("ไม่มี"); this.cellStyle = baseCellStyle }
-                row.createCell(10).apply { setCellValue("0"); this.cellStyle = baseCellStyle }
-                row.createCell(11).apply { setCellValue(""); this.cellStyle = baseCellStyle }
+                row.createCell(7).apply { setCellValue(""); this.cellStyle = baseCellStyle }
+                row.createCell(8).apply { setCellValue("à¸¢à¸±à¸‡à¹„à¸¡à¹ˆà¸ªà¹ˆà¸‡"); this.cellStyle = baseCellStyle }
+                row.createCell(9).apply { setCellValue(""); this.cellStyle = baseCellStyle }
+                row.createCell(10).apply { setCellValue("à¹„à¸¡à¹ˆà¸¡à¸µ"); this.cellStyle = baseCellStyle }
+                row.createCell(11).apply { setCellValue("0"); this.cellStyle = baseCellStyle }
                 row.createCell(12).apply { setCellValue(""); this.cellStyle = baseCellStyle }
-                row.createCell(13).apply { setCellValue(item.results.joinToString("\n")); this.cellStyle = baseCellStyle }
-                row.createCell(14).apply { setCellValue(""); this.cellStyle = baseCellStyle }
+                row.createCell(13).apply { setCellValue(""); this.cellStyle = baseCellStyle }
+                row.createCell(14).apply { setCellValue(item.results.joinToString("\n")); this.cellStyle = baseCellStyle }
+                row.createCell(15).apply { setCellValue(""); this.cellStyle = baseCellStyle }
                 rowNum++
             }
+        }
+
+                for (i in 0..14) {
+            sheet.autoSizeColumn(i)
+            val currentWidth = sheet.getColumnWidth(i)
+            sheet.setColumnWidth(i, currentWidth + 1000)
         }
 
         val file = File(context.cacheDir, "$fileName.xlsx")
@@ -883,13 +891,23 @@ suspend fun exportToPdf(context: Context, fileName: String, activities: List<Exp
             y += 13f
         }
 
+        if (item.activityType == "onsite" && item.checkInTime != null) {
+            val timeFormatted = try {
+                val instant = java.time.Instant.parse(item.checkInTime)
+                instant.atZone(java.time.ZoneId.systemDefault()).format(java.time.format.DateTimeFormatter.ofPattern("dd MMM HH:mm"))
+            } catch (e: Exception) { item.checkInTime.take(16).replace("T", " ") }
+            checkPageBreak(13f)
+            canvas.drawText("Check-in: $timeFormatted", 150f, y, subPaint)
+            y += 13f
+        }
+
         y += 4f
 
         // Results as bullets
         if (item.resultDetails.isNotEmpty()) {
             item.resultDetails.forEach { res ->
                 val summaryText = res.summary ?: "N/A"
-                val summaryLines = wrapTextLines("• สรุปผล: $summaryText", resultPaint, 370f)
+                val summaryLines = wrapTextLines("â€¢ à¸ªà¸£à¸¸à¸›à¸œà¸¥: $summaryText", resultPaint, 370f)
                 summaryLines.forEach { line ->
                     checkPageBreak(13f)
                     canvas.drawText(line, 160f, y, resultPaint)
@@ -897,17 +915,17 @@ suspend fun exportToPdf(context: Context, fileName: String, activities: List<Exp
                 }
 
                 val detailParts = mutableListOf<String>()
-                if (!res.newStatus.isNullOrBlank()) detailParts.add("สถานะใหม่: ${res.newStatus}")
-                if (!res.opportunityScore.isNullOrBlank()) detailParts.add("โอกาส: ${res.opportunityScore}%")
+                if (!res.newStatus.isNullOrBlank()) detailParts.add("à¸ªà¸–à¸²à¸™à¸°à¹ƒà¸«à¸¡à¹ˆ: ${res.newStatus}")
+                if (!res.opportunityScore.isNullOrBlank()) detailParts.add("à¹‚à¸­à¸à¸²à¸ª: ${res.opportunityScore}%")
                 if (res.isProposalSent) {
-                    detailParts.add("proposal: ใช่ (${res.proposalDate ?: ""})")
+                    detailParts.add("proposal: à¹ƒà¸Šà¹ˆ (${res.proposalDate ?: ""})")
                 } else {
-                    detailParts.add("proposal: ไม่ใช่")
+                    detailParts.add("proposal: à¹„à¸¡à¹ˆà¹ƒà¸Šà¹ˆ")
                 }
-                if (res.dmInvolved) detailParts.add("DM ร่วมประชุม: มี")
-                if (res.competitorCount > 0) detailParts.add("คู่แข่ง: ${res.competitorCount} ราย")
-                if (!res.previousSolution.isNullOrBlank()) detailParts.add("โซลูชันเดิม: ${res.previousSolution}")
-                if (!res.lossReason.isNullOrBlank()) detailParts.add("เหตุผลแพ้: ${res.lossReason}")
+                if (res.dmInvolved) detailParts.add("DM à¸£à¹ˆà¸§à¸¡à¸›à¸£à¸°à¸Šà¸¸à¸¡: à¸¡à¸µ")
+                if (res.competitorCount > 0) detailParts.add("à¸„à¸¹à¹ˆà¹à¸‚à¹ˆà¸‡: ${res.competitorCount} à¸£à¸²à¸¢")
+                if (!res.previousSolution.isNullOrBlank()) detailParts.add("à¹‚à¸‹à¸¥à¸¹à¸Šà¸±à¸™à¹€à¸”à¸´à¸¡: ${res.previousSolution}")
+                if (!res.lossReason.isNullOrBlank()) detailParts.add("à¹€à¸«à¸•à¸¸à¸œà¸¥à¹à¸žà¹‰: ${res.lossReason}")
 
                 if (detailParts.isNotEmpty()) {
                     detailParts.forEach { detail ->
@@ -922,7 +940,7 @@ suspend fun exportToPdf(context: Context, fileName: String, activities: List<Exp
 
                 if (res.photoUrls.isNotEmpty()) {
                     checkPageBreak(13f)
-                    canvas.drawText("รูปภาพแนบ (${res.photoUrls.size} รูป):", 160f, y, subPaint)
+                    canvas.drawText("à¸£à¸¹à¸›à¸ à¸²à¸žà¹à¸™à¸š (${res.photoUrls.size} à¸£à¸¹à¸›):", 160f, y, subPaint)
                     y += 13f
 
                     res.photoUrls.chunked(2).forEach { rowUrls ->
@@ -977,7 +995,7 @@ suspend fun exportToPdf(context: Context, fileName: String, activities: List<Exp
             }
         } else {
             item.results.forEach { res ->
-                val resLines = wrapTextLines("• $res", resultPaint, 370f)
+                val resLines = wrapTextLines("â€¢ $res", resultPaint, 370f)
                 resLines.forEach { line ->
                     checkPageBreak(13f)
                     canvas.drawText(line, 160f, y, resultPaint)
@@ -1020,10 +1038,10 @@ fun WeeklyReportPreview() {
                         topic = "Meeting with client",
                         note = "Discuss about the project requirements.",
                         status = "completed",
-                        results = listOf("ลูกค้าสนใจเพิ่ม Module A", "นัดคุยราคาต่ออาทิตย์หน้า"),
+                        results = listOf("à¸¥à¸¹à¸à¸„à¹‰à¸²à¸ªà¸™à¹ƒà¸ˆà¹€à¸žà¸´à¹ˆà¸¡ Module A", "à¸™à¸±à¸”à¸„à¸¸à¸¢à¸£à¸²à¸„à¸²à¸•à¹ˆà¸­à¸­à¸²à¸—à¸´à¸•à¸¢à¹Œà¸«à¸™à¹‰à¸²"),
                         resultDetails = listOf(
                             ExportResultDetail(
-                                summary = "ลูกค้าสนใจเพิ่ม Module A",
+                                summary = "à¸¥à¸¹à¸à¸„à¹‰à¸²à¸ªà¸™à¹ƒà¸ˆà¹€à¸žà¸´à¹ˆà¸¡ Module A",
                                 newStatus = "Quotation",
                                 opportunityScore = "80%",
                                 isProposalSent = true,
@@ -1036,10 +1054,12 @@ fun WeeklyReportPreview() {
                 ),
                 startDate = LocalDate.now().minusDays(6),
                 endDate = LocalDate.now(),
-                weekRangeText = "23 ต.ค. 2023 - 29 ต.ค. 2023"
+                weekRangeText = "23 à¸•.à¸„. 2023 - 29 à¸•.à¸„. 2023"
             ),
             onBack = {},
             onDateRangeSelected = { _, _ -> }
         )
     }
 }
+
+
