@@ -38,6 +38,7 @@ data class StatsUiState(
     val monthlyNewProjects: Int    = 0,
     val activeProjects:     Int    = 0,
     val closingThisMonth:   Int    = 0,
+    val monthlyVisitCount:  Int    = 0,
 
     // Pipeline
     val pipelineStages:     List<PipelineStageCount> = emptyList(),
@@ -172,6 +173,10 @@ class StatsViewModel @Inject constructor(
             isInRange(p.startDate?.take(10), monthStart, monthEnd)
         }
 
+        val monthlyVisit = activities.count { a ->
+            a.status.lowercase() == "completed" && isInRange(a.activityDate, monthStart, monthEnd)
+        }
+
         val closingMonthCount = myProjects.count { p ->
             p.projectStatus !in listOf("Completed", "Lost", "Failed") &&
                     isSameMonth(p.closingDate, currentMonth)
@@ -217,6 +222,7 @@ class StatsViewModel @Inject constructor(
             monthlyNewProjects = monthlyNewProj,
             activeProjects     = activeProjectsList.size,
             closingThisMonth   = closingMonthCount,
+            monthlyVisitCount  = monthlyVisit,
             pipelineStages     = stageCounts,
             opportunityGroups  = oppGroups
         )
@@ -246,4 +252,5 @@ class StatsViewModel @Inject constructor(
         } catch (e: Exception) { false }
     }
 }
+
 

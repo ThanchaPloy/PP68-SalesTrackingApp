@@ -29,7 +29,8 @@ data class ActivityCard(
     val plannedEndTime:String?,
     val weeklyNote:    String? = null,
     val customerId:    String? = null,
-    val hasResult:     Boolean = false
+    val hasResult:     Boolean = false,
+    val checkInTime:   String? = null
 )
 
 data class HomeUiState(

@@ -99,12 +99,12 @@ fun WeeklyReportContent(
             try {
                 withContext(Dispatchers.IO) { block() }
                 snackbarState.showSnackbar(
-                    message  = "âœ… à¸ªà¹ˆà¸‡à¸­à¸­à¸ $label à¹€à¸£à¸µà¸¢à¸šà¸£à¹‰à¸­à¸¢à¹à¸¥à¹‰à¸§",
+                    message  = "✅ ส่งออก $label เรียบร้อยแล้ว",
                     duration = SnackbarDuration.Short
                 )
             } catch (e: Exception) {
                 snackbarState.showSnackbar(
-                    message  = "âŒ à¹€à¸à¸´à¸”à¸‚à¹‰à¸­à¸œà¸´à¸”à¸žà¸¥à¸²à¸”: ${e.message}",
+                    message  = "❌ เกิดข้อผิดพลาด: ${e.message}",
                     duration = SnackbarDuration.Long
                 )
             } finally {
@@ -126,10 +126,10 @@ fun WeeklyReportContent(
                         onDateRangeSelected(startDate, endDate)
                     }
                     showDatePicker = false
-                }) { Text("à¸•à¸à¸¥à¸‡", color = RedReport) }
+                }) { Text("ตกลง", color = RedReport) }
             },
             dismissButton = {
-                TextButton(onClick = { showDatePicker = false }) { Text("à¸¢à¸à¹€à¸¥à¸´à¸") }
+                TextButton(onClick = { showDatePicker = false }) { Text("ยกเลิก") }
             }
         ) {
             DateRangePicker(
@@ -240,7 +240,7 @@ fun WeeklyReportContent(
                     Spacer(Modifier.width(8.dp))
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text(
-                            text = "à¸ªà¸±à¸›à¸”à¸²à¸«à¹Œà¸—à¸µà¹ˆà¹€à¸¥à¸·à¸­à¸",
+                            text = "\u0e2a\u0e31\u0e1b\u0e14\u0e32\u0e2b\u0e4c\u0e17\u0e35\u0e48\u0e40\u0e25\u0e37\u0e2d\u0e01", // สัปดาห์ที่เลือก
                             fontSize = 12.sp,
                             color = Color.Gray
                         )
@@ -269,9 +269,9 @@ fun WeeklyReportContent(
                         Icon(Icons.Default.EventNote, null,
                             modifier = Modifier.size(64.dp), tint = Color.LightGray)
                         Spacer(Modifier.height(8.dp))
-                        Text("à¹„à¸¡à¹ˆà¸¡à¸µà¹à¸œà¸™à¸‡à¸²à¸™à¸«à¸£à¸·à¸­à¸œà¸¥à¸à¸²à¸£à¸—à¸³à¸‡à¸²à¸™à¹ƒà¸™à¸Šà¹ˆà¸§à¸‡à¸ªà¸±à¸›à¸”à¸²à¸«à¹Œà¸™à¸µà¹‰", color = Color.Gray)
+                        Text("ไม่มีแผนงานหรือผลการทำงานในช่วงสัปดาห์นี้", color = Color.Gray)
                         TextButton(onClick = { showDatePicker = true }) {
-                            Text("à¹€à¸¥à¸·à¸­à¸à¸ªà¸±à¸›à¸”à¸²à¸«à¹Œà¸­à¸·à¹ˆà¸™", color = RedReport)
+                            Text("เลือกสัปดาห์อื่น", color = RedReport)
                         }
                     }
                 }
@@ -283,7 +283,7 @@ fun WeeklyReportContent(
                 ) {
                     item {
                         Text(
-                            "à¸ªà¸£à¸¸à¸›à¸à¸´à¸ˆà¸à¸£à¸£à¸¡ (${state.activities.size} à¸£à¸²à¸¢à¸à¸²à¸£)",
+                            "สรุปกิจกรรม (${state.activities.size} รายการ)",
                             fontWeight = FontWeight.SemiBold,
                             fontSize   = 14.sp,
                             color      = Color.Gray,
@@ -375,10 +375,24 @@ fun ReportActivityCard(item: ExportActivityItem) {
                         else Color(0xFFE65100)
                     )
                 }
+                if (!item.activityType.isNullOrBlank()) {
+                    Spacer(Modifier.width(8.dp))
+                    Surface(
+                        shape = RoundedCornerShape(4.dp),
+                        color = Color(0xFFE3F2FD)
+                    ) {
+                        Text(
+                            item.activityType.uppercase(),
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                            fontSize = 10.sp, fontWeight = FontWeight.Bold,
+                            color    = Color(0xFF1565C0)
+                        )
+                    }
+                }
             }
 
             Spacer(Modifier.height(8.dp))
-            Text(item.topic ?: "à¹„à¸¡à¹ˆà¸¡à¸µà¸«à¸±à¸§à¸‚à¹‰à¸­",
+            Text(item.topic ?: "ไม่มีหัวข้อ",
                 fontWeight = FontWeight.Bold, fontSize = 15.sp, color = Color(0xFF1A1A1A))
 
             if (!item.companyName.isNullOrBlank())
@@ -399,20 +413,20 @@ fun ReportActivityCard(item: ExportActivityItem) {
                 }
             }
 
-            // â”€â”€ à¸šà¸±à¸™à¸—à¸¶à¸à¸œà¸¥à¸«à¸¥à¸±à¸‡à¸à¸²à¸£à¸‚à¸²à¸¢ (Results & Photos) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+            // —— บันทึกผลหลังการขาย (Results & Photos) ————————
             if (item.resultDetails.isNotEmpty()) {
                 Spacer(Modifier.height(12.dp))
-                Text("à¸šà¸±à¸™à¸—à¸¶à¸à¸œà¸¥à¸à¸²à¸£à¸—à¸³à¸‡à¸²à¸™ / à¸«à¸¥à¸±à¸‡à¸à¸²à¸£à¸‚à¸²à¸¢:", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF424242))
+                Text("บันทึกผลการทำงาน / หลังการขาย:", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF424242))
                 item.resultDetails.forEach { detail ->
                     Spacer(Modifier.height(6.dp))
-                    PostSalesResultDetailCard(detail = detail, onPhotoClick = { previewPhotoUrl = it })
+                    PostSalesResultDetailCard(detail = detail, onPhotoClick = { previewPhotoUrl = detail.photoUrls.firstOrNull()?.let { formatPhotoUrl(it) } ?: "" })
                 }
             } else if (item.results.isNotEmpty()) {
                 Spacer(Modifier.height(12.dp))
-                Text("à¸šà¸±à¸™à¸—à¸¶à¸à¸œà¸¥à¸à¸²à¸£à¸—à¸³à¸‡à¸²à¸™:", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF424242))
+                Text("บันทึกผลการทำงาน:", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF424242))
                 item.results.forEach { res ->
                     Row(modifier = Modifier.padding(top = 4.dp, start = 4.dp)) {
-                        Text("â€¢ ", fontSize = 12.sp, color = Color.Gray)
+                        Text("• ", fontSize = 12.sp, color = Color.Gray)
                         Text(res, fontSize = 12.sp, color = Color.DarkGray)
                     }
                 }
@@ -440,31 +454,31 @@ private fun PostSalesResultDetailCard(
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 if (!detail.newStatus.isNullOrBlank()) {
-                    item { DetailChip(label = "à¸ªà¸–à¸²à¸™à¸°à¹ƒà¸«à¸¡à¹ˆ: ${detail.newStatus}", color = Color(0xFFE3F2FD), textColor = Color(0xFF1565C0)) }
+                    item { DetailChip(label = "\u0e2a\u0e16\u0e32\u0e19\u0e30\u0e43\u0e2b\u0e21\u0e48: ${detail.newStatus}", color = Color(0xFFE3F2FD), textColor = Color(0xFF1565C0)) } // สถานะใหม่
                 }
                 if (!detail.opportunityScore.isNullOrBlank()) {
-                    item { DetailChip(label = "à¹‚à¸­à¸à¸²à¸ª: ${detail.opportunityScore}", color = Color(0xFFFFF8E1), textColor = Color(0xFFF57F17)) }
+                    item { DetailChip(label = "\u0e42\u0e2d\u0e01\u0e32\u0e2a: ${detail.opportunityScore}", color = Color(0xFFFFF8E1), textColor = Color(0xFFF57F17)) } // โอกาส
                 }
                 if (!detail.dealPosition.isNullOrBlank()) {
-                    item { DetailChip(label = "à¸ªà¸–à¸²à¸™à¸°à¸”à¸µà¸¥: ${detail.dealPosition}", color = Color(0xFFEDE7F6), textColor = Color(0xFF512DA8)) }
+                    item { DetailChip(label = "\u0e2a\u0e16\u0e32\u0e19\u0e30\u0e14\u0e35\u0e25: ${detail.dealPosition}", color = Color(0xFFEDE7F6), textColor = Color(0xFF512DA8)) } // สถานะดีล
                 }
                 if (detail.isProposalSent) {
-                    item { DetailChip(label = "à¹ƒà¸šà¹€à¸ªà¸™à¸­à¸£à¸²à¸„à¸²: à¸ªà¹ˆà¸‡à¹à¸¥à¹‰à¸§ (${detail.proposalDate ?: ""})", color = Color(0xFFE8F5E9), textColor = Color(0xFF2E7D32)) }
+                    item { DetailChip(label = "\u0e43\u0e1a\u0e40\u0e2a\u0e19\u0e2d\u0e23\u0e32\u0e04\u0e32: \u0e2a\u0e48\u0e07\u0e41\u0e25\u0e49\u0077 (${detail.proposalDate ?: ""})", color = Color(0xFFE8F5E9), textColor = Color(0xFF2E7D32)) } // ใบเสนอราคา: ส่งแล้ว
                 }
                 if (detail.dmInvolved) {
-                    item { DetailChip(label = "DM à¸£à¹ˆà¸§à¸¡à¸›à¸£à¸°à¸Šà¸¸à¸¡", color = Color(0xFFE0F7FA), textColor = Color(0xFF00838F)) }
+                    item { DetailChip(label = "DM \u0e23\u0e48\u0e27\u0e21\u0e1b\u0e23\u0e30\u0e0a\u0e38\u0e21", color = Color(0xFFE0F7FA), textColor = Color(0xFF00838F)) } // ร่วมประชุม
                 }
                 if (detail.competitorCount > 0) {
-                    item { DetailChip(label = "à¸„à¸¹à¹ˆà¹à¸‚à¹ˆà¸‡: ${detail.competitorCount} à¸£à¸²à¸¢", color = Color(0xFFFFF3E0), textColor = Color(0xFFE65100)) }
+                    item { DetailChip(label = "\u0e04\u0e39\u0e48\u0e41\u0e02\u0e48\u0e07: ${detail.competitorCount} \u0e23\u0e32\u0e22", color = Color(0xFFFFF3E0), textColor = Color(0xFFE65100)) } // คู่แข่ง: ... ราย
                 }
                 if (!detail.responseSpeed.isNullOrBlank()) {
-                    item { DetailChip(label = "à¸•à¸­à¸šà¸ªà¸™à¸­à¸‡: ${detail.responseSpeed}", color = Color(0xFFF3E5F5), textColor = Color(0xFF6A1B9A)) }
+                    item { DetailChip(label = "ตอบสนอง: ${detail.responseSpeed}", color = Color(0xFFF3E5F5), textColor = Color(0xFF6A1B9A)) }
                 }
                 if (!detail.previousSolution.isNullOrBlank()) {
-                    item { DetailChip(label = "à¹‚à¸‹à¸¥à¸¹à¸Šà¸±à¸™à¹€à¸”à¸´à¸¡: ${detail.previousSolution}", color = Color(0xFFECEFF1), textColor = Color(0xFF37474F)) }
+                    item { DetailChip(label = "โซลูชั่นเดิม: ${detail.previousSolution}", color = Color(0xFFECEFF1), textColor = Color(0xFF37474F)) }
                 }
                 if (!detail.lossReason.isNullOrBlank()) {
-                    item { DetailChip(label = "à¹€à¸«à¸•à¸¸à¸œà¸¥à¹à¸žà¹‰: ${detail.lossReason}", color = Color(0xFFFFEBEE), textColor = Color(0xFFC62828)) }
+                    item { DetailChip(label = "เหตุผลแพ้: ${detail.lossReason}", color = Color(0xFFFFEBEE), textColor = Color(0xFFC62828)) }
                 }
             }
 
@@ -480,14 +494,14 @@ private fun PostSalesResultDetailCard(
             // Photos gallery
             if (detail.photoUrls.isNotEmpty()) {
                 Spacer(Modifier.height(8.dp))
-                Text("à¸£à¸¹à¸›à¸–à¹ˆà¸²à¸¢à¸¢à¸·à¸™à¸¢à¸±à¸™ (${detail.photoUrls.size} à¸£à¸¹à¸›):", fontSize = 11.sp, color = Color.Gray, fontWeight = FontWeight.Medium)
+                Text("รูปถ่ายยืนยัน (${detail.photoUrls.size} รูป):", fontSize = 11.sp, color = Color.Gray, fontWeight = FontWeight.Medium)
                 Spacer(Modifier.height(4.dp))
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     items(detail.photoUrls) { photoUrl ->
                         val formattedUrl = formatPhotoUrl(photoUrl)
                         AsyncImage(
                             model = formattedUrl,
-                            contentDescription = "à¸£à¸¹à¸›à¸–à¹ˆà¸²à¸¢à¸šà¸±à¸™à¸—à¸¶à¸à¸«à¸¥à¸±à¸‡à¸à¸²à¸£à¸‚à¸²à¸¢",
+                            contentDescription = "รูปถ่ายบันทึกหลังการขาย",
                             modifier = Modifier
                                 .size(72.dp)
                                 .clip(RoundedCornerShape(8.dp))
@@ -535,12 +549,12 @@ fun ImagePreviewDialog(imageUrl: String, onDismiss: () -> Unit) {
                     horizontalArrangement = Arrangement.End
                 ) {
                     IconButton(onClick = onDismiss) {
-                        Icon(Icons.Default.Close, contentDescription = "à¸›à¸´à¸”", tint = Color.White)
+                        Icon(Icons.Default.Close, contentDescription = "ปิด", tint = Color.White)
                     }
                 }
                 AsyncImage(
                     model = formatPhotoUrl(imageUrl),
-                    contentDescription = "à¸”à¸¹à¸£à¸¹à¸›à¹ƒà¸«à¸à¹ˆ",
+                    contentDescription = "ดูรูปใหญ่",
                     modifier = Modifier
                         .fillMaxWidth()
                         .heightIn(max = 450.dp)
@@ -687,12 +701,12 @@ suspend fun exportToExcel(context: Context, fileName: String, activities: List<E
             setFont(font)
         }
 
-        // Headers
+        // Headers (Using Unicode escapes to prevent encoding issues)
         val headers = listOf(
-            "à¸§à¸±à¸™à¸—à¸µà¹ˆ (Date)", "à¸šà¸£à¸´à¸©à¸±à¸— (Company)", "à¹‚à¸„à¸£à¸‡à¸à¸²à¸£ (Project)", "à¸«à¸±à¸§à¸‚à¹‰à¸­ (Topic)",
-            "à¸ªà¸–à¸²à¸™à¸° (Status)", "à¸ªà¸–à¸²à¸™à¸°à¹ƒà¸«à¸¡à¹ˆ (New Status)", "à¹‚à¸­à¸à¸²à¸ª", "à¹ƒà¸šà¹€à¸ªà¸™à¸­à¸£à¸²à¸„à¸²",
-            "à¸§à¸±à¸™à¸—à¸µà¹ˆà¹€à¸ªà¸™à¸­à¸£à¸²à¸„à¸²", "DM à¸£à¹ˆà¸§à¸¡à¸›à¸£à¸°à¸Šà¸¸à¸¡", "à¸ˆà¸³à¸™à¸§à¸™à¸„à¸¹à¹ˆà¹à¸‚à¹ˆà¸‡", "à¹‚à¸‹à¸¥à¸¹à¸Šà¸±à¸™à¹€à¸”à¸´à¸¡",
-            "à¹€à¸«à¸•à¸¸à¸œà¸¥à¹à¸žà¹‰", "à¸ªà¸£à¸¸à¸›à¸œà¸¥à¸à¸²à¸£à¸—à¸³à¸‡à¸²à¸™", "à¸£à¸¹à¸›à¸ à¸²à¸žà¹à¸™à¸š (Photos)"
+            "\u0e27\u0e31\u0e19\u0e17\u0e35\u0e48 (Date)", "\u0e1a\u0e23\u0e34\u0e2a\u0e31\u0e17 (Company)", "\u0e42\u0e04\u0e23\u0e07\u0e01\u0e32\u0e23 (Project)", "\u0e2b\u0e31\u0e27\u0e02\u0e49\u0e2d (Topic)",
+            "\u0e2a\u0e16\u0e32\u0e19\u0e30 (Status)", "\u0e1b\u0e23\u0e30\u0e40\u0e20\u0e17 (Type)", "\u0e40\u0e0a\u0e47\u0e04\u0e2d\u0e34\u0e19 (Check-in)", "\u0e2a\u0e16\u0e32\u0e19\u0e30\u0e43\u0e2b\u0e21\u0e48 (New Status)", "\u0e42\u0e2d\u0e01\u0e32\u0e2a", "\u0e43\u0e1a\u0e40\u0e2a\u0e19\u0e2d\u0e23\u0e32\u0e04\u0e32",
+            "\u0e27\u0e31\u0e19\u0e17\u0e35\u0e48\u0e40\u0e2a\u0e19\u0e2d\u0e23\u0e32\u0e04\u0e32", "DM \u0e23\u0e48\u0e27\u0e21\u0e1b\u0e23\u0e30\u0e0a\u0e38\u0e21", "\u0e08\u0e33\u0e19\u0e27\u0e19\u0e04\u0e39\u0e48\u0e41\u0e02\u0e48\u0e07", "\u0e42\u0e0b\u0e25\u0e39\u0e0a\u0e31\u0e48\u0e19\u0e40\u0e14\u0e34\u0e21",
+            "\u0e40\u0e2b\u0e15\u0e38\u0e1c\u0e25\u0e41\u0e1e\u0e49", "\u0e2a\u0e23\u0e38\u0e1b\u0e1c\u0e25\u0e01\u0e32\u0e23\u0e17\u0e33\u0e07\u0e32\u0e19", "\u0e23\u0e39\u0e1b\u0e20\u0e32\u0e1e (Photos)"
         )
         val headerRow = sheet.createRow(0)
         headers.forEachIndexed { i, title ->
@@ -701,12 +715,17 @@ suspend fun exportToExcel(context: Context, fileName: String, activities: List<E
             cell.cellStyle = headerStyle
             sheet.setColumnWidth(i, 4000)
         }
-        sheet.setColumnWidth(14, 8000) // summary column wider
-        sheet.setColumnWidth(15, 6000) // photos column wider
+        sheet.setColumnWidth(15, 8000) // summary column wider
+        sheet.setColumnWidth(16, 6000) // photos column wider
 
         val drawing = sheet.createDrawingPatriarch()
         val creationHelper = workbook.creationHelper
         var rowNum = 1
+
+        // Track max character counts for manual auto-fit
+        val maxChars = IntArray(17) { 10 } // Start with min width of 10 chars
+        headers.forEachIndexed { i, h -> maxChars[i] = maxOf(maxChars[i], h.length) }
+        var maxPhotosInAnyRow = 0
 
         for (item in activities) {
             val isCompleted = item.status.equals("completed", ignoreCase = true)
@@ -714,35 +733,41 @@ suspend fun exportToExcel(context: Context, fileName: String, activities: List<E
             if (item.resultDetails.isNotEmpty()) {
                 for (res in item.resultDetails) {
                     val row = sheet.createRow(rowNum)
-                    // Set default row height if there are photos
                     if (res.photoUrls.isNotEmpty()) {
-                        row.height = (120 * 15).toShort() // ~120px height
+                        row.height = (120 * 15).toShort()
+                        maxPhotosInAnyRow = maxOf(maxPhotosInAnyRow, res.photoUrls.size)
                     }
                     
-                    row.createCell(0).apply { setCellValue(item.date); this.cellStyle = baseCellStyle }
-                    row.createCell(1).apply { setCellValue(item.companyName ?: ""); this.cellStyle = baseCellStyle }
-                    row.createCell(2).apply { setCellValue(item.projectName ?: ""); this.cellStyle = baseCellStyle }
-                    row.createCell(3).apply { setCellValue(item.topic ?: ""); this.cellStyle = baseCellStyle }
-                    
-                    row.createCell(4).apply {
-                        setCellValue(item.status)
-                        cellStyle = if (isCompleted) statusCompletedStyle else statusPendingStyle
-                    }
-                    
-                    row.createCell(5).apply { setCellValue(if (item.activityType == "onsite" && item.checkInTime != null) { try { java.time.Instant.parse(item.checkInTime).atZone(java.time.ZoneId.systemDefault()).format(java.time.format.DateTimeFormatter.ofPattern("dd MMM HH:mm")) } catch(e: Exception) { item.checkInTime.take(16).replace("T", " ") } } else ""); this.cellStyle = baseCellStyle }
-                    row.createCell(6).apply { setCellValue(res.newStatus ?: ""); this.cellStyle = baseCellStyle }
-                    row.createCell(7).apply { setCellValue(res.opportunityScore ?: ""); this.cellStyle = baseCellStyle }
-                    row.createCell(8).apply { setCellValue(if (res.isProposalSent) "à¸ªà¹ˆà¸‡à¹à¸¥à¹‰à¸§" else "à¸¢à¸±à¸‡à¹„à¸¡à¹ˆà¸ªà¹ˆà¸‡"); this.cellStyle = baseCellStyle }
-                    row.createCell(9).apply { setCellValue(res.proposalDate ?: ""); this.cellStyle = baseCellStyle }
-                    row.createCell(10).apply { setCellValue(if (res.dmInvolved) "à¸¡à¸µ" else "à¹„à¸¡à¹ˆà¸¡à¸µ"); this.cellStyle = baseCellStyle }
-                    row.createCell(11).apply { setCellValue(res.competitorCount.toString()); this.cellStyle = baseCellStyle }
-                    row.createCell(12).apply { setCellValue(res.previousSolution ?: ""); this.cellStyle = baseCellStyle }
-                    row.createCell(13).apply { setCellValue(res.lossReason ?: ""); this.cellStyle = baseCellStyle }
-                    row.createCell(14).apply { setCellValue(res.summary ?: ""); this.cellStyle = baseCellStyle }
-                    
-                    val photoCell = row.createCell(15).apply { this.cellStyle = baseCellStyle }
+                    val values = listOf(
+                        item.date,
+                        item.companyName ?: "",
+                        item.projectName ?: "",
+                        item.topic ?: "",
+                        item.status,
+                        item.activityType?.uppercase() ?: "N/A",
+                        if (item.activityType == "onsite" && item.checkInTime != null) { try { java.time.Instant.parse(item.checkInTime).atZone(java.time.ZoneId.systemDefault()).format(java.time.format.DateTimeFormatter.ofPattern("dd MMM HH:mm")) } catch(e: Exception) { item.checkInTime.take(16).replace("T", " ") } } else "",
+                        res.newStatus ?: "",
+                        res.opportunityScore ?: "",
+                        if (res.isProposalSent) "ส่งแล้ว" else "ยังไม่ส่ง",
+                        res.proposalDate ?: "",
+                        if (res.dmInvolved) "มี" else "ไม่มี",
+                        res.competitorCount.toString(),
+                        res.previousSolution ?: "",
+                        res.lossReason ?: "",
+                        res.summary ?: ""
+                    )
 
-                    // Insert Photos side by side
+                    values.forEachIndexed { i, v ->
+                        row.createCell(i).apply {
+                            setCellValue(v)
+                            cellStyle = if (i == 4) (if (isCompleted) statusCompletedStyle else statusPendingStyle) else baseCellStyle
+                        }
+                        // Update max chars (handle newlines)
+                        v.split("\n").forEach { line -> maxChars[i] = maxOf(maxChars[i], line.length) }
+                    }
+                    
+                    row.createCell(16).apply { this.cellStyle = baseCellStyle }
+
                     if (res.photoUrls.isNotEmpty()) {
                         var colOffset = 0
                         for (url in res.photoUrls) {
@@ -750,24 +775,18 @@ suspend fun exportToExcel(context: Context, fileName: String, activities: List<E
                             if (bytes != null) {
                                 val pictureIdx = workbook.addPicture(bytes, Workbook.PICTURE_TYPE_JPEG)
                                 val anchor = creationHelper.createClientAnchor()
-                                
-                                // Anchor within the cell (14)
-                                anchor.setCol1(14)
+                                anchor.setCol1(16) // Fixed to col 16
                                 anchor.setRow1(rowNum)
-                                anchor.setCol2(14)
+                                anchor.setCol2(16)
                                 anchor.setRow2(rowNum)
                                 
-                                // Calculate offsets for multiple images
-                                // POI XSSF uses EMU units (1 pixel = 9525 EMUs)
                                 val emuPerPx = 9525
                                 val imgSizePx = 100
                                 val paddingPx = 10
-                                
                                 anchor.dx1 = (colOffset * (imgSizePx + paddingPx) + paddingPx) * emuPerPx
                                 anchor.dy1 = paddingPx * emuPerPx
                                 anchor.dx2 = anchor.dx1 + (imgSizePx * emuPerPx)
                                 anchor.dy2 = anchor.dy1 + (imgSizePx * emuPerPx)
-                                
                                 drawing.createPicture(anchor, pictureIdx)
                                 colOffset++
                             }
@@ -777,33 +796,44 @@ suspend fun exportToExcel(context: Context, fileName: String, activities: List<E
                 }
             } else {
                 val row = sheet.createRow(rowNum)
-                row.createCell(0).apply { setCellValue(item.date); this.cellStyle = baseCellStyle }
-                row.createCell(1).apply { setCellValue(item.companyName ?: ""); this.cellStyle = baseCellStyle }
-                row.createCell(2).apply { setCellValue(item.projectName ?: ""); this.cellStyle = baseCellStyle }
-                row.createCell(3).apply { setCellValue(item.topic ?: ""); this.cellStyle = baseCellStyle }
-                row.createCell(4).apply {
-                    setCellValue(item.status)
-                    cellStyle = if (isCompleted) statusCompletedStyle else statusPendingStyle
+                val resultsStr = item.results.joinToString("\n")
+                val values = listOf(
+                    item.date,
+                    item.companyName ?: "",
+                    item.projectName ?: "",
+                    item.topic ?: "",
+                    item.status,
+                    item.activityType?.uppercase() ?: "N/A",
+                    if (item.activityType == "onsite" && item.checkInTime != null) { try { java.time.Instant.parse(item.checkInTime).atZone(java.time.ZoneId.systemDefault()).format(java.time.format.DateTimeFormatter.ofPattern("dd MMM HH:mm")) } catch(e: Exception) { item.checkInTime.take(16).replace("T", " ") } } else "",
+                    "", "", "ยังไม่ส่ง", "", "ไม่มี", "0", "", "",
+                    resultsStr
+                )
+                values.forEachIndexed { i, v ->
+                    row.createCell(i).apply {
+                        setCellValue(v)
+                        cellStyle = if (i == 4) (if (isCompleted) statusCompletedStyle else statusPendingStyle) else baseCellStyle
+                    }
+                    v.split("\n").forEach { line -> maxChars[i] = maxOf(maxChars[i], line.length) }
                 }
-                    row.createCell(5).apply { setCellValue(if (item.activityType == "onsite" && item.checkInTime != null) { try { java.time.Instant.parse(item.checkInTime).atZone(java.time.ZoneId.systemDefault()).format(java.time.format.DateTimeFormatter.ofPattern("dd MMM HH:mm")) } catch(e: Exception) { item.checkInTime.take(16).replace("T", " ") } } else ""); this.cellStyle = baseCellStyle }
-                row.createCell(6).apply { setCellValue(""); this.cellStyle = baseCellStyle }
-                row.createCell(7).apply { setCellValue(""); this.cellStyle = baseCellStyle }
-                row.createCell(8).apply { setCellValue("à¸¢à¸±à¸‡à¹„à¸¡à¹ˆà¸ªà¹ˆà¸‡"); this.cellStyle = baseCellStyle }
-                row.createCell(9).apply { setCellValue(""); this.cellStyle = baseCellStyle }
-                row.createCell(10).apply { setCellValue("à¹„à¸¡à¹ˆà¸¡à¸µ"); this.cellStyle = baseCellStyle }
-                row.createCell(11).apply { setCellValue("0"); this.cellStyle = baseCellStyle }
-                row.createCell(12).apply { setCellValue(""); this.cellStyle = baseCellStyle }
-                row.createCell(13).apply { setCellValue(""); this.cellStyle = baseCellStyle }
-                row.createCell(14).apply { setCellValue(item.results.joinToString("\n")); this.cellStyle = baseCellStyle }
-                row.createCell(15).apply { setCellValue(""); this.cellStyle = baseCellStyle }
+                row.createCell(16).apply { this.cellStyle = baseCellStyle }
                 rowNum++
             }
         }
 
-                for (i in 0..14) {
-            sheet.autoSizeColumn(i)
-            val currentWidth = sheet.getColumnWidth(i)
-            sheet.setColumnWidth(i, currentWidth + 1000)
+        // Apply Manual Auto-fit
+        for (i in 0..15) {
+            // Width in units of 1/256th of a character width
+            // Multiplier 256 * 1.2 to give some breathing room, max width 255 chars
+            val width = minOf(255, (maxChars[i] * 1.3).toInt()) * 256
+            sheet.setColumnWidth(i, width)
+        }
+        // Special handling for photo column
+        if (maxPhotosInAnyRow > 0) {
+            // Each photo is ~100px + padding. 1px is approx 36.5 units in POI
+            val photoColWidth = (maxPhotosInAnyRow * 110 + 20) * 37
+            sheet.setColumnWidth(16, photoColWidth)
+        } else {
+            sheet.setColumnWidth(16, 4000)
         }
 
         val file = File(context.cacheDir, "$fileName.xlsx")
@@ -875,7 +905,7 @@ suspend fun exportToPdf(context: Context, fileName: String, activities: List<Exp
         canvas.drawText(item.status, 500f, y, bodyPaint)
 
         // Topic (Wrapped)
-        val topicLines = wrapTextLines(item.topic ?: "N/A", bodyPaint, 330f)
+        val topicLines = wrapTextLines("${item.topic ?: "N/A"} (${item.activityType?.uppercase() ?: "N/A"})", bodyPaint, 330f)
         topicLines.forEach { line ->
             checkPageBreak(14f)
             canvas.drawText(line, 150f, y, bodyPaint)
@@ -907,25 +937,25 @@ suspend fun exportToPdf(context: Context, fileName: String, activities: List<Exp
         if (item.resultDetails.isNotEmpty()) {
             item.resultDetails.forEach { res ->
                 val summaryText = res.summary ?: "N/A"
-                val summaryLines = wrapTextLines("â€¢ à¸ªà¸£à¸¸à¸›à¸œà¸¥: $summaryText", resultPaint, 370f)
+                val summaryLines = wrapTextLines("\u2022 \u0e2a\u0e23\u0e38\u0e1b\u0e1c\u0e25: $summaryText", resultPaint, 370f) // สรุปผล
                 summaryLines.forEach { line ->
-                    checkPageBreak(13f)
+                    checkPageBreak(14f)
                     canvas.drawText(line, 160f, y, resultPaint)
-                    y += 13f
+                    y += 14f
                 }
 
                 val detailParts = mutableListOf<String>()
-                if (!res.newStatus.isNullOrBlank()) detailParts.add("à¸ªà¸–à¸²à¸™à¸°à¹ƒà¸«à¸¡à¹ˆ: ${res.newStatus}")
-                if (!res.opportunityScore.isNullOrBlank()) detailParts.add("à¹‚à¸­à¸à¸²à¸ª: ${res.opportunityScore}%")
+                if (!res.newStatus.isNullOrBlank()) detailParts.add("\u0e2a\u0e16\u0e32\u0e19\u0e30\u0e43\u0e2b\u0e21\u0e48: ${res.newStatus}") // สถานะใหม่
+                if (!res.opportunityScore.isNullOrBlank()) detailParts.add("\u0e42\u0e2d\u0e01\u0e32\u0e2a: ${res.opportunityScore}%") // โอกาส
                 if (res.isProposalSent) {
-                    detailParts.add("proposal: à¹ƒà¸Šà¹ˆ (${res.proposalDate ?: ""})")
+                    detailParts.add("proposal: \u0e43\u0e0a\u0e48 (${res.proposalDate ?: ""})") // ใช่
                 } else {
-                    detailParts.add("proposal: à¹„à¸¡à¹ˆà¹ƒà¸Šà¹ˆ")
+                    detailParts.add("proposal: \u0e44\u0e21\u0e48\u0e43\u0e0a\u0e48") // ไม่ใช่
                 }
-                if (res.dmInvolved) detailParts.add("DM à¸£à¹ˆà¸§à¸¡à¸›à¸£à¸°à¸Šà¸¸à¸¡: à¸¡à¸µ")
-                if (res.competitorCount > 0) detailParts.add("à¸„à¸¹à¹ˆà¹à¸‚à¹ˆà¸‡: ${res.competitorCount} à¸£à¸²à¸¢")
-                if (!res.previousSolution.isNullOrBlank()) detailParts.add("à¹‚à¸‹à¸¥à¸¹à¸Šà¸±à¸™à¹€à¸”à¸´à¸¡: ${res.previousSolution}")
-                if (!res.lossReason.isNullOrBlank()) detailParts.add("à¹€à¸«à¸•à¸¸à¸œà¸¥à¹à¸žà¹‰: ${res.lossReason}")
+                if (res.dmInvolved) detailParts.add("DM \u0e23\u0e48\u0e27\u0e21\u0e1b\u0e23\u0e30\u0e0a\u0e38\u0e21: \u0e21\u0e35") // มี
+                if (res.competitorCount > 0) detailParts.add("\u0e08\u0e33\u0e19\u0e27\u0e19\u0e04\u0e39\u0e48\u0e41\u0e02\u0e48\u0e07: ${res.competitorCount} \u0e23\u0e32\u0e22") // จำนวนคู่แข่ง ... ราย
+                if (!res.previousSolution.isNullOrBlank()) detailParts.add("\u0e42\u0e0b\u0e25\u0e39\u0e0a\u0e31\u0e48\u0e19\u0e40\u0e14\u0e34\u0e21: ${res.previousSolution}") // โซลูชั่นเดิม
+                if (!res.lossReason.isNullOrBlank()) detailParts.add("\u0e40\u0e2b\u0e15\u0e38\u0e1c\u0e25\u0e41\u0e1e\u0e49: ${res.lossReason}") // เหตุผลแพ้
 
                 if (detailParts.isNotEmpty()) {
                     detailParts.forEach { detail ->
@@ -939,9 +969,9 @@ suspend fun exportToPdf(context: Context, fileName: String, activities: List<Exp
                 }
 
                 if (res.photoUrls.isNotEmpty()) {
-                    checkPageBreak(13f)
-                    canvas.drawText("à¸£à¸¹à¸›à¸ à¸²à¸žà¹à¸™à¸š (${res.photoUrls.size} à¸£à¸¹à¸›):", 160f, y, subPaint)
-                    y += 13f
+                    checkPageBreak(14f)
+                    canvas.drawText("\u0e23\u0e39\u0e1b\u0e20\u0e32\u0e1e\u0e41\u0e1a\u0e1a (${res.photoUrls.size} \u0e23\u0e39\u0e1b):", 160f, y, subPaint) // รูปภาพแนบ ... รูป
+                    y += 14f
 
                     res.photoUrls.chunked(2).forEach { rowUrls ->
                         val rowItems = rowUrls.map { pUrl ->
@@ -995,11 +1025,11 @@ suspend fun exportToPdf(context: Context, fileName: String, activities: List<Exp
             }
         } else {
             item.results.forEach { res ->
-                val resLines = wrapTextLines("â€¢ $res", resultPaint, 370f)
+                val resLines = wrapTextLines("• $res", resultPaint, 370f)
                 resLines.forEach { line ->
-                    checkPageBreak(13f)
+                    checkPageBreak(14f)
                     canvas.drawText(line, 160f, y, resultPaint)
-                    y += 13f
+                    y += 14f
                 }
             }
         }
@@ -1038,10 +1068,10 @@ fun WeeklyReportPreview() {
                         topic = "Meeting with client",
                         note = "Discuss about the project requirements.",
                         status = "completed",
-                        results = listOf("à¸¥à¸¹à¸à¸„à¹‰à¸²à¸ªà¸™à¹ƒà¸ˆà¹€à¸žà¸´à¹ˆà¸¡ Module A", "à¸™à¸±à¸”à¸„à¸¸à¸¢à¸£à¸²à¸„à¸²à¸•à¹ˆà¸­à¸­à¸²à¸—à¸´à¸•à¸¢à¹Œà¸«à¸™à¹‰à¸²"),
+                        results = listOf("ลูกค้าสนใจเพิ่ม Module A", "นัดคุยราคาต่ออาทิตย์หน้า"),
                         resultDetails = listOf(
                             ExportResultDetail(
-                                summary = "à¸¥à¸¹à¸à¸„à¹‰à¸²à¸ªà¸™à¹ƒà¸ˆà¹€à¸žà¸´à¹ˆà¸¡ Module A",
+                                summary = "ลูกค้าสนใจเพิ่ม Module A",
                                 newStatus = "Quotation",
                                 opportunityScore = "80%",
                                 isProposalSent = true,
@@ -1054,7 +1084,7 @@ fun WeeklyReportPreview() {
                 ),
                 startDate = LocalDate.now().minusDays(6),
                 endDate = LocalDate.now(),
-                weekRangeText = "23 à¸•.à¸„. 2023 - 29 à¸•.à¸„. 2023"
+                weekRangeText = "23 ต.ค. 2023 - 29 ต.ค. 2023"
             ),
             onBack = {},
             onDateRangeSelected = { _, _ -> }
