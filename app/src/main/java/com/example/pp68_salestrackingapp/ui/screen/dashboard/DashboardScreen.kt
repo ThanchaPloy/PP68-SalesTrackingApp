@@ -220,9 +220,10 @@ fun DashboardScreenContent(
                     label = "คาดว่าจะปิดในเดือนนี้",
                     icon = Icons.Default.Event,
                     modifier = Modifier.fillMaxWidth()
+                )
                 Spacer(Modifier.height(4.dp))
                 VisitCountCard(count = s.monthlyVisitCount, label = "จำนวนการเข้าพบเดือนนี้")
-                )
+
             }
 
             // ── สถานะ PIPELINE โครงการ ───────────────────────
@@ -477,3 +478,4 @@ fun DashboardScreenPreview() {
         )
     }
 }
+
