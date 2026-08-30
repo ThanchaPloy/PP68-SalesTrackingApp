@@ -294,6 +294,7 @@ class CreateAppointmentViewModel @Inject constructor(
                     loadContactsForProject(activity.projectId, selectedContactIds)
                     projectRepo.getProjectById(activity.projectId).onSuccess { p ->
                         _uiState.update { it.copy(selectedProjectName = p.projectName) }
+                        filterMastersByProjectStatus(p.projectStatus ?: "")
                     }
                 } else {
                     // ถ้าไม่มี Project ให้ใช้ allContactOptions

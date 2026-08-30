@@ -30,7 +30,10 @@ data class ActivityCard(
     val weeklyNote:    String? = null,
     val customerId:    String? = null,
     val hasResult:     Boolean = false,
-    val checkInTime:   String? = null
+    val checkInTime:   String? = null,
+    val isLocationVerified: Boolean? = null,
+    val plannedLat:    Double? = null,
+    val plannedLong:   Double? = null
 )
 
 data class HomeUiState(

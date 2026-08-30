@@ -63,9 +63,14 @@ object ExportHelper {
                 canvas.drawText(text, 50f, yPosition, paint)
 
                 val detailText = "   Topic: ${item.topic ?: "-"} | Note: ${item.note ?: "-"}"
+                val locationText = "   Location: ${item.locationName ?: "-"}"
                 canvas.drawText(detailText, 50f, yPosition + 20f, paint)
 
-                yPosition += 50f // ขยับลงไปบรรทัดต่อไป
+                val contactText = "   Contact: ${item.contactName ?: "-"} | Check-in: ${item.checkInStatus ?: "-"}"
+                canvas.drawText(contactText, 50f, yPosition + 40f, paint)
+                canvas.drawText(locationText, 50f, yPosition + 60f, paint)
+
+                yPosition += 90f // ขยับลงไปบรรทัดต่อไป
             }
 
             pdfDocument.finishPage(page)

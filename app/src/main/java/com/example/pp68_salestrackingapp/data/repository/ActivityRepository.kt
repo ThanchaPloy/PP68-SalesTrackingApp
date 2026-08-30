@@ -234,7 +234,7 @@ class ActivityRepository @Inject constructor(
                     val masters = if (masterResp.isSuccessful) masterResp.body() ?: emptyList() else emptyList()
                     val dtos = checklist.map { item ->
                         val master = masters.find { it.masterId == item.masterId }
-                        PlanItemDto(masterId = item.masterId, masterDetails = MasterActDto(master?.actName ?: "Activity ${item.masterId}"), isDone = item.isDone)
+                        PlanItemDto(masterId = item.masterId, masterDetails = MasterActDto(item.actName ?: master?.actName ?: "Activity ${item.masterId}"), isDone = item.isDone)
                     }
                     val planItems = dtos.map { dto -> ActivityPlanItem(appointmentId = activityId, masterId = dto.masterId, actName = dto.masterDetails?.actName, isDone = dto.isDone) }
                     planItemDao.insertPlanItems(planItems)
@@ -338,7 +338,7 @@ class ActivityRepository @Inject constructor(
                 val cards = activities.map { activity ->
                     val project = activity.projectId?.let { projects[it] }
                     val customer = activity.customerId?.let { customers[it] }
-                    ActivityCard(activityId = activity.activityId, activityType = activity.activityType, projectName = project?.projectName ?: activity.projectName, companyName = customer?.companyName ?: activity.companyName, contactName = activity.contactName, objective = activity.detail, planStatus = activity.status, plannedDate = activity.activityDate, plannedTime = activity.plannedTime, plannedEndTime = activity.plannedEndTime, weeklyNote = activity.weeklyNote ?: activity.note, customerId = activity.customerId, checkInTime = activity.checkInTime)
+                    ActivityCard(activityId = activity.activityId, activityType = activity.activityType, projectName = project?.projectName ?: activity.projectName, companyName = customer?.companyName ?: activity.companyName, contactName = activity.contactName, objective = activity.detail, planStatus = activity.status, plannedDate = activity.activityDate, plannedTime = activity.plannedTime, plannedEndTime = activity.plannedEndTime, weeklyNote = activity.weeklyNote ?: activity.note, customerId = activity.customerId, checkInTime = activity.checkInTime, isLocationVerified = activity.isLocationVerified, plannedLat = activity.plannedLat, plannedLong = activity.plannedLong)
                 }
                 kotlin.Result.success(cards)
             } catch (e: Exception) {

@@ -56,7 +56,10 @@ data class ExportActivityItem(
     val results: List<String> = emptyList(),
     val resultDetails: List<ExportResultDetail> = emptyList(),
     val activityType: String? = null,
-    val checkInTime: String? = null
+    val checkInTime: String? = null,
+    val contactName: String? = null,
+    val checkInStatus: String? = null,
+    val locationName: String? = null
 )
 
 data class ExportProjectItem(
@@ -163,7 +166,17 @@ class ExportViewModel @Inject constructor(
                             results = summaryList,
                             resultDetails = resultDetailsList,
                             activityType = act.activityType,
-                            checkInTime = act.checkInTime
+                            checkInTime = act.checkInTime,
+                            contactName = act.contactName,
+                            checkInStatus = run {
+                                val statuses = mutableListOf<String>()
+                                if (act.isLocationVerified == false) statuses.add("นอกสถานที่")
+                                val checkIn = act.checkInTime
+                                val planned = act.plannedTime
+                                if (checkIn != null && planned != null && checkIn > planned) statuses.add("ช้ากว่าเวลานัด")
+                                if (statuses.isEmpty()) null else statuses.joinToString(", ")
+                            },
+                            locationName = getAddressFromLatLong(act.plannedLat, act.plannedLong)
                         )
                     )
                 }
@@ -214,7 +227,10 @@ class ExportViewModel @Inject constructor(
                             results = listOfNotNull(res.summary),
                             resultDetails = listOf(detail),
                             activityType = null,
-                            checkInTime = null
+                            checkInTime = null,
+                            contactName = null,
+                            checkInStatus = null,
+                            locationName = null
                         )
                     )
                 }
@@ -262,11 +278,16 @@ class ExportViewModel @Inject constructor(
         }
     }
 
+    
+    private suspend fun getAddressFromLatLong(lat: Double?, lon: Double?): String {
+        return ""
+    }
+
     fun generateActivityCsvString(): String {
         val activities = _uiState.value.activities
         val builder = StringBuilder()
         // Added UTF-8 BOM (\uFEFF) and using Unicode escapes for Thai headers
-        builder.append("\uFEFF\u0e27\u0e31\u0e19\u0e17\u0e35\u0e48 (Date),\u0e42\u0e04\u0e23\u0e07\u0e01\u0e32\u0e23 (Project),\u0e1a\u0e23\u0e34\u0e2a\u0e31\u0e17 (Company),\u0e2b\u0e31\u0e27\u0e02\u0e49\u0e2d (Topic),\u0e2a\u0e16\u0e32\u0e19\u0e30 (Status),\u0e1b\u0e23\u0e30\u0e40\u0e20\u0e17 (Type),\u0e40\u0e0a\u0e47\u0e04\u0e2d\u0e34\u0e19 (Check-in),\u0e2a\u0e16\u0e32\u0e19\u0e30\u0e43\u0e2b\u0e21\u0e48 (New Status),\u0e42\u0e2d\u0e01\u0e32\u0e2a (Opportunity),\u0e43\u0e1a\u0e40\u0e2a\u0e19\u0e2d\u0e23\u0e32\u0e04\u0e32 (Proposal),\u0e27\u0e31\u0e19\u0e17\u0e35\u0e48\u0e40\u0e2a\u0e19\u0e2d\u0e23\u0e32\u0e04\u0e32 (Proposal Date),DM \u0e23\u0e48\u0e27\u0e21\u0e1b\u0e23\u0e30\u0e0a\u0e38\u0e21 (DM Involved),\u0e08\u0e33\u0e19\u0e27\u0e19\u0e04\u0e39\u0e48\u0e41\u0e02\u0e48\u0e07 (CompetitorCount),\u0e04\u0e27\u0e32\u0e21\u0e40\u0e23\u0e47\u0e27 (Speed),\u0e2a\u0e16\u0e32\u0e19\u0e30\u0e14\u0e35\u0e25 (Deal),\u0e42\u0e0b\u0e25\u0e39\u0e0a\u0e31\u0e48\u0e19\u0e40\u0e14\u0e34\u0e21 (Solution),\u0e40\u0e2b\u0e15\u0e38\u0e1c\u0e25\u0e41\u0e1e\u0e49 (Loss),\u0e2a\u0e23\u0e38\u0e1b\u0e1c\u0e25 (Summary),\u0e23\u0e39\u0e1b\u0e20\u0e32\u0e1e (Photos)\n")
+        builder.append("\uFEFF\u0e27\u0e31\u0e19\u0e17\u0e35\u0e48 (Date),\u0e42\u0e04\u0e23\u0e07\u0e01\u0e32\u0e23 (Project),\u0e1a\u0e23\u0e34\u0e29\u0e31\u0e17 (Company),\u0e2b\u0e31\u0e27\u0e02\u0e49\u0e2d (Topic),\u0e2a\u0e16\u0e32\u0e19\u0e30 (Status),\u0e1b\u0e23\u0e30\u0e40\u0e20\u0e17 (Type),\u0e40\u0e0a\u0e47\u0e04\u0e2d\u0e34\u0e19 (Check-in),\u0e2a\u0e16\u0e32\u0e19\u0e30\u0e43\u0e2b\u0e21\u0e48 (New Status),\u0e42\u0e2d\u0e01\u0e32\u0e2a (Opportunity),\u0e43\u0e1a\u0e40\u0e2a\u0e19\u0e2d\u0e23\u0e32\u0e04\u0e32 (Proposal),\u0e27\u0e31\u0e19\u0e17\u0e35\u0e48\u0e40\u0e2a\u0e19\u0e2d\u0e23\u0e32\u0e04\u0e32 (Proposal Date),DM \u0e23\u0e48\u0e27\u0e21\u0e1b\u0e23\u0e30\u0e0a\u0e38\u0e21 (DM Involved),\u0e08\u0e33\u0e19\u0e27\u0e19\u0e04\u0e39\u0e48\u0e41\u0e02\u0e48\u0e07 (CompetitorCount),\u0e04\u0e27\u0e32\u0e21\u0e40\u0e23\u0e47\u0e27 (Speed),\u0e2a\u0e16\u0e32\u0e19\u0e30\u0e14\u0e35\u0e25 (Deal),\u0e42\u0e0b\u0e25\u0e39\u0e0a\u0e31\u0e48\u0e19\u0e40\u0e14\u0e34\u0e21 (Solution),\u0e40\u0e2b\u0e15\u0e38\u0e1c\u0e25\u0e41\u0e1e\u0e49 (Loss),\u0e2a\u0e23\u0e38\u0e1b\u0e1c\u0e25 (Summary),\u0e23\u0e39\u0e1b\u0e20\u0e32\u0e1e (Photos),\u0e1c\u0e39\u0e49\u0e15\u0e34\u0e14\u0e15\u0e48\u0e2d (Contact),\u0e2a\u0e16\u0e32\u0e19\u0e30\u0e40\u0e0a\u0e47\u0e04\u0e2d\u0e34\u0e19 (Check-in Status),\u0e2a\u0e16\u0e32\u0e19\u0e17\u0e35\u0e48\u0e19\u0e31\u0e14\u0e2b\u0e21\u0e32\u0e22 (Location Name)\n")
         activities.forEach { item ->
             val safeProject = item.projectName?.replace("\"", "\"\"") ?: ""
             val safeCompany = item.companyName?.replace("\"", "\"\"") ?: ""
@@ -289,12 +310,12 @@ class ExportViewModel @Inject constructor(
                     val summary = res.summary?.replace("\"", "\"\"")?.replace("\n", " ") ?: ""
                     val photos = res.photoUrls.joinToString("; ") { formatPhotoUrl(it) }.replace("\"", "\"\"")
 
-                    builder.append("${item.date},\"$safeProject\",\"$safeCompany\",\"$safeTopic\",${item.status},\"$safeType\",\"$checkIn\",\"$newStatus\",\"$score\",\"$propSent\",\"$propDate\",\"$dm\",\"$comp\",\"$speed\",\"$dealPos\",\"$sol\",\"$loss\",\"$summary\",\"$photos\"\n")
+                    builder.append("${item.date},\"$safeProject\",\"$safeCompany\",\"$safeTopic\",${item.status},\"$safeType\",\"$checkIn\",\"$newStatus\",\"$score\",\"$propSent\",\"$propDate\",\"$dm\",\"$comp\",\"$speed\",\"$dealPos\",\"$sol\",\"$loss\",\"$summary\",\"$photos\",\"${item.contactName ?: ""}\",\"${item.checkInStatus ?: ""}\",\"${item.locationName ?: ""}\"\n")
                 }
             } else {
                 val checkIn = item.checkInTime ?: ""
                 val safeResults = item.results.joinToString("; ").replace("\"", "\"\"")
-                builder.append("${item.date},\"$safeProject\",\"$safeCompany\",\"$safeTopic\",${item.status},\"$safeType\",\"$checkIn\",\"\",\"\",\"No\",\"\",\"No\",\"0\",\"\",\"\",\"\",\"\",\"$safeResults\",\"\"\n")
+                builder.append("${item.date},\"$safeProject\",\"$safeCompany\",\"$safeTopic\",${item.status},\"$safeType\",\"$checkIn\",\"\",\"\",\"No\",\"\",\"No\",\"0\",\"\",\"\",\"\",\"\",\"$safeResults\",\"\",\"${item.contactName ?: ""}\",\"${item.checkInStatus ?: ""}\",\"${item.locationName ?: ""}\"\n")
             }
         }
         return builder.toString()

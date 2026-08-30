@@ -21,11 +21,21 @@ import java.util.Locale
 import javax.inject.Inject
 import java.time.ZoneId
 
-data class PipelineStageCount(val stage: String, val count: Int, val totalValue: Double)
-data class OpportunityGroup(val score: String, val count: Int, val totalValue: Double)
+data class PipelineStageCount(val stage: String, val count: Int, val totalValue: Double, val projects: List<Project> = emptyList())
+data class OpportunityGroup(val score: String, val count: Int, val totalValue: Double, val projects: List<Project> = emptyList())
 
 data class StatsUiState(
     // Weekly
+    
+    val weeklyNewLeadsList:     List<Customer> = emptyList(),
+    val weeklyNewProjectsList:  List<Project>  = emptyList(),
+    val weeklyVisitList:        List<SalesActivity> = emptyList(),
+    val monthlyClosedSalesList: List<Project>  = emptyList(),
+    val monthlyNewLeadsList:    List<Customer> = emptyList(),
+    val monthlyNewProjectsList: List<Project>  = emptyList(),
+    val activeProjectsList:     List<Project>  = emptyList(),
+    val closingThisMonthList:   List<Project>  = emptyList(),
+    val monthlyVisitList:       List<SalesActivity> = emptyList(),
     val weeklyNewLeads:     Int    = 0,
     val weeklyNewProjects:  Int    = 0,
     val weeklyVisitCount:   Int    = 0,
@@ -139,17 +149,14 @@ class StatsViewModel @Inject constructor(
         val myProjects = projects
 
         // â”€â”€ Weekly â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-        val weeklyLeads = myCustomers.count { c ->
-            isInRange(c.createdAt?.take(10), weekStart, weekEnd)
-        }
+        val weeklyLeadsList = myCustomers.filter { c -> isInRange(c.createdAt?.take(10), weekStart, weekEnd) }
+        val weeklyLeads = weeklyLeadsList.size
 
-        val weeklyNewProj = myProjects.count { p ->
-            isInRange(p.startDate?.take(10), weekStart, weekEnd)
-        }
+        val weeklyNewProjList = myProjects.filter { p -> isInRange(p.startDate?.take(10), weekStart, weekEnd) }
+        val weeklyNewProj = weeklyNewProjList.size
 
-        val weeklyVisit = activities.count { a ->
-            a.status.lowercase() == "completed" && isInRange(a.activityDate, weekStart, weekEnd)
-        }
+        val weeklyVisitListRaw = activities.filter { a -> a.status.lowercase() == "completed" && isInRange(a.activityDate, weekStart, weekEnd) }
+        val weeklyVisit = weeklyVisitListRaw.size
 
         // â”€â”€ Monthly â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         val closedSales = myProjects
@@ -165,22 +172,17 @@ class StatsViewModel @Inject constructor(
         val totalValue = myProjects.filter { it.projectStatus !in listOf("Lost", "Failed") }
             .sumOf { it.expectedValue ?: 0.0 }
 
-        val monthlyLeads = myCustomers.count { c ->
-            isInRange(c.createdAt?.take(10), monthStart, monthEnd)
-        }
+        val monthlyLeadsList = myCustomers.filter { c -> isInRange(c.createdAt?.take(10), monthStart, monthEnd) }
+        val monthlyLeads = monthlyLeadsList.size
 
-        val monthlyNewProj = myProjects.count { p ->
-            isInRange(p.startDate?.take(10), monthStart, monthEnd)
-        }
+        val monthlyNewProjList = myProjects.filter { p -> isInRange(p.startDate?.take(10), monthStart, monthEnd) }
+        val monthlyNewProj = monthlyNewProjList.size
 
-        val monthlyVisit = activities.count { a ->
-            a.status.lowercase() == "completed" && isInRange(a.activityDate, monthStart, monthEnd)
-        }
+        val monthlyVisitListRaw = activities.filter { a -> a.status.lowercase() == "completed" && isInRange(a.activityDate, monthStart, monthEnd) }
+        val monthlyVisit = monthlyVisitListRaw.size
 
-        val closingMonthCount = myProjects.count { p ->
-            p.projectStatus !in listOf("Completed", "Lost", "Failed") &&
-                    isSameMonth(p.closingDate, currentMonth)
-        }
+        val closingMonthList = myProjects.filter { p -> p.projectStatus !in listOf("Completed", "Lost", "Failed") && isSameMonth(p.closingDate, currentMonth) }
+        val closingMonthCount = closingMonthList.size
 
         // â”€â”€ Pipeline stages â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         val stageOrder = listOf(
@@ -192,7 +194,8 @@ class StatsViewModel @Inject constructor(
             PipelineStageCount(
                 stage      = stage,
                 count      = stageProjects.size,
-                totalValue = stageProjects.sumOf { it.expectedValue ?: 0.0 }
+                totalValue = stageProjects.sumOf { it.expectedValue ?: 0.0 },
+                projects   = stageProjects
             )
         }.filter { it.count > 0 }
 
@@ -207,11 +210,21 @@ class StatsViewModel @Inject constructor(
             OpportunityGroup(
                 score      = score,
                 count      = scored.size,
-                totalValue = scored.sumOf { it.expectedValue ?: 0.0 }
+                totalValue = scored.sumOf { it.expectedValue ?: 0.0 },
+                projects   = scored
             )
         }
 
         return StatsUiState(
+            weeklyNewLeadsList = weeklyLeadsList,
+            weeklyNewProjectsList = weeklyNewProjList,
+            weeklyVisitList    = weeklyVisitListRaw,
+            monthlyClosedSalesList = myProjects.filter { it.projectStatus in listOf("PO", "Completed") && isInRange(it.closingDate ?: it.startDate, monthStart, monthEnd) },
+            monthlyNewLeadsList = monthlyLeadsList,
+            monthlyNewProjectsList = monthlyNewProjList,
+            activeProjectsList = activeProjectsList,
+            closingThisMonthList = closingMonthList,
+            monthlyVisitList   = monthlyVisitListRaw,
             weeklyNewLeads     = weeklyLeads,
             weeklyNewProjects  = weeklyNewProj,
             weeklyVisitCount   = weeklyVisit,

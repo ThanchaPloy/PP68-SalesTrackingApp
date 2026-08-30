@@ -38,7 +38,7 @@ class AppointmentAlarmReceiver : BroadcastReceiver() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        val title = "⏰ มีนัดหมายในอีก $leadMinutes นาที!"
+        val title = if (leadMinutes == 0) "\u0e16\u0e36\u0e07\u0e40\u0e27\u0e25\u0e32\u0e19\u0e31\u0e14\u0e2b\u0e21\u0e32\u0e22\u0e41\u0e25\u0e49\u0e27!" else "\u0e43\u0e01\u0e25\u0e49\u0e16\u0e36\u0e07\u0e40\u0e27\u0e25\u0e32\u0e19\u0e31\u0e14\u0e2b\u0e21\u0e32\u0e22\u0e43\u0e19\u0e2d\u0e35\u0e01 $leadMinutes \u0e19\u0e32\u0e17\u0e35!"
         val body = "$topic ที่ $companyName (เวลา $plannedTime)"
 
         val notification = NotificationCompat.Builder(context, NotificationChannels.APPOINTMENT_TIME_CHANNEL_ID)

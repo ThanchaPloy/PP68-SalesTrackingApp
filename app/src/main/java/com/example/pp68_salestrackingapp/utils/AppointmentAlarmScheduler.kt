@@ -23,7 +23,7 @@ class AppointmentAlarmScheduler(private val context: Context) {
         topic: String,
         plannedDateStr: String,
         plannedTimeStr: String,
-        leadMinutesList: List<Int> = listOf(30, 15)
+        leadMinutesList: List<Int> = listOf(30, 15, 0)
     ) {
         try {
             if (plannedDateStr.isBlank()) return
@@ -79,7 +79,7 @@ class AppointmentAlarmScheduler(private val context: Context) {
         }
     }
 
-    fun cancelAlarm(activityId: String, leadMinutesList: List<Int> = listOf(30, 15)) {
+    fun cancelAlarm(activityId: String, leadMinutesList: List<Int> = listOf(30, 15, 0)) {
         leadMinutesList.forEach { leadMinutesBefore ->
             val intent = Intent(context, AppointmentAlarmReceiver::class.java)
             val requestCode = (activityId + leadMinutesBefore).hashCode()

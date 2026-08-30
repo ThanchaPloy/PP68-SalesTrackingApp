@@ -1,5 +1,16 @@
 ﻿package com.example.pp68_salestrackingapp.ui.screen.dashboard
 
+
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.clickable
+import com.example.pp68_salestrackingapp.data.model.Customer
+import com.example.pp68_salestrackingapp.data.model.Project
+import com.example.pp68_salestrackingapp.data.model.SalesActivity
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -59,6 +70,21 @@ private val oppColors = mapOf(
 )
 
 // ═══════════════════════════════════════════════════════════════
+
+enum class StatDetailType(val title: String) {
+    WEEKLY_LEADS("Weekly Leads"),
+    WEEKLY_PROJECTS("Weekly Projects"),
+    WEEKLY_VISITS("Weekly Visits"),
+    MONTHLY_CLOSED("Monthly Closed Sales"),
+    MONTHLY_LEADS("Monthly Leads"),
+    MONTHLY_PROJECTS("Monthly Projects"),
+    ACTIVE_PROJECTS("Active Projects"),
+    CLOSING_MONTH("Closing This Month"),
+    MONTHLY_VISITS("Monthly Visits"),
+    PIPELINE_STAGE("Pipeline Stage"),
+    OPPORTUNITY_GROUP("Opportunity Group")
+}
+
 @Composable
 fun DashboardScreen(
     onNotificationClick: () -> Unit = {},
@@ -109,6 +135,11 @@ fun DashboardScreenContent(
     currentTab: Int,
     onTabChange: (Int) -> Unit
 ) {
+
+    var selectedStatType by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<StatDetailType?>(null) }
+    var selectedPipelineStage by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<String?>(null) }
+    var selectedOpportunityGroup by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<String?>(null) }
+
     Scaffold(
         topBar = {
             AppTopBar(
