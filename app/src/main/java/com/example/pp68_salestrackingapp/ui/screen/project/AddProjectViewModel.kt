@@ -14,6 +14,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import com.example.pp68_salestrackingapp.data.model.Customer
+import java.util.UUID
 import javax.inject.Inject
 
 data class AddProjectUiState(
@@ -56,7 +58,12 @@ data class AddProjectUiState(
     val saveError:    String? = null,
     val lossReason:             String  = "",
     val otherLossReason:        String  = "",
-    val lossReasonError:        String? = null
+    val lossReasonError:        String? = null,
+    // Quick Add Customer
+    val isQuickAddCustomerOpen: Boolean = false,
+    val quickAddCompanyName:    String  = "",
+    val quickAddCustType:       String  = "",
+    val isSavingQuickCust:      Boolean = false
 )
 
 sealed class AddProjectEvent {
@@ -76,6 +83,12 @@ sealed class AddProjectEvent {
     data class LocationPicked(val lat: Double, val lng: Double)   : AddProjectEvent()
     data class LossReasonChanged(val value: String)               : AddProjectEvent()
     data class OtherLossReasonChanged(val value: String)          : AddProjectEvent()
+    
+    // Quick Add Events
+    data class ToggleQuickAddCustomer(val isOpen: Boolean)        : AddProjectEvent()
+    data class QuickAddCustomerChanged(val name: String, val type: String) : AddProjectEvent()
+    object SaveQuickAddCustomer                                   : AddProjectEvent()
+    
     object Save                                                   : AddProjectEvent()
 }
 
@@ -395,7 +408,54 @@ class AddProjectViewModel @Inject constructor(
                 _uiState.update { it.copy(lossReason = event.value, lossReasonError = null) }
             is AddProjectEvent.OtherLossReasonChanged ->
                 _uiState.update { it.copy(otherLossReason = event.value, lossReasonError = null) }
+            is AddProjectEvent.ToggleQuickAddCustomer -> {
+                _uiState.update { it.copy(isQuickAddCustomerOpen = event.isOpen, quickAddCompanyName = "", quickAddCustType = "") }
+            }
+            is AddProjectEvent.QuickAddCustomerChanged -> {
+                _uiState.update { it.copy(quickAddCompanyName = event.name, quickAddCustType = event.type) }
+            }
+            is AddProjectEvent.SaveQuickAddCustomer -> {
+                saveQuickCustomer()
+            }
             is AddProjectEvent.Save -> save()
+        }
+    }
+
+    private fun saveQuickCustomer() {
+        val st = _uiState.value
+        if (st.quickAddCompanyName.isBlank() || st.quickAddCustType.isBlank()) return
+        
+        viewModelScope.launch {
+            _uiState.update { it.copy(isSavingQuickCust = true) }
+            val newCust = Customer(
+                custId = UUID.randomUUID().toString(),
+                companyName = st.quickAddCompanyName.trim(),
+                custType = st.quickAddCustType,
+                createdBy = authRepo.currentUser()?.userId
+            )
+            val result = customerRepo.addCustomer(newCust) // Using customerRepo per the constructor
+            result.fold(
+                onSuccess = {
+                    // Update options and select it
+                    val newOption = Pair(newCust.custId, newCust.companyName)
+                    _uiState.update { 
+                        it.copy(
+                            customerOptions = it.customerOptions + newOption,
+                            selectedCustomerId = newCust.custId,
+                            selectedCustomerName = newCust.companyName,
+                            isQuickAddCustomerOpen = false,
+                            isSavingQuickCust = false,
+                            quickAddCompanyName = "",
+                            quickAddCustType = ""
+                        )
+                    }
+                    // Load contacts for the new customer (which will be empty, but clears previous)
+                    loadContacts(newCust.custId) // Function is loadContacts in this ViewModel
+                },
+                onFailure = {
+                    _uiState.update { it.copy(isSavingQuickCust = false) }
+                }
+            )
         }
     }
 

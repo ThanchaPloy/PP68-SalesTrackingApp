@@ -429,6 +429,18 @@ fun ProjectListItem(project: Project, onClick: () -> Unit) {
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
+                    } else {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .padding(top = 4.dp)
+                                .background(Color(0xFFFFF9C4), RoundedCornerShape(4.dp))
+                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                        ) {
+                            Text("⚠️", fontSize = 10.sp)
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("รอระบุลูกค้า", fontSize = 10.sp, color = Color(0xFFF57F17), fontWeight = FontWeight.Bold)
+                        }
                     }
                 }
                 Text(

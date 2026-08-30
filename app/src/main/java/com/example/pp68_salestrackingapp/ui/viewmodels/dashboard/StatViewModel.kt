@@ -36,6 +36,10 @@ data class StatsUiState(
     val activeProjectsList:     List<Project>  = emptyList(),
     val closingThisMonthList:   List<Project>  = emptyList(),
     val monthlyVisitList:       List<SalesActivity> = emptyList(),
+    
+    // Missing Customer Warning
+    val missingCustomerProjectsList: List<Project> = emptyList(),
+    val missingCustomerProjectsCount: Int = 0,
     val weeklyNewLeads:     Int    = 0,
     val weeklyNewProjects:  Int    = 0,
     val weeklyVisitCount:   Int    = 0,
@@ -168,6 +172,10 @@ class StatsViewModel @Inject constructor(
             it.projectStatus !in listOf("Completed", "Lost", "Failed")
         }
         val activeValue = activeProjectsList.sumOf { it.expectedValue ?: 0.0 }
+        
+        // Missing Customer Warning calculation
+        val missingCustList = activeProjectsList.filter { it.customerName.isNullOrBlank() }
+        val missingCustCount = missingCustList.size
 
         val totalValue = myProjects.filter { it.projectStatus !in listOf("Lost", "Failed") }
             .sumOf { it.expectedValue ?: 0.0 }

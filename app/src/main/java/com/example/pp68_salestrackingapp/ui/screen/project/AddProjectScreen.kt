@@ -137,19 +137,36 @@ fun AddProjectContent(
             }
 
             // ── Customer/Company ────────────────────────────
+            // Customer/Company 
             FormField("ลูกค้า/บริษัท") {
                 if (uiState.isLoadingCustomers) LoadingFieldProject()
                 else Column {
-                    SearchableDropdownField(
-                        value       = uiState.selectedCustomerName ?: "",
-                        placeholder = "เลือกลูกค้า",
-                        options     = uiState.customerOptions.map { it.second },
-                        onSelect    = { name ->
-                            val found = uiState.customerOptions.firstOrNull { it.second == name }
-                            found?.let { onEvent(AddProjectEvent.CustomerSelected(it.first, it.second)) }
-                        },
-                        onClear     = { onEvent(AddProjectEvent.CustomerSelected("", "")) }
-                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(modifier = Modifier.weight(1f)) {
+                            SearchableDropdownField(
+                                value       = uiState.selectedCustomerName ?: "",
+                                placeholder = "เลือกลูกค้า",
+                                options     = uiState.customerOptions.map { it.second },
+                                onSelect    = { name ->
+                                    val found = uiState.customerOptions.firstOrNull { it.second == name }
+                                    found?.let { onEvent(AddProjectEvent.CustomerSelected(it.first, it.second)) }
+                                },
+                                onClear     = { onEvent(AddProjectEvent.CustomerSelected("", "")) }
+                            )
+                        }
+                        TextButton(
+                            onClick = { onEvent(AddProjectEvent.ToggleQuickAddCustomer(true)) },
+                            modifier = Modifier.padding(start = 8.dp)
+                        ) {
+                            Icon(Icons.Default.Add, contentDescription = "Add Customer", modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text("สร้างด่วน", fontSize = 12.sp)
+                        }
+                    }
                     if (uiState.customerError != null)
                         Text(uiState.customerError, color = AppColors.Error, fontSize = 12.sp,
                             modifier = Modifier.padding(start = 4.dp, top = 2.dp))

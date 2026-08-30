@@ -187,6 +187,37 @@ fun DashboardScreenContent(
                     Text("โหลดข้อมูลไม่สำเร็จ: ${s.error}", color = RedPrimary, fontSize = 13.sp)
                 }
             }
+            
+            // Warning Card for missing customers
+            if (s.missingCustomerProjectsCount > 0) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(androidx.compose.ui.graphics.Color(0xFFFFF9C4), androidx.compose.foundation.shape.RoundedCornerShape(12.dp))
+                        .padding(16.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            androidx.compose.material3.Text("⚠️", fontSize = 24.sp)
+                            Spacer(Modifier.width(12.dp))
+                            Column {
+                                androidx.compose.material3.Text("โครงการที่รอระบุลูกค้า", fontWeight = FontWeight.Bold, color = androidx.compose.ui.graphics.Color(0xFFF57F17), fontSize = 16.sp)
+                                androidx.compose.material3.Text("กรุณาแก้ไขเพื่อเพิ่มข้อมูลลูกค้า", color = androidx.compose.ui.graphics.Color(0xFFF57F17), fontSize = 12.sp)
+                            }
+                        }
+                        androidx.compose.material3.Text(
+                            "${s.missingCustomerProjectsCount}", 
+                            fontWeight = FontWeight.Bold, 
+                            color = androidx.compose.ui.graphics.Color(0xFFE65100), 
+                            fontSize = 24.sp
+                        )
+                    }
+                }
+            }
             // ── ภาพรวมทั้งหมด ──────────────────────────
             SectionBlock(label = "ภาพรวมทั้งหมด") {
                 StatCard(
