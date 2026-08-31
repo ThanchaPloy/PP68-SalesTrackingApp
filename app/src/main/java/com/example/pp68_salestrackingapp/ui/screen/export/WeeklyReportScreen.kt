@@ -648,65 +648,36 @@ private suspend fun getPhotoBytes(context: Context, photoUrl: String): ByteArray
 
 suspend fun exportToExcel(context: Context, fileName: String, activities: List<ExportActivityItem>) {
     withContext(Dispatchers.IO) {
-        val workbook = XSSFWorkbook()
-        val sheet = workbook.createSheet("Weekly Report")
-        
-        // Setup styles
+        val workbook: Workbook = XSSFWorkbook()
+        val sheet = workbook.createSheet("Activities")
+
         val headerStyle = workbook.createCellStyle().apply {
-            fillForegroundColor = IndexedColors.DARK_RED.index
+            fillForegroundColor = IndexedColors.GREY_25_PERCENT.index
             fillPattern = FillPatternType.SOLID_FOREGROUND
-            val font = workbook.createFont().apply {
-                color = IndexedColors.WHITE.index
-                bold = true
-            }
-            setFont(font)
-            alignment = HorizontalAlignment.CENTER
+            setFont(workbook.createFont().apply { bold = true })
             verticalAlignment = VerticalAlignment.CENTER
-            borderBottom = BorderStyle.THIN
-            borderTop = BorderStyle.THIN
-            borderLeft = BorderStyle.THIN
-            borderRight = BorderStyle.THIN
         }
-
         val baseCellStyle = workbook.createCellStyle().apply {
-            verticalAlignment = VerticalAlignment.TOP
+            verticalAlignment = VerticalAlignment.CENTER
             wrapText = true
-            borderBottom = BorderStyle.THIN
-            borderTop = BorderStyle.THIN
-            borderLeft = BorderStyle.THIN
-            borderRight = BorderStyle.THIN
         }
-
         val statusCompletedStyle = workbook.createCellStyle().apply {
             cloneStyleFrom(baseCellStyle)
             fillForegroundColor = IndexedColors.LIGHT_GREEN.index
             fillPattern = FillPatternType.SOLID_FOREGROUND
-            alignment = HorizontalAlignment.CENTER
-            val font = workbook.createFont().apply {
-                color = IndexedColors.DARK_GREEN.index
-                bold = true
-            }
-            setFont(font)
         }
-
         val statusPendingStyle = workbook.createCellStyle().apply {
             cloneStyleFrom(baseCellStyle)
-            fillForegroundColor = IndexedColors.LIGHT_ORANGE.index
+            fillForegroundColor = IndexedColors.LIGHT_YELLOW.index
             fillPattern = FillPatternType.SOLID_FOREGROUND
-            alignment = HorizontalAlignment.CENTER
-            val font = workbook.createFont().apply {
-                color = IndexedColors.ORANGE.index
-                bold = true
-            }
-            setFont(font)
         }
 
-        // Headers (Using Unicode escapes to prevent encoding issues)
         val headers = listOf(
-            "\u0e27\u0e31\u0e19\u0e17\u0e35\u0e48 (Date)", "\u0e1a\u0e23\u0e34\u0e2a\u0e31\u0e17 (Company)", "\u0e42\u0e04\u0e23\u0e07\u0e01\u0e32\u0e23 (Project)", "\u0e2b\u0e31\u0e27\u0e02\u0e49\u0e2d (Topic)",
-            "\u0e2a\u0e16\u0e32\u0e19\u0e30 (Status)", "\u0e1b\u0e23\u0e30\u0e40\u0e20\u0e17 (Type)", "\u0e40\u0e0a\u0e47\u0e04\u0e2d\u0e34\u0e19 (Check-in)", "\u0e2a\u0e16\u0e32\u0e19\u0e30\u0e43\u0e2b\u0e21\u0e48 (New Status)", "\u0e42\u0e2d\u0e01\u0e32\u0e2a", "\u0e43\u0e1a\u0e40\u0e2a\u0e19\u0e2d\u0e23\u0e32\u0e04\u0e32",
-            "\u0e27\u0e31\u0e19\u0e17\u0e35\u0e48\u0e40\u0e2a\u0e19\u0e2d\u0e23\u0e32\u0e04\u0e32", "DM \u0e23\u0e48\u0e27\u0e21\u0e1b\u0e23\u0e30\u0e0a\u0e38\u0e21", "\u0e08\u0e33\u0e19\u0e27\u0e19\u0e04\u0e39\u0e48\u0e41\u0e02\u0e48\u0e07", "\u0e42\u0e0b\u0e25\u0e39\u0e0a\u0e31\u0e48\u0e19\u0e40\u0e14\u0e34\u0e21",
-            "\u0e40\u0e2b\u0e15\u0e38\u0e1c\u0e25\u0e41\u0e1e\u0e49", "\u0e2a\u0e23\u0e38\u0e1b\u0e1c\u0e25\u0e01\u0e32\u0e23\u0e17\u0e33\u0e07\u0e32\u0e19", "\u0e23\u0e39\u0e1b\u0e20\u0e32\u0e1e (Photos)"
+            "\u0e27\u0e31\u0e19\u0e17\u0e35\u0e48 (Date)", "\u0e1a\u0e23\u0e34\u0e29\u0e31\u0e17 (Company)", "\u0e42\u0e04\u0e23\u0e07\u0e01\u0e32\u0e23 (Project)", "\u0e2b\u0e31\u0e27\u0e02\u0e49\u0e2d (Topic)",
+            "\u0e2a\u0e16\u0e32\u0e19\u0e30 (Status)", "\u0e1b\u0e23\u0e30\u0e40\u0e20\u0e17 (Type)", "\u0e40\u0e0a\u0e47\u0e04\u0e2d\u0e34\u0e19 (Check-in)", "\u0e2a\u0e16\u0e32\u0e19\u0e30\u0e43\u0e2b\u0e21\u0e48 (New Status)",
+            "\u0e42\u0e2d\u0e01\u0e32\u0e2a (Opportunity)", "\u0e43\u0e1a\u0e40\u0e2a\u0e19\u0e2d\u0e23\u0e32\u0e04\u0e32 (Proposal)", "\u0e27\u0e31\u0e19\u0e17\u0e35\u0e48\u0e40\u0e2a\u0e19\u0e2d\u0e23\u0e32\u0e04\u0e32 (Proposal Date)", "DM \u0e23\u0e48\u0e27\u0e21\u0e1b\u0e23\u0e30\u0e0a\u0e38\u0e21 (DM Involved)", 
+            "\u0e08\u0e33\u0e19\u0e27\u0e19\u0e04\u0e39\u0e48\u0e41\u0e02\u0e48\u0e07 (CompetitorCount)", "\u0e04\u0e27\u0e32\u0e21\u0e40\u0e23\u0e47\u0e27 (Speed)", "\u0e2a\u0e16\u0e32\u0e19\u0e30\u0e14\u0e35\u0e25 (Deal)", "\u0e42\u0e0b\u0e25\u0e39\u0e0a\u0e31\u0e48\u0e19\u0e40\u0e14\u0e34\u0e21 (Solution)",
+            "\u0e40\u0e2b\u0e15\u0e38\u0e1c\u0e25\u0e41\u0e1e\u0e49 (Loss)", "\u0e2a\u0e23\u0e38\u0e1b\u0e1c\u0e25\u0e01\u0e32\u0e23\u0e17\u0e33\u0e07\u0e32\u0e19 (Summary)", "\u0e1c\u0e39\u0e49\u0e15\u0e34\u0e14\u0e15\u0e48\u0e2d (Contact)", "\u0e2a\u0e16\u0e32\u0e19\u0e30\u0e40\u0e0a\u0e47\u0e04\u0e2d\u0e34\u0e19 (Check-in Status)", "\u0e2a\u0e16\u0e32\u0e19\u0e17\u0e35\u0e48\u0e19\u0e31\u0e14\u0e2b\u0e21\u0e32\u0e22 (Location Name)", "\u0e23\u0e39\u0e1b\u0e20\u0e32\u0e1e (Photos)"
         )
         val headerRow = sheet.createRow(0)
         headers.forEachIndexed { i, title ->
@@ -715,15 +686,15 @@ suspend fun exportToExcel(context: Context, fileName: String, activities: List<E
             cell.cellStyle = headerStyle
             sheet.setColumnWidth(i, 4000)
         }
-        sheet.setColumnWidth(15, 8000) // summary column wider
-        sheet.setColumnWidth(16, 6000) // photos column wider
+        sheet.setColumnWidth(17, 8000) // summary column wider
+        sheet.setColumnWidth(21, 6000) // photos column wider
 
         val drawing = sheet.createDrawingPatriarch()
         val creationHelper = workbook.creationHelper
         var rowNum = 1
 
         // Track max character counts for manual auto-fit
-        val maxChars = IntArray(17) { 10 } // Start with min width of 10 chars
+        val maxChars = IntArray(22) { 10 } // Start with min width of 10 chars
         headers.forEachIndexed { i, h -> maxChars[i] = maxOf(maxChars[i], h.length) }
         var maxPhotosInAnyRow = 0
 
@@ -752,9 +723,14 @@ suspend fun exportToExcel(context: Context, fileName: String, activities: List<E
                         res.proposalDate ?: "",
                         if (res.dmInvolved) "มี" else "ไม่มี",
                         res.competitorCount.toString(),
+                        res.responseSpeed ?: "",
+                        res.dealPosition ?: "",
                         res.previousSolution ?: "",
                         res.lossReason ?: "",
-                        res.summary ?: ""
+                        res.summary ?: "",
+                        item.contactName ?: "",
+                        item.checkInStatus ?: "",
+                        item.locationName ?: ""
                     )
 
                     values.forEachIndexed { i, v ->
@@ -766,7 +742,7 @@ suspend fun exportToExcel(context: Context, fileName: String, activities: List<E
                         v.split("\n").forEach { line -> maxChars[i] = maxOf(maxChars[i], line.length) }
                     }
                     
-                    row.createCell(16).apply { this.cellStyle = baseCellStyle }
+                    row.createCell(21).apply { this.cellStyle = baseCellStyle }
 
                     if (res.photoUrls.isNotEmpty()) {
                         var colOffset = 0
@@ -775,9 +751,9 @@ suspend fun exportToExcel(context: Context, fileName: String, activities: List<E
                             if (bytes != null) {
                                 val pictureIdx = workbook.addPicture(bytes, Workbook.PICTURE_TYPE_JPEG)
                                 val anchor = creationHelper.createClientAnchor()
-                                anchor.setCol1(16) // Fixed to col 16
+                                anchor.setCol1(21) // Fixed to col 21
                                 anchor.setRow1(rowNum)
-                                anchor.setCol2(16)
+                                anchor.setCol2(21)
                                 anchor.setRow2(rowNum)
                                 
                                 val emuPerPx = 9525
@@ -805,8 +781,11 @@ suspend fun exportToExcel(context: Context, fileName: String, activities: List<E
                     item.status,
                     item.activityType?.uppercase() ?: "N/A",
                     if (item.activityType == "onsite" && item.checkInTime != null) { try { java.time.Instant.parse(item.checkInTime).atZone(java.time.ZoneId.systemDefault()).format(java.time.format.DateTimeFormatter.ofPattern("dd MMM HH:mm")) } catch(e: Exception) { item.checkInTime.take(16).replace("T", " ") } } else "",
-                    "", "", "ยังไม่ส่ง", "", "ไม่มี", "0", "", "",
-                    resultsStr
+                    "", "", "ยังไม่ส่ง", "", "ไม่มี", "0", "", "", "", "",
+                    resultsStr,
+                    item.contactName ?: "",
+                    item.checkInStatus ?: "",
+                    item.locationName ?: ""
                 )
                 values.forEachIndexed { i, v ->
                     row.createCell(i).apply {
@@ -815,13 +794,13 @@ suspend fun exportToExcel(context: Context, fileName: String, activities: List<E
                     }
                     v.split("\n").forEach { line -> maxChars[i] = maxOf(maxChars[i], line.length) }
                 }
-                row.createCell(16).apply { this.cellStyle = baseCellStyle }
+                row.createCell(21).apply { this.cellStyle = baseCellStyle }
                 rowNum++
             }
         }
 
         // Apply Manual Auto-fit
-        for (i in 0..15) {
+        for (i in 0..20) {
             // Width in units of 1/256th of a character width
             // Multiplier 256 * 1.2 to give some breathing room, max width 255 chars
             val width = minOf(255, (maxChars[i] * 1.3).toInt()) * 256
@@ -831,9 +810,9 @@ suspend fun exportToExcel(context: Context, fileName: String, activities: List<E
         if (maxPhotosInAnyRow > 0) {
             // Each photo is ~100px + padding. 1px is approx 36.5 units in POI
             val photoColWidth = (maxPhotosInAnyRow * 110 + 20) * 37
-            sheet.setColumnWidth(16, photoColWidth)
+            sheet.setColumnWidth(21, photoColWidth)
         } else {
-            sheet.setColumnWidth(16, 4000)
+            sheet.setColumnWidth(21, 4000)
         }
 
         val file = File(context.cacheDir, "$fileName.xlsx")
