@@ -899,15 +899,46 @@ suspend fun exportToPdf(context: Context, fileName: String, activities: List<Exp
             canvas.drawText(line, 150f, y, subPaint)
             y += 13f
         }
+        
+        // Extra Details (Contact, Notes)
+        val extraDetails = mutableListOf<String>()
+        if (!item.contactName.isNullOrBlank()) extraDetails.add("ผู้ติดต่อ: ${item.contactName}")
+        if (!item.note.isNullOrBlank()) extraDetails.add("Notes: ${item.note}")
+        
+        extraDetails.forEach { extra ->
+            wrapTextLines(extra, subPaint, 330f).forEach { line ->
+                checkPageBreak(13f)
+                canvas.drawText(line, 150f, y, subPaint)
+                y += 13f
+            }
+        }
 
-        if (item.activityType == "onsite" && item.checkInTime != null) {
-            val timeFormatted = try {
-                val instant = java.time.Instant.parse(item.checkInTime)
-                instant.atZone(java.time.ZoneId.systemDefault()).format(java.time.format.DateTimeFormatter.ofPattern("dd MMM HH:mm"))
-            } catch (e: Exception) { item.checkInTime.take(16).replace("T", " ") }
-            checkPageBreak(13f)
-            canvas.drawText("Check-in: $timeFormatted", 150f, y, subPaint)
-            y += 13f
+        if (item.activityType == "onsite" || item.checkInTime != null) {
+            val checkInStr = buildString {
+                if (item.checkInTime != null) {
+                    val timeFormatted = try {
+                        val instant = java.time.Instant.parse(item.checkInTime)
+                        instant.atZone(java.time.ZoneId.systemDefault()).format(java.time.format.DateTimeFormatter.ofPattern("dd MMM HH:mm"))
+                    } catch (e: Exception) { item.checkInTime.take(16).replace("T", " ") }
+                    append("Check-in: $timeFormatted")
+                    if (!item.checkInStatus.isNullOrBlank()) append(" (${item.checkInStatus})")
+                } else {
+                    append("Check-in: ไม่มีข้อมูล")
+                }
+            }
+            wrapTextLines(checkInStr, subPaint, 330f).forEach { line ->
+                checkPageBreak(13f)
+                canvas.drawText(line, 150f, y, subPaint)
+                y += 13f
+            }
+            
+            if (!item.locationName.isNullOrBlank()) {
+                wrapTextLines("สถานที่: ${item.locationName}", subPaint, 330f).forEach { line ->
+                    checkPageBreak(13f)
+                    canvas.drawText(line, 150f, y, subPaint)
+                    y += 13f
+                }
+            }
         }
 
         y += 4f
