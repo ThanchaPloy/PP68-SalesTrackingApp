@@ -239,13 +239,13 @@ fun DashboardScreenContent(
                         value = "${s.weeklyNewLeads}",
                         label = "ลูกค้าใหม่",
                         icon = Icons.Default.PersonAdd,
-                        modifier = Modifier.weight(1f).clickable { onWeeklyClick() }
+                        modifier = Modifier.weight(1f).clickable { selectedStatType = StatDetailType.WEEKLY_LEADS }
                     )
                     StatCard(
                         value = "${s.weeklyNewProjects}",
                         label = "โครงการใหม่",
                         icon = Icons.Default.Assignment,
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier.weight(1f).clickable { selectedStatType = StatDetailType.WEEKLY_PROJECTS }
                     )
                 }
                 Spacer(Modifier.height(4.dp))
@@ -261,27 +261,27 @@ fun DashboardScreenContent(
                 ) {
                     StatCard(
                         value    = formatValue(s.monthlyClosedSales),
-                        label    = "ยอดขายที่ปิดได้รวม",
+                        label    = "ยอดขายปิดการขายแล้ว",
                         icon     = Icons.Default.AttachMoney,
-                        modifier = Modifier.weight(1f),
+                        modifier = Modifier.weight(1f).clickable { selectedStatType = StatDetailType.MONTHLY_CLOSED },
                         valueFontSize = 20
                     )
-                    StatCard("${s.monthlyNewLeads}", "ลูกค้าใหม่", Icons.Default.PersonAdd, Modifier.weight(1f))
+                    StatCard("${s.monthlyNewLeads}", "ลูกค้าใหม่", Icons.Default.PersonAdd, Modifier.weight(1f).clickable { selectedStatType = StatDetailType.MONTHLY_LEADS })
                 }
                 Spacer(Modifier.height(4.dp))
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    StatCard("${s.monthlyNewProjects}", "โครงการใหม่", Icons.Default.Assignment, Modifier.weight(1f))
-                    StatCard("${s.activeProjects}", "โครงการที่ดำเนินการอยู่", Icons.Default.Pending, Modifier.weight(1f))
+                    StatCard("${s.monthlyNewProjects}", "โครงการใหม่", Icons.Default.Assignment, Modifier.weight(1f).clickable { selectedStatType = StatDetailType.MONTHLY_PROJECTS })
+                    StatCard("${s.activeProjects}", "โครงการที่ดำเนินการอยู่", Icons.Default.Pending, Modifier.weight(1f).clickable { selectedStatType = StatDetailType.ACTIVE_PROJECTS })
                 }
                 Spacer(Modifier.height(4.dp))
                 StatCard(
                     value = "${s.closingThisMonth}",
-                    label = "คาดว่าจะปิดในเดือนนี้",
+                    label = "โครงการที่คาดว่าจะปิดเดือนนี้",
                     icon = Icons.Default.Event,
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth().clickable { selectedStatType = StatDetailType.CLOSING_MONTH }
                 )
                 Spacer(Modifier.height(4.dp))
                 VisitCountCard(count = s.monthlyVisitCount, label = "จำนวนการเข้าพบเดือนนี้")
@@ -314,10 +314,118 @@ fun DashboardScreenContent(
                 }
             }
 
+
             Spacer(Modifier.height(80.dp))
+        }
+
+        // --- Detail Bottom Sheet ---
+        if (selectedStatType != null) {
+            val listData = when (selectedStatType) {
+                StatDetailType.WEEKLY_LEADS -> s.weeklyNewLeadsList
+                StatDetailType.WEEKLY_PROJECTS -> s.weeklyNewProjectsList
+                StatDetailType.WEEKLY_VISITS -> s.weeklyVisitList
+                StatDetailType.MONTHLY_CLOSED -> s.monthlyClosedSalesList
+                StatDetailType.MONTHLY_LEADS -> s.monthlyNewLeadsList
+                StatDetailType.MONTHLY_PROJECTS -> s.monthlyNewProjectsList
+                StatDetailType.ACTIVE_PROJECTS -> s.activeProjectsList
+                StatDetailType.CLOSING_MONTH -> s.closingThisMonthList
+                StatDetailType.MONTHLY_VISITS -> s.monthlyVisitList
+                else -> emptyList<Any>()
+            }
+            StatDetailBottomSheet(
+                title = selectedStatType?.title ?: "",
+                items = listData,
+                onDismiss = { selectedStatType = null }
+            )
         }
     }
 }
+
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@Composable
+fun StatDetailBottomSheet(
+    title: String,
+    items: List<Any>,
+    onDismiss: () -> Unit
+) {
+    androidx.compose.material3.ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        containerColor = androidx.compose.ui.graphics.Color.White
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp)
+        ) {
+            androidx.compose.material3.Text(
+                text = title,
+                fontSize = 18.sp,
+                fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                color = androidx.compose.ui.graphics.Color(0xFFC62828),
+                modifier = Modifier.padding(bottom = 16.dp)
+            )
+            
+            if (items.isEmpty()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(100.dp),
+                    contentAlignment = androidx.compose.ui.Alignment.Center
+                ) {
+                    androidx.compose.material3.Text("ไม่มีข้อมูล", color = androidx.compose.ui.graphics.Color.Gray)
+                }
+            } else {
+                LazyColumn(
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    items(items) { item ->
+                        when (item) {
+                            is Customer -> {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .background(androidx.compose.ui.graphics.Color(0xFFF5F5F5), RoundedCornerShape(8.dp))
+                                        .padding(12.dp)
+                                ) {
+                                    androidx.compose.material3.Text(item.companyName ?: "ไม่ระบุชื่อลูกค้า", fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold)
+                                }
+                            }
+                            is Project -> {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .background(androidx.compose.ui.graphics.Color(0xFFF5F5F5), RoundedCornerShape(8.dp))
+                                        .padding(12.dp)
+                                ) {
+                                    Column {
+                                        androidx.compose.material3.Text(item.projectName, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold)
+                                        androidx.compose.material3.Text("มูลค่า: ${item.expectedValue ?: 0.0}", fontSize = 12.sp, color = androidx.compose.ui.graphics.Color.Gray)
+                                    }
+                                }
+                            }
+                            is SalesActivity -> {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .background(androidx.compose.ui.graphics.Color(0xFFF5F5F5), RoundedCornerShape(8.dp))
+                                        .padding(12.dp)
+                                ) {
+                                    Column {
+                                        androidx.compose.material3.Text(item.detail ?: "No Title", fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold)
+                                        androidx.compose.material3.Text(item.activityDate, fontSize = 12.sp, color = androidx.compose.ui.graphics.Color.Gray)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            Spacer(modifier = Modifier.height(24.dp))
+        }
+    }
+}
+
 
 // ── Section with red pill header ─────────────────────────────
 @Composable

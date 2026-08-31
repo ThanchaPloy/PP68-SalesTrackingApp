@@ -54,6 +54,7 @@ fun AddProjectScreen(
     )
 }
 
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 fun AddProjectContent(
     uiState: AddProjectUiState,
@@ -164,7 +165,7 @@ fun AddProjectContent(
                         ) {
                             Icon(Icons.Default.Add, contentDescription = "Add Customer", modifier = Modifier.size(16.dp))
                             Spacer(Modifier.width(4.dp))
-                            Text("สร้างด่วน", fontSize = 12.sp)
+                            Text("สร้างลูกค้าใหม่", fontSize = 12.sp)
                         }
                     }
                     if (uiState.customerError != null)
@@ -349,6 +350,56 @@ fun AddProjectContent(
                 }
             }
             Spacer(Modifier.height(32.dp))
+        }
+
+        // Quick Add Customer Modal
+        if (uiState.isQuickAddCustomerOpen) {
+            androidx.compose.material3.ModalBottomSheet(
+                onDismissRequest = { onEvent(AddProjectEvent.ToggleQuickAddCustomer(false)) },
+                containerColor = AppColors.BgWhite
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(24.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    Text("สร้างลูกค้าใหม่ (สร้างด่วน)", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = AppColors.Primary)
+                    
+                    FormField("ชื่อบริษัท/ชื่อลูกค้า", required = true) {
+                        FormTextField(
+                            value = uiState.quickAddCompanyName,
+                            onValueChange = { onEvent(AddProjectEvent.QuickAddCustomerChanged(it, uiState.quickAddCustType)) },
+                            placeholder = "ระบุชื่อบริษัท หรือชื่อลูกค้า"
+                        )
+                    }
+
+                    FormField("ประเภทลูกค้า", required = true) {
+                        val types = listOf("Government", "Private", "Hospital", "School", "Other")
+                        DropdownField(
+                            value = uiState.quickAddCustType,
+                            placeholder = "เลือกประเภท",
+                            options = types,
+                            onSelect = { idx -> onEvent(AddProjectEvent.QuickAddCustomerChanged(uiState.quickAddCompanyName, types[idx])) }
+                        )
+                    }
+
+                    Button(
+                        onClick = { onEvent(AddProjectEvent.SaveQuickAddCustomer) },
+                        modifier = Modifier.fillMaxWidth().height(48.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = AppColors.Primary),
+                        shape = RoundedCornerShape(10.dp),
+                        enabled = !uiState.isSavingQuickCust && uiState.quickAddCompanyName.isNotBlank() && uiState.quickAddCustType.isNotBlank()
+                    ) {
+                        if (uiState.isSavingQuickCust) {
+                            CircularProgressIndicator(color = androidx.compose.ui.graphics.Color.White, modifier = Modifier.size(24.dp))
+                        } else {
+                            Text("บันทึกข้อมูลลูกค้า", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(32.dp))
+                }
+            }
         }
     }
 }
