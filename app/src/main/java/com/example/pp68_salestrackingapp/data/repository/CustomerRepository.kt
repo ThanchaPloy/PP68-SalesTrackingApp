@@ -7,6 +7,7 @@ import com.example.pp68_salestrackingapp.data.local.ActivityDao
 import com.example.pp68_salestrackingapp.data.model.ContactPerson
 import com.example.pp68_salestrackingapp.data.model.Customer
 import com.example.pp68_salestrackingapp.data.remote.ApiService
+import com.example.pp68_salestrackingapp.data.remote.AuthService
 import com.example.pp68_salestrackingapp.di.TokenManager
 import com.example.pp68_salestrackingapp.utils.SyncManager
 import kotlinx.coroutines.Dispatchers
@@ -19,6 +20,7 @@ import java.io.IOException
 
 class CustomerRepository @Inject constructor(
     private val apiService: ApiService,
+    private val authService: AuthService,
     private val customerDao: CustomerDao,
     private val contactDao: ContactDao,
     private val projectDao: ProjectDao,
@@ -50,10 +52,9 @@ class CustomerRepository @Inject constructor(
 
                 // 1. Fetch current user's own customers FIRST & insert into Room immediately
                 if (currentUserId.isNotBlank()) {
-                    val ownCustResp = apiService.getCustomersBySalespersonCodes(
-                        codes = "eq.$currentUserId",
-                        limit = 1000,
-                        offset = 0
+                    val ownCustResp = authService.getCustomers(
+                        salespersonCode = "eq.$currentUserId",
+                        limit = 1000
                     )
                     if (ownCustResp.isSuccessful && ownCustResp.body() != null) {
                         val ownCustomers = ownCustResp.body()!!.map { it.copy(isSynced = true) }
@@ -66,12 +67,9 @@ class CustomerRepository @Inject constructor(
 
                 // 2. Fetch branch team member customers in background to enrich local database
                 if (branchId.isNotBlank()) {
-                    // All branches now fetch their entire branch customer list directly via Ktor
-                    // backend's branch_id parameter. This ensures customers from inactive employees
-                    // are also included, which wouldn't happen if we fetched active employee codes first.
-                    val custResp = apiService.getCustomersByBranchId(branchId = "eq.$branchId", limit = 5000)
+                    val custResp = authService.getCustomers(branchId = "eq.$branchId", limit = 5000)
                     if (custResp.isSuccessful && custResp.body() != null) {
-                        customers.addAll(custResp.body()!!)
+                        customers.addAll(custResp.body()!!.map { it.copy(isSynced = true) })
                     }
                 }
 

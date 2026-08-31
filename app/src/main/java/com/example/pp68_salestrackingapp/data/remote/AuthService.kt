@@ -25,4 +25,11 @@ interface AuthService {
     suspend fun getProjectSalesEmployees(
         @Query("emp_type") empType: String = "P"
     ): Response<List<UserDto>>
+
+    @GET("customer")
+    suspend fun getCustomers(
+        @Query("branch_id") branchId: String? = null,
+        @Query("salesperson_code") salespersonCode: String? = null,
+        @Query("limit") limit: Int = 5000
+    ): Response<List<Customer>>
 }
