@@ -851,68 +851,68 @@ suspend fun exportToPdf(context: Context, fileName: String, activities: List<Exp
     }
 
     var pageNum  = 1
-    var pageInfo = PdfDocument.PageInfo.Builder(595, 842, pageNum).create()
+    // Landscape Mode (A4 is 842 x 595)
+    var pageInfo = PdfDocument.PageInfo.Builder(842, 595, pageNum).create()
     var page     = doc.startPage(pageInfo)
     var canvas: Canvas = page.canvas
     var y = 50f
 
     val checkPageBreak: (Float) -> Unit = { neededHeight ->
-        if (y + neededHeight > 780f) {
+        if (y + neededHeight > 540f) {
             doc.finishPage(page)
             pageNum++
-            pageInfo = PdfDocument.PageInfo.Builder(595, 842, pageNum).create()
+            pageInfo = PdfDocument.PageInfo.Builder(842, 595, pageNum).create()
             page     = doc.startPage(pageInfo)
             canvas   = page.canvas
             y        = 50f
         }
     }
 
-    canvas.drawText("Weekly Performance Report", 50f, y, titlePaint); y += 35f
-    canvas.drawText("Date",    50f,  y, headerPaint)
-    canvas.drawText("Activity / Project Details", 150f, y, headerPaint)
-    canvas.drawText("Status",  500f, y, headerPaint)
+    canvas.drawText("Weekly Performance Report (Landscape)", 30f, y, titlePaint); y += 35f
+    canvas.drawText("Date", 30f, y, headerPaint)
+    canvas.drawText("Company & Contact", 100f, y, headerPaint)
+    canvas.drawText("Activity / Location / Check-in", 280f, y, headerPaint)
+    canvas.drawText("Results & Status", 480f, y, headerPaint)
     y += 15f
-    canvas.drawLine(50f, y, 550f, y, paint); y += 20f
+    canvas.drawLine(30f, y, 810f, y, paint); y += 20f
 
     activities.forEach { item ->
         checkPageBreak(50f)
         
-        // Date
-        canvas.drawText(item.date.take(10), 50f, y, bodyPaint)
+        // --- 1. Date ---
+        canvas.drawText(item.date.take(10), 30f, y, bodyPaint)
         
-        // Status
-        canvas.drawText(item.status, 500f, y, bodyPaint)
-
-        // Topic (Wrapped)
-        val topicLines = wrapTextLines("${item.topic ?: "N/A"} (${item.activityType?.uppercase() ?: "N/A"})", bodyPaint, 330f)
-        topicLines.forEach { line ->
-            checkPageBreak(14f)
-            canvas.drawText(line, 150f, y, bodyPaint)
-            y += 14f
-        }
+        // We will keep track of the maximum Y reached by each column for this row
+        var maxY = y
         
-        // Company & Project Name (Wrapped)
+        // --- 2. Company & Contact ---
+        var currentYCol2 = y
         val projectComp = "${item.companyName ?: ""} (${item.projectName ?: ""})"
-        val compLines = wrapTextLines(projectComp, subPaint, 330f)
-        compLines.forEach { line ->
-            checkPageBreak(13f)
-            canvas.drawText(line, 150f, y, subPaint)
-            y += 13f
+        wrapTextLines(projectComp, bodyPaint, 170f).forEach { line ->
+            canvas.drawText(line, 100f, currentYCol2, bodyPaint)
+            currentYCol2 += 14f
         }
-        
-        // Extra Details (Contact, Notes)
-        val extraDetails = mutableListOf<String>()
-        if (!item.contactName.isNullOrBlank()) extraDetails.add("ผู้ติดต่อ: ${item.contactName}")
-        if (!item.note.isNullOrBlank()) extraDetails.add("Notes: ${item.note}")
-        
-        extraDetails.forEach { extra ->
-            wrapTextLines(extra, subPaint, 330f).forEach { line ->
-                checkPageBreak(13f)
-                canvas.drawText(line, 150f, y, subPaint)
-                y += 13f
+        if (!item.contactName.isNullOrBlank()) {
+            wrapTextLines("ผู้ติดต่อ: ${item.contactName}", subPaint, 170f).forEach { line ->
+                canvas.drawText(line, 100f, currentYCol2, subPaint)
+                currentYCol2 += 13f
             }
         }
+        maxY = maxOf(maxY, currentYCol2)
 
+        // --- 3. Activity / Location / Check-in ---
+        var currentYCol3 = y
+        val topicLines = wrapTextLines("${item.topic ?: "N/A"} (${item.activityType?.uppercase() ?: "N/A"})", bodyPaint, 190f)
+        topicLines.forEach { line ->
+            canvas.drawText(line, 280f, currentYCol3, bodyPaint)
+            currentYCol3 += 14f
+        }
+        if (!item.note.isNullOrBlank()) {
+            wrapTextLines("Notes: ${item.note}", subPaint, 190f).forEach { line ->
+                canvas.drawText(line, 280f, currentYCol3, subPaint)
+                currentYCol3 += 13f
+            }
+        }
         if (item.activityType == "onsite" || item.checkInTime != null) {
             val checkInStr = buildString {
                 if (item.checkInTime != null) {
@@ -926,127 +926,80 @@ suspend fun exportToPdf(context: Context, fileName: String, activities: List<Exp
                     append("Check-in: ไม่มีข้อมูล")
                 }
             }
-            wrapTextLines(checkInStr, subPaint, 330f).forEach { line ->
-                checkPageBreak(13f)
-                canvas.drawText(line, 150f, y, subPaint)
-                y += 13f
+            wrapTextLines(checkInStr, subPaint, 190f).forEach { line ->
+                canvas.drawText(line, 280f, currentYCol3, subPaint)
+                currentYCol3 += 13f
             }
-            
             if (!item.locationName.isNullOrBlank()) {
-                wrapTextLines("สถานที่: ${item.locationName}", subPaint, 330f).forEach { line ->
-                    checkPageBreak(13f)
-                    canvas.drawText(line, 150f, y, subPaint)
-                    y += 13f
+                wrapTextLines("สถานที่: ${item.locationName}", subPaint, 190f).forEach { line ->
+                    canvas.drawText(line, 280f, currentYCol3, subPaint)
+                    currentYCol3 += 13f
                 }
             }
         }
+        maxY = maxOf(maxY, currentYCol3)
 
-        y += 4f
-
-        // Results as bullets
+        // --- 4. Results & Status ---
+        var currentYCol4 = y
+        canvas.drawText("Status: ${item.status}", 480f, currentYCol4, bodyPaint)
+        currentYCol4 += 16f
+        
         if (item.resultDetails.isNotEmpty()) {
             item.resultDetails.forEach { res ->
                 val summaryText = res.summary ?: "N/A"
-                val summaryLines = wrapTextLines("\u2022 \u0e2a\u0e23\u0e38\u0e1b\u0e1c\u0e25: $summaryText", resultPaint, 370f) // สรุปผล
+                val summaryLines = wrapTextLines("• สรุปผล: $summaryText", resultPaint, 320f)
                 summaryLines.forEach { line ->
-                    checkPageBreak(14f)
-                    canvas.drawText(line, 160f, y, resultPaint)
-                    y += 14f
+                    canvas.drawText(line, 480f, currentYCol4, resultPaint)
+                    currentYCol4 += 14f
                 }
 
                 val detailParts = mutableListOf<String>()
-                if (!res.newStatus.isNullOrBlank()) detailParts.add("\u0e2a\u0e16\u0e32\u0e19\u0e30\u0e43\u0e2b\u0e21\u0e48: ${res.newStatus}") // สถานะใหม่
-                if (!res.opportunityScore.isNullOrBlank()) detailParts.add("\u0e42\u0e2d\u0e01\u0e32\u0e2a: ${res.opportunityScore}%") // โอกาส
-                if (res.isProposalSent) {
-                    detailParts.add("proposal: \u0e43\u0e0a\u0e48 (${res.proposalDate ?: ""})") // ใช่
-                } else {
-                    detailParts.add("proposal: \u0e44\u0e21\u0e48\u0e43\u0e0a\u0e48") // ไม่ใช่
-                }
-                if (res.dmInvolved) detailParts.add("DM \u0e23\u0e48\u0e27\u0e21\u0e1b\u0e23\u0e30\u0e0a\u0e38\u0e21: \u0e21\u0e35") // มี
-                if (res.competitorCount > 0) detailParts.add("\u0e08\u0e33\u0e19\u0e27\u0e19\u0e04\u0e39\u0e48\u0e41\u0e02\u0e48\u0e07: ${res.competitorCount} \u0e23\u0e32\u0e22") // จำนวนคู่แข่ง ... ราย
-                if (!res.previousSolution.isNullOrBlank()) detailParts.add("\u0e42\u0e0b\u0e25\u0e39\u0e0a\u0e31\u0e48\u0e19\u0e40\u0e14\u0e34\u0e21: ${res.previousSolution}") // โซลูชั่นเดิม
-                if (!res.lossReason.isNullOrBlank()) detailParts.add("\u0e40\u0e2b\u0e15\u0e38\u0e1c\u0e25\u0e41\u0e1e\u0e49: ${res.lossReason}") // เหตุผลแพ้
+                if (!res.newStatus.isNullOrBlank()) detailParts.add("สถานะใหม่: ${res.newStatus}")
+                if (!res.opportunityScore.isNullOrBlank()) detailParts.add("โอกาส: ${res.opportunityScore}%")
+                if (res.isProposalSent) detailParts.add("proposal: ใช่ (${res.proposalDate ?: ""})") else detailParts.add("proposal: ไม่ใช่")
+                if (res.dmInvolved) detailParts.add("DM: มี")
+                if (res.competitorCount > 0) detailParts.add("คู่แข่ง: ${res.competitorCount} ราย")
+                if (!res.previousSolution.isNullOrBlank()) detailParts.add("โซลูชั่นเดิม: ${res.previousSolution}")
+                if (!res.lossReason.isNullOrBlank()) detailParts.add("เหตุผลแพ้: ${res.lossReason}")
 
                 if (detailParts.isNotEmpty()) {
                     detailParts.forEach { detail ->
-                        val dLines = wrapTextLines("  - $detail", subPaint, 370f)
+                        val dLines = wrapTextLines("  - $detail", subPaint, 320f)
                         dLines.forEach { line ->
-                            checkPageBreak(13f)
-                            canvas.drawText(line, 160f, y, subPaint)
-                            y += 13f
+                            canvas.drawText(line, 480f, currentYCol4, subPaint)
+                            currentYCol4 += 13f
                         }
                     }
                 }
-
+                
+                // --- Images for PDF ---
                 if (res.photoUrls.isNotEmpty()) {
-                    checkPageBreak(14f)
-                    canvas.drawText("\u0e23\u0e39\u0e1b\u0e20\u0e32\u0e1e\u0e41\u0e1a\u0e1a (${res.photoUrls.size} \u0e23\u0e39\u0e1b):", 160f, y, subPaint) // รูปภาพแนบ ... รูป
-                    y += 14f
-
-                    res.photoUrls.chunked(2).forEach { rowUrls ->
-                        val rowItems = rowUrls.map { pUrl ->
-                            val formattedUrl = formatPhotoUrl(pUrl)
-                            val bytes = getPhotoBytes(context, pUrl)
-                            val originalBitmap = bytes?.let {
-                                BitmapFactory.decodeByteArray(it, 0, it.size)
-                            }
-                            Pair(formattedUrl, originalBitmap)
-                        }
-
-                        var rowMaxH = 0f
-                        val renderItems = rowItems.map { (url, bitmap) ->
-                            if (bitmap != null) {
-                                val maxW = 190f
-                                val maxH = 190f
-                                val scale = minOf(maxW / bitmap.width, maxH / bitmap.height)
-                                val finalW = (bitmap.width * scale).toInt()
-                                val finalH = (bitmap.height * scale).toInt()
-                                val scaledBitmap = android.graphics.Bitmap.createScaledBitmap(bitmap, finalW, finalH, true)
-                                rowMaxH = maxOf(rowMaxH, finalH.toFloat())
-                                Triple(url, scaledBitmap, finalH.toFloat())
-                            } else {
-                                val pLines = wrapTextLines(url, linkPaint, 190f)
-                                val textH = pLines.size * 12f
-                                rowMaxH = maxOf(rowMaxH, textH)
-                                Triple(url, null, textH)
-                            }
-                        }
-
-                        checkPageBreak(rowMaxH + 10f)
-
-                        var currentX = 160f
-                        renderItems.forEach { (url, scaledBitmap, _) ->
-                            if (scaledBitmap != null) {
-                                canvas.drawBitmap(scaledBitmap, currentX, y, null)
-                            } else {
-                                val pLines = wrapTextLines(url, linkPaint, 190f)
-                                var tempY = y + 12f
-                                pLines.forEach { line ->
-                                    canvas.drawText(line, currentX, tempY, linkPaint)
-                                    tempY += 12f
-                                }
-                            }
-                            currentX += 200f
-                        }
-                        y += rowMaxH + 10f
-                    }
+                    currentYCol4 += 6f
+                    canvas.drawText("มีรูปภาพแนบ ${res.photoUrls.size} รูป (กรุณาดูในรายงาน Excel)", 480f, currentYCol4, subPaint)
+                    currentYCol4 += 13f
                 }
-                y += 4f
+                
+                currentYCol4 += 6f
             }
         } else {
             item.results.forEach { res ->
-                val resLines = wrapTextLines("• $res", resultPaint, 370f)
+                val resLines = wrapTextLines("• $res", resultPaint, 320f)
                 resLines.forEach { line ->
-                    checkPageBreak(14f)
-                    canvas.drawText(line, 160f, y, resultPaint)
-                    y += 14f
+                    canvas.drawText(line, 480f, currentYCol4, resultPaint)
+                    currentYCol4 += 14f
                 }
             }
         }
+        maxY = maxOf(maxY, currentYCol4)
         
-        y += 6f
-        canvas.drawLine(50f, y, 550f, y, Paint().apply { strokeWidth=0.5f; color=android.graphics.Color.LTGRAY })
-        y += 14f
+        y = maxY + 8f
+        // Check if we need page break before next row or if we just drew past the page
+        if (y > 540f) {
+            checkPageBreak(50f) 
+        } else {
+            canvas.drawLine(30f, y, 810f, y, Paint().apply { strokeWidth=0.5f; color=android.graphics.Color.LTGRAY })
+            y += 14f
+        }
     }
     doc.finishPage(page)
 
