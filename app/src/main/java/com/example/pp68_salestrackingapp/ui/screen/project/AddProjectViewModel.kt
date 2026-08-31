@@ -423,7 +423,7 @@ class AddProjectViewModel @Inject constructor(
 
     private fun saveQuickCustomer() {
         val st = _uiState.value
-        if (st.quickAddCompanyName.isBlank() || st.quickAddCustType.isBlank()) return
+        if (st.quickAddCompanyName.isBlank() || st.quickAddCustType.isBlank()) { _uiState.update { it.copy(error = "กรุณาระบุชื่อบริษัทและประเภทลูกค้าให้ครบถ้วน") }; return }
         
         viewModelScope.launch {
             _uiState.update { it.copy(isSavingQuickCust = true) }
