@@ -50,45 +50,28 @@ class CustomerRepository @Inject constructor(
 
                 // 1. Fetch current user's own customers FIRST & insert into Room immediately
                 if (currentUserId.isNotBlank()) {
-                    // Regular customers
                     val ownCustResp = apiService.getCustomersBySalespersonCodes(
                         codes = "eq.$currentUserId",
                         limit = 1000,
                         offset = 0
                     )
                     if (ownCustResp.isSuccessful && ownCustResp.body() != null) {
-                        val ownCustomers = ownCustResp.body()!!.map { it.copy(isSynced = true, isLead = false) }
+                        val ownCustomers = ownCustResp.body()!!.map { it.copy(isSynced = true) }
                         customers.addAll(ownCustomers)
-                    }
-
-                    // Lead customers
-                    val ownLeadResp = apiService.getLeadCustomersBySalespersonCodes(
-                        codes = "eq.$currentUserId",
-                        limit = 1000,
-                        offset = 0
-                    )
-                    if (ownLeadResp.isSuccessful && ownLeadResp.body() != null) {
-                        val ownLeads = ownLeadResp.body()!!.map { it.copy(isSynced = true, isLead = true) }
-                        customers.addAll(ownLeads)
-                    }
-
-                    if (customers.isNotEmpty()) {
-                        customerDao.clearAndInsert(customers.distinctBy { it.custId })
+                        if (ownCustomers.isNotEmpty()) {
+                            customerDao.clearAndInsert(ownCustomers)
+                        }
                     }
                 }
 
                 // 2. Fetch branch team member customers in background to enrich local database
                 if (branchId.isNotBlank()) {
-                    // Regular customers
+                    // All branches now fetch their entire branch customer list directly via Ktor
+                    // backend's branch_id parameter. This ensures customers from inactive employees
+                    // are also included, which wouldn't happen if we fetched active employee codes first.
                     val custResp = apiService.getCustomersByBranchId(branchId = "eq.$branchId", limit = 5000)
                     if (custResp.isSuccessful && custResp.body() != null) {
-                        customers.addAll(custResp.body()!!.map { it.copy(isSynced = true, isLead = false) })
-                    }
-
-                    // Lead customers
-                    val leadResp = apiService.getLeadCustomersByBranchId(branchId = "eq.$branchId", limit = 5000)
-                    if (leadResp.isSuccessful && leadResp.body() != null) {
-                        customers.addAll(leadResp.body()!!.map { it.copy(isSynced = true, isLead = true) })
+                        customers.addAll(custResp.body()!!)
                     }
                 }
 

@@ -57,22 +57,9 @@ interface ApiService {
         @Query("offset") offset: Int
     ): Response<List<Customer>>
 
-    @GET("lead_customer")
-    suspend fun getLeadCustomersBySalespersonCodes(
-        @Query("salesperson_code") codes: String,
-        @Query("limit") limit: Int,
-        @Query("offset") offset: Int
-    ): Response<List<Customer>>
-
     @GET("customer")
     suspend fun getCustomersByBranchId(
         @Query("gen_bus_posting_group") branchId: String,  // format: eq.90HO
-        @Query("limit") limit: Int = 5000
-    ): Response<List<Customer>>
-
-    @GET("lead_customer")
-    suspend fun getLeadCustomersByBranchId(
-        @Query("gen_bus_posting_group") branchId: String,
         @Query("limit") limit: Int = 5000
     ): Response<List<Customer>>
 

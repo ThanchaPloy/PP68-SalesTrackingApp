@@ -423,7 +423,7 @@ class AddProjectViewModel @Inject constructor(
 
     private fun saveQuickCustomer() {
         val st = _uiState.value
-        if (st.quickAddCompanyName.isBlank() || st.quickAddCustType.isBlank()) { _uiState.update { it.copy(error = "กรุณาระบุชื่อบริษัทและประเภทลูกค้าให้ครบถ้วน") }; return }
+        if (st.quickAddCompanyName.isBlank() || st.quickAddCustType.isBlank()) { _uiState.update { it.copy(saveError = "กรุณาระบุชื่อบริษัทและประเภทลูกค้าให้ครบถ้วน") }; return }
         
         viewModelScope.launch {
             _uiState.update { it.copy(isSavingQuickCust = true) }
@@ -452,8 +452,8 @@ class AddProjectViewModel @Inject constructor(
                     // Load contacts for the new customer (which will be empty, but clears previous)
                     loadContacts(newCust.custId) // Function is loadContacts in this ViewModel
                 },
-                onFailure = {
-                    _uiState.update { it.copy(isSavingQuickCust = false) }
+                onFailure = { e ->
+                    _uiState.update { it.copy(isSavingQuickCust = false, saveError = e.message) }
                 }
             )
         }
