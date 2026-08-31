@@ -59,7 +59,7 @@ interface ApiService {
 
     @GET("customer")
     suspend fun getCustomersByBranchId(
-        @Query("branch_id") branchId: String,  // format: eq.90HO
+        @Query("gen_bus_posting_group") branchId: String,  // format: eq.90HO
         @Query("limit") limit: Int = 5000
     ): Response<List<Customer>>
 
