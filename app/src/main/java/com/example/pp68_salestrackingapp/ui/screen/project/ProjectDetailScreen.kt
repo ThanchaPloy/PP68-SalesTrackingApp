@@ -535,7 +535,7 @@ private fun ProjectHeaderCard(
                 Column(horizontalAlignment = Alignment.End) {
                     Text("มูลค่าที่คาดหวัง", fontSize = 12.sp, color = TextGray)
                     Text(
-                        "฿ ${project.expectedValue ?: 0.0}",
+                        "฿ ${java.text.NumberFormat.getNumberInstance(java.util.Locale.US).format(project.expectedValue ?: 0.0)}",
                         fontWeight = FontWeight.Bold,
                         color      = RedPrimary
                     )
