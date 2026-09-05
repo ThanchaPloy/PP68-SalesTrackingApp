@@ -250,7 +250,7 @@ fun DashboardScreenContent(
                 }
                 Spacer(Modifier.height(4.dp))
                 // Visit count full width
-                VisitCountCard(count = s.weeklyVisitCount)
+                VisitCountCard(count = s.weeklyVisitCount, onClick = { selectedStatType = StatDetailType.WEEKLY_VISITS })
             }
 
             // ── รายเดือน ───────────────────────────────────────
@@ -284,7 +284,7 @@ fun DashboardScreenContent(
                     modifier = Modifier.fillMaxWidth().clickable { selectedStatType = StatDetailType.CLOSING_MONTH }
                 )
                 Spacer(Modifier.height(4.dp))
-                VisitCountCard(count = s.monthlyVisitCount, label = "จำนวนการเข้าพบเดือนนี้")
+                VisitCountCard(count = s.monthlyVisitCount, label = "จำนวนการเข้าพบเดือนนี้", onClick = { selectedStatType = StatDetailType.MONTHLY_VISITS })
 
             }
 
@@ -498,11 +498,11 @@ private fun StatCard(
 
 // ── Visit count card — full width ────────────────────────────
 @Composable
-private fun VisitCountCard(count: Int, label: String = "จำนวนการเข้าพบสัปดาห์นี้") {
+private fun VisitCountCard(count: Int, label: String = "จำนวนการเข้าพบสัปดาห์นี้", onClick: () -> Unit = {}) {
     Surface(
         shape    = RoundedCornerShape(14.dp),
         color    = White,
-        modifier = Modifier.fillMaxWidth()
+        modifier = Modifier.fillMaxWidth().clickable { onClick() }
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
