@@ -116,7 +116,7 @@ class CustomerRepository @Inject constructor(
         }
     }
 
-    suspend fun addCustomer(customer: Customer): kotlin.Result<Unit> {
+    suspend fun addCustomer(customer: Customer): kotlin.Result<String> {
         return withContext(Dispatchers.IO) {
             val today = java.time.LocalDate.now().toString()
             val tempId = customer.custId
@@ -152,7 +152,11 @@ class CustomerRepository @Inject constructor(
                         customerDao.updateSyncStatus(tempId, true)
                         customerDao.updateLeadStatus(tempId, true)
                     }
-                    kotlin.Result.success(Unit)
+                    if (realCustId != null && realCustId != tempId) {
+                        kotlin.Result.success(realCustId)
+                    } else {
+                        kotlin.Result.success(tempId)
+                    }
                 } else {
                     val errBody = response.errorBody()?.string()
                     Log.e("CustomerRepo", "POST failed ${response.code()}: $errBody")
@@ -164,7 +168,7 @@ class CustomerRepository @Inject constructor(
                 }
             } catch (e: IOException) {
                 syncManager.scheduleSync()
-                kotlin.Result.success(Unit)
+                kotlin.Result.success(tempId)
             } catch (e: Exception) {
                 kotlin.Result.failure(e)
             }

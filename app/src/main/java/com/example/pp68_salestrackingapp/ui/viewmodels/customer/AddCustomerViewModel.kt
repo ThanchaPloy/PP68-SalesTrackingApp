@@ -169,7 +169,7 @@ class AddCustomerViewModel @Inject constructor(
             val result = if (s.custId != null) {
                 customerRepo.updateCustomer(s.custId, customer)
             } else {
-                customerRepo.addCustomer(customer)
+                customerRepo.addCustomer(customer).map { Unit }
             }
 
             result.fold(

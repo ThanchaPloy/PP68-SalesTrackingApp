@@ -437,13 +437,13 @@ class AddProjectViewModel @Inject constructor(
             )
             val result = customerRepo.addCustomer(newCust) // Using customerRepo per the constructor
             result.fold(
-                onSuccess = {
-                    // Update options and select it
-                    val newOption = Pair(newCust.custId, newCust.companyName)
+                onSuccess = { realCustId ->
+                    // Update options and select it using the real generated ID
+                    val newOption = Pair(realCustId, newCust.companyName)
                     _uiState.update { 
                         it.copy(
                             customerOptions = it.customerOptions + newOption,
-                            selectedCustomerId = newCust.custId,
+                            selectedCustomerId = realCustId,
                             selectedCustomerName = newCust.companyName,
                             isQuickAddCustomerOpen = false,
                             isSavingQuickCust = false,
