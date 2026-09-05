@@ -51,7 +51,7 @@ class CustomerListViewModel @Inject constructor(
         _selectedTab
     ) { list, bizGroup, custType, tab ->
         list
-            .let { if (bizGroup != null) it.filter { c -> c.branchId == bizGroup } else it }
+            .let { if (bizGroup != null) it.filter { c -> c.branchId == bizGroup || c.branchId.isNullOrBlank() } else it }
             .let { if (custType != null) it.filter { c -> c.custType == custType } else it }
             .let { 
                 when(tab) {

@@ -431,7 +431,9 @@ class AddProjectViewModel @Inject constructor(
                 custId = UUID.randomUUID().toString(),
                 companyName = st.quickAddCompanyName.trim(),
                 custType = st.quickAddCustType,
-                createdBy = authRepo.currentUser()?.userId
+                createdBy = authRepo.currentUser()?.userId,
+                branchId = authRepo.currentUser()?.teamId,
+                isLead = true
             )
             val result = customerRepo.addCustomer(newCust) // Using customerRepo per the constructor
             result.fold(
