@@ -334,7 +334,7 @@ class ExportViewModel @Inject constructor(
                     val summary = res.summary?.replace("\"", "\"\"")?.replace("\n", " ") ?: ""
                     val photos = res.photoUrls.joinToString("; ") { formatPhotoUrl(it) }.replace("\"", "\"\"")
 
-                    builder.append("${item.date},\"${safeType}\",\"${safeTopic}\",\"${safeCompany}\",\"${contact}\",\"${safeProject}\",\"${checkIn}\",\"${checkInStatus}\",\"${locationName}\",\"${item.status}\",\"${newStatus}\",\"${summary}\",\"${photos}\",\"${score}\",\"${propSent}\",\"${propDate}\",\"${dm}\",\"${comp}\",\"${speed}\",\"${dealPos}\",\"${sol}\",\"${loss}\"\n")
+                    builder.append("${item.date},\"${safeType}\",\"${safeTopic}\",\"${safeCompany}\",\"${contact}\",\"${safeProject}\",\"${checkIn}\",\"${checkInStatus}\",\"${locationName}\",\"${item.status}\",\"${newStatus}\",\"${summary}\",\"${score}\",\"${propSent}\",\"${propDate}\",\"${dm}\",\"${comp}\",\"${speed}\",\"${dealPos}\",\"${sol}\",\"${loss}\",\"${photos}\"\n")
                 }
             } else {
                 val safeResults = item.results.joinToString("; ").replace("\"", "\"\"").replace("\n", " ")

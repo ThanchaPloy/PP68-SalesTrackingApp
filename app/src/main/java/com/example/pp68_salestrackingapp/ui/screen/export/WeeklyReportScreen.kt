@@ -673,12 +673,12 @@ suspend fun exportToExcel(context: Context, fileName: String, activities: List<E
         }
 
         val headers = listOf(
-            "\u0e27\u0e31\u0e19\u0e17\u0e35\u0e48 (Date)", "\u0e1b\u0e23\u0e30\u0e40\u0e20\u0e17 (Type)", "\u0e2b\u0e31\u0e27\u0e02\u0e49\u0e2d (Topic)", "\u0e1a\u0e23\u0e34\u0e29\u0e31\u0e17 (Company)", 
-            "\u0e1c\u0e39\u0e49\u0e15\u0e34\u0e14\u0e15\u0e48\u0e2d (Contact)", "\u0e42\u0e04\u0e23\u0e07\u0e01\u0e32\u0e23 (Project)", "\u0e40\u0e0a\u0e47\u0e04\u0e2d\u0e34\u0e19 (Check-in)", "\u0e2a\u0e16\u0e32\u0e19\u0e30\u0e40\u0e0a\u0e47\u0e04\u0e2d\u0e34\u0e19 (Check-in Status)", 
-            "\u0e2a\u0e16\u0e32\u0e19\u0e17\u0e35\u0e48\u0e19\u0e31\u0e14\u0e2b\u0e21\u0e32\u0e22 (Location Name)", "\u0e2a\u0e16\u0e32\u0e19\u0e30 (Status)", "\u0e2a\u0e16\u0e32\u0e19\u0e30\u0e43\u0e2b\u0e21\u0e48 (New Status)", "\u0e2a\u0e23\u0e38\u0e1b\u0e1c\u0e25\u0e01\u0e32\u0e23\u0e17\u0e33\u0e07\u0e32\u0e19 (Summary)", 
-            "\u0e23\u0e39\u0e1b\u0e20\u0e32\u0e1e (Photos)", "\u0e42\u0e2d\u0e01\u0e32\u0e2a (Opportunity)", "\u0e43\u0e1a\u0e40\u0e2a\u0e19\u0e2d\u0e23\u0e32\u0e04\u0e32 (Proposal)", "\u0e27\u0e31\u0e19\u0e17\u0e35\u0e48\u0e40\u0e2a\u0e19\u0e2d\u0e23\u0e32\u0e04\u0e32 (Proposal Date)", 
-            "DM \u0e23\u0e48\u0e27\u0e21\u0e1b\u0e23\u0e30\u0e0a\u0e38\u0e21 (DM Involved)", "\u0e08\u0e33\u0e19\u0e27\u0e19\u0e04\u0e39\u0e48\u0e41\u0e02\u0e48\u0e07 (CompetitorCount)", "\u0e04\u0e27\u0e32\u0e21\u0e40\u0e23\u0e47\u0e27 (Speed)", "\u0e2a\u0e16\u0e32\u0e19\u0e30\u0e14\u0e35\u0e25 (Deal)", 
-            "\u0e42\u0e0b\u0e25\u0e39\u0e0a\u0e31\u0e48\u0e19\u0e40\u0e14\u0e34\u0e21 (Solution)", "\u0e40\u0e2b\u0e15\u0e38\u0e1c\u0e25\u0e41\u0e1e\u0e49 (Loss)"
+            "\u0e27\u0e31\u0e19\u0e17\u0e35\u0e48 (Date)", "\u0e1b\u0e23\u0e30\u0e40\u0e20\u0e17 (Type)", "\u0e2b\u0e31\u0e27\u0e02\u0e49\u0e2d (Topic)", "\u0e1a\u0e23\u0e34\u0e29\u0e31\u0e17 (Company)",
+            "\u0e1c\u0e39\u0e49\u0e15\u0e34\u0e14\u0e15\u0e48\u0e2d (Contact)", "\u0e42\u0e04\u0e23\u0e07\u0e01\u0e32\u0e23 (Project)", "\u0e40\u0e0a\u0e47\u0e04\u0e2d\u0e34\u0e19 (Check-in)", "\u0e2a\u0e16\u0e32\u0e19\u0e30\u0e40\u0e0a\u0e47\u0e04\u0e2d\u0e34\u0e19 (Check-in Status)",
+            "\u0e2a\u0e16\u0e32\u0e19\u0e17\u0e35\u0e48\u0e19\u0e31\u0e14\u0e2b\u0e21\u0e32\u0e22 (Location Name)", "\u0e2a\u0e16\u0e32\u0e19\u0e30 (Status)", "\u0e2a\u0e16\u0e32\u0e19\u0e30\u0e43\u0e2b\u0e21\u0e48 (New Status)", "\u0e2a\u0e23\u0e38\u0e1b\u0e1c\u0e25\u0e01\u0e32\u0e23\u0e17\u0e33\u0e07\u0e32\u0e19 (Summary)",
+            "\u0e42\u0e2d\u0e01\u0e32\u0e2a (Opportunity)", "\u0e43\u0e1a\u0e40\u0e2a\u0e19\u0e2d\u0e23\u0e32\u0e04\u0e32 (Proposal)", "\u0e27\u0e31\u0e19\u0e17\u0e35\u0e48\u0e40\u0e2a\u0e19\u0e2d\u0e23\u0e32\u0e04\u0e32 (Proposal Date)",
+            "DM \u0e23\u0e48\u0e27\u0e21\u0e1b\u0e23\u0e30\u0e0a\u0e38\u0e21 (DM Involved)", "\u0e08\u0e33\u0e19\u0e27\u0e19\u0e04\u0e39\u0e48\u0e41\u0e02\u0e48\u0e07 (CompetitorCount)", "\u0e04\u0e27\u0e32\u0e21\u0e40\u0e23\u0e47\u0e27 (Speed)", "\u0e2a\u0e16\u0e32\u0e19\u0e30\u0e14\u0e35\u0e25 (Deal)",
+            "\u0e42\u0e0b\u0e25\u0e39\u0e0a\u0e31\u0e48\u0e19\u0e40\u0e14\u0e34\u0e21 (Solution)", "\u0e40\u0e2b\u0e15\u0e38\u0e1c\u0e25\u0e41\u0e1e\u0e49 (Loss)", "\u0e23\u0e39\u0e1b\u0e20\u0e32\u0e1e (Photos)"
         )
         val headerRow = sheet.createRow(0)
         headers.forEachIndexed { i, title ->
@@ -688,7 +688,7 @@ suspend fun exportToExcel(context: Context, fileName: String, activities: List<E
             sheet.setColumnWidth(i, 4000)
         }
         sheet.setColumnWidth(11, 8000) // summary column wider
-        sheet.setColumnWidth(12, 6000) // photos column wider
+        sheet.setColumnWidth(21, 6000) // photos column wider
 
         val drawing = sheet.createDrawingPatriarch()
         val creationHelper = workbook.creationHelper
@@ -712,26 +712,26 @@ suspend fun exportToExcel(context: Context, fileName: String, activities: List<E
                     
                     val values = listOf(
                         item.date,
-                        item.companyName ?: "",
-                        item.projectName ?: "",
-                        item.topic ?: "",
-                        item.status,
                         item.activityType?.uppercase() ?: "N/A",
+                        item.topic ?: "",
+                        item.companyName ?: "",
+                        item.contactName ?: "",
+                        item.projectName ?: "",
                         if (item.activityType == "onsite" && item.checkInTime != null) { try { java.time.Instant.parse(item.checkInTime).atZone(java.time.ZoneId.systemDefault()).format(java.time.format.DateTimeFormatter.ofPattern("dd MMM HH:mm")) } catch(e: Exception) { item.checkInTime.take(16).replace("T", " ") } } else "",
+                        item.checkInStatus ?: "",
+                        item.locationName ?: "",
+                        item.status,
                         res.newStatus ?: "",
+                        res.summary ?: "",
                         res.opportunityScore ?: "",
-                        if (res.isProposalSent) "ส่งแล้ว" else "ยังไม่ส่ง",
+                        if (res.isProposalSent) "Yes" else "No",
                         res.proposalDate ?: "",
-                        if (res.dmInvolved) "มี" else "ไม่มี",
+                        if (res.dmInvolved) "Yes" else "No",
                         res.competitorCount.toString(),
                         res.responseSpeed ?: "",
                         res.dealPosition ?: "",
                         res.previousSolution ?: "",
-                        res.lossReason ?: "",
-                        res.summary ?: "",
-                        item.contactName ?: "",
-                        item.checkInStatus ?: "",
-                        item.locationName ?: ""
+                        res.lossReason ?: ""
                     )
 
                     values.forEachIndexed { i, v ->
@@ -743,7 +743,7 @@ suspend fun exportToExcel(context: Context, fileName: String, activities: List<E
                         v.split("\n").forEach { line -> maxChars[i] = maxOf(maxChars[i], line.length) }
                     }
                     
-                    row.createCell(12).apply { this.cellStyle = baseCellStyle }
+                    row.createCell(21).apply { this.cellStyle = baseCellStyle }
 
                     if (res.photoUrls.isNotEmpty()) {
                         var colOffset = 0
@@ -752,9 +752,9 @@ suspend fun exportToExcel(context: Context, fileName: String, activities: List<E
                             if (bytes != null) {
                                 val pictureIdx = workbook.addPicture(bytes, Workbook.PICTURE_TYPE_JPEG)
                                 val anchor = creationHelper.createClientAnchor()
-                                anchor.setCol1(12) // Fixed to col 12 for photos
+                                anchor.setCol1(21) // Fixed to col 21 for photos
                                 anchor.setRow1(rowNum)
-                                anchor.setCol2(12)
+                                anchor.setCol2(21)
                                 anchor.setRow2(rowNum)
                                 
                                 val emuPerPx = 9525
@@ -776,17 +776,26 @@ suspend fun exportToExcel(context: Context, fileName: String, activities: List<E
                 val resultsStr = item.results.joinToString("\n")
                 val values = listOf(
                     item.date,
-                    item.companyName ?: "",
-                    item.projectName ?: "",
-                    item.topic ?: "",
-                    item.status,
                     item.activityType?.uppercase() ?: "N/A",
-                    if (item.activityType == "onsite" && item.checkInTime != null) { try { java.time.Instant.parse(item.checkInTime).atZone(java.time.ZoneId.systemDefault()).format(java.time.format.DateTimeFormatter.ofPattern("dd MMM HH:mm")) } catch(e: Exception) { item.checkInTime.take(16).replace("T", " ") } } else "",
-                    "", "", "ยังไม่ส่ง", "", "ไม่มี", "0", "", "", "", "",
-                    resultsStr,
+                    item.topic ?: "",
+                    item.companyName ?: "",
                     item.contactName ?: "",
+                    item.projectName ?: "",
+                    if (item.activityType == "onsite" && item.checkInTime != null) { try { java.time.Instant.parse(item.checkInTime).atZone(java.time.ZoneId.systemDefault()).format(java.time.format.DateTimeFormatter.ofPattern("dd MMM HH:mm")) } catch(e: Exception) { item.checkInTime.take(16).replace("T", " ") } } else "",
                     item.checkInStatus ?: "",
-                    item.locationName ?: ""
+                    item.locationName ?: "",
+                    item.status,
+                    "",
+                    resultsStr,
+                    "",
+                    "",
+                    "",
+                    "",
+                    "",
+                    "",
+                    "",
+                    "",
+                    ""
                 )
                 values.forEachIndexed { i, v ->
                     row.createCell(i).apply {
@@ -795,7 +804,7 @@ suspend fun exportToExcel(context: Context, fileName: String, activities: List<E
                     }
                     v.split("\n").forEach { line -> maxChars[i] = maxOf(maxChars[i], line.length) }
                 }
-                row.createCell(12).apply { this.cellStyle = baseCellStyle }
+                row.createCell(21).apply { this.cellStyle = baseCellStyle }
                 rowNum++
             }
         }
