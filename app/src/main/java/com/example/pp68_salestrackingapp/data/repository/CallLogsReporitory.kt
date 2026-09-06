@@ -31,7 +31,7 @@ class CallLogRepository @Inject constructor(
     private val apiService:   ApiService,
     private val tokenManager: TokenManager
 ) {
-    private val isoFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssZ", Locale.US)
+    private val isoFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssXXX", Locale.US)
     private val synced    = mutableSetOf<String>() // เก็บ key ที่ sync แล้ว
 
     // ✅ ดึง call log จากเครื่อง แล้ว match กับ contact ใน DB
@@ -102,6 +102,8 @@ class CallLogRepository @Inject constructor(
                 }
 
                 // ✅ ส่งขึ้น API ทีละ batch
+                var maxSuccessDateMs = lastSyncTime
+
                 if (entries.isNotEmpty()) {
                     entries.forEach { entry ->
                         try {
@@ -117,14 +119,19 @@ class CallLogRepository @Inject constructor(
                                     "is_sync"      to "true"
                                 )
                             )
+                            val entryDateMs = isoFormat.parse(entry.startTime)?.time ?: 0L
+                            if (entryDateMs > maxSuccessDateMs) {
+                                maxSuccessDateMs = entryDateMs
+                            }
                         } catch (e: Exception) {
-                            android.util.Log.w("CallLog", "ส่ง log ไม่สำเร็จ: ${e.message}")
+                            android.util.Log.w("CallLog", "Failed to sync: ")
                         }
                     }
                 }
 
-                // ✅ เลื่อน watermark ไปข้างหน้าหลัง sync รอบนี้ ป้องกันส่งซ้ำในรอบถัดไป/หลังเปิดแอปใหม่
-                if (newestDateMs > lastSyncTime) tokenManager.saveLastCallLogSyncTime(newestDateMs)
+                if (maxSuccessDateMs > lastSyncTime) {
+                    tokenManager.saveLastCallLogSyncTime(maxSuccessDateMs)
+                }
 
                 kotlin.Result.success(entries.size)
             } catch (e: Exception) {

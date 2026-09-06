@@ -96,6 +96,44 @@ fun HomeScreen(
         }
     }
 
+
+
+
+    if (uiState.showPhonePrompt) {
+        var phoneNumber by remember { mutableStateOf("") }
+        AlertDialog(
+            onDismissRequest = { /* Cannot dismiss */ },
+            properties = androidx.compose.ui.window.DialogProperties(dismissOnBackPress = false, dismissOnClickOutside = false),
+            title = { Text("??????????????????????", fontWeight = FontWeight.Bold) },
+            text = {
+                Column {
+                    Text("????????????????????????????????????????????????????????????????????", fontSize = 14.sp, color = TextGray)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = phoneNumber,
+                        onValueChange = { phoneNumber = it },
+                        label = { Text("?????????????") },
+                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Phone),
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (phoneNumber.isNotBlank()) {
+                            viewModel.savePhoneNumber(phoneNumber)
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = RedPrimary)
+                ) {
+                    Text("??????", color = White)
+                }
+            }
+        )
+    }
+
     HomeScreenContent(
         uiState             = uiState,
         onAddClick          = onAddClick,
@@ -583,7 +621,10 @@ fun HomeScreenPreview() {
     )
 
     SalesTrackingTheme {
-        HomeScreenContent(
+    
+
+
+    HomeScreenContent(
             uiState = uiState,
             onAddClick = {},
             onCardClick = {},

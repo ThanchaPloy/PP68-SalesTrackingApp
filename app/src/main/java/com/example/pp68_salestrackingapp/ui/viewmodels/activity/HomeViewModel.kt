@@ -2,6 +2,7 @@
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.pp68_salestrackingapp.data.remote.ApiService
 import com.example.pp68_salestrackingapp.data.repository.ActivityRepository
 import com.example.pp68_salestrackingapp.data.repository.AuthRepository
 import com.example.pp68_salestrackingapp.data.model.AuthUser
@@ -41,7 +42,8 @@ data class HomeUiState(
     val groupedCards: Map<String, List<ActivityCard>> = emptyMap(),
     val isLoading:       Boolean                = false,
     val error:           String?                = null,
-    val authUser:        AuthUser?              = null
+    val authUser:        AuthUser?              = null,
+    val showPhonePrompt: Boolean = false
 )
 
 @HiltViewModel
@@ -50,7 +52,8 @@ class HomeViewModel @Inject constructor(
     private val authRepo:     AuthRepository,
     private val customerRepo: CustomerRepository,
     private val projectRepo:  ProjectRepository,
-    private val callLogRepo: CallLogRepository
+    private val callLogRepo: CallLogRepository,
+    private val apiService:  ApiService
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(HomeUiState(authUser = authRepo.currentUser()))
@@ -143,7 +146,13 @@ class HomeViewModel @Inject constructor(
             }
             
             try {
-                // âœ… à¹€à¸žà¸´à¹ˆà¸¡à¸à¸²à¸£ refreshResults à¹€à¸žà¸·à¹ˆà¸­à¸”à¸¶à¸‡à¸ªà¸–à¸²à¸™à¸°à¸à¸²à¸£à¸šà¸±à¸™à¸—à¸¶à¸à¸œà¸¥à¸¥à¹ˆà¸²à¸ªà¸¸à¸”à¸ˆà¸²à¸ Server
+                val resp = apiService.getUserById("eq.")
+                val userDto = resp.body()?.firstOrNull()
+                if (userDto != null && userDto.phoneNumber.isNullOrBlank()) {
+                    _uiState.update { it.copy(showPhonePrompt = true) }
+                }
+
+                // refreshResults à¹€à¸žà¸·à¹ˆà¸­à¸”à¸¶à¸‡à¸ªà¸–à¸²à¸™à¸°à¸à¸²à¸£à¸šà¸±à¸™à¸—à¸¶à¸à¸œà¸¥à¸¥à¹ˆà¸²à¸ªà¸¸à¸”à¸ˆà¸²à¸ Server
                 activityRepo.refreshActivities(userId)
                 activityRepo.refreshResults(userId)
                 customerRepo.refreshCustomers(authRepo.currentUser()?.teamId ?: "")
@@ -186,5 +195,19 @@ class HomeViewModel @Inject constructor(
             loadActivities()
         }
     }
-}
 
+    fun savePhoneNumber(phone: String) {
+        viewModelScope.launch {
+            try {
+                val userId = authRepo.currentUser()?.userId ?: return@launch
+                val updates = mapOf("phone_number" to phone.trim())
+                val response = apiService.updateUserProfile("eq.", updates)
+                if (response.isSuccessful) {
+                    _uiState.update { it.copy(showPhonePrompt = false) }
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("HomeVM", "Error saving phone: ")
+            }
+        }
+    }
+}
