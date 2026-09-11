@@ -80,8 +80,7 @@ fun ProjectDetailScreen(
     onEditProject:       (String) -> Unit = {},
     onCreateActivity:    (String) -> Unit = {},
     onSalesResultClick: (String) -> Unit,
-    onInventoryClick:    (String) -> Unit = {},
-    onRecordResult:      (projectId: String?, activityId: String?) -> Unit = { _, _ -> },
+        onRecordResult:      (projectId: String?, activityId: String?) -> Unit = { _, _ -> },
     onActivityClick:     (String) -> Unit = {},
     onCheckin:           (String) -> Unit = {},
     onFinish:            (String) -> Unit = {},
@@ -115,8 +114,7 @@ fun ProjectDetailScreen(
         onBack = onBack,
         onEditProject = onEditProject,
         onCreateActivity = onCreateActivity,
-        onInventoryClick = onInventoryClick,
-        onSalesResultClick = onSalesResultClick,
+                onSalesResultClick = onSalesResultClick,
         onRecordResult = onRecordResult,
         onActivityClick = onActivityClick,
         onCheckin = onCheckin,
@@ -137,8 +135,7 @@ fun ProjectDetailContent(
     onBack: () -> Unit,
     onEditProject: (String) -> Unit,
     onCreateActivity: (String) -> Unit,
-    onInventoryClick: (String) -> Unit,
-    onSalesResultClick: (String) -> Unit,
+        onSalesResultClick: (String) -> Unit,
     onRecordResult: (String?, String?) -> Unit,
     onActivityClick: (String) -> Unit,
     onCheckin: (String) -> Unit = {},
@@ -189,16 +186,7 @@ fun ProjectDetailContent(
                 horizontalAlignment = Alignment.End
             ) {
                 /*
-                // FAB 1 — Inventory/Products (ปิดการใช้งานชั่วคราว)
-                FloatingActionButton(
-                    onClick        = { s.project?.let { onInventoryClick(it.projectId) } },
-                    containerColor = RedDark,
-                    contentColor   = White,
-                    shape          = CircleShape,
-                    modifier       = Modifier.size(52.dp)
-                ) {
-                    Icon(Icons.Default.ShoppingCart, "สินค้าในโครงการ",
-                        modifier = Modifier.size(22.dp))
+                                        modifier = Modifier.size(22.dp))
                 }
                 */
                 
@@ -902,8 +890,7 @@ private fun ProjectDetailPreview() {
                 teamMembers = listOf(TeamMember("U1", "John Doe")),
                 history = listOf(HistoryItem("H1", "First Meeting", "Initial req", "2024-05-10", "completed", "meeting", "Khun Somchai"))
             ),
-            onBack = {}, onEditProject = {}, onCreateActivity = {}, onInventoryClick = {},
-            onSalesResultClick = {}, onRecordResult = { _, _ -> }, onActivityClick = {}
+            onBack = {}, onEditProject = {}, onCreateActivity = {},             onSalesResultClick = {}, onRecordResult = { _, _ -> }, onActivityClick = {}
         )
     }
 }

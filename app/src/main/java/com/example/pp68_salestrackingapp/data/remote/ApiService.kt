@@ -225,26 +225,6 @@ interface ApiService {
         @Query("offset") offset: Int = 0
     ): Response<List<UnitOfMeasureDto>>
 
-    @GET("project_product")
-    suspend fun getProjectProducts(@Query("project_id") projectId: String, @Query("limit") limit: Int = 100): Response<List<ProjectProductDto>>
-
-    @POST("project_product")
-    @Headers("Prefer: return=minimal", "Content-Profile: public")
-    suspend fun addProductToProject(@Body item: ProjectProductInsertDto): Response<Unit>
-
-    @PATCH("project_product")
-    @Headers("Prefer: return=minimal", "Content-Profile: public")
-    suspend fun updateProjectProduct(@Query("project_id") projectId: String, @Query("product_id") productId: String, @Body updates: @JvmSuppressWildcards Map<String, Any?>): Response<Unit>
-
-    @GET("project_product")
-    suspend fun getProjectProductsByStatus(@Query("project_id") projectId: String, @Query("status") status: String): Response<List<ProjectProductDto>>
-
-    @DELETE("project_product")
-    suspend fun deleteProjectProduct(@Query("project_code") projectId: String, @Query("product_id") productId: String): Response<Unit>
-
-    @DELETE("project_product")
-    suspend fun deleteProjectProductsByProject(@Query("project_code") projectId: String): Response<Unit>
-
     // ── Appointment ──────────────────────────────────────────────
     @GET("appointment")
     suspend fun getMyAppointments(@Query("user_id") userId: String, @Query("limit") limit: Int = 5000, @Query("order") order: String = "planned_date.desc"): Response<List<SalesActivity>>
@@ -355,9 +335,6 @@ interface ApiService {
     @DELETE("appointment_checklist")
     suspend fun deleteChecklistByAppointment(@Query("appointment_id") appointmentId: String): Response<Unit>
 
-    @POST("call_log")
-    @Headers("Prefer: return=representation", "Content-Profile: public")
-    suspend fun insertCallLog(@Body body: @JvmSuppressWildcards Map<String, String>): Response<Unit>
 
     @POST("rpc/set_app_context")
     suspend fun setAppContext(@Body body: @JvmSuppressWildcards Map<String, String>): Response<Unit>

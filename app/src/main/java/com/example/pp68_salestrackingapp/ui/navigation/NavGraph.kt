@@ -267,7 +267,6 @@ fun SalesTrackingApp() {
                 onEditProject = { id -> navController.navigate(Route.EditProject.createRoute(id)) },
                 onCreateActivity = { id -> navController.navigate(Route.CreateActivityWithProject.createRoute(id)) },
                 onSalesResultClick = { navController.navigate(Route.StandaloneSalesResult.createRoute(it)) },
-                onInventoryClick = { id -> navController.navigate(Route.ProjectInventory.createRoute(id)) },
                 onRecordResult = { pId, activityId -> 
                     if (activityId != null) {
                         navController.navigate(Route.SalesResult.createRoute(activityId))
@@ -292,53 +291,6 @@ fun SalesTrackingApp() {
                 onBack     = { navController.popBackStack() },
                 onSaved    = { navController.popBackStack() },
                 onViewHistory = { groupId -> navController.navigate(Route.ResultHistory.createRoute(groupId)) }
-            )
-        }
-
-        composable(
-            route = Route.ProjectInventory.path,
-            arguments = listOf(navArgument("projectId") { type = NavType.StringType })
-        ) { backStackEntry ->
-            val projectId = backStackEntry.arguments?.getString("projectId") ?: ""
-            ProjectInventoryScreen(
-                projectId = projectId,
-                onBack = { navController.popBackStack() },
-                onAddProduct = { id -> navController.navigate(Route.AddProduct.createRoute(id)) },
-                onEditProduct = { pId, prodId -> navController.navigate(Route.EditProduct.createRoute(pId, prodId)) },
-                onNotificationClick = { navController.navigate(Route.Notification.path) },
-                onSettingsClick = { navController.navigate(Route.Settings.path) },
-                onLogoutClick = onLogout,
-                currentTab = currentTab,
-                onTabChange = { tab -> navigateToTab(navController, tab) }
-            )
-        }
-
-        composable(
-            route = Route.AddProduct.path,
-            arguments = listOf(navArgument("projectId") { type = NavType.StringType })
-        ) { backStackEntry ->
-            val projectId = backStackEntry.arguments?.getString("projectId") ?: ""
-            AddProductScreen(
-                projectId = projectId,
-                onBack = { navController.popBackStack() },
-                onSaved = { navController.popBackStack() }
-            )
-        }
-
-        composable(
-            route = Route.EditProduct.path,
-            arguments = listOf(
-                navArgument("projectId") { type = NavType.StringType },
-                navArgument("productId") { type = NavType.StringType }
-            )
-        ) { backStackEntry ->
-            val projectId = backStackEntry.arguments?.getString("projectId") ?: ""
-            val productId = backStackEntry.arguments?.getString("productId") ?: ""
-            AddProductScreen(
-                projectId = projectId,
-                productId = productId,
-                onBack = { navController.popBackStack() },
-                onSaved = { navController.popBackStack() }
             )
         }
 
@@ -456,3 +408,4 @@ private fun navigateToTab(navController: NavHostController, tabIndex: Int) {
         restoreState = true
     }
 }
+

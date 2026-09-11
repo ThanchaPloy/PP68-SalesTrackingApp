@@ -38,13 +38,7 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private val callLogPermissionLauncher = registerForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { granted ->
-        if (granted) {
-            Log.d("CallLog", "READ_CALL_LOG permission granted")
-        }
-    }
+
 
     private var lastSyncMs = 0L
 
@@ -62,7 +56,7 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         com.example.pp68_salestrackingapp.utils.NotificationChannels.ensureCreated(this)
         askNotificationPermission()
-        askCallLogPermission()
+
 
         setContent {
             SalesTrackingTheme {
@@ -88,13 +82,7 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun askCallLogPermission() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_CALL_LOG) != PackageManager.PERMISSION_GRANTED) {
-                callLogPermissionLauncher.launch(Manifest.permission.READ_CALL_LOG)
-            }
-        }
-    }
+
 
     private fun getFcmToken() {
         FirebaseMessaging.getInstance().token.addOnCompleteListener { task ->

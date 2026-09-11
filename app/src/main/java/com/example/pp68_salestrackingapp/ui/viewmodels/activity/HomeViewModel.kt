@@ -6,7 +6,6 @@ import com.example.pp68_salestrackingapp.data.remote.ApiService
 import com.example.pp68_salestrackingapp.data.repository.ActivityRepository
 import com.example.pp68_salestrackingapp.data.repository.AuthRepository
 import com.example.pp68_salestrackingapp.data.model.AuthUser
-import com.example.pp68_salestrackingapp.data.repository.CallLogRepository
 import com.example.pp68_salestrackingapp.data.repository.CustomerRepository
 import com.example.pp68_salestrackingapp.data.repository.ProjectRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -52,7 +51,6 @@ class HomeViewModel @Inject constructor(
     private val authRepo:     AuthRepository,
     private val customerRepo: CustomerRepository,
     private val projectRepo:  ProjectRepository,
-    private val callLogRepo: CallLogRepository,
     private val apiService:  ApiService
 ) : ViewModel() {
 
@@ -62,22 +60,10 @@ class HomeViewModel @Inject constructor(
     init {
         if (authRepo.currentUser()?.userId != null) {
             refreshData()
-            syncCallLogs()
         } else {
             loadActivities()
         }
         observeActivities()
-    }
-
-    private fun syncCallLogs() {
-        viewModelScope.launch {
-            try {
-                val contacts = customerRepo.getAllContactPhoneMap()
-                callLogRepo.syncCallLogs(contacts)
-            } catch (e: Exception) {
-                android.util.Log.w("CallLog", "Sync call logs à¹„à¸¡à¹ˆà¸ªà¸³à¹€à¸£à¹‡à¸ˆ: ${e.message}")
-            }
-        }
     }
 
     private fun observeActivities() {

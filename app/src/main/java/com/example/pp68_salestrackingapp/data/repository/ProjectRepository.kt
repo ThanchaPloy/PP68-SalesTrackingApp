@@ -198,11 +198,6 @@ class ProjectRepository @Inject constructor(
                 }
                 apiService.deleteProjectMembers("eq.$projectId")
                 apiService.deleteProjectContacts("eq.$projectId")
-                try {
-                    apiService.deleteProjectProductsByProject("eq.$projectId")
-                } catch (e: Exception) {
-                    Log.e("ProjectRepo", "Failed to delete project products: ${e.message}")
-                }
                 val response = apiService.deleteProject("eq.$projectId")
                 if (response.isSuccessful) {
                     projectDao.deleteProjectById(projectId)
