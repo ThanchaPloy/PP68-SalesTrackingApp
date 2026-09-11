@@ -211,7 +211,7 @@ class ActivityRepository @Inject constructor(
                 try {
                     apiService.deleteChecklistByAppointment("eq.$appointmentId")
                     if (items.isNotEmpty()) {
-                        val dtos = items.map { ChecklistInsertDto(appointmentId = appointmentId, masterId = it.masterId, isDone = it.isDone) }
+                        val dtos = items.map { ChecklistInsertDto(appointmentId = appointmentId, masterId = it.masterId, isDone = it.isDone, actName = it.actName) }
                         apiService.insertChecklist(dtos)
                     }
                 } catch (_: Exception) { }
