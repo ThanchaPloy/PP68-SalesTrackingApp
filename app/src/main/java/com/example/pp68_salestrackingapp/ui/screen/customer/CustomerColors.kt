@@ -69,8 +69,8 @@ fun TypeTag(type: String?) {
     val color = when (type) {
         "Owner"            -> Color(0xFF7C3AED)
         "Developer"        -> Color(0xFF2563EB)
-        "Main Constructor" -> Color(0xFFE53935)
-        "Sub Constructor"  -> Color(0xFFEA580C)
+        "Main Contractor" -> Color(0xFFE53935)
+        "Sub Contractor"  -> Color(0xFFEA580C)
         "Installer"        -> Color(0xFF059669)
         else               -> Color(0xFF6B7280)
     }

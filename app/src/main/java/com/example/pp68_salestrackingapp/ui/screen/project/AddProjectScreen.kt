@@ -375,7 +375,7 @@ fun AddProjectContent(
                     }
 
                     FormField("ประเภทลูกค้า", required = true) {
-                        val types = listOf("Owner", "Developer", "Main Constructor", "Sub Constructor", "Installer", "Architect", "Interior Designer", "Consultant", "Industrial", "Wholesale", "Factory")
+                        val types = listOf("Owner", "Developer", "Main Contractor", "Sub Contractor", "Installer", "Architect", "Interior Designer", "Consultant", "Industrial", "Wholesale", "Factory")
                         DropdownField(
                             value = uiState.quickAddCustType,
                             placeholder = "เลือกประเภท",

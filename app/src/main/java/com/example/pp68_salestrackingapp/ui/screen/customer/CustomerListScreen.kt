@@ -398,7 +398,7 @@ fun CustomerListScreenPreview() {
             custId = "C001",
             companyName = "บริษัท ตัวอย่าง จำกัด",
             branch = "สำนักงานใหญ่",
-            custType = "Main Constructor",
+            custType = "Main Contractor",
             companyAddr = "123 BKK",
             companyLat = 0.0,
             companyLong = 0.0,
