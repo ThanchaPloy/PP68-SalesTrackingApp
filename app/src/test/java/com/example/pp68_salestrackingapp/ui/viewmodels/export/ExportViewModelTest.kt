@@ -68,7 +68,7 @@ class ExportViewModelTest {
         val outWeek = inWeek.copy(activityId = "A2", plannedDate = "2026-04-20")
         coEvery { activityRepo.getMyActivitiesWithDetails() } returns Result.success(listOf(outWeek, inWeek))
 
-        viewModel.loadWeeklyData(LocalDate.parse("2026-04-08"))
+        viewModel.loadWeeklyData(LocalDate.parse("2026-04-08"), LocalDate.parse("2026-04-14"))
         advanceUntilIdle()
 
         val state = viewModel.uiState.value
@@ -83,7 +83,7 @@ class ExportViewModelTest {
     fun `loadWeeklyData failure should set error`() = runTest {
         coEvery { activityRepo.getMyActivitiesWithDetails() } returns Result.failure(Exception("boom"))
 
-        viewModel.loadWeeklyData(LocalDate.parse("2026-04-08"))
+        viewModel.loadWeeklyData(LocalDate.parse("2026-04-08"), LocalDate.parse("2026-04-14"))
         advanceUntilIdle()
 
         assertEquals("boom", viewModel.uiState.value.error)
@@ -108,7 +108,7 @@ class ExportViewModelTest {
         val invalid = valid.copy(activityId = "A3", plannedDate = "bad-date")
         coEvery { activityRepo.getMyActivitiesWithDetails() } returns Result.success(listOf(blank, invalid, valid))
 
-        viewModel.loadWeeklyData(LocalDate.parse("2026-04-08"))
+        viewModel.loadWeeklyData(LocalDate.parse("2026-04-08"), LocalDate.parse("2026-04-14"))
         advanceUntilIdle()
 
         val state = viewModel.uiState.value
@@ -184,7 +184,7 @@ class ExportViewModelTest {
                 )
             )
         )
-        viewModel.loadWeeklyData(LocalDate.parse("2026-04-08"))
+        viewModel.loadWeeklyData(LocalDate.parse("2026-04-08"), LocalDate.parse("2026-04-14"))
         advanceUntilIdle()
 
         val csv = viewModel.generateActivityCsvString()
@@ -222,7 +222,7 @@ class ExportViewModelTest {
         val activityCsv = viewModel.generateActivityCsvString()
         val projectCsv = viewModel.generateProjectCsvString()
 
-        assertTrue(activityCsv.startsWith("\uFEFFDate,Project Name,Company Name,Topic,Status"))
+        assertTrue(activityCsv.startsWith("\uFEFF\u0E27\u0E31\u0E19\u0E17\u0E35\u0E48 (Date)"))
         assertEquals("\uFEFFProject Name,Expected Value,Status,Score,Close Date\n", projectCsv)
     }
 
@@ -257,7 +257,7 @@ class ExportViewModelTest {
         every { activityRepo.getAllResultsFlow() } returns flowOf(listOf(result))
         coEvery { activityRepo.getResultPhotos("RES-01") } returns listOf("https://example.com/photo2.jpg")
 
-        viewModel.loadWeeklyData(LocalDate.parse("2026-04-08"))
+        viewModel.loadWeeklyData(LocalDate.parse("2026-04-08"), LocalDate.parse("2026-04-14"))
         advanceUntilIdle()
 
         val state = viewModel.uiState.value
@@ -307,7 +307,7 @@ class ExportViewModelTest {
         coEvery { activityRepo.getMyActivitiesWithDetails() } returns Result.success(listOf(activity))
         every { activityRepo.getAllResultsFlow() } returns flowOf(listOf(oldResult, newResult))
 
-        viewModel.loadWeeklyData(LocalDate.parse("2026-04-08"))
+        viewModel.loadWeeklyData(LocalDate.parse("2026-04-08"), LocalDate.parse("2026-04-14"))
         advanceUntilIdle()
 
         val state = viewModel.uiState.value

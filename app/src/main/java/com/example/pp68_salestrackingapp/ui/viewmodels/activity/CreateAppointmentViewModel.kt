@@ -616,28 +616,13 @@ class CreateAppointmentViewModel @Inject constructor(
                 android.util.Log.e("CreateApptVM", "ตั้ง Alarm ไม่สำเร็จ: ${e.message}")
             }
 
-            // 📍 ตั้ง Geofence แจ้งเตือนเมื่อเข้าใกล้สถานที่
+            // 📍 เริ่มติดตามตำแหน่งเพื่อแจ้งเตือนเมื่อเข้าใกล้สถานที่นัดหมาย (เฉพาะนัดหมายวันนี้)
             try {
-                var targetLat = s.lat
-                var targetLng = s.lng
-                if ((targetLat == null || targetLng == null) && customerId != null) {
-                    val cust = customerRepo.getCustomerById(customerId).getOrNull()
-                    targetLat = cust?.companyLat
-                    targetLng = cust?.companyLong
-                }
-                if (targetLat != null && targetLng != null) {
-                    val geofenceManager = com.example.pp68_salestrackingapp.utils.GeofenceManager(context)
-                    geofenceManager.addGeofenceForActivity(
-                        activityId = finalId,
-                        companyName = s.selectedCompanyName ?: "สถานที่นัดหมาย",
-                        lat = targetLat,
-                        lng = targetLng,
-                        plannedDate = isoDate,
-                        plannedTime = s.startTime ?: ""
-                    )
+                if (isoDate == java.time.LocalDate.now().toString()) {
+                    com.example.pp68_salestrackingapp.service.ProximityMonitorService.startIfNeeded(context)
                 }
             } catch (e: Exception) {
-                android.util.Log.e("CreateApptVM", "ตั้ง Geofence ไม่สำเร็จ: ${e.message}")
+                android.util.Log.e("CreateApptVM", "เริ่มติดตามตำแหน่งไม่สำเร็จ: ${e.message}")
             }
 
             _uiState.update { it.copy(isLoading = false, isSaved = true) }

@@ -20,7 +20,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.pp68_salestrackingapp.ui.components.*
 import com.example.pp68_salestrackingapp.ui.theme.AppColors
 import com.example.pp68_salestrackingapp.ui.theme.SalesTrackingTheme
-import com.example.pp68_salestrackingapp.ui.components.GoogleMapPickerField
+import com.example.pp68_salestrackingapp.ui.components.MapPickerField
 import com.example.pp68_salestrackingapp.ui.viewmodels.customer.AddCustomerEvent
 import com.example.pp68_salestrackingapp.ui.viewmodels.customer.AddCustomerUiState
 import com.example.pp68_salestrackingapp.ui.viewmodels.customer.AddCustomerViewModel
@@ -136,8 +136,8 @@ fun AddCustomerContent(
                 )
             }
 
-            // ── Google Maps Picker ───────────────────────────
-            GoogleMapPickerField(
+            // ── Map Picker (OpenStreetMap) ────────────────────
+            MapPickerField(
                 lat = uiState.selectedLat,
                 lng = uiState.selectedLng,
                 onLocationPicked = { pickedLat, pickedLng ->

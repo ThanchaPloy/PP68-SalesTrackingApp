@@ -41,6 +41,7 @@ class AddProjectViewModelTest {
         coEvery { branchRepo.observeBranches() } coAnswers { emptyList() }
         coEvery { projectRepo.getMembersByBranch(any()) } coAnswers { Result.success(emptyList()) }
         coEvery { projectRepo.getBranchMembersRpc(any()) } returns Result.success(emptyList())
+        coEvery { projectRepo.getProjectSalesEmployees() } returns Result.success(emptyList())
         coEvery { projectRepo.getProjectMembersDetailed(any()) } returns emptyList()
         coEvery { customerRepo.getContactPersons(any()) } coAnswers { Result.success(emptyList()) }
         coEvery { branchRepo.getBranchById(any()) } returns null
@@ -75,6 +76,9 @@ class AddProjectViewModelTest {
         coEvery { projectRepo.getBranchMembersRpc("U1") } returns Result.success(
             listOf("U1" to "Owner", "U2" to "Support")
         )
+        coEvery { projectRepo.getProjectSalesEmployees() } returns Result.success(
+            listOf("U1" to "Owner", "U2" to "Support")
+        )
 
         initViewModel()
         advanceUntilIdle()
@@ -97,6 +101,7 @@ class AddProjectViewModelTest {
             Branch("TS-003", "South A", "South")
         )
         coEvery { projectRepo.getBranchMembersRpc("U1") } returns Result.success(listOf("U1" to "Me"))
+        coEvery { projectRepo.getProjectSalesEmployees() } returns Result.success(listOf("U1" to "Me"))
 
         initViewModel()
         advanceUntilIdle()
@@ -130,6 +135,7 @@ class AddProjectViewModelTest {
             Branch("TS-003", "South A", "South")
         )
         coEvery { projectRepo.getBranchMembersRpc("U1") } returns Result.success(listOf("U1" to "Owner"))
+        coEvery { projectRepo.getProjectSalesEmployees() } returns Result.success(listOf("U1" to "Owner"))
 
         initViewModel()
         advanceUntilIdle()
@@ -240,8 +246,8 @@ class AddProjectViewModelTest {
 
         val state = viewModel.uiState.value
         assertEquals("กรุณากรอกชื่อโครงการ", state.projectNameError)
-        assertEquals("กรุณาเลือกลูกค้า", state.customerError)
         assertEquals("กรุณาเลือกสถานะ", state.statusError)
+        assertEquals("กรุณาเลือกสาขาที่รับผิดชอบ", state.saveError)
         coVerify(exactly = 0) { projectRepo.createProject(any(), any()) }
         coVerify(exactly = 0) { projectRepo.updateProject(any(), any()) }
     }
@@ -305,7 +311,9 @@ class AddProjectViewModelTest {
     }
 
     @Test
-    fun `save success when member list selected should save selected members`() = runTest {
+    fun `save should persist only the creating user as member regardless of member toggles`() = runTest {
+        // production save() deliberately ignores selectedMemberIds: "Each project has
+        // strictly 1 sales person: the logged-in user who creates it"
         initViewModel()
         advanceUntilIdle()
 
@@ -319,7 +327,7 @@ class AddProjectViewModelTest {
         advanceUntilIdle()
 
         coVerify(exactly = 1) {
-            projectRepo.addProjectMembers(any(), match { it.toSet() == setOf("U9", "U8", "USR-001") }, "owner")
+            projectRepo.addProjectMembers(any(), listOf("USR-001"), "owner")
         }
         assertTrue(viewModel.uiState.value.isSaved)
     }

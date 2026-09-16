@@ -37,15 +37,15 @@ RUN chmod +x gradlew && ./gradlew --version --no-daemon
 
 COPY . .
 
-ARG MAPS_API_KEY="AIzaSyDKmJSLtEmvghV_sT-flPYMjtkfkCOZG8Y"
 # ARG POSTGREST_URL="https://postgrest-279493695905.asia-southeast1.run.app/"
 # ARG BASE_AUTH_URL="http://192.168.15.177:8080"
 ARG POSTGREST_URL=postgresql://postgres:your_password@192.168.15.182:5432/postgres
 ARG BASE_AUTH_URL=http://192.168.15.177:8080
 ARG UPLOAD_URL="https://upload-visit-photo-279493695905.asia-southeast1.run.app/"
 ARG JWT_SECRET="sales-app-super-secret-key-2026-practical-project"
-RUN printf "MAPS_API_KEY=%s\nPOSTGREST_URL=%s\nBASE_AUTH_URL=%s\nUPLOAD_URL=%s\nJWT_SECRET=%s\nsdk.dir=%s\n" \
-      "$MAPS_API_KEY" "$POSTGREST_URL" "$BASE_AUTH_URL" "$UPLOAD_URL" "$JWT_SECRET" "$ANDROID_SDK_ROOT" \
+ARG OSM_USER_AGENT="SalesTrackingApp-Tangnam/1.0 (tangnamsalesproject@gmail.com)"
+RUN printf "POSTGREST_URL=%s\nBASE_AUTH_URL=%s\nUPLOAD_URL=%s\nJWT_SECRET=%s\nOSM_USER_AGENT=%s\nsdk.dir=%s\n" \
+      "$POSTGREST_URL" "$BASE_AUTH_URL" "$UPLOAD_URL" "$JWT_SECRET" "$OSM_USER_AGENT" "$ANDROID_SDK_ROOT" \
       > local.properties
 
 RUN ./gradlew :app:assembleDebug --no-daemon

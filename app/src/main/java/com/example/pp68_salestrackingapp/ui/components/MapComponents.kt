@@ -1,5 +1,10 @@
 package com.example.pp68_salestrackingapp.ui.components
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.util.Log
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -12,14 +17,6 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.LocationOn
-import android.Manifest
-import android.annotation.SuppressLint
-import android.content.pm.PackageManager
-import android.util.Log
-import androidx.core.content.ContextCompat
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
-import com.google.android.gms.location.LocationServices
 import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
@@ -35,21 +32,22 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.pp68_salestrackingapp.BuildConfig
-import com.google.android.gms.maps.CameraUpdateFactory
-import com.google.android.gms.maps.model.CameraPosition
-import com.google.android.gms.maps.model.LatLng
-import com.google.android.libraries.places.api.Places
-import com.google.android.libraries.places.api.model.AutocompletePrediction
-import com.google.android.libraries.places.api.model.Place
-import com.google.android.libraries.places.api.net.FetchPlaceRequest
-import com.google.android.libraries.places.api.net.FindAutocompletePredictionsRequest
-import com.google.android.libraries.places.api.net.PlacesClient
-import com.google.maps.android.compose.*
-import com.example.pp68_salestrackingapp.ui.theme.AppColors
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.content.ContextCompat
+import com.example.pp68_salestrackingapp.data.remote.NominatimClient
+import com.example.pp68_salestrackingapp.data.remote.NominatimPlace
+import com.example.pp68_salestrackingapp.utils.fetchCurrentLocation
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import org.osmdroid.events.MapEventsReceiver
+import org.osmdroid.tileprovider.tilesource.TileSourceFactory
+import org.osmdroid.util.GeoPoint
+import org.osmdroid.views.MapView
+import org.osmdroid.views.overlay.Marker
+import org.osmdroid.views.overlay.MapEventsOverlay
+import org.osmdroid.views.overlay.mylocation.GpsMyLocationProvider
+import org.osmdroid.views.overlay.mylocation.MyLocationNewOverlay
 
 private val RedPrimary  = Color(0xFFCC1D1D)
 private val TextDark    = Color(0xFF1A1A1A)
@@ -57,30 +55,10 @@ private val TextGray    = Color(0xFF888888)
 private val BgField     = Color(0xFFF8F8F8)
 private val BorderGray  = Color(0xFFE8E8E8)
 
-// ponytail: Places.createClient() opens a gRPC channel the SDK never closes — creating a
-// new one every time this composable enters composition (e.g. re-navigating to this screen)
-// leaks a channel each time ("Previous channel was not shutdown properly"). Cache one client
-// for the process lifetime instead of one per composable instance.
-private val placesClientLock = Any()
-@Volatile private var cachedPlacesClient: PlacesClient? = null
-
-private fun getOrCreatePlacesClient(context: android.content.Context): PlacesClient? {
-    cachedPlacesClient?.let { return it }
-    return synchronized(placesClientLock) {
-        cachedPlacesClient ?: try {
-            if (!Places.isInitialized()) {
-                Places.initialize(context.applicationContext, BuildConfig.MAPS_API_KEY)
-            }
-            Places.createClient(context.applicationContext).also { cachedPlacesClient = it }
-        } catch (e: Exception) {
-            Log.e("MapComponents", "Failed to initialize Places Client", e)
-            null
-        }
-    }
-}
+private const val DEFAULT_ZOOM = 15.0
 
 @Composable
-fun GoogleMapPickerField(
+fun MapPickerField(
     lat: Double?,
     lng: Double?,
     onLocationPicked: (Double, Double) -> Unit,
@@ -91,10 +69,6 @@ fun GoogleMapPickerField(
     val focusManager = LocalFocusManager.current
     val scope        = rememberCoroutineScope()
     val isPreview    = LocalInspectionMode.current
-
-    val fusedLocationClient = remember {
-        if (isPreview) null else LocationServices.getFusedLocationProviderClient(context)
-    }
 
     var hasLocationPermission by remember {
         mutableStateOf(
@@ -107,17 +81,22 @@ fun GoogleMapPickerField(
 
     // ── State ────────────────────────────────────────────────
     var searchQuery       by remember { mutableStateOf("") }
-    var suggestions       by remember { mutableStateOf<List<AutocompletePrediction>>(emptyList()) }
+    var suggestions       by remember { mutableStateOf<List<NominatimPlace>>(emptyList()) }
     var isSearching       by remember { mutableStateOf(false) }
     var showSuggestions   by remember { mutableStateOf(false) }
     var searchJob:  Job?  = remember { null }
 
-    val currentLatLng = LatLng(if (lat == null || lat == 0.0) 13.7563 else lat, if (lng == null || lng == 0.0) 100.5018 else lng)
+    val hasLocation = lat != null && lng != null && lat != 0.0 && lng != 0.0
+    val effectiveLat = if (lat == null || lat == 0.0) 13.7563 else lat
+    val effectiveLng = if (lng == null || lng == 0.0) 100.5018 else lng
 
-    val cameraPositionState = rememberCameraPositionState {
-        position = CameraPosition.fromLatLngZoom(currentLatLng, 15f)
+    val onLocationPickedState = rememberUpdatedState(onLocationPicked)
+    val markerRef = remember { mutableStateOf<Marker?>(null) }
+    val myLocationOverlayRef = remember { mutableStateOf<MyLocationNewOverlay?>(null) }
+
+    DisposableEffect(Unit) {
+        onDispose { myLocationOverlayRef.value?.disableMyLocation() }
     }
-    val markerState = rememberMarkerState(position = currentLatLng)
 
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -125,36 +104,23 @@ fun GoogleMapPickerField(
         val granted = permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
                 permissions[Manifest.permission.ACCESS_COARSE_LOCATION] == true
         hasLocationPermission = granted
-        if (granted && fusedLocationClient != null) {
-            fetchLocation(fusedLocationClient) { fetchedLat, fetchedLng ->
+        if (granted) {
+            fetchCurrentLocation(context) { fetchedLat, fetchedLng ->
                 onLocationPicked(fetchedLat, fetchedLng)
-                scope.launch {
-                    cameraPositionState.animate(CameraUpdateFactory.newLatLngZoom(LatLng(fetchedLat, fetchedLng), 15f))
-                }
             }
         }
     }
 
-    var permissionRequested by remember { mutableStateOf(false) }
-
-    // Sync camera if lat/lng changes from outside
     LaunchedEffect(lat, lng) {
-        if (lat != null && lng != null && lat != 0.0 && lng != 0.0) {
-            val newPoint = LatLng(lat, lng)
-            markerState.position = newPoint
-            cameraPositionState.position = CameraPosition.fromLatLngZoom(newPoint, 15f)
-        } else {
+        if (!hasLocation) {
             searchQuery = ""
         }
     }
 
     val actualResetToCurrentLocation = onResetToCurrentLocation ?: {
-        if (hasLocationPermission && fusedLocationClient != null) {
-            fetchLocation(fusedLocationClient) { fetchedLat, fetchedLng ->
+        if (hasLocationPermission) {
+            fetchCurrentLocation(context) { fetchedLat, fetchedLng ->
                 onLocationPicked(fetchedLat, fetchedLng)
-                scope.launch {
-                    cameraPositionState.animate(CameraUpdateFactory.newLatLngZoom(LatLng(fetchedLat, fetchedLng), 15f))
-                }
             }
         } else if (!isPreview) {
             permissionLauncher.launch(arrayOf(
@@ -164,20 +130,8 @@ fun GoogleMapPickerField(
         }
     }
 
-    // ── Places Client (cached process-wide — see getOrCreatePlacesClient) ─────
-    val placesClient = remember {
-        if (isPreview) {
-            Log.d("MapComponents", "Preview mode: skipping Places client initialization")
-            null
-        } else {
-            getOrCreatePlacesClient(context)
-        }
-    }
-
-    // ── Search function (debounce 400ms) ──────────────────────
+    // ── Search function (debounce 400ms, Nominatim) ──────────
     fun searchPlaces(query: String) {
-        Log.d("MapComponents", "searchPlaces called with query: '$query'. Client is null: ${placesClient == null}")
-        val client = placesClient ?: return
         searchJob?.cancel()
         if (query.length < 2) {
             suggestions     = emptyList()
@@ -188,58 +142,28 @@ fun GoogleMapPickerField(
             delay(400)
             isSearching = true
             try {
-                Log.d("MapComponents", "Sending autocomplete predictions request for query: '$query'")
-                val request = FindAutocompletePredictionsRequest.builder()
-                    .setQuery(query)
-                    .setCountries("TH")
-                    .build()
-
-                client.findAutocompletePredictions(request)
-                    .addOnSuccessListener { response ->
-                        suggestions     = response.autocompletePredictions
-                        showSuggestions = suggestions.isNotEmpty()
-                        isSearching     = false
-                        Log.d("MapComponents", "Autocomplete success: ${suggestions.size} suggestions retrieved")
-                    }
-                    .addOnFailureListener { exception ->
-                        Log.e("MapComponents", "Autocomplete predictions request failed", exception)
-                        suggestions     = emptyList()
-                        showSuggestions = false
-                        isSearching     = false
-                    }
+                val results = NominatimClient.service.search(query = query)
+                suggestions     = results
+                showSuggestions = results.isNotEmpty()
             } catch (e: Exception) {
-                Log.e("MapComponents", "Autocomplete exception during request construction/call", e)
+                Log.e("MapComponents", "Nominatim search failed", e)
+                suggestions     = emptyList()
+                showSuggestions = false
+            } finally {
                 isSearching = false
             }
         }
     }
 
-    fun selectPlace(prediction: AutocompletePrediction) {
-        Log.d("MapComponents", "selectPlace selected: ${prediction.getPrimaryText(null)} (ID: ${prediction.placeId})")
-        val client = placesClient ?: return
-        val placeFields = listOf(Place.Field.LAT_LNG, Place.Field.NAME)
-        val request     = FetchPlaceRequest.newInstance(prediction.placeId, placeFields)
+    fun selectPlace(place: NominatimPlace) {
+        val placeLat = place.lat.toDoubleOrNull() ?: return
+        val placeLng = place.lon.toDoubleOrNull() ?: return
 
-        client.fetchPlace(request)
-            .addOnSuccessListener { response ->
-                val place  = response.place
-                val latLng = place.latLng ?: return@addOnSuccessListener
-
-                Log.d("MapComponents", "FetchPlace success. Name: ${place.name}, LatLng: ${latLng.latitude}, ${latLng.longitude}")
-                markerState.position = latLng
-                scope.launch {
-                    cameraPositionState.animate(CameraUpdateFactory.newLatLngZoom(latLng, 16f))
-                }
-                onLocationPicked(latLng.latitude, latLng.longitude)
-
-                searchQuery     = place.name ?: prediction.getPrimaryText(null).toString()
-                showSuggestions = false
-                suggestions     = emptyList()
-                focusManager.clearFocus()
-            }
-            .addOnFailureListener { exception ->
-                Log.e("MapComponents", "FetchPlace request failed", exception)
-            }
+        onLocationPicked(placeLat, placeLng)
+        searchQuery     = place.displayName.ifBlank { "%.4f, %.4f".format(placeLat, placeLng) }
+        showSuggestions = false
+        suggestions     = emptyList()
+        focusManager.clearFocus()
     }
 
     Column(verticalArrangement = Arrangement.spacedBy(0.dp)) {
@@ -292,19 +216,16 @@ fun GoogleMapPickerField(
                 border = androidx.compose.foundation.BorderStroke(1.dp, BorderGray)
             ) {
                 LazyColumn(modifier = Modifier.heightIn(max = 200.dp)) {
-                    items(suggestions) { prediction ->
+                    items(suggestions) { place ->
                         Row(
-                            modifier = Modifier.fillMaxWidth().clickable { selectPlace(prediction) }.padding(horizontal = 16.dp, vertical = 12.dp),
+                            modifier = Modifier.fillMaxWidth().clickable { selectPlace(place) }.padding(horizontal = 16.dp, vertical = 12.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
                             Icon(Icons.Default.LocationOn, null, tint = RedPrimary, modifier = Modifier.size(18.dp))
-                            Column {
-                                Text(prediction.getPrimaryText(null).toString(), fontSize = 14.sp, fontWeight = FontWeight.Medium, color = TextDark, maxLines = 1)
-                                Text(prediction.getSecondaryText(null).toString(), fontSize = 12.sp, color = TextGray, maxLines = 1)
-                            }
+                            Text(place.displayName, fontSize = 13.sp, fontWeight = FontWeight.Medium, color = TextDark, maxLines = 2)
                         }
-                        if (suggestions.last() != prediction) HorizontalDivider(color = BorderGray, thickness = 0.5.dp)
+                        if (suggestions.last() != place) HorizontalDivider(color = BorderGray, thickness = 0.5.dp)
                     }
                 }
             }
@@ -325,32 +246,64 @@ fun GoogleMapPickerField(
                     Text("Map Preview Not Available", color = Color.DarkGray)
                 }
             } else {
-                GoogleMap(
+                AndroidView(
                     modifier = Modifier.fillMaxSize(),
-                    cameraPositionState = cameraPositionState,
-                    properties = MapProperties(
-                        isMyLocationEnabled = hasLocationPermission,
-                        mapType = MapType.NORMAL
-                    ),
-                    uiSettings = MapUiSettings(
-                        zoomControlsEnabled = true,
-                        myLocationButtonEnabled = hasLocationPermission
-                    ),
-                    onMapClick = { latLng ->
-                        markerState.position = latLng
-                        onLocationPicked(latLng.latitude, latLng.longitude)
-                        focusManager.clearFocus()
-                        showSuggestions = false
+                    factory = { ctx ->
+                        MapView(ctx).apply {
+                            setTileSource(TileSourceFactory.MAPNIK)
+                            setMultiTouchControls(true)
+                            controller.setZoom(DEFAULT_ZOOM)
+                            controller.setCenter(GeoPoint(effectiveLat, effectiveLng))
+
+                            val eventsOverlay = MapEventsOverlay(object : MapEventsReceiver {
+                                override fun singleTapConfirmedHelper(p: GeoPoint): Boolean {
+                                    onLocationPickedState.value(p.latitude, p.longitude)
+                                    focusManager.clearFocus()
+                                    showSuggestions = false
+                                    return true
+                                }
+                                override fun longPressHelper(p: GeoPoint): Boolean = false
+                            })
+                            overlays.add(eventsOverlay)
+
+                            val marker = Marker(this).apply {
+                                setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
+                                position = GeoPoint(effectiveLat, effectiveLng)
+                            }
+                            if (hasLocation) overlays.add(marker)
+                            markerRef.value = marker
+
+                            val myLocationOverlay = MyLocationNewOverlay(GpsMyLocationProvider(ctx), this)
+                            overlays.add(myLocationOverlay)
+                            myLocationOverlayRef.value = myLocationOverlay
+                            if (hasLocationPermission) myLocationOverlay.enableMyLocation()
+                        }
+                    },
+                    update = { mapView ->
+                        val point = GeoPoint(effectiveLat, effectiveLng)
+                        val marker = markerRef.value
+                        if (marker != null) {
+                            marker.position = point
+                            if (hasLocation) {
+                                if (!mapView.overlays.contains(marker)) mapView.overlays.add(marker)
+                            } else {
+                                mapView.overlays.remove(marker)
+                            }
+                        }
+                        mapView.controller.setCenter(point)
+
+                        val myLocationOverlay = myLocationOverlayRef.value
+                        if (myLocationOverlay != null) {
+                            if (hasLocationPermission && !myLocationOverlay.isMyLocationEnabled) {
+                                myLocationOverlay.enableMyLocation()
+                            } else if (!hasLocationPermission && myLocationOverlay.isMyLocationEnabled) {
+                                myLocationOverlay.disableMyLocation()
+                            }
+                        }
+
+                        mapView.invalidate()
                     }
-                ) {
-                    if (lat != null && lng != null && lat != 0.0 && lng != 0.0) {
-                        Marker(
-                            state = markerState,
-                            title = "Location",
-                            snippet = "${"%.4f".format(markerState.position.latitude)}, ${"%.4f".format(markerState.position.longitude)}"
-                        )
-                    }
-                }
+                )
             }
 
             // hint overlay
@@ -370,7 +323,7 @@ fun GoogleMapPickerField(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            if (lat != null && lng != null && lat != 0.0 && lng != 0.0) {
+            if (hasLocation) {
                 Text(
                     "📍 ${"%.6f".format(lat)}, ${"%.6f".format(lng)}",
                     fontSize = 11.sp,
@@ -385,7 +338,7 @@ fun GoogleMapPickerField(
             }
 
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (lat != null && lng != null && lat != 0.0 && lng != 0.0 && onClearLocation != null) {
+                if (hasLocation && onClearLocation != null) {
                     TextButton(
                         onClick = onClearLocation,
                         contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
@@ -417,21 +370,6 @@ fun GoogleMapPickerField(
                     Text("รีเซ็ตเป็นตำแหน่งปัจจุบัน", fontSize = 11.sp, color = RedPrimary)
                 }
             }
-        }
-    }
-}
-
-@SuppressLint("MissingPermission")
-private fun fetchLocation(
-    fusedLocationClient: com.google.android.gms.location.FusedLocationProviderClient,
-    onResult: (Double, Double) -> Unit
-) {
-    fusedLocationClient.getCurrentLocation(
-        com.google.android.gms.location.Priority.PRIORITY_HIGH_ACCURACY,
-        com.google.android.gms.tasks.CancellationTokenSource().token
-    ).addOnSuccessListener { location ->
-        location?.let {
-            onResult(it.latitude, it.longitude)
         }
     }
 }

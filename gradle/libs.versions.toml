@@ -17,8 +17,7 @@ junit                  = "4.13.2"
 junitVersion           = "1.2.1"
 espressoCore           = "3.6.1"
 ktor                   = "2.3.12"
-googleMapsCompose      = "6.1.2"
-playServicesLocation = "21.3.0"
+osmdroid               = "6.1.20"
 firebaseBom = "33.7.0"
 
 [libraries]
@@ -51,11 +50,10 @@ ktor-client-core                  = { group = "io.ktor",                  name =
 ktor-client-okhttp                = { group = "io.ktor",                  name = "ktor-client-okhttp",            version.ref = "ktor" }
 ktor-client-content-negotiation   = { group = "io.ktor",                  name = "ktor-client-content-negotiation",version.ref = "ktor" }
 ktor-serialization-gson            = { group = "io.ktor",                  name = "ktor-serialization-gson",       version.ref = "ktor" }
-google-maps-compose               = { group = "com.google.maps.android",  name = "maps-compose",                  version.ref = "googleMapsCompose" }
+osmdroid                           = { group = "org.osmdroid",             name = "osmdroid-android",              version.ref = "osmdroid" }
 junit                             = { group = "junit",                    name = "junit",                         version.ref = "junit" }
 androidx-junit                    = { group = "androidx.test.ext",        name = "junit",                         version.ref = "junitVersion" }
 androidx-espresso-core            = { group = "androidx.test.espresso",   name = "espresso-core",                  version.ref = "espressoCore" }
-play-services-location = { group = "com.google.android.gms", name = "play-services-location", version.ref = "playServicesLocation" }
 firebase-bom = { group = "com.google.firebase", name = "firebase-bom", version.ref = "firebaseBom" }
 firebase-database = { group = "com.google.firebase", name = "firebase-database" }
 firebase-messaging = { group = "com.google.firebase", name = "firebase-messaging" }

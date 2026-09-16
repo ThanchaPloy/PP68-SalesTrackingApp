@@ -319,8 +319,8 @@ fun AddProjectContent(
             // ── Site Location + Google Maps ──────────────────
             FormField("สถานที่ตั้งโครงการ") {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    // ใช้ GoogleMapPickerField จาก MapComponents.kt ที่มีระบบค้นหา
-                    GoogleMapPickerField(
+                    // ใช้ MapPickerField จาก MapComponents.kt ที่มีระบบค้นหา
+                    MapPickerField(
                         lat = uiState.siteLat,
                         lng = uiState.siteLong,
                         onLocationPicked = { lat, lng ->

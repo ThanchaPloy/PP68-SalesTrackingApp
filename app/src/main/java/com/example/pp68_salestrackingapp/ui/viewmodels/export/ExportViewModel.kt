@@ -16,9 +16,7 @@ import java.time.format.DateTimeFormatter
 import java.time.temporal.WeekFields
 import java.util.Locale
 import com.example.pp68_salestrackingapp.utils.formatPhotoUrl
-import android.content.Context
-import android.location.Geocoder
-import dagger.hilt.android.qualifiers.ApplicationContext
+import com.example.pp68_salestrackingapp.data.remote.NominatimClient
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.Dispatchers
 import javax.inject.Inject
@@ -79,8 +77,7 @@ data class ExportProjectItem(
 @HiltViewModel
 class ExportViewModel @Inject constructor(
     private val activityRepo: ActivityRepository,
-    private val projectRepo: ProjectRepository,
-    @ApplicationContext private val context: Context
+    private val projectRepo: ProjectRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ExportUiState())
@@ -289,14 +286,8 @@ class ExportViewModel @Inject constructor(
         if (lat == null || lon == null) return ""
         return withContext(Dispatchers.IO) {
             try {
-                val geocoder = Geocoder(context, Locale.getDefault())
-                val addresses = geocoder.getFromLocation(lat, lon, 1)
-                if (!addresses.isNullOrEmpty()) {
-                    val address = addresses[0]
-                    address.getAddressLine(0) ?: ""
-                } else {
-                    ", "
-                }
+                val place = NominatimClient.service.reverse(lat, lon)
+                place.displayName.ifBlank { ", " }
             } catch (e: Exception) {
                 ", "
             }

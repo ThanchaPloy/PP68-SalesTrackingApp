@@ -13,6 +13,8 @@
     <uses-feature android:name="android.hardware.camera" android:required="false" />
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
     <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
 
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES"/>
     <!-- ✅ ต้องใช้สำหรับอ่านตำแหน่ง GPS จาก EXIF ใน Android 10+ -->
@@ -29,10 +31,6 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.PP68SalesTrackingApp">
-
-        <meta-data
-            android:name="com.google.android.geo.API_KEY"
-            android:value="${MAPS_API_KEY}" />
 
         <activity
             android:name=".MainActivity"
@@ -52,10 +50,6 @@
         </activity>
 
         <receiver
-            android:name=".receiver.GeofenceBroadcastReceiver"
-            android:exported="false" />
-
-        <receiver
             android:name=".receiver.AppointmentAlarmReceiver"
             android:exported="false" />
 
@@ -66,6 +60,11 @@
                 <action android:name="com.google.firebase.MESSAGING_EVENT" />
             </intent-filter>
         </service>
+
+        <service
+            android:name=".service.ProximityMonitorService"
+            android:exported="false"
+            android:foregroundServiceType="location" />
 
         <provider
             android:name="androidx.startup.InitializationProvider"

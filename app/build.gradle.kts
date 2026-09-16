@@ -22,7 +22,8 @@ android {
         localProperties.load(FileInputStream(localPropertiesFile))
     }
 
-    val mapsApiKey: String = localProperties.getProperty("MAPS_API_KEY") ?: ""
+    val osmUserAgent: String = localProperties.getProperty("OSM_USER_AGENT")
+        ?: "SalesTrackingApp-Tangnam/1.0 (tangnamsalesproject@gmail.com)"
 
     defaultConfig {
         applicationId = "com.example.pp68_salestrackingapp"
@@ -46,8 +47,7 @@ android {
         buildConfigField("String", "BASE_AUTH_URL", "\"$baseAuthUrl\"")
         buildConfigField("String", "UPLOAD_URL",    "\"$uploadUrl\"")
 
-        buildConfigField("String", "MAPS_API_KEY", "\"$mapsApiKey\"")
-        manifestPlaceholders["MAPS_API_KEY"] = mapsApiKey
+        buildConfigField("String", "OSM_USER_AGENT", "\"$osmUserAgent\"")
     }
     signingConfigs {
         create("release") {
@@ -103,7 +103,6 @@ dependencies {
     implementation(libs.androidx.ui.tooling.preview)
     implementation(libs.androidx.material3)
     implementation(libs.androidx.material.icons.extended)
-    implementation(libs.play.services.location)
     debugImplementation(libs.androidx.ui.tooling)
 
     // Core
@@ -132,8 +131,8 @@ dependencies {
     implementation(libs.ktor.client.content.negotiation)
     implementation(libs.ktor.serialization.gson)
 
-    // Google Maps
-    implementation(libs.google.maps.compose)
+    // OpenStreetMap (osmdroid)
+    implementation(libs.osmdroid)
 
     // Room
     implementation(libs.room.runtime)
@@ -159,9 +158,6 @@ dependencies {
 
     // ต้องมี room-ktx สำหรับ Flow support
     implementation("androidx.room:room-ktx:2.6.1")
-
-    // Places API
-    implementation("com.google.android.libraries.places:places:3.3.0")
 
     // ✅ Firebase BOM — จัดการ version ให้อัตโนมัติ
     implementation(platform(libs.firebase.bom))

@@ -40,6 +40,7 @@ class CreateAppointmentViewModelTest {
     val instantTaskExecutorRule = InstantTaskExecutorRule()
 
     private val dispatcher = StandardTestDispatcher()
+    private val context = mockk<android.content.Context>(relaxed = true)
     private val activityRepo = mockk<ActivityRepository>(relaxed = true)
     private val projectRepo = mockk<ProjectRepository>(relaxed = true)
     private val customerRepo = mockk<CustomerRepository>(relaxed = true)
@@ -101,7 +102,7 @@ class CreateAppointmentViewModelTest {
             ActivityMaster(1, "Lead", "สำรวจความต้องการ")
         )
 
-        val vm = CreateAppointmentViewModel(activityRepo, projectRepo, customerRepo, authRepo)
+        val vm = CreateAppointmentViewModel(context, activityRepo, projectRepo, customerRepo, authRepo)
         advanceUntilIdle()
 
         assertEquals(1, vm.uiState.value.projectOptions.size)
@@ -116,7 +117,7 @@ class CreateAppointmentViewModelTest {
         configureBaseData()
         coEvery { activityRepo.getMasterActivities() } throws RuntimeException("network")
 
-        val vm = CreateAppointmentViewModel(activityRepo, projectRepo, customerRepo, authRepo)
+        val vm = CreateAppointmentViewModel(context, activityRepo, projectRepo, customerRepo, authRepo)
         advanceUntilIdle()
 
         assertTrue(vm.uiState.value.allMasterOptions.isNotEmpty())
@@ -130,7 +131,7 @@ class CreateAppointmentViewModelTest {
             ActivityMaster(1, "Lead", "Lead item"),
             ActivityMaster(2, "Quotation", "Quotation item")
         )
-        val vm = CreateAppointmentViewModel(activityRepo, projectRepo, customerRepo, authRepo)
+        val vm = CreateAppointmentViewModel(context, activityRepo, projectRepo, customerRepo, authRepo)
         advanceUntilIdle()
 
         vm.onEvent(CreateAppointmentEvent.ProjectSelected("PRJ-1", "Project A", "Lead"))
@@ -149,7 +150,7 @@ class CreateAppointmentViewModelTest {
         configureBaseData()
         coEvery { activityRepo.getMasterActivities() } returns listOf(ActivityMaster(1, "Lead", "L"))
         every { authRepo.currentUser() } returns null
-        val vm = CreateAppointmentViewModel(activityRepo, projectRepo, customerRepo, authRepo)
+        val vm = CreateAppointmentViewModel(context, activityRepo, projectRepo, customerRepo, authRepo)
         advanceUntilIdle()
         vm.onEvent(CreateAppointmentEvent.LoadInitialProject("PRJ-1"))
         vm.onEvent(CreateAppointmentEvent.TypeChanged("onsite"))
@@ -173,7 +174,7 @@ class CreateAppointmentViewModelTest {
         coEvery { activityRepo.saveAppointmentContacts(any(), any()) } returns Unit
         coEvery { activityRepo.savePlanItems(any(), any()) } returns Unit
 
-        val vm = CreateAppointmentViewModel(activityRepo, projectRepo, customerRepo, authRepo)
+        val vm = CreateAppointmentViewModel(context, activityRepo, projectRepo, customerRepo, authRepo)
         advanceUntilIdle()
         vm.onEvent(CreateAppointmentEvent.LoadInitialProject("PRJ-1"))
         vm.onEvent(CreateAppointmentEvent.TypeChanged("onsite"))
@@ -201,7 +202,7 @@ class CreateAppointmentViewModelTest {
     fun `picker events and toggles should update state deterministically`() = runTest {
         configureBaseData()
         coEvery { activityRepo.getMasterActivities() } returns listOf(ActivityMaster(1, "Lead", "L"))
-        val vm = CreateAppointmentViewModel(activityRepo, projectRepo, customerRepo, authRepo)
+        val vm = CreateAppointmentViewModel(context, activityRepo, projectRepo, customerRepo, authRepo)
         advanceUntilIdle()
 
         vm.onEvent(CreateAppointmentEvent.ShowStartTimePicker)
@@ -243,7 +244,7 @@ class CreateAppointmentViewModelTest {
             ActivityMaster(1, "Lead", "Lead item"),
             ActivityMaster(2, "Quotation", "Quotation item")
         )
-        val vm = CreateAppointmentViewModel(activityRepo, projectRepo, customerRepo, authRepo)
+        val vm = CreateAppointmentViewModel(context, activityRepo, projectRepo, customerRepo, authRepo)
         advanceUntilIdle()
 
         vm.onEvent(CreateAppointmentEvent.ContactToggled("CT-1"))
@@ -259,7 +260,7 @@ class CreateAppointmentViewModelTest {
         configureBaseData()
         coEvery { activityRepo.getMasterActivities() } returns emptyList()
         coEvery { projectRepo.getProjectById("PRJ-X") } returns Result.failure(Exception("not found"))
-        val vm = CreateAppointmentViewModel(activityRepo, projectRepo, customerRepo, authRepo)
+        val vm = CreateAppointmentViewModel(context, activityRepo, projectRepo, customerRepo, authRepo)
         advanceUntilIdle()
 
         vm.onEvent(CreateAppointmentEvent.LoadInitialProject("PRJ-X"))
@@ -279,7 +280,7 @@ class CreateAppointmentViewModelTest {
         )
         coEvery { customerRepo.getContactPersons("C2") } returns Result.failure(Exception("contact failed"))
         coEvery { activityRepo.getMasterActivities() } returns listOf(ActivityMaster(1, "Lead", "Lead item"))
-        val vm = CreateAppointmentViewModel(activityRepo, projectRepo, customerRepo, authRepo)
+        val vm = CreateAppointmentViewModel(context, activityRepo, projectRepo, customerRepo, authRepo)
         advanceUntilIdle()
 
         vm.onEvent(CreateAppointmentEvent.ProjectSelected("PRJ-2", "Project B", "Lead"))
@@ -303,7 +304,7 @@ class CreateAppointmentViewModelTest {
             listOf(ContactPerson(contactId = "CT-1", custId = "C2", fullName = "Contact One"))
         )
         coEvery { activityRepo.getMasterActivities() } returns listOf(ActivityMaster(1, "Lead", "Lead item"))
-        val vm = CreateAppointmentViewModel(activityRepo, projectRepo, customerRepo, authRepo)
+        val vm = CreateAppointmentViewModel(context, activityRepo, projectRepo, customerRepo, authRepo)
         advanceUntilIdle()
 
         vm.onEvent(CreateAppointmentEvent.ProjectSelected("PRJ-2", "Project B", "Lead"))
@@ -322,7 +323,7 @@ class CreateAppointmentViewModelTest {
         coEvery { activityRepo.getMasterActivities() } returns emptyList()
         every { authRepo.currentUser() } returns AuthUser("U1", "u@test.com", "sale")
         coEvery { activityRepo.addActivity(any()) } returns Result.failure(Exception("insert fail"))
-        val vm = CreateAppointmentViewModel(activityRepo, projectRepo, customerRepo, authRepo)
+        val vm = CreateAppointmentViewModel(context, activityRepo, projectRepo, customerRepo, authRepo)
         advanceUntilIdle()
         vm.onEvent(CreateAppointmentEvent.LoadInitialProject("PRJ-1"))
         vm.onEvent(CreateAppointmentEvent.TypeChanged("onsite"))
@@ -347,7 +348,7 @@ class CreateAppointmentViewModelTest {
         coEvery { activityRepo.addActivity(any()) } returns Result.success("ACT-001")
         coEvery { activityRepo.saveAppointmentContacts(any(), any()) } returns Unit
 
-        val vm = CreateAppointmentViewModel(activityRepo, projectRepo, customerRepo, authRepo)
+        val vm = CreateAppointmentViewModel(context, activityRepo, projectRepo, customerRepo, authRepo)
         advanceUntilIdle()
         vm.onEvent(CreateAppointmentEvent.LoadInitialProject("PRJ-1"))
         vm.onEvent(CreateAppointmentEvent.TitleChanged("edited"))
