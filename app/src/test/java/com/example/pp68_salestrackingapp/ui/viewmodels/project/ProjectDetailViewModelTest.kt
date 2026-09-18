@@ -159,7 +159,7 @@ class ProjectDetailViewModelTest {
             Customer("C1", "Company A", null, null, null, null, null, null, null)
         )
         every { activityRepo.getActivitiesByProjectFlow(any()) } returns MutableStateFlow(emptyList())
-        coEvery { authRepo.logout() } returns Unit
+        coEvery { authRepo.logout() } returns Result.success(Unit)
 
         val vm = ProjectDetailViewModel(
             projectRepo, authRepo, activityRepo, customerRepo,

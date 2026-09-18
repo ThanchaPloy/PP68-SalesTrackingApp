@@ -44,15 +44,17 @@ fun SettingScreen(
     viewModel: SettingsViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
-    
+
+    LaunchedEffect(uiState.isLoggedOut) {
+        if (uiState.isLoggedOut) onLogout()
+    }
+
     SettingScreenContent(
         uiState = uiState,
         onBack = onBack,
-        onLogout = {
-            viewModel.logout()
-            onLogout()
-        },
-        onRefreshUser = { viewModel.refreshUser() }
+        onLogout = { viewModel.logout() },
+        onRefreshUser = { viewModel.refreshUser() },
+        onDismissLogoutError = { viewModel.dismissLogoutError() }
     )
 }
 
@@ -62,11 +64,23 @@ fun SettingScreenContent(
     uiState: SettingsUiState,
     onBack: () -> Unit,
     onLogout: () -> Unit,
-    onRefreshUser: () -> Unit = {}
+    onRefreshUser: () -> Unit = {},
+    onDismissLogoutError: () -> Unit = {}
 ) {
     // State สำหรับควบคุมว่ากำลังแสดงหน้าย่อยไหน
     var activeSubScreen by remember { mutableStateOf<String?>(null) }
     var showLanguageDialog by remember { mutableStateOf(false) }
+
+    if (uiState.logoutError != null) {
+        AlertDialog(
+            onDismissRequest = onDismissLogoutError,
+            title = { Text("ออกจากระบบไม่สำเร็จ") },
+            text = { Text(uiState.logoutError) },
+            confirmButton = {
+                TextButton(onClick = onDismissLogoutError) { Text("ตกลง") }
+            }
+        )
+    }
 
     LaunchedEffect(activeSubScreen) {
         if (activeSubScreen == null) {
@@ -211,7 +225,7 @@ fun SettingScreenContent(
                     }
 
                     Spacer(Modifier.height(32.dp))
-                    LogoutButton(onClick = onLogout)
+                    LogoutButton(onClick = onLogout, isLoading = uiState.isLoggingOut)
                     Spacer(Modifier.height(16.dp))
                     Text(
                         text = "Sales Tracking App v${BuildConfig.VERSION_NAME} (Build ${BuildConfig.VERSION_CODE})",
@@ -368,12 +382,12 @@ private fun SettingItem(
 }
 
 @Composable
-private fun LogoutButton(onClick: () -> Unit) {
+private fun LogoutButton(onClick: () -> Unit, isLoading: Boolean = false) {
     Surface(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 24.dp)
-            .clickable { onClick() },
+            .clickable(enabled = !isLoading) { onClick() },
         shape = RoundedCornerShape(12.dp),
         color = Color(0xFFFDECEA),
         border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFFFCDD2))
@@ -383,9 +397,15 @@ private fun LogoutButton(onClick: () -> Unit) {
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.Center
         ) {
-            Icon(Icons.AutoMirrored.Filled.Logout, null, tint = RedPrimary)
-            Spacer(Modifier.width(12.dp))
-            Text("ออกจากระบบ", color = RedPrimary, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+            if (isLoading) {
+                CircularProgressIndicator(modifier = Modifier.size(20.dp), color = RedPrimary, strokeWidth = 2.dp)
+                Spacer(Modifier.width(12.dp))
+                Text("กำลังซิงค์ข้อมูล...", color = RedPrimary, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+            } else {
+                Icon(Icons.AutoMirrored.Filled.Logout, null, tint = RedPrimary)
+                Spacer(Modifier.width(12.dp))
+                Text("ออกจากระบบ", color = RedPrimary, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+            }
         }
     }
 }

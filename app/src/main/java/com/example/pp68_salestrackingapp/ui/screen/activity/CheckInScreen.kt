@@ -188,9 +188,14 @@ fun CheckInContent(
                         context, Manifest.permission.ACCESS_FINE_LOCATION
                     ) == PackageManager.PERMISSION_GRANTED
                     val myLocationOverlayRef = remember { mutableStateOf<MyLocationNewOverlay?>(null) }
+                    val mapViewRef = remember { mutableStateOf<MapView?>(null) }
+                    val lastFittedBounds = remember { mutableStateOf<Pair<GeoPoint, GeoPoint>?>(null) }
 
                     DisposableEffect(Unit) {
-                        onDispose { myLocationOverlayRef.value?.disableMyLocation() }
+                        onDispose {
+                            myLocationOverlayRef.value?.disableMyLocation()
+                            mapViewRef.value?.onDetach()
+                        }
                     }
 
                     AndroidView(
@@ -207,6 +212,8 @@ fun CheckInContent(
                                 overlays.add(myLocationOverlay)
                                 myLocationOverlayRef.value = myLocationOverlay
                                 if (hasLocationPermission) myLocationOverlay.enableMyLocation()
+
+                                mapViewRef.value = this
                             }
                         },
                         update = { mapView ->
@@ -253,8 +260,14 @@ fun CheckInContent(
                                 }
                                 mapView.overlays.add(0, line)
 
-                                val bounds = BoundingBox.fromGeoPoints(listOf(currentPos, targetPos))
-                                mapView.post { mapView.zoomToBoundingBox(bounds, true, 150) }
+                                // เช็คก่อนว่าจุดสองจุดนี้เปลี่ยนจริงไหม — ไม่งั้นจะรีเซ็ตซูม/แพนที่ผู้ใช้
+                                // ปรับเองทุกครั้งที่ recompose (เช่น isFetchingLocation เปลี่ยน)
+                                val boundsKey = currentPos to targetPos
+                                if (lastFittedBounds.value != boundsKey) {
+                                    lastFittedBounds.value = boundsKey
+                                    val bounds = BoundingBox.fromGeoPoints(listOf(currentPos, targetPos))
+                                    mapView.post { mapView.zoomToBoundingBox(bounds, true, 150) }
+                                }
                             }
 
                             mapView.invalidate()

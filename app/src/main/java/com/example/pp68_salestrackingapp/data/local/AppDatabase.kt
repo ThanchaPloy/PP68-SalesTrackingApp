@@ -84,6 +84,13 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        // ไม่พบหลักฐานว่ามีการเปลี่ยน schema จริงระหว่าง v30 กับ v31 (ทุก migration ตั้งแต่ 31_32
+        // เป็นต้นไปสมมติ schema เดียวกับที่ MIGRATION_29_30 ทิ้งไว้) — ใส่เป็น no-op ไว้ปิดช่องว่าง
+        // เพื่อไม่ให้ผู้ใช้ที่ค้างอยู่ที่ v30 หรือต่ำกว่าโดน fallbackToDestructiveMigration() ล้างข้อมูล
+        val MIGRATION_30_31 = object : Migration(30, 31) {
+            override fun migrate(db: SupportSQLiteDatabase) {}
+        }
+
         val MIGRATION_31_32 = object : Migration(31, 32) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("""

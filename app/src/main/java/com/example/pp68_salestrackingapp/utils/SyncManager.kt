@@ -15,6 +15,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -59,6 +60,14 @@ class SyncManager @Inject constructor(
                 Log.e("SyncManager", "Foreground sync error: ${e.message}")
             }
         }
+    }
+
+    suspend fun hasPendingChanges(): Boolean = withContext(Dispatchers.IO) {
+        customerDao.getUnsyncedCustomers().isNotEmpty() ||
+            contactDao.getUnsyncedContacts().isNotEmpty() ||
+            projectDao.getUnsyncedProjects().isNotEmpty() ||
+            activityDao.getUnsyncedActivities().isNotEmpty() ||
+            resultDao.getUnsyncedResults().isNotEmpty()
     }
 
     internal suspend fun doSync() {

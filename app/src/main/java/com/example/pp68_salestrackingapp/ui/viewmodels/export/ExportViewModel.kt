@@ -122,7 +122,12 @@ class ExportViewModel @Inject constructor(
                 val exportItems = mutableListOf<ExportActivityItem>()
 
                 // 1. ✅ ประมวลผลกิจกรรมที่มีนัดหมาย (ดึงเฉพาะบันทึกหลังการขายเวอร์ชันล่าสุด + รูปภาพทั้งหมด)
-                filteredActivities.forEach { act ->
+                filteredActivities.forEachIndexed { index, act ->
+                    // Nominatim usage policy caps public server calls at ~1 req/sec — throttle
+                    // between rows so exporting a busy week doesn't get the shared client rate-limited
+                    if (index > 0 && act.plannedLat != null && act.plannedLong != null) {
+                        kotlinx.coroutines.delay(1100)
+                    }
                     val matchedResults = allResults.filter { it.activityId == act.activityId }
                     val latestResult = matchedResults
                         .filter { it.isLatest == true }
@@ -287,9 +292,9 @@ class ExportViewModel @Inject constructor(
         return withContext(Dispatchers.IO) {
             try {
                 val place = NominatimClient.service.reverse(lat, lon)
-                place.displayName.ifBlank { ", " }
+                place.displayName
             } catch (e: Exception) {
-                ", "
+                ""
             }
         }
     }

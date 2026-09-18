@@ -70,7 +70,7 @@ class ProjectListViewModelTest {
             flowOf(allProjects.filter { it.projectName.contains(q, ignoreCase = true) })
         }
         coEvery { projectRepo.refreshProjects(any()) } returns Result.success(Unit)
-        coEvery { authRepo.logout() } just Runs
+        coEvery { authRepo.logout() } returns Result.success(Unit)
     }
 
     @After

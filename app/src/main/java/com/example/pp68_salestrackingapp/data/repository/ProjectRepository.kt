@@ -139,10 +139,13 @@ class ProjectRepository @Inject constructor(
                 } else {
                     val err = response.errorBody()?.string()
                     Log.e("ProjectRepo", "POST failed ${response.code()}: $err")
+                    // ❌ ไม่ใช่ offline (นี่คือ server ปฏิเสธ request จริง เช่น validation error) —
+                    // อย่าคืน success เพราะ caller จะเข้าใจว่าบันทึกสำเร็จทั้งที่ยังไม่ถูกสร้างบนเซิร์ฟเวอร์
                     syncManager.scheduleSync()
-                    Result.success(tempProject)
+                    Result.failure(Exception("บันทึกโครงการไม่สำเร็จ: HTTP ${response.code()} $err"))
                 }
             } catch (e: IOException) {
+                // offline — เก็บไว้ใน Room แล้วรอ retry ตอนมีเน็ต ถือเป็น success ตาม offline-first pattern
                 syncManager.scheduleSync()
                 Result.success(tempProject)
             } catch (e: Exception) { Result.failure(e) }

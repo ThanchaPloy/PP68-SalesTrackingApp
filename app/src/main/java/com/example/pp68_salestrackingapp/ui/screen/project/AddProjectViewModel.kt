@@ -539,8 +539,12 @@ class AddProjectViewModel @Inject constructor(
 
                 result.onSuccess {
                     if (finalProjectId.isNotBlank()) {
-                        // Each project has strictly 1 sales person: the logged-in user who creates it
-                        val memberIds = listOf(userId.trim())
+                        // project_sales_member supports multiple members (confirmed still read/synced
+                        // elsewhere: ProjectRepository.getProjectMembersDetailed, utils/SyncManager) —
+                        // always keep the creator, plus whatever the user toggled/already had selected
+                        // (loadProject() pre-populates selectedMemberIds from existing DB state, so this
+                        // also stops editing a project from wiping its previously assigned team)
+                        val memberIds = (s.selectedMemberIds + userId.trim()).map { it.trim() }.distinct()
 
                         val memberResult = projectRepo.addProjectMembers(
                             projectId = finalProjectId,

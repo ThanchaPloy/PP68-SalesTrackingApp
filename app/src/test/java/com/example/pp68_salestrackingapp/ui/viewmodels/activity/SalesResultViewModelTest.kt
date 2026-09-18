@@ -163,10 +163,29 @@ class SalesResultViewModelTest {
     }
 
     @Test
-    fun `save should validate missing activity id`() = runTest {
+    fun `save should validate missing project id in standalone mode`() = runTest {
+        // no activityId param -> ViewModel enters ResultMode.STANDALONE (see init{}), which
+        // requires a projectId instead of an activityId
+        val vm = SalesResultViewModel(
+            SavedStateHandle(),
+            projectRepo,
+            activityRepo,
+            authRepo
+        )
+        advanceUntilIdle()
+        vm.onSummaryChanged("summary")
+
+        vm.save()
+
+        assertEquals("ไม่พบรหัสโครงการ", vm.uiState.value.error)
+    }
+
+    @Test
+    fun `save in standalone mode should call saveStandaloneResult, not be blocked by missing activity id`() = runTest {
         coEvery { projectRepo.getProjectById("PRJ-1") } returns Result.success(
             Project(projectId = "PRJ-1", custId = "C1", projectName = "Project A")
         )
+        coEvery { activityRepo.saveStandaloneResult(any(), any(), any()) } returns Result.success(Unit)
 
         val vm = SalesResultViewModel(
             SavedStateHandle(mapOf("projectId" to "PRJ-1")),
@@ -178,8 +197,12 @@ class SalesResultViewModelTest {
         vm.onSummaryChanged("summary")
 
         vm.save()
+        advanceUntilIdle()
 
-        assertEquals("ไม่พบรหัสนัดหมาย", vm.uiState.value.error)
+        assertNull(vm.uiState.value.error)
+        assertTrue(vm.uiState.value.isSaved)
+        coVerify(exactly = 1) { activityRepo.saveStandaloneResult("PRJ-1", any(), any()) }
+        coVerify(exactly = 0) { activityRepo.saveActivityResult(any(), any()) }
     }
 
     @Test

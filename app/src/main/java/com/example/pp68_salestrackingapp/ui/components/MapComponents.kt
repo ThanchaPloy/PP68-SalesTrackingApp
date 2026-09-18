@@ -93,9 +93,14 @@ fun MapPickerField(
     val onLocationPickedState = rememberUpdatedState(onLocationPicked)
     val markerRef = remember { mutableStateOf<Marker?>(null) }
     val myLocationOverlayRef = remember { mutableStateOf<MyLocationNewOverlay?>(null) }
+    val mapViewRef = remember { mutableStateOf<MapView?>(null) }
+    val lastCenteredPoint = remember { mutableStateOf<GeoPoint?>(null) }
 
     DisposableEffect(Unit) {
-        onDispose { myLocationOverlayRef.value?.disableMyLocation() }
+        onDispose {
+            myLocationOverlayRef.value?.disableMyLocation()
+            mapViewRef.value?.onDetach()
+        }
     }
 
     val permissionLauncher = rememberLauncherForActivityResult(
@@ -277,6 +282,9 @@ fun MapPickerField(
                             overlays.add(myLocationOverlay)
                             myLocationOverlayRef.value = myLocationOverlay
                             if (hasLocationPermission) myLocationOverlay.enableMyLocation()
+
+                            mapViewRef.value = this
+                            lastCenteredPoint.value = GeoPoint(effectiveLat, effectiveLng)
                         }
                     },
                     update = { mapView ->
@@ -290,7 +298,12 @@ fun MapPickerField(
                                 mapView.overlays.remove(marker)
                             }
                         }
-                        mapView.controller.setCenter(point)
+                        // เช็คก่อนว่า point เปลี่ยนจริงไหม — ไม่งั้นแผนที่จะดีดกลับตำแหน่งเดิมทุกครั้งที่
+                        // recompose (เช่น แค่พิมพ์ในช่องค้นหา) ทับการ pan/zoom ที่ผู้ใช้ทำเองอยู่
+                        if (lastCenteredPoint.value != point) {
+                            mapView.controller.setCenter(point)
+                            lastCenteredPoint.value = point
+                        }
 
                         val myLocationOverlay = myLocationOverlayRef.value
                         if (myLocationOverlay != null) {

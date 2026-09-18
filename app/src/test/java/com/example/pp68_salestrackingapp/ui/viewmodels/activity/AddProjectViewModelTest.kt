@@ -311,9 +311,10 @@ class AddProjectViewModelTest {
     }
 
     @Test
-    fun `save should persist only the creating user as member regardless of member toggles`() = runTest {
-        // production save() deliberately ignores selectedMemberIds: "Each project has
-        // strictly 1 sales person: the logged-in user who creates it"
+    fun `save should include toggled members plus the creator`() = runTest {
+        // project_sales_member supports multiple members (confirmed still read/synced via
+        // ProjectRepository.getProjectMembersDetailed and utils/SyncManager) — save() must
+        // include whatever was toggled, not just the creator
         initViewModel()
         advanceUntilIdle()
 
@@ -327,9 +328,34 @@ class AddProjectViewModelTest {
         advanceUntilIdle()
 
         coVerify(exactly = 1) {
-            projectRepo.addProjectMembers(any(), listOf("USR-001"), "owner")
+            projectRepo.addProjectMembers(any(), match { it.toSet() == setOf("U9", "U8", "USR-001") }, "owner")
         }
         assertTrue(viewModel.uiState.value.isSaved)
+    }
+
+    @Test
+    fun `save on edit should not wipe existing members that were never toggled`() = runTest {
+        // regression test for the critical bug: editing a project used to always resave with
+        // just [creator], deleting every previously assigned team member
+        coEvery { projectRepo.getProjectById("P123") } returns Result.success(
+            Project(projectId = "P123", custId = "C1", projectName = "Old Name", projectStatus = "Lead", branchId = "TS-001")
+        )
+        coEvery { customerRepo.getCustomerById("C1") } returns Result.success(
+            Customer("C1", "Client A", null, null, null, null, null, null, null)
+        )
+        coEvery { branchRepo.observeBranches() } returns listOf(Branch("TS-001", "North A", "North"))
+        coEvery { projectRepo.getProjectMembersDetailed("P123") } returns listOf("U9" to "U9", "U8" to "U8")
+
+        initViewModel()
+        advanceUntilIdle()
+        viewModel.onEvent(AddProjectEvent.LoadProject("P123"))
+        advanceUntilIdle()
+        viewModel.onEvent(AddProjectEvent.Save)
+        advanceUntilIdle()
+
+        coVerify(exactly = 1) {
+            projectRepo.addProjectMembers(any(), match { it.toSet() == setOf("U9", "U8", "USR-001") }, "owner")
+        }
     }
 
     @Test

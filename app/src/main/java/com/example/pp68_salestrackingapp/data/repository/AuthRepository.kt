@@ -8,13 +8,15 @@ import com.example.pp68_salestrackingapp.di.TokenManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
+import com.example.pp68_salestrackingapp.utils.SyncManager as OutboxSyncManager
 
 class AuthRepository @Inject constructor(
     private val apiService: ApiService,
     private val authService: AuthService,
     private val tokenManager: TokenManager,
     private val database: AppDatabase,
-    private val syncManager: SyncManager
+    private val syncManager: SyncManager,
+    private val outboxSyncManager: OutboxSyncManager
 ) {
     suspend fun login(username: String, password: String): kotlin.Result<LoginResponse> {
         return withContext(Dispatchers.IO) {
@@ -158,10 +160,28 @@ class AuthRepository @Inject constructor(
         val branchName: String?
     )
 
-    suspend fun logout() {
-        withContext(Dispatchers.IO) {
-            database.clearAllTables()
-            tokenManager.clearToken()
+    /**
+     * รอ sync ข้อมูลที่ยังค้าง (outbox) ให้เสร็จก่อน แล้วค่อยล้าง DB+token — ป้องกันเช็คอิน/บันทึกผล
+     * ที่ทำ offline ไว้หายถาวรตอน logout. ถ้า sync แล้วยังมีข้อมูลค้างอยู่ (เช่น ยังไม่มีเน็ต) จะไม่ยอม
+     * logout เพื่อไม่ให้ข้อมูลหาย — คืน failure ให้ผู้เรียกแจ้งผู้ใช้แทน
+     */
+    suspend fun logout(): kotlin.Result<Unit> {
+        return withContext(Dispatchers.IO) {
+            try {
+                if (outboxSyncManager.hasPendingChanges()) {
+                    outboxSyncManager.doSync()
+                }
+                if (outboxSyncManager.hasPendingChanges()) {
+                    return@withContext kotlin.Result.failure(
+                        Exception("มีข้อมูลที่ยังไม่ได้ซิงค์กับเซิร์ฟเวอร์ กรุณาเชื่อมต่ออินเทอร์เน็ตแล้วลองอีกครั้ง")
+                    )
+                }
+                database.clearAllTables()
+                tokenManager.clearToken()
+                kotlin.Result.success(Unit)
+            } catch (e: Exception) {
+                kotlin.Result.failure(e)
+            }
         }
     }
 
