@@ -52,10 +52,10 @@ class ProjectDetailViewModelTest {
         coEvery { projectRepo.getProjectContacts(any()) } returns Result.success(emptyList())
         every { projectRepo.getProjectByIdFlow(any()) } returns flowOf(null)
         every { projectRepo.getProjectByIdFlow("PRJ-1") } returns flowOf(
-            Project(projectId = "PRJ-1", custId = "C1", projectName = "Project A")
+            Project(projectId = "PRJ-1", custId = "C1", projectName = "Project A", createBy = "U1")
         )
         every { activityRepo.getResultsByProjectFlow(any()) } returns flowOf(emptyList())
-        coEvery { projectRepo.getProjectMembersDetailed(any()) } returns listOf("U1" to "John Doe")
+        coEvery { projectRepo.getProjectOwnerName(any()) } returns "John Doe"
     }
 
     @After

@@ -6,8 +6,6 @@ import androidx.work.*
 import com.example.pp68_salestrackingapp.data.local.*
 import com.example.pp68_salestrackingapp.data.model.ActivityResult
 import com.example.pp68_salestrackingapp.data.model.ProjectContact
-import com.example.pp68_salestrackingapp.data.model.ProjectSalesMember
-import com.example.pp68_salestrackingapp.data.model.ProjectMemberInsertDto
 import com.example.pp68_salestrackingapp.data.remote.ApiService
 import com.example.pp68_salestrackingapp.di.TokenManager
 import com.example.pp68_salestrackingapp.worker.SyncWorker
@@ -33,8 +31,7 @@ class SyncManager @Inject constructor(
     private val photoDao: ActivityResultPhotoDao,
     private val appointmentContactDao: AppointmentContactDao,
     private val planItemDao: ActivityPlanItemDao,
-    private val projectContactDao: ProjectContactDao,
-    private val projectSalesMemberDao: ProjectSalesMemberDao
+    private val projectContactDao: ProjectContactDao
 ) {
     fun scheduleSync() {
         val constraints = Constraints.Builder()
@@ -206,7 +203,6 @@ class SyncManager @Inject constructor(
                             activityDao.updateProjectIdForActivities(oldId, realId)
                             projectDao.insertProject(project.copy(projectId = realId, isSynced = true))
                             projectContactDao.updateProjectId(oldId, realId)
-                            projectSalesMemberDao.updateProjectId(oldId, realId)
                             projectDao.deleteProjectById(oldId)
                             realId
                         } else {
@@ -225,23 +221,6 @@ class SyncManager @Inject constructor(
                         }
                     } catch (e: Exception) {
                         Log.e("SyncManager", "Failed to sync project contacts for $finalId: ${e.message}")
-                    }
-
-                    // Sync sales members to remote
-                    try {
-                        val localMembers = projectSalesMemberDao.getMemberIdsByProject(finalId)
-                        if (localMembers.isNotEmpty()) {
-                            apiService.deleteProjectMembers("eq.$finalId")
-                            val memberRows = localMembers.map { ProjectMemberInsertDto(finalId, it.trim(), "owner") }
-                            apiService.addProjectMembers(memberRows)
-                        } else {
-                            project.createBy?.let { userId ->
-                                apiService.deleteProjectMembers("eq.$finalId")
-                                apiService.addProjectMembers(listOf(ProjectMemberInsertDto(finalId, userId, "owner")))
-                            }
-                        }
-                    } catch (e: Exception) {
-                        Log.e("SyncManager", "Failed to sync project members for $finalId: ${e.message}")
                     }
                 }
             } catch (e: Exception) {

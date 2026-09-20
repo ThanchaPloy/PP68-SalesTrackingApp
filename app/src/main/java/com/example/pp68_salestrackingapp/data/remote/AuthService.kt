@@ -21,11 +21,6 @@ interface AuthService {
     @PATCH("user/fcm-token")
     suspend fun updateFcmToken(@Body updates: Map<String, String>): Response<Map<String, String>>
 
-    @GET("user")
-    suspend fun getProjectSalesEmployees(
-        @Query("emp_type") empType: String = "P"
-    ): Response<List<UserDto>>
-
     @GET("customer")
     suspend fun getCustomers(
         @Query("branch_id") branchId: String? = null,

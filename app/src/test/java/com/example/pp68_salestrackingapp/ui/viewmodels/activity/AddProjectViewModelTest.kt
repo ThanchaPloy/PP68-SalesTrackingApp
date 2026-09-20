@@ -41,8 +41,6 @@ class AddProjectViewModelTest {
         coEvery { branchRepo.observeBranches() } coAnswers { emptyList() }
         coEvery { projectRepo.getMembersByBranch(any()) } coAnswers { Result.success(emptyList()) }
         coEvery { projectRepo.getBranchMembersRpc(any()) } returns Result.success(emptyList())
-        coEvery { projectRepo.getProjectSalesEmployees() } returns Result.success(emptyList())
-        coEvery { projectRepo.getProjectMembersDetailed(any()) } returns emptyList()
         coEvery { customerRepo.getContactPersons(any()) } coAnswers { Result.success(emptyList()) }
         coEvery { branchRepo.getBranchById(any()) } returns null
         coEvery { projectRepo.createProject(any(), any()) } returns Result.success(
@@ -50,7 +48,6 @@ class AddProjectViewModelTest {
         )
         coEvery { projectRepo.updateProject(any()) } returns Result.success(Unit)
         coEvery { projectRepo.updateProject(any(), any()) } returns Result.success(Unit)
-        coEvery { projectRepo.addProjectMembers(any(), any(), any()) } returns Result.success(Unit)
         coEvery { projectRepo.saveProjectContacts(any(), any()) } returns Result.success(Unit)
         coEvery { projectRepo.getProjectById(any()) } returns Result.failure(Exception("not found"))
         coEvery { projectRepo.getProjectContacts(any()) } returns Result.success(emptyList())
@@ -69,14 +66,11 @@ class AddProjectViewModelTest {
     }
 
     @Test
-    fun `init when user in PJ-001 should auto select project team and load members`() = runTest {
+    fun `init when user in PJ-001 should auto select project team`() = runTest {
         every { authRepo.currentUser() } returns AuthUser("U1", "u@test.com", "sale", "PJ-001")
         coEvery { branchRepo.getBranchById("PJ-001") } returns Branch("PJ-001", "Project Team", "Bangkok")
         coEvery { branchRepo.observeBranches() } returns listOf(Branch("PJ-001", "Project Team", "Bangkok"))
         coEvery { projectRepo.getBranchMembersRpc("U1") } returns Result.success(
-            listOf("U1" to "Owner", "U2" to "Support")
-        )
-        coEvery { projectRepo.getProjectSalesEmployees() } returns Result.success(
             listOf("U1" to "Owner", "U2" to "Support")
         )
 
@@ -87,9 +81,7 @@ class AddProjectViewModelTest {
         assertEquals("PJ-001", state.selectedTeamId)
         assertEquals("Project Team", state.selectedTeamName)
         assertEquals(listOf("PJ-001" to "Project Team"), state.teamOptions)
-        assertEquals(listOf("U1" to "Owner", "U2" to "Support"), state.teamMemberOptions)
         assertFalse(state.isLoadingTeams)
-        assertFalse(state.isLoadingMembers)
     }
 
     @Test
@@ -101,7 +93,6 @@ class AddProjectViewModelTest {
             Branch("TS-003", "South A", "South")
         )
         coEvery { projectRepo.getBranchMembersRpc("U1") } returns Result.success(listOf("U1" to "Me"))
-        coEvery { projectRepo.getProjectSalesEmployees() } returns Result.success(listOf("U1" to "Me"))
 
         initViewModel()
         advanceUntilIdle()
@@ -112,7 +103,6 @@ class AddProjectViewModelTest {
         assertTrue(state.teamOptions.any { it.first == "TS-002" })
         assertEquals("TS-001", state.selectedTeamId)
         assertEquals("North A", state.selectedTeamName)
-        assertEquals(listOf("U1" to "Me"), state.teamMemberOptions)
     }
 
     @Test
@@ -135,7 +125,6 @@ class AddProjectViewModelTest {
             Branch("TS-003", "South A", "South")
         )
         coEvery { projectRepo.getBranchMembersRpc("U1") } returns Result.success(listOf("U1" to "Owner"))
-        coEvery { projectRepo.getProjectSalesEmployees() } returns Result.success(listOf("U1" to "Owner"))
 
         initViewModel()
         advanceUntilIdle()
@@ -143,7 +132,6 @@ class AddProjectViewModelTest {
         val state = viewModel.uiState.value
         assertEquals("TS-001", state.selectedTeamId)
         assertEquals("North A", state.selectedTeamName)
-        assertEquals(listOf("U1" to "Owner"), state.teamMemberOptions)
     }
 
 
@@ -209,11 +197,6 @@ class AddProjectViewModelTest {
         assertEquals(setOf("CT-1"), viewModel.uiState.value.selectedContactIds)
         viewModel.onEvent(AddProjectEvent.ContactToggled("CT-1"))
         assertTrue(viewModel.uiState.value.selectedContactIds.isEmpty())
-
-        viewModel.onEvent(AddProjectEvent.MemberToggled("U1"))
-        assertEquals(setOf("U1"), viewModel.uiState.value.selectedMemberIds)
-        viewModel.onEvent(AddProjectEvent.MemberToggled("U1"))
-        assertTrue(viewModel.uiState.value.selectedMemberIds.isEmpty())
     }
 
     @Test
@@ -253,7 +236,7 @@ class AddProjectViewModelTest {
     }
 
     @Test
-    fun `save create success should save project members and contacts`() = runTest {
+    fun `save create success should save project contacts`() = runTest {
         val projectSlot = slot<Project>()
         coEvery { projectRepo.createProject(capture(projectSlot), "USR-001") } returns Result.success(
             Project(projectId = "PJ-NEW", custId = "C1", projectName = "New Project Alpha", branchId = "TS-001")
@@ -276,7 +259,6 @@ class AddProjectViewModelTest {
         assertTrue(viewModel.uiState.value.isSaved)
         assertNull(viewModel.uiState.value.saveError)
         coVerify(exactly = 1) { projectRepo.createProject(any(), "USR-001") }
-        coVerify(exactly = 1) { projectRepo.addProjectMembers(any(), listOf("USR-001"), "owner") }
         coVerify(exactly = 1) { projectRepo.saveProjectContacts(any(), listOf("CT-1")) }
     }
 
@@ -311,56 +293,8 @@ class AddProjectViewModelTest {
     }
 
     @Test
-    fun `save should include toggled members plus the creator`() = runTest {
-        // project_sales_member supports multiple members (confirmed still read/synced via
-        // ProjectRepository.getProjectMembersDetailed and utils/SyncManager) — save() must
-        // include whatever was toggled, not just the creator
-        initViewModel()
-        advanceUntilIdle()
-
-        viewModel.onEvent(AddProjectEvent.ProjectNameChanged("Proj A"))
-        viewModel.onEvent(AddProjectEvent.CustomerSelected("C1", "Client A"))
-        viewModel.onEvent(AddProjectEvent.StatusChanged("Quotation"))
-        viewModel.onEvent(AddProjectEvent.TeamSelected("TS-001", "North A"))
-        viewModel.onEvent(AddProjectEvent.MemberToggled("U9"))
-        viewModel.onEvent(AddProjectEvent.MemberToggled("U8"))
-        viewModel.onEvent(AddProjectEvent.Save)
-        advanceUntilIdle()
-
-        coVerify(exactly = 1) {
-            projectRepo.addProjectMembers(any(), match { it.toSet() == setOf("U9", "U8", "USR-001") }, "owner")
-        }
-        assertTrue(viewModel.uiState.value.isSaved)
-    }
-
-    @Test
-    fun `save on edit should not wipe existing members that were never toggled`() = runTest {
-        // regression test for the critical bug: editing a project used to always resave with
-        // just [creator], deleting every previously assigned team member
-        coEvery { projectRepo.getProjectById("P123") } returns Result.success(
-            Project(projectId = "P123", custId = "C1", projectName = "Old Name", projectStatus = "Lead", branchId = "TS-001")
-        )
-        coEvery { customerRepo.getCustomerById("C1") } returns Result.success(
-            Customer("C1", "Client A", null, null, null, null, null, null, null)
-        )
-        coEvery { branchRepo.observeBranches() } returns listOf(Branch("TS-001", "North A", "North"))
-        coEvery { projectRepo.getProjectMembersDetailed("P123") } returns listOf("U9" to "U9", "U8" to "U8")
-
-        initViewModel()
-        advanceUntilIdle()
-        viewModel.onEvent(AddProjectEvent.LoadProject("P123"))
-        advanceUntilIdle()
-        viewModel.onEvent(AddProjectEvent.Save)
-        advanceUntilIdle()
-
-        coVerify(exactly = 1) {
-            projectRepo.addProjectMembers(any(), match { it.toSet() == setOf("U9", "U8", "USR-001") }, "owner")
-        }
-    }
-
-    @Test
-    fun `save when post save call throws should expose error`() = runTest {
-        coEvery { projectRepo.addProjectMembers(any(), any(), any()) } throws IllegalStateException("member add failed")
+    fun `save when saving contacts throws should expose error`() = runTest {
+        coEvery { projectRepo.saveProjectContacts(any(), any()) } throws IllegalStateException("contacts save failed")
         initViewModel()
         advanceUntilIdle()
 
@@ -372,7 +306,7 @@ class AddProjectViewModelTest {
         advanceUntilIdle()
 
         assertFalse(viewModel.uiState.value.isSaved)
-        assertEquals("member add failed", viewModel.uiState.value.saveError)
+        assertEquals("contacts save failed", viewModel.uiState.value.saveError)
         assertFalse(viewModel.uiState.value.isLoading)
     }
 

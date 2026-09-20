@@ -9,7 +9,6 @@ import com.example.pp68_salestrackingapp.data.local.ActivityResultPhotoDao
 import com.example.pp68_salestrackingapp.data.local.AppDatabase
 import com.example.pp68_salestrackingapp.data.local.AppointmentContactDao
 import com.example.pp68_salestrackingapp.data.local.ProjectContactDao
-import com.example.pp68_salestrackingapp.data.local.ProjectSalesMemberDao
 import com.example.pp68_salestrackingapp.data.local.BranchDao
 import com.example.pp68_salestrackingapp.data.local.CustomerDao
 import com.example.pp68_salestrackingapp.data.local.ProjectDao
@@ -52,7 +51,8 @@ object DatabaseModule {
                 AppDatabase.MIGRATION_42_43,
                 AppDatabase.MIGRATION_43_44,
                 AppDatabase.MIGRATION_44_45,
-                AppDatabase.MIGRATION_45_46
+                AppDatabase.MIGRATION_45_46,
+                AppDatabase.MIGRATION_46_47
             )
             .build()
     }
@@ -104,10 +104,6 @@ object DatabaseModule {
     @Provides
     @Singleton
     fun provideProjectContactDao(db: AppDatabase): ProjectContactDao = db.projectContactDao()
-
-    @Provides
-    @Singleton
-    fun provideProjectSalesMemberDao(db: AppDatabase): ProjectSalesMemberDao = db.projectSalesMemberDao()
 
     @Provides
     @Singleton

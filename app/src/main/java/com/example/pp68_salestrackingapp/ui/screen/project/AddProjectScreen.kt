@@ -509,9 +509,7 @@ fun AddProjectScreenPreview() {
                 projectStatus = "New Project",
                 teamOptions = listOf("t1" to "Sales Team Alpha"),
                 selectedTeamId = "t1",
-                selectedTeamName = "Sales Team Alpha",
-                teamMemberOptions = listOf("m1" to "Alice", "m2" to "Bob", "m3" to "Charlie"),
-                selectedMemberIds = setOf("m1", "m2")
+                selectedTeamName = "Sales Team Alpha"
             ),
             onEvent = {},
             onBack = {}

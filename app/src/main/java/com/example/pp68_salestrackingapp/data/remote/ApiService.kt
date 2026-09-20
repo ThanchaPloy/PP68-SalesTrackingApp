@@ -20,16 +20,6 @@ interface ApiService {
     @PATCH("user")
     suspend fun updateUserProfile(@Query("user_id") userId: String, @Body updates: Map<String, String>): Response<List<UserDto>>
 
-    @POST("project_sales_member")
-    @Headers("Prefer: return=representation", "Content-Profile: public")
-    suspend fun addProjectMembers(@Body members: List<ProjectMemberInsertDto>): Response<List<ProjectMemberInsertDto>>
-
-    @DELETE("project_sales_member")
-    suspend fun deleteProjectMembers(@Query("project_code") projectId: String): Response<Unit>
-
-    @GET("project_sales_member")
-    suspend fun getProjectMembers(@Query("project_id") projectId: String, @Query("select") select: String = "emp_code,sales_role"): Response<List<ProjectMemberDto>>
-
     @GET("project_team_member")
     suspend fun getProjectTeamMemberCodes(
         @Query("select") select: String = "emp_code",
@@ -67,11 +57,6 @@ interface ApiService {
     suspend fun getEmployeeCodesByBranch(
         @Query("branch_id") branchCode: String  // format: eq.90HO
     ): Response<List<Map<String, String>>>
-
-    @GET("employee")
-    suspend fun getProjectSalesEmployees(
-        @Query("emp_type") empType: String = "eq.P"
-    ): Response<List<UserDto>>
 
     @GET("customer")
     // ponytail: backend's /customer route checks customer_code before salesperson_code and
@@ -150,9 +135,6 @@ interface ApiService {
     ): Response<List<ContactPerson>>
 
     // ── Project ──────────────────────────────────────────────────
-    @GET("project")
-    suspend fun getProjectsByIds(@Query("project_id") projectIds: String, @Query("limit") limit: Int = 1000): Response<List<Project>>
-
     @GET("project")
     suspend fun getProjectsByCreator(@Query("create_by") userId: String, @Query("limit") limit: Int = 5000): Response<List<Project>>
 
@@ -252,9 +234,6 @@ interface ApiService {
 
     @GET("activity_master")
     suspend fun getMasterActivities(@Query("is_active") isActive: String = "eq.true", @Query("limit") limit: Int = 100): Response<List<ActivityMasterDto>>
-
-    @GET("project_sales_member")
-    suspend fun getMyProjectIds(@Query("user_id") userId: String, @Query("select") select: String = "project_id", @Query("limit") limit: Int = 5000): Response<List<ProjectMemberDto>>
 
     // ── Activity Result ──────────────────────────────────────────
     @POST("activity_result")

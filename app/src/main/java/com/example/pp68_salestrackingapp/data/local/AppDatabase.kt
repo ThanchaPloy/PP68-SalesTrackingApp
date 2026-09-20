@@ -17,10 +17,9 @@ import com.example.pp68_salestrackingapp.data.model.*
         ActivityResult::class,
         ProjectContact::class,
         AppointmentContact::class,
-        ProjectSalesMember::class,
         ActivityResultPhoto::class
     ],
-    version = 46,
+    version = 47,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -34,7 +33,6 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun activityResultDao(): ActivityResultDao
     abstract fun appointmentContactDao(): AppointmentContactDao
     abstract fun projectContactDao(): ProjectContactDao
-    abstract fun projectSalesMemberDao(): ProjectSalesMemberDao
     abstract fun activityResultPhotoDao(): ActivityResultPhotoDao
 
     fun clearAllData() {
@@ -340,6 +338,13 @@ abstract class AppDatabase : RoomDatabase() {
                 """)
                 db.execSQL("DROP TABLE project")
                 db.execSQL("ALTER TABLE project_new RENAME TO project")
+            }
+        }
+
+        // ✅ 1 โครงการมีเจ้าของคนเดียว (project.create_by) — เลิกใช้ตาราง M2M นี้แล้ว
+        val MIGRATION_46_47 = object : Migration(46, 47) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("DROP TABLE IF EXISTS project_sales_member")
             }
         }
     }

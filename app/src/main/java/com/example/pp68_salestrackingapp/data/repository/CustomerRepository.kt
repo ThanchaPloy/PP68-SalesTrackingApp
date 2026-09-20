@@ -222,7 +222,6 @@ class CustomerRepository @Inject constructor(
                 apiService.deleteActivitiesByCustomer("eq.$custId")
                 val projects = projectDao.getProjectsByCustomer(custId).first()
                 projects.forEach {
-                    apiService.deleteProjectMembers("eq.${it.projectId}")
                     apiService.deleteProjectContacts("eq.${it.projectId}")
                 }
                 apiService.deleteProjectsByCustomer("eq.$custId")

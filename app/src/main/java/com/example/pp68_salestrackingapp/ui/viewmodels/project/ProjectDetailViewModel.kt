@@ -106,10 +106,11 @@ class ProjectDetailViewModel @Inject constructor(
     fun refresh() {
         val id = projectId ?: return
         viewModelScope.launch {
-            projectRepo.getProjectById(id)
-            val members = projectRepo.getProjectMembersDetailed(id)
-                .map { TeamMember(it.first, it.second) }
-            _uiState.update { it.copy(teamMembers = members) }
+            val project = projectRepo.getProjectById(id).getOrNull()
+            val owner = project?.createBy?.let { userId ->
+                TeamMember(userId, projectRepo.getProjectOwnerName(userId))
+            }
+            _uiState.update { it.copy(teamMembers = listOfNotNull(owner)) }
         }
         loadProjectContacts(id)
     }
@@ -127,9 +128,10 @@ class ProjectDetailViewModel @Inject constructor(
                         _uiState.update { it.copy(companyName = company) }
                     }
                     launch {
-                        val members = projectRepo.getProjectMembersDetailed(id)
-                            .map { TeamMember(it.first, it.second) }
-                        _uiState.update { it.copy(teamMembers = members) }
+                        val owner = project.createBy?.let { userId ->
+                            TeamMember(userId, projectRepo.getProjectOwnerName(userId))
+                        }
+                        _uiState.update { it.copy(teamMembers = listOfNotNull(owner)) }
                     }
                 }
             }

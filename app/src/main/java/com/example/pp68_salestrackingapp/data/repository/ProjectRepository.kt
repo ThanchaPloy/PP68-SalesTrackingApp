@@ -3,12 +3,9 @@ package com.example.pp68_salestrackingapp.data.repository
 import com.example.pp68_salestrackingapp.data.local.ContactDao
 import com.example.pp68_salestrackingapp.data.local.ProjectContactDao
 import com.example.pp68_salestrackingapp.data.local.ProjectDao
-import com.example.pp68_salestrackingapp.data.local.ProjectSalesMemberDao
 import com.example.pp68_salestrackingapp.data.model.ContactPerson
 import com.example.pp68_salestrackingapp.data.model.Project
 import com.example.pp68_salestrackingapp.data.model.ProjectContact
-import com.example.pp68_salestrackingapp.data.model.ProjectMemberInsertDto
-import com.example.pp68_salestrackingapp.data.model.ProjectSalesMember
 import com.example.pp68_salestrackingapp.data.remote.ApiService
 import com.example.pp68_salestrackingapp.data.remote.FirebaseRealtimeService
 import com.example.pp68_salestrackingapp.utils.SyncManager
@@ -17,17 +14,14 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
-import com.example.pp68_salestrackingapp.data.remote.AuthService
 import java.io.IOException
 import java.time.LocalDate
 import javax.inject.Inject
 
 class ProjectRepository @Inject constructor(
     private val apiService: ApiService,
-    private val authService: AuthService,
     private val projectDao: ProjectDao,
     private val projectContactDao: ProjectContactDao,
-    private val projectSalesMemberDao: ProjectSalesMemberDao,
     private val contactDao: ContactDao,
     private val firebaseService: FirebaseRealtimeService,
     private val syncManager: SyncManager
@@ -42,35 +36,15 @@ class ProjectRepository @Inject constructor(
         return withContext(Dispatchers.IO) {
             try {
                 val cleanUserId = userId.removePrefix("eq.")
-                val memberResp = apiService.getMyProjectIds(userId = cleanUserId)
-                val memberIds = if (memberResp.isSuccessful) memberResp.body()?.mapNotNull { it.projectId } ?: emptyList() else emptyList()
-
+                // ✅ 1 โครงการมีเจ้าของคนเดียว (create_by) — ไม่มีตาราง membership แยกแล้ว
                 val creatorResp = apiService.getProjectsByCreator(userId = cleanUserId)
                 val creatorProjects = if (creatorResp.isSuccessful) creatorResp.body() ?: emptyList() else emptyList()
 
-                val allIds = (memberIds + creatorProjects.map { it.projectId }).distinct()
-
                 // ponytail: never clear local cache on empty — missing records would silently wipe all local data
-                if (allIds.isEmpty()) return@withContext Result.success(Unit)
+                if (creatorProjects.isEmpty()) return@withContext Result.success(Unit)
 
-                val memberProjects = mutableListOf<Project>()
-                if (allIds.isNotEmpty()) {
-                    val chunks = allIds.chunked(50)
-                    for (chunk in chunks) {
-                        try {
-                            val r = apiService.getProjectsByIds(projectIds = "in.(${chunk.joinToString(",")})")
-                            if (r.isSuccessful && r.body() != null) {
-                                memberProjects.addAll(r.body()!!)
-                            }
-                        } catch (e: Exception) {
-                            Log.e("ProjectRepo", "Batch project fetch error: ${e.message}")
-                        }
-                    }
-                }
-
-                val merged = (memberProjects + creatorProjects).distinctBy { it.projectId }
-                    .map { it.copy(isSynced = true) }
-                if (merged.isNotEmpty()) projectDao.clearAndInsert(merged)
+                val merged = creatorProjects.distinctBy { it.projectId }.map { it.copy(isSynced = true) }
+                projectDao.clearAndInsert(merged)
                 Result.success(Unit)
             } catch (e: IOException) {
                 Result.success(Unit) // offline — Room data still valid
@@ -116,7 +90,6 @@ class ProjectRepository @Inject constructor(
                         val real = (returnedProject ?: tempProject.copy(projectId = realId)).copy(isSynced = true)
                         projectDao.insertProject(real)
                         projectContactDao.updateProjectId(tempId, realId)
-                        projectSalesMemberDao.updateProjectId(tempId, realId)
                         projectDao.deleteProjectById(tempId)
                         real
                     } else {
@@ -127,13 +100,6 @@ class ProjectRepository @Inject constructor(
                             projectDao.updateSyncStatus(tempId, true)
                         }
                         returnedProject?.copy(isSynced = true) ?: tempProject
-                    }
-                    try {
-                        apiService.addProjectMembers(listOf(ProjectMemberInsertDto(finalProject.projectId, userId, "owner")))
-                    } catch (e: Exception) {
-                        // ✅ โครงการสร้างสำเร็จแล้ว — ห้ามให้ error ตรงนี้ไปเปลี่ยนผลลัพธ์เป็น tempProject (id เก่าที่ถูกลบไปแล้ว)
-                        Log.e("ProjectRepo", "addProjectMembers (owner) failed for ${finalProject.projectId}: ${e.message}")
-                        syncManager.scheduleSync()
                     }
                     Result.success(finalProject)
                 } else {
@@ -199,7 +165,6 @@ class ProjectRepository @Inject constructor(
                     projectDao.deleteProjectById(projectId)
                     return@withContext Result.success(Unit)
                 }
-                apiService.deleteProjectMembers("eq.$projectId")
                 apiService.deleteProjectContacts("eq.$projectId")
                 val response = apiService.deleteProject("eq.$projectId")
                 if (response.isSuccessful) {
@@ -207,57 +172,6 @@ class ProjectRepository @Inject constructor(
                     Result.success(Unit)
                 } else Result.failure(Exception("HTTP ${response.code()}"))
             } catch (e: Exception) { Result.failure(e) }
-        }
-    }
-
-    suspend fun addProjectMembers(projectId: String, userIds: List<String>, role: String = "support"): Result<Unit> {
-        return withContext(Dispatchers.IO) {
-            Log.d("ProjectRepo", "addProjectMembers started. projectId=$projectId, userIds=$userIds")
-            projectSalesMemberDao.deleteByProject(projectId)
-            if (userIds.isNotEmpty()) {
-                val localRows = userIds.map { ProjectSalesMember(projectId, it.trim(), role) }
-                projectSalesMemberDao.insertAll(localRows)
-                Log.d("ProjectRepo", "Inserted local members: ${localRows.size} rows")
-            }
-            if (projectId.startsWith("TEMP-")) {
-                return@withContext Result.success(Unit)
-            }
-            try {
-                val delResp = apiService.deleteProjectMembers("eq.$projectId")
-                Log.d("ProjectRepo", "deleteProjectMembers API status: ${delResp.code()}")
-                if (!delResp.isSuccessful) {
-                    val errMsg = delResp.errorBody()?.string() ?: ""
-                    return@withContext Result.failure(Exception("ลบสมาชิกเก่าล้มเหลว: HTTP ${delResp.code()} $errMsg"))
-                }
-                if (userIds.isNotEmpty()) {
-                    val remoteRows = userIds.map { ProjectMemberInsertDto(projectId, it.trim(), role) }
-                    val addResp = apiService.addProjectMembers(remoteRows)
-                    Log.d("ProjectRepo", "addProjectMembers API status: ${addResp.code()}")
-                    if (!addResp.isSuccessful) {
-                        // ponytail: backend's POST /project_sales_member always 500s on the
-                        // response step even though the row is actually committed (confirmed
-                        // by direct curl testing against api-ploy.cskmitl.com) — verify the
-                        // real DB state instead of trusting the broken status code
-                        val verifyResp = apiService.getProjectMembers("eq.$projectId")
-                        val actualIds = if (verifyResp.isSuccessful) {
-                            verifyResp.body()?.mapNotNull { it.userId?.trim() }?.toSet() ?: emptySet()
-                        } else emptySet()
-                        val expectedIds = userIds.map { it.trim() }.toSet()
-                        if (actualIds != expectedIds) {
-                            val errMsg = addResp.errorBody()?.string() ?: ""
-                            return@withContext Result.failure(Exception("บันทึกสมาชิกหลักล้มเหลว: HTTP ${addResp.code()} $errMsg"))
-                        }
-                        Log.w("ProjectRepo", "addProjectMembers got HTTP ${addResp.code()} but DB write verified OK — treating as success")
-                    }
-                }
-                Result.success(Unit)
-            } catch (e: IOException) {
-                Log.w("ProjectRepo", "addProjectMembers offline: ${e.message}")
-                Result.success(Unit) // Offline fallback
-            } catch (e: Exception) {
-                Log.e("ProjectRepo", "addProjectMembers failed: ${e.message}", e)
-                Result.failure(e)
-            }
         }
     }
 
@@ -330,24 +244,14 @@ class ProjectRepository @Inject constructor(
         }
     }
 
-    suspend fun getProjectMembersDetailed(projectId: String): List<Pair<String, String>> {
+    // ✅ 1 โครงการมีเจ้าของคนเดียว (project.createBy) — resolve ชื่อแสดงผลจาก /user
+    suspend fun getProjectOwnerName(userId: String): String {
         return withContext(Dispatchers.IO) {
-            // อัพเดท Room จาก API ก่อน (ถ้าทำได้) — เดิม select ผิดคอลัมน์ (emp_code,sales_role
-            // ไม่มีจริง จริงคือ user_id,role) ทำให้ได้ list ว่างเสมอ จึงเคย bypass มาอ่าน Room อย่างเดียว
-            if (!projectId.startsWith("TEMP-")) {
-                try {
-                    val resp = apiService.getProjectMembers("eq.$projectId")
-                    if (resp.isSuccessful) {
-                        val rows = (resp.body() ?: emptyList()).mapNotNull { m ->
-                            m.userId?.trim()?.takeIf { it.isNotBlank() }?.let { ProjectSalesMember(projectId, it, m.saleRole ?: "support") }
-                        }
-                        projectSalesMemberDao.deleteByProject(projectId)
-                        if (rows.isNotEmpty()) projectSalesMemberDao.insertAll(rows)
-                    }
-                } catch (_: Exception) { /* offline — ใช้ค่าที่มีใน Room */ }
-            }
-            val ids = projectSalesMemberDao.getMemberIdsByProject(projectId)
-            ids.map { it to it }   // names resolved at display time via teamMemberOptions
+            try {
+                val resp = apiService.getUserById("eq.$userId")
+                val name = resp.body()?.firstOrNull()?.fullName?.trim()?.ifBlank { null }
+                name ?: userId
+            } catch (e: Exception) { userId }
         }
     }
 
@@ -364,30 +268,6 @@ class ProjectRepository @Inject constructor(
                 Result.success(Unit)
             } else Result.failure(Exception("API Error: ${response.code()}"))
         } catch (e: Exception) { Result.failure(e) }
-    }
-
-    suspend fun getProjectSalesEmployees(): Result<List<Pair<String, String>>> {
-        return withContext(Dispatchers.IO) {
-            try {
-                val ktorResp = authService.getProjectSalesEmployees("true")
-                if (ktorResp.isSuccessful && !ktorResp.body().isNullOrEmpty()) {
-                    val result = ktorResp.body()!!.map { u ->
-                        u.userId.trim() to (u.fullName?.trim()?.ifBlank { null } ?: u.userId.trim())
-                    }
-                    return@withContext Result.success(result)
-                }
-
-                val resp = apiService.getProjectSalesEmployees("eq.true")
-                if (resp.isSuccessful && !resp.body().isNullOrEmpty()) {
-                    val result = resp.body()!!.map { u ->
-                        u.userId.trim() to (u.fullName?.trim()?.ifBlank { null } ?: u.userId.trim())
-                    }
-                    Result.success(result)
-                } else {
-                    Result.failure(Exception("No project sales employees found"))
-                }
-            } catch (e: Exception) { Result.failure(e) }
-        }
     }
 
     suspend fun getBranchMembersRpc(empCode: String): Result<List<Pair<String, String>>> {

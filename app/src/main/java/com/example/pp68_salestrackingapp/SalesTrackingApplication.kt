@@ -26,8 +26,11 @@ class SalesTrackingApplication : Application(), Configuration.Provider {
         NotificationChannels.ensureCreated(this)
 
         org.osmdroid.config.Configuration.getInstance().apply {
-            userAgentValue = BuildConfig.OSM_USER_AGENT
+            // load() reads userAgentValue back from SharedPreferences (defaulting to the
+            // package name) so it must run BEFORE we override it, otherwise our custom
+            // User-Agent gets clobbered and OSM's tile servers 403 the generic package name.
             load(this@SalesTrackingApplication, android.preference.PreferenceManager.getDefaultSharedPreferences(this@SalesTrackingApplication))
+            userAgentValue = BuildConfig.OSM_USER_AGENT
         }
 
         // เผื่อมีนัดหมายวันนี้ค้างอยู่ตอนเปิดแอป — service เช็คเองแล้วหยุดถ้าไม่มีอะไรต้องติดตาม

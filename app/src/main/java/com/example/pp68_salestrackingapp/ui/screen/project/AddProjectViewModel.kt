@@ -42,9 +42,6 @@ data class AddProjectUiState(
     val selectedTeamId:         String? = null,
     val selectedTeamName:       String? = null,
     val isLoadingTeams:         Boolean = false,
-    val teamMemberOptions:      List<Pair<String, String>> = emptyList(),
-    val selectedMemberIds:      Set<String> = emptySet(),
-    val isLoadingMembers:       Boolean = false,
     val billingBranchOptions:      List<Pair<String, String>> = emptyList(),
     val isLoadingBillingBranches:  Boolean = false,
     val selectedBillingBranchId:   String? = null,
@@ -79,7 +76,6 @@ sealed class AddProjectEvent {
     data class OpportunityScoreChanged(val value: String)         : AddProjectEvent() // ✅ เพิ่ม Event
     data class TeamSelected(val id: String, val name: String)     : AddProjectEvent()
     data class BillingBranchSelected(val id: String, val name: String) : AddProjectEvent()
-    data class MemberToggled(val userId: String)                  : AddProjectEvent()
     data class LocationPicked(val lat: Double, val lng: Double)   : AddProjectEvent()
     data class LossReasonChanged(val value: String)               : AddProjectEvent()
     data class OtherLossReasonChanged(val value: String)          : AddProjectEvent()
@@ -163,7 +159,6 @@ class AddProjectViewModel @Inject constructor(
                         isLoadingTeams   = false
                     )
                 }
-                loadMembersForTeam(userBranchId)
             } else {
                 try {
                     branchRepo.syncFromRemote()
@@ -185,17 +180,12 @@ class AddProjectViewModel @Inject constructor(
 
                     if (filteredBranches.size == 1) {
                         val b = filteredBranches.first()
-                        val editMode = _uiState.value.projectId != null
                         _uiState.update { current ->
                             current.copy(
-                                selectedTeamId    = b.branchId,
-                                selectedTeamName  = b.branchName,
-                                // ponytail: preserve members in edit mode — TeamSelected would clear them
-                                selectedMemberIds = if (editMode) current.selectedMemberIds else emptySet(),
-                                teamMemberOptions = emptyList()
+                                selectedTeamId   = b.branchId,
+                                selectedTeamName = b.branchName
                             )
                         }
-                        loadMembersForTeam(b.branchId)
                     } else if (userBranch != null && _uiState.value.projectId == null) {
                         onEvent(AddProjectEvent.TeamSelected(userBranch.branchId, userBranch.branchName))
                     }
@@ -264,12 +254,6 @@ class AddProjectViewModel @Inject constructor(
                         branchRepo.observeBranches().find { it.branchId == bid }?.let { b ->
                             _uiState.update { it.copy(selectedTeamName = b.branchName) }
                         }
-                        loadMembersForTeam(bid)
-
-                        val existingMembers = projectRepo.getProjectMembersDetailed(id)
-                        _uiState.update {
-                            it.copy(selectedMemberIds = existingMembers.map { m -> m.first.trim() }.toSet())
-                        }
                     }
 
                     project.billingBranchId?.let { bid ->
@@ -316,25 +300,6 @@ class AddProjectViewModel @Inject constructor(
         }
     }
 
-    private fun loadMembersForTeam(teamId: String) {
-        viewModelScope.launch {
-            _uiState.update { it.copy(isLoadingMembers = true) }
-            val currentUser = authRepo.currentUser()
-            projectRepo.getProjectSalesEmployees().fold(
-                onSuccess = { list ->
-                    val members = list.map { it.first.trim() to it.second }
-                    _uiState.update { it.copy(teamMemberOptions = members, isLoadingMembers = false) }
-                },
-                onFailure = {
-                    val fallback = if (currentUser != null)
-                        listOf(currentUser.userId.trim() to (currentUser.fullName ?: currentUser.userId))
-                    else emptyList()
-                    _uiState.update { it.copy(teamMemberOptions = fallback, isLoadingMembers = false) }
-                }
-            )
-        }
-    }
-
     fun onEvent(event: AddProjectEvent) {
         when (event) {
             is AddProjectEvent.LoadProject        -> loadProject(event.id)
@@ -373,13 +338,10 @@ class AddProjectViewModel @Inject constructor(
             is AddProjectEvent.TeamSelected -> {
                 _uiState.update {
                     it.copy(
-                        selectedTeamId    = event.id.trim(),
-                        selectedTeamName  = event.name,
-                        selectedMemberIds = emptySet(),
-                        teamMemberOptions = emptyList()
+                        selectedTeamId   = event.id.trim(),
+                        selectedTeamName = event.name
                     )
                 }
-                loadMembersForTeam(event.id.trim())
             }
             is AddProjectEvent.BillingBranchSelected -> {
                 _uiState.update {
@@ -389,12 +351,6 @@ class AddProjectViewModel @Inject constructor(
                         billingBranchError        = null
                     )
                 }
-            }
-            is AddProjectEvent.MemberToggled -> {
-                val current      = _uiState.value.selectedMemberIds.toMutableSet()
-                val targetUserId = event.userId.trim()
-                if (targetUserId in current) current.remove(targetUserId) else current.add(targetUserId)
-                _uiState.update { it.copy(selectedMemberIds = current) }
             }
             is AddProjectEvent.LocationPicked ->
                 _uiState.update {
@@ -539,26 +495,10 @@ class AddProjectViewModel @Inject constructor(
 
                 result.onSuccess {
                     if (finalProjectId.isNotBlank()) {
-                        // project_sales_member supports multiple members (confirmed still read/synced
-                        // elsewhere: ProjectRepository.getProjectMembersDetailed, utils/SyncManager) —
-                        // always keep the creator, plus whatever the user toggled/already had selected
-                        // (loadProject() pre-populates selectedMemberIds from existing DB state, so this
-                        // also stops editing a project from wiping its previously assigned team)
-                        val memberIds = (s.selectedMemberIds + userId.trim()).map { it.trim() }.distinct()
-
-                        val memberResult = projectRepo.addProjectMembers(
-                            projectId = finalProjectId,
-                            userIds   = memberIds,
-                            role      = "owner"
-                        )
                         val contactResult = projectRepo.saveProjectContacts(finalProjectId, s.selectedContactIds.map { it.trim() })
 
-                        if (memberResult.isFailure || contactResult.isFailure) {
-                            val errorMsg = listOfNotNull(
-                                memberResult.exceptionOrNull()?.message,
-                                contactResult.exceptionOrNull()?.message
-                            ).joinToString(", ")
-                            _uiState.update { it.copy(isLoading = false, saveError = "บันทึกสมาชิก/ผู้ติดต่อล้มเหลว: $errorMsg") }
+                        if (contactResult.isFailure) {
+                            _uiState.update { it.copy(isLoading = false, saveError = "บันทึกผู้ติดต่อล้มเหลว: ${contactResult.exceptionOrNull()?.message}") }
                             return@onSuccess
                         }
                     }
