@@ -118,7 +118,10 @@ class ProjectRepository @Inject constructor(
         }
     }
 
-    suspend fun updateProject(project: Project, updatedBy: String = ""): kotlin.Result<Unit> {
+    // resultAppointmentId: appointment_id จริงของผลการขายที่ทำให้ project_status เปลี่ยน (null สำหรับ
+    // standalone หรือแก้โครงการตรงๆ) — backend ใช้ค่านี้บันทึก project_stage_log.appointment_id ตรงๆ
+    // ไม่มีการเดาจากวันที่ใกล้เคียงฝั่ง backend แล้ว เพราะนัดหมายใกล้วันที่สุดอาจไม่ใช่ของโครงการนี้เลย
+    suspend fun updateProject(project: Project, updatedBy: String = "", resultAppointmentId: String? = null): kotlin.Result<Unit> {
         return withContext(Dispatchers.IO) {
             val localProject = project.copy(isSynced = false)
             projectDao.insertProject(localProject)
@@ -140,6 +143,7 @@ class ProjectRepository @Inject constructor(
                 ).filterValues { it != null }.toMutableMap()
                 project.projectLat?.let { updates["project_lat"] = it }
                 project.projectLong?.let { updates["project_long"] = it }
+                resultAppointmentId?.let { updates["stage_appointment_id"] = it }
 
                 val response = apiService.updateProject("eq.${project.projectId}", updates)
                 if (response.isSuccessful && response.body()?.isNotEmpty() == true) {

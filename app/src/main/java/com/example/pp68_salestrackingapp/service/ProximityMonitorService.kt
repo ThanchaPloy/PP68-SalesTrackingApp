@@ -44,8 +44,11 @@ class ProximityMonitorService : Service() {
 
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var locationManager: LocationManager? = null
+    // ✅ เก็บเฉพาะนัดหมายที่ "ตอนนี้อยู่ในรัศมี" (ไม่ใช่ "เคยแจ้งแล้วตลอดไป") — ถ้าออกนอกรัศมีแล้ว
+    // กลับเข้ามาใหม่ วันเดียวกัน จะแจ้งเตือนซ้ำได้ จนกว่านัดหมายนั้นจะเช็คอินหรือเสร็จสิ้น (หลุดออกจาก
+    // getPendingAppointments() แล้ว retainAll จะเอาออกจาก set นี้ไปด้วย)
     // location callbacks can fire from more than one thread — keep this thread-safe
-    private val notifiedActivityIds = Collections.synchronizedSet(mutableSetOf<String>())
+    private val activitiesInsideRadius = Collections.synchronizedSet(mutableSetOf<String>())
 
     private val locationListener = object : LocationListener {
         override fun onLocationChanged(location: Location) {
@@ -109,7 +112,7 @@ class ProximityMonitorService : Service() {
     private suspend fun getPendingAppointments(): List<SalesActivity> {
         val today = LocalDate.now().toString()
         return db.activityDao().getActivitiesByDateRange(today, today).first()
-            .filter { it.status != "checked_in" && it.plannedLat != null && it.plannedLong != null }
+            .filter { it.status != "checked_in" && it.status != "completed" && it.plannedLat != null && it.plannedLong != null }
     }
 
     private suspend fun checkProximity(location: Location) {
@@ -119,13 +122,22 @@ class ProximityMonitorService : Service() {
             return
         }
 
+        // เลิกติดตามนัดหมายที่เช็คอิน/เสร็จสิ้นไปแล้ว ไม่งั้น set นี้จะค้างและกิน memory ไปเรื่อยๆ
+        activitiesInsideRadius.retainAll(pending.map { it.activityId }.toSet())
+
         pending.forEach { activity ->
             val distance = haversineMeters(
                 location.latitude, location.longitude,
                 activity.plannedLat!!, activity.plannedLong!!
             )
-            if (distance <= RADIUS_METERS && notifiedActivityIds.add(activity.activityId)) {
-                showProximityAlert(activity.activityId, activity.companyName ?: "สถานที่นัดหมาย")
+            if (distance <= RADIUS_METERS) {
+                // แจ้งเตือนเฉพาะตอนเพิ่งเข้ารัศมี (rising edge) — add() คืน false ถ้าอยู่ในรัศมีอยู่แล้ว
+                if (activitiesInsideRadius.add(activity.activityId)) {
+                    showProximityAlert(activity.activityId, activity.companyName ?: "สถานที่นัดหมาย")
+                }
+            } else {
+                // ออกนอกรัศมีแล้ว — ถ้ากลับเข้ามาใหม่จะแจ้งเตือนซ้ำได้
+                activitiesInsideRadius.remove(activity.activityId)
             }
         }
     }
