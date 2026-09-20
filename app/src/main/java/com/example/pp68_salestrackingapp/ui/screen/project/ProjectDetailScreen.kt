@@ -827,38 +827,35 @@ private fun ProjectContactRow(contact: com.example.pp68_salestrackingapp.data.mo
 
 @Composable
 private fun SalesTeamRow(members: List<TeamMember>) {
+    // ✅ 1 โครงการมีเจ้าของคนเดียว — members มีอย่างมาก 1 คนเสมอ
+    val owner = members.firstOrNull()
     Row(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy((-8).dp)
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        members.take(5).forEachIndexed { idx, member ->
-            Box(
-                modifier = Modifier.size(40.dp).clip(CircleShape)
-                    .background(avatarColors[idx % avatarColors.size])
-                    .border(2.dp, White, CircleShape),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(member.fullName.take(1).uppercase(), color = White, fontWeight = FontWeight.Bold)
-            }
+        Box(
+            modifier = Modifier.size(40.dp).clip(CircleShape)
+                .background(if (owner != null) avatarColors[0] else Color.LightGray)
+                .border(2.dp, White, CircleShape),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                owner?.fullName?.take(1)?.uppercase() ?: "-",
+                color = White,
+                fontWeight = FontWeight.Bold
+            )
         }
-        if (members.size > 5) {
-            Box(
-                modifier = Modifier.size(40.dp).clip(CircleShape).background(Color.LightGray).border(2.dp, White, CircleShape),
-                contentAlignment = Alignment.Center
-            ) { Text("+${members.size - 5}", fontSize = 12.sp, color = TextDark) }
-        }
-        Spacer(Modifier.width(16.dp))
         Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Text(
-                "${members.size} สมาชิก",
+                owner?.fullName ?: "ยังไม่ระบุผู้รับผิดชอบ",
                 fontWeight = FontWeight.Bold,
                 fontSize = 14.sp,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
             Text(
-                "ได้รับมอบหมายในโครงการนี้",
+                "เซลส์ผู้รับผิดชอบโครงการนี้",
                 fontSize = 11.sp,
                 color = TextGray,
                 maxLines = 1,
