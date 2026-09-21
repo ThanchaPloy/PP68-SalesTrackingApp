@@ -162,7 +162,6 @@ fun ProjectListScreen(
         onNotificationClick = onNotificationClick,
         onSettingsClick = onSettingsClick,
         onLogoutClick = {
-            viewModel.logout()
             onLogoutClick()
         },
         currentTab = currentTab, onTabChange = onTabChange

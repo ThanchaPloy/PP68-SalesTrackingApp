@@ -62,7 +62,4 @@ class ContactListViewModel @Inject constructor(
         _uiState.update { it.copy(searchQuery = query) }
     }
 
-    fun logout() {
-        viewModelScope.launch { authRepo.logout() }
-    }
 }

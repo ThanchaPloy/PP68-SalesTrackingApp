@@ -91,7 +91,6 @@ fun CustomerDetailScreen(
         onNotificationClick = onNotificationClick,
         onSettingsClick = onSettingsClick,
         onLogoutClick = {
-            viewModel.logout()
             onLogoutClick()
         },
         onTabChange = onTabChange

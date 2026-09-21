@@ -109,9 +109,4 @@ class CustomerListViewModel @Inject constructor(
         }
     }
 
-    fun logout() {
-        viewModelScope.launch {
-            authRepo.logout()
-        }
-    }
 }

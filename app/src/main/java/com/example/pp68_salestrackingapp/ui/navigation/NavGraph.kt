@@ -37,17 +37,27 @@ fun SalesTrackingApp() {
     val appViewModel: SalesTrackingAppViewModel = hiltViewModel()
     val isLoggedIn = remember { appViewModel.isLoggedIn() }
 
-    val onLogout = {
+    val context = LocalContext.current
+
+    val navigateToLogin = {
         navController.navigate(Route.Login.path) {
             popUpTo(0) { inclusive = true }
         }
     }
 
-    val context = LocalContext.current
+    // ต้องผ่าน logout() จริงก่อน ถ้ายังมีข้อมูลค้างจะถูกปฏิเสธและอยู่หน้าเดิมพร้อมเหตุผล
+    val onLogout = {
+        appViewModel.logout(
+            onSuccess = { navigateToLogin() },
+            onFailure = { msg -> Toast.makeText(context, msg, Toast.LENGTH_LONG).show() }
+        )
+    }
+
     LaunchedEffect(Unit) {
         appViewModel.sessionExpired.collect {
+            // token ถูกเคลียร์ไปแล้วตอนเจอ 401 จึงพาไปหน้า Login ตรง ๆ ไม่ต้องเรียก logout() ซ้ำ
             Toast.makeText(context, "เซสชันหมดอายุ กรุณาเข้าสู่ระบบใหม่", Toast.LENGTH_LONG).show()
-            onLogout()
+            navigateToLogin()
         }
     }
 
@@ -372,9 +382,11 @@ fun SalesTrackingApp() {
         }
 
         composable(Route.Settings.path) {
+            // หน้านี้เรียก logout() ผ่าน SettingsViewModel เองและรอผลอยู่แล้ว
+            // จึงรับแค่ตัวพาไปหน้า Login ไม่ใช่ตัวที่สั่ง logout ซ้ำ
             SettingScreen(
                 onBack = { navController.popBackStack() },
-                onLogout = onLogout
+                onLogout = navigateToLogin
             )
         }
     }

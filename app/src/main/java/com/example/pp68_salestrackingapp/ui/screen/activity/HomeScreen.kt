@@ -144,7 +144,7 @@ fun HomeScreen(
         onDelete            = { viewModel.deleteActivity(it) },
         onNotificationClick = onNotificationClick,
         onSettingsClick     = onSettingsClick,
-        onLogoutClick       = { viewModel.logout(); onLogoutClick() },
+        onLogoutClick       = onLogoutClick,
         currentTab          = currentTab,
         onTabChange         = onTabChange,
         onMonthChange       = { viewModel.selectMonth(it) }

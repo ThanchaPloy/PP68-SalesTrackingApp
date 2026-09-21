@@ -114,7 +114,6 @@ fun DashboardScreen(
         onNotificationClick = onNotificationClick,
         onSettingsClick = onSettingsClick,
         onLogoutClick = {
-            viewModel.logout()
             onLogoutClick()
         },
         onExportClick = onExportClick,

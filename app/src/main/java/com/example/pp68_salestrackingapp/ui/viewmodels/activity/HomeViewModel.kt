@@ -158,11 +158,6 @@ class HomeViewModel @Inject constructor(
         loadActivities()
     }
 
-    fun logout() {
-        viewModelScope.launch {
-            authRepo.logout()
-        }
-    }
 
     private fun formatGroupHeader(dateStr: String): String {
         return try {

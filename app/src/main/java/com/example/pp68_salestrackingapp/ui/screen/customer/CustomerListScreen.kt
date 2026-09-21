@@ -93,7 +93,6 @@ fun CustomerListScreen(
         onNotificationClick = onNotificationClick,
         onSettingsClick = onSettingsClick,
         onLogoutClick = {
-            viewModel.logout()
             onLogoutClick()
         },
         currentTab = currentTab,

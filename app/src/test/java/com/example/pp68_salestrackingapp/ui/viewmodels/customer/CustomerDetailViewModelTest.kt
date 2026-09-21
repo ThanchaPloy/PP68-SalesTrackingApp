@@ -221,13 +221,4 @@ class CustomerDetailViewModelTest {
         assertFalse(viewModel.isLoading.value)
     }
 
-    @Test
-    fun `logout should delegate to auth repository`() = runTest {
-        every { authRepo.currentUser() } returns AuthUser("U1", "x@test.com", "sale")
-
-        viewModel.logout()
-        advanceUntilIdle()
-
-        coVerify(exactly = 1) { authRepo.logout() }
-    }
 }

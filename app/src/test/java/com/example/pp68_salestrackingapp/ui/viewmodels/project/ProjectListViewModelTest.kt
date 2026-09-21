@@ -70,7 +70,6 @@ class ProjectListViewModelTest {
             flowOf(allProjects.filter { it.projectName.contains(q, ignoreCase = true) })
         }
         coEvery { projectRepo.refreshProjects(any()) } returns Result.success(Unit)
-        coEvery { authRepo.logout() } returns Result.success(Unit)
     }
 
     @After
@@ -255,13 +254,4 @@ class ProjectListViewModelTest {
         assertNull(viewModel.error.value)
     }
 
-    @Test
-    fun givenLogoutCalled_whenInvoked_thenCallsAuthRepositoryLogout() = runTest {
-        initVm()
-
-        viewModel.logout()
-        advanceUntilIdle()
-
-        coVerify(exactly = 1) { authRepo.logout() }
-    }
 }

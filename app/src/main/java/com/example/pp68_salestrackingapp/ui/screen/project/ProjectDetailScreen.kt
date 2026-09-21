@@ -123,7 +123,6 @@ fun ProjectDetailScreen(
         onNotificationClick = onNotificationClick,
         onSettingsClick = onSettingsClick,
         onLogoutClick = {
-            viewModel.logout()
             onLogoutClick()
         }
     )

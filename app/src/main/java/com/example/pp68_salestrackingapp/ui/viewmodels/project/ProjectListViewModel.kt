@@ -135,11 +135,6 @@ class ProjectListViewModel @Inject constructor(
 
     fun clearError() { _error.value = null }
 
-    fun logout() {
-        viewModelScope.launch {
-            authRepo.logout()
-        }
-    }
 
     init {
         refreshDataFromApi()

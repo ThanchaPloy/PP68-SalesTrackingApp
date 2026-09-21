@@ -249,11 +249,6 @@ class StatsViewModel @Inject constructor(
         )
     }
 
-    fun logout() {
-        viewModelScope.launch {
-            authRepo.logout()
-        }
-    }
 
     private fun isInRange(dateStr: String?, from: LocalDate, to: LocalDate): Boolean {
         if (dateStr.isNullOrBlank()) return false

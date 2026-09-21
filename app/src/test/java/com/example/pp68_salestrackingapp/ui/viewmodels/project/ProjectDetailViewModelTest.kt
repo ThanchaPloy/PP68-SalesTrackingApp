@@ -151,28 +151,6 @@ class ProjectDetailViewModelTest {
     }
 
     @Test
-    fun `logout should call auth repository`() = runTest {
-        coEvery { projectRepo.getProjectById("PRJ-1") } returns Result.success(
-            Project(projectId = "PRJ-1", custId = "C1", projectName = "Project A")
-        )
-        coEvery { customerRepo.getCustomerById(any()) } returns Result.success(
-            Customer("C1", "Company A", null, null, null, null, null, null, null)
-        )
-        every { activityRepo.getActivitiesByProjectFlow(any()) } returns MutableStateFlow(emptyList())
-        coEvery { authRepo.logout() } returns Result.success(Unit)
-
-        val vm = ProjectDetailViewModel(
-            projectRepo, authRepo, activityRepo, customerRepo,
-            SavedStateHandle(mapOf("projectId" to "PRJ-1"))
-        )
-        advanceUntilIdle()
-        vm.logout()
-        advanceUntilIdle()
-
-        coVerify(exactly = 1) { authRepo.logout() }
-    }
-
-    @Test
     fun `deleteProject failure should set error and stop deleting`() = runTest {
         coEvery { projectRepo.getProjectById("PRJ-1") } returns Result.success(
             Project(projectId = "PRJ-1", custId = "C1", projectName = "Project A")

@@ -91,17 +91,6 @@ class CustomerListViewModelTest {
     }
 
     @Test
-    fun `logout should call auth repository logout`() = runTest {
-        viewModel = CustomerListViewModel(customerRepo, authRepo)
-        advanceUntilIdle()
-
-        viewModel.logout()
-        advanceUntilIdle()
-
-        coVerify(exactly = 1) { authRepo.logout() }
-    }
-
-    @Test
     fun `blank search should use all customers flow`() = runTest {
         val all = listOf(Customer("C1", "Alpha Co", null, null, null, null, null, null, null))
         every { customerRepo.getAllCustomersFlow() } returns flowOf(all)

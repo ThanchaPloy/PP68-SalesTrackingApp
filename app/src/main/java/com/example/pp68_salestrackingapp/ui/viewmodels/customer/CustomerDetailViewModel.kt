@@ -103,9 +103,4 @@ class CustomerDetailViewModel @Inject constructor(
         }
     }
 
-    fun logout() {
-        viewModelScope.launch {
-            authRepo.logout()
-        }
-    }
 }
