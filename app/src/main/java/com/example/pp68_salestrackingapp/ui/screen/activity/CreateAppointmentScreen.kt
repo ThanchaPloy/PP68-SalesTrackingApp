@@ -433,7 +433,7 @@ fun CreateAppointmentScreen(
             }
 
             if (state.activityType == "onsite") {
-                FormField(label = "สถานที่") {
+                FormField(label = "สถานที่ *") {
                     MapPickerField(
                         lat = state.lat,
                         lng = state.lng,

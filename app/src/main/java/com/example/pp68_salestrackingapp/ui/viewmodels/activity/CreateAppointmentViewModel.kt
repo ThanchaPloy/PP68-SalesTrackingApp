@@ -475,6 +475,8 @@ class CreateAppointmentViewModel @Inject constructor(
 
     // ✅ บังคับกรอกแค่หัวข้อ + วันเวลานัด (ประเภทกิจกรรมมีค่า default อยู่แล้วไม่มีทางว่าง)
     // ส่วนโครงการ/บริษัท/ผู้ติดต่อ เป็น optional ทั้งหมด ไม่ใส่ก็เซฟได้
+    // ยกเว้นนัดแบบ onsite ที่ต้องมีพิกัด เพราะการเช็คอินเอาไปวัดระยะ — ถ้าไม่มีจุดให้เทียบ
+    // ระบบจะบันทึกว่า "ยืนยันตำแหน่งแล้ว ห่าง 0 เมตร" ทั้งที่ไม่ได้ตรวจอะไรเลย
     private fun validate(): Boolean {
         val s = _uiState.value
         return when {
@@ -488,6 +490,10 @@ class CreateAppointmentViewModel @Inject constructor(
             }
             s.startTime.isNullOrBlank() -> {
                 _uiState.update { it.copy(saveError = "กรุณาเลือกเวลานัดหมาย") }
+                false
+            }
+            s.activityType == "onsite" && (s.lat == null || s.lng == null) -> {
+                _uiState.update { it.copy(saveError = "กรุณาปักหมุดตำแหน่งนัดหมาย (จำเป็นสำหรับนัดแบบ On-site)") }
                 false
             }
             else -> true

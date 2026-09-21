@@ -157,12 +157,68 @@ class CreateAppointmentViewModelTest {
         vm.onEvent(CreateAppointmentEvent.TitleChanged("Visit"))
         vm.onEvent(CreateAppointmentEvent.DateChanged("Apr 06, 2026"))
         vm.onEvent(CreateAppointmentEvent.StartTimeSelected("10:00 AM"))
+        vm.onEvent(CreateAppointmentEvent.LocationPicked(13.7563, 100.5018))
         advanceUntilIdle()
 
         vm.onEvent(CreateAppointmentEvent.Save)
         advanceUntilIdle()
 
         assertEquals("ไม่พบข้อมูล User กรุณา Login ใหม่", vm.uiState.value.saveError)
+    }
+
+    // นัด onsite ที่ไม่มีพิกัด ทำให้การเช็คอินบันทึกว่า "ยืนยันตำแหน่งแล้ว ห่าง 0 เมตร"
+    // ทั้งที่ไม่มีจุดให้เทียบ จึงต้องกันไว้ตั้งแต่ตอนสร้างนัด
+    @Test
+    fun `onsite appointment without a pinned location must not save`() = runTest {
+        configureBaseData()
+        coEvery { activityRepo.getMasterActivities() } returns listOf(ActivityMaster(1, "Lead", "L"))
+        every { authRepo.currentUser() } returns AuthUser("U1", "u@test.com", "sale")
+        val vm = CreateAppointmentViewModel(context, activityRepo, projectRepo, customerRepo, authRepo)
+        advanceUntilIdle()
+        vm.onEvent(CreateAppointmentEvent.LoadInitialProject("PRJ-1"))
+        vm.onEvent(CreateAppointmentEvent.TypeChanged("onsite"))
+        vm.onEvent(CreateAppointmentEvent.TitleChanged("Visit"))
+        vm.onEvent(CreateAppointmentEvent.DateChanged("Apr 06, 2026"))
+        vm.onEvent(CreateAppointmentEvent.StartTimeSelected("10:00 AM"))
+        advanceUntilIdle()
+
+        vm.onEvent(CreateAppointmentEvent.Save)
+        advanceUntilIdle()
+
+        assertEquals(
+            "กรุณาปักหมุดตำแหน่งนัดหมาย (จำเป็นสำหรับนัดแบบ On-site)",
+            vm.uiState.value.saveError
+        )
+        assertFalse(vm.uiState.value.isSaved)
+        coVerify(exactly = 0) { activityRepo.addActivity(any()) }
+    }
+
+    // online และ call ไม่มีการเช็คอินด้วยพิกัด จึงต้องไม่ถูกบังคับตาม
+    @Test
+    fun `online and call appointments still save without a location`() = runTest {
+        configureBaseData()
+        coEvery { activityRepo.getMasterActivities() } returns listOf(ActivityMaster(1, "Lead", "L"))
+        every { authRepo.currentUser() } returns AuthUser("U1", "u@test.com", "sale")
+        coEvery { activityRepo.addActivity(any()) } returns Result.success("ACT-001")
+        coEvery { activityRepo.saveAppointmentContacts(any(), any()) } returns Unit
+        coEvery { activityRepo.savePlanItems(any(), any()) } returns Unit
+
+        listOf("online", "call").forEach { type ->
+            val vm = CreateAppointmentViewModel(context, activityRepo, projectRepo, customerRepo, authRepo)
+            advanceUntilIdle()
+            vm.onEvent(CreateAppointmentEvent.LoadInitialProject("PRJ-1"))
+            vm.onEvent(CreateAppointmentEvent.TypeChanged(type))
+            vm.onEvent(CreateAppointmentEvent.TitleChanged("Call topic"))
+            vm.onEvent(CreateAppointmentEvent.DateChanged("Apr 06, 2026"))
+            vm.onEvent(CreateAppointmentEvent.StartTimeSelected("10:00 AM"))
+            advanceUntilIdle()
+
+            vm.onEvent(CreateAppointmentEvent.Save)
+            advanceUntilIdle()
+
+            assertNull("type=$type ไม่ควรติด validation", vm.uiState.value.saveError)
+            assertTrue("type=$type ควรบันทึกได้", vm.uiState.value.isSaved)
+        }
     }
 
     @Test
@@ -182,6 +238,7 @@ class CreateAppointmentViewModelTest {
         vm.onEvent(CreateAppointmentEvent.DateChanged("Apr 06, 2026"))
         vm.onEvent(CreateAppointmentEvent.StartTimeSelected("09:00 AM"))
         vm.onEvent(CreateAppointmentEvent.EndTimeSelected("10:00 AM"))
+        vm.onEvent(CreateAppointmentEvent.LocationPicked(13.7563, 100.5018))
         vm.onEvent(CreateAppointmentEvent.ContactToggled("CT-1"))
         vm.onEvent(CreateAppointmentEvent.MasterToggled(1))
         vm.onEvent(CreateAppointmentEvent.OtherToggled)
@@ -330,6 +387,7 @@ class CreateAppointmentViewModelTest {
         vm.onEvent(CreateAppointmentEvent.TitleChanged("topic"))
         vm.onEvent(CreateAppointmentEvent.DateChanged("Apr 06, 2026"))
         vm.onEvent(CreateAppointmentEvent.StartTimeSelected("10:00 AM"))
+        vm.onEvent(CreateAppointmentEvent.LocationPicked(13.7563, 100.5018))
         advanceUntilIdle()
 
         vm.onEvent(CreateAppointmentEvent.Save)
@@ -377,6 +435,8 @@ class CreateAppointmentViewModelTest {
 
         vm.onEvent(CreateAppointmentEvent.LoadActivity("A-EDIT"))
         advanceUntilIdle()
+        // นัดเก่าตัวนี้เป็น onsite แต่ไม่มีพิกัด — กฎใหม่บังคับให้ปักหมุดก่อนถึงจะบันทึกได้
+        vm.onEvent(CreateAppointmentEvent.LocationPicked(13.7563, 100.5018))
         vm.onEvent(CreateAppointmentEvent.Save)
         advanceUntilIdle()
 
