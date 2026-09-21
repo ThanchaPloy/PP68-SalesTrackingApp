@@ -97,8 +97,11 @@ class SyncManager @Inject constructor(
                     if (response.isSuccessful) {
                         val realCustId = response.body()?.firstOrNull()?.custId
                         if (realCustId != null && realCustId != customer.custId) {
+                            // ทุกตารางที่อ้าง custId ต้องถูกชี้ใหม่ให้ครบ — project ไม่มี FK ฝั่ง server
+                            // ถ้าตกหล่น มันจะ insert สำเร็จโดยชี้ไปหาลูกค้าที่ไม่มีอยู่จริง แบบเงียบ ๆ
                             contactDao.updateCustIdForContacts(customer.custId, realCustId)
                             activityDao.updateCustIdForActivities(customer.custId, realCustId)
+                            projectDao.updateCustIdForProjects(customer.custId, realCustId)
                             customerDao.deleteCustomerById(customer.custId)
                             customerDao.insertCustomer(customer.copy(custId = realCustId, isSynced = true))
                         } else {
@@ -213,9 +216,11 @@ class SyncManager @Inject constructor(
 
                     // Sync contacts to remote
                     try {
+                        // ลบฝั่ง server ก่อนเสมอ แม้ในเครื่องจะไม่เหลือผู้ติดต่อแล้ว — ไม่งั้นการลบ
+                        // ออกจนหมดจะไม่ถูกส่งขึ้นไป แล้ว sync รอบถัดไปจะดึงของเก่ากลับลงมา
                         val localContacts = projectContactDao.getContactIdsByProject(finalId)
+                        apiService.deleteProjectContacts("eq.$finalId")
                         if (localContacts.isNotEmpty()) {
-                            apiService.deleteProjectContacts("eq.$finalId")
                             val rows = localContacts.map { ProjectContact(finalId, it.trim()) }
                             apiService.addProjectContacts(rows)
                         }

@@ -98,4 +98,7 @@ interface ProjectDao {
 
     @Query("UPDATE project SET is_synced = :isSynced WHERE projectId = :projectId")
     suspend fun updateSyncStatus(projectId: String, isSynced: Boolean)
+
+    @Query("UPDATE project SET custId = :newCustId WHERE custId = :oldCustId")
+    suspend fun updateCustIdForProjects(oldCustId: String, newCustId: String)
 }

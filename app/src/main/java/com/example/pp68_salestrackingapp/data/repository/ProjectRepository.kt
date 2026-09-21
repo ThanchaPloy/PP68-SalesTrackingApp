@@ -212,6 +212,10 @@ class ProjectRepository @Inject constructor(
                 Result.success(Unit)
             } catch (e: IOException) {
                 Log.w("ProjectRepo", "saveProjectContacts offline: ${e.message}")
+                // Room เก็บรายชื่อใหม่ไว้แล้ว แต่ outbox วนเฉพาะโปรเจคที่ is_synced = 0 — ถ้าไม่ปักธง
+                // ตรงนี้ การแก้ผู้ติดต่อตอนออฟไลน์จะไม่มีวันถูกอัปขึ้น server เลย
+                projectDao.updateSyncStatus(projectId, false)
+                syncManager.scheduleSync()
                 Result.success(Unit) // Offline fallback
             } catch (e: Exception) {
                 Log.e("ProjectRepo", "saveProjectContacts failed: ${e.message}", e)
