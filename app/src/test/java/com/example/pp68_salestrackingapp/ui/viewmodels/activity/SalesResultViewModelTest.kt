@@ -162,6 +162,95 @@ class SalesResultViewModelTest {
 
     }
 
+    // ข้อ 4-7 บังคับเลือกก่อนบันทึก — เทสต์ที่ต้องการให้ save() เดินต่อจึงต้องตอบให้ครบก่อน
+    private fun SalesResultViewModel.answerRequiredAnalysis() {
+        onDealPositionChanged("ลูกค้าใช้เราอยู่แล้ว การต่อสัญญามีโอกาสสูงมาก")
+        onPreviousSolutionChanged("ไม่มี Solution เดิม")
+        onCounterpartyMultiplierChanged("ดีลกับ Main Contractor โดยตรง")
+        onResponseSpeedChanged("เร็ว")
+    }
+
+    @Test
+    fun `save should block when analysis questions 4-7 are unanswered`() = runTest {
+        coEvery { activityRepo.getActivityById("A1") } returns Result.success(
+            listOf(
+                SalesActivity(
+                    activityId = "A1",
+                    userId = "U1",
+                    customerId = null,
+                    projectId = null,
+                    activityType = "Visit",
+                    activityDate = "2026-04-01",
+                    status = "planned"
+                )
+            )
+        )
+        coEvery { activityRepo.saveActivityResult(any(), any()) } returns Result.success(Unit)
+
+        val vm = SalesResultViewModel(
+            SavedStateHandle(mapOf("activityId" to "A1")),
+            projectRepo,
+            activityRepo,
+            authRepo
+        )
+        advanceUntilIdle()
+        vm.onSummaryChanged("summary")
+
+        vm.save()
+        advanceUntilIdle()
+
+        assertTrue(vm.uiState.value.showRequiredErrors)
+        assertEquals("กรุณาตอบข้อ 4-7 ในหัวข้อวิเคราะห์ข้อมูลให้ครบ", vm.uiState.value.error)
+        assertFalse(vm.uiState.value.isSaved)
+        coVerify(exactly = 0) { activityRepo.saveActivityResult(any(), any()) }
+    }
+
+    @Test
+    fun `undetermined choice satisfies the requirement for questions 4-6`() = runTest {
+        coEvery { activityRepo.getActivityById("A1") } returns Result.success(
+            listOf(
+                SalesActivity(
+                    activityId = "A1",
+                    userId = "U1",
+                    customerId = null,
+                    projectId = null,
+                    activityType = "Visit",
+                    activityDate = "2026-04-01",
+                    status = "planned"
+                )
+            )
+        )
+        coEvery { activityRepo.saveActivityResult(any(), any()) } returns Result.success(Unit)
+
+        val vm = SalesResultViewModel(
+            SavedStateHandle(mapOf("activityId" to "A1")),
+            projectRepo,
+            activityRepo,
+            authRepo
+        )
+        advanceUntilIdle()
+        vm.onSummaryChanged("summary")
+        vm.onDealPositionChanged(SalesResultViewModel.UNDETERMINED_LABEL)
+        vm.onPreviousSolutionChanged(SalesResultViewModel.UNDETERMINED_LABEL)
+        vm.onCounterpartyMultiplierChanged(SalesResultViewModel.UNDETERMINED_LABEL)
+        vm.onResponseSpeedChanged("เร็ว")
+
+        vm.save()
+        advanceUntilIdle()
+
+        assertFalse(vm.uiState.value.showRequiredErrors)
+        assertTrue(vm.uiState.value.isSaved)
+    }
+
+    // ป้ายที่หน้าจอแสดงต้องเป็นคีย์ในตารางแปลงค่าเป๊ะ ไม่งั้นจะส่งข้อความไทยดิบขึ้น server เงียบ ๆ
+    // (ตัวแปลงมี fallback เป็น `?: value` จึงไม่มีใครฟ้องตอนพิมพ์ผิด)
+    @Test
+    fun `undetermined label maps to a code in every question that offers it`() {
+        assertEquals("undetermined", SalesResultViewModel.DEAL_POSITION_MAP[SalesResultViewModel.UNDETERMINED_LABEL])
+        assertEquals("undetermined", SalesResultViewModel.SOLUTION_MAP[SalesResultViewModel.UNDETERMINED_LABEL])
+        assertEquals("undetermined", SalesResultViewModel.COUNTERPARTY_MAP[SalesResultViewModel.UNDETERMINED_LABEL])
+    }
+
     @Test
     fun `save should validate missing project id in standalone mode`() = runTest {
         // no activityId param -> ViewModel enters ResultMode.STANDALONE (see init{}), which
@@ -195,6 +284,7 @@ class SalesResultViewModelTest {
         )
         advanceUntilIdle()
         vm.onSummaryChanged("summary")
+        vm.answerRequiredAnalysis()
 
         vm.save()
         advanceUntilIdle()
@@ -230,6 +320,7 @@ class SalesResultViewModelTest {
         )
         advanceUntilIdle()
         vm.onSummaryChanged("summary")
+        vm.answerRequiredAnalysis()
 
         vm.save()
         advanceUntilIdle()
@@ -269,6 +360,7 @@ class SalesResultViewModelTest {
         )
         advanceUntilIdle()
         vm.onSummaryChanged("summary")
+        vm.answerRequiredAnalysis()
 
         vm.save()
         advanceUntilIdle()

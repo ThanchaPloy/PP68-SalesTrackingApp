@@ -49,6 +49,8 @@ data class SalesResultUiState(
     val lossReason: String = "",
     val otherLossReason: String = "",
     val lossReasonError: String? = null,
+    // true หลังกดบันทึกแล้วยังมีข้อ 4-7 ที่ไม่ได้เลือก — ให้หน้าจอกางแท็บที่ผิดและขึ้นข้อความใต้ข้อนั้น
+    val showRequiredErrors: Boolean = false,
 
     // ✅ รองรับ version history ของบันทึกผลการขาย
     val resultGroupId: String? = null,
@@ -222,20 +224,28 @@ class SalesResultViewModel @Inject constructor(
     companion object {
         const val MAX_PHOTOS = 5
 
+        // ข้อ 4-6 บังคับเลือก จึงต้องมีทางออกให้เซลส์ที่ยังไม่รู้คำตอบ — ไม่งั้นจะกดมั่วเพื่อให้ผ่าน
+        // แล้วได้ข้อมูลเพี้ยนแทนที่จะได้ค่าว่าง
+        const val UNDETERMINED_LABEL = "ยังระบุไม่ได้"
+        private const val UNDETERMINED_CODE = "undetermined"
+
         val DEAL_POSITION_MAP = mapOf(
             "ลูกค้าใช้เราอยู่แล้ว การต่อสัญญามีโอกาสสูงมาก" to "incumbent",
             "ลูกค้าเลือกเราเป็นตัวหลัก คู่แข่งอื่นเป็นแค่ backup"  to "vendor_of_choice",
-            "ถูกเชิญมาเพื่อ benchmark ราคา โอกาสต่ำ"              to "invited_to_compare"
+            "ถูกเชิญมาเพื่อ benchmark ราคา โอกาสต่ำ"              to "invited_to_compare",
+            UNDETERMINED_LABEL                                    to UNDETERMINED_CODE
         )
         val SOLUTION_MAP = mapOf(
             "ไม่มี Solution เดิม"              to "no_solution",
             "มีระบบเดิมที่ไม่ใช่คู่แข่ง"       to "non_competitor_system",
-            "ใช้คู่แข่งอยู่และไม่มีปัญหา"      to "competitor_no_issue"
+            "ใช้คู่แข่งอยู่และไม่มีปัญหา"      to "competitor_no_issue",
+            UNDETERMINED_LABEL                 to UNDETERMINED_CODE
         )
         val COUNTERPARTY_MAP = mapOf(
             "ดีลกับ Main Contractor โดยตรง"                       to "direct_main_contractor",
             "ดีลผ่าน Installer — Main Contractor ได้งานแล้ว"      to "via_installer_main_awarded",
-            "ดีลผ่าน Installer — Main Contractor ยังไม่ได้งาน"    to "via_installer_main_pending"
+            "ดีลผ่าน Installer — Main Contractor ยังไม่ได้งาน"    to "via_installer_main_pending",
+            UNDETERMINED_LABEL                                    to UNDETERMINED_CODE
         )
         val RESPONSE_SPEED_MAP = mapOf(
             "เร็ว"           to "fast",
@@ -408,6 +418,17 @@ class SalesResultViewModel @Inject constructor(
         if (s.isReadOnlyVersion) { _uiState.update { it.copy(error = "กำลังดูเวอร์ชันเก่า ไม่สามารถแก้ไขได้") }; return }
         if (s.visitSummary.isBlank()) { _uiState.update { it.copy(error = "กรุณากรอกสรุปการเข้าพบ") }; return }
         if (s.photos.any { it.isUploading }) { _uiState.update { it.copy(error = "กรุณารอให้อัปโหลดรูปให้เสร็จก่อนบันทึก") }; return }
+
+        // ข้อ 4-7 อยู่ในแท็บที่พับไว้ ผู้ใช้จึงอาจไม่เคยเห็นว่ายังไม่ได้ตอบ — ตั้ง flag ให้หน้าจอกางแท็บ
+        // ที่ยังขาดและชี้ทีละข้อ แทนที่จะขึ้นแค่ข้อความรวมแล้วผู้ใช้หาไม่เจอ
+        if (s.dealPosition.isBlank() || s.previousSolution.isBlank() ||
+            s.counterpartyMultiplier.isBlank() || s.responseSpeed.isBlank()
+        ) {
+            _uiState.update {
+                it.copy(showRequiredErrors = true, error = "กรุณาตอบข้อ 4-7 ในหัวข้อวิเคราะห์ข้อมูลให้ครบ")
+            }
+            return
+        }
 
         if (s.isStatusUpdateEnabled) {
             if (s.newStatus.isBlank()) {

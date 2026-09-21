@@ -132,6 +132,14 @@ private fun SalesResultContent(
     var expandContract by remember { mutableStateOf(false) }
     var expandProposal by remember { mutableStateOf(false) }
 
+    // ข้อ 4-7 ซ่อนอยู่ในแท็บที่พับไว้ ถ้ากดบันทึกแล้วยังตอบไม่ครบต้องกางแท็บที่ขาดให้เอง
+    // ไม่งั้นผู้ใช้เห็นแต่ข้อความ error แต่หาไม่เจอว่าต้องไปกรอกตรงไหน
+    LaunchedEffect(s.showRequiredErrors, s.dealPosition, s.previousSolution, s.counterpartyMultiplier, s.responseSpeed) {
+        if (!s.showRequiredErrors) return@LaunchedEffect
+        if (s.dealPosition.isBlank() || s.previousSolution.isBlank()) expandSolution = true
+        if (s.counterpartyMultiplier.isBlank() || s.responseSpeed.isBlank()) expandContract = true
+    }
+
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
@@ -318,7 +326,7 @@ private fun SalesResultContent(
 
                 Spacer(Modifier.height(8.dp))
                 HorizontalDivider(color = BorderGray)
-                Text("วิเคราะห์ข้อมูลเพิ่มเติม(ถ้ามี)", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = RedPrimary)
+                Text("วิเคราะห์ข้อมูลเพิ่มเติม", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = RedPrimary)
 
                 CollapsibleSection(
                     title = "Tab Solution & ตำแหน่งดีล",
@@ -327,23 +335,35 @@ private fun SalesResultContent(
                     onToggle = { expandSolution = !expandSolution }
                 ) {
                     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                        SectionCard(title = "4. ตำแหน่งของดีล", icon = Icons.Default.Place) {
+                        SectionCard(
+                            title = "4. ตำแหน่งของดีล",
+                            icon = Icons.Default.Place,
+                            required = true,
+                            errorText = requiredErrorFor(s.showRequiredErrors, s.dealPosition)
+                        ) {
                             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                 listOf(
                                     "ลูกค้าใช้เราอยู่แล้ว การต่อสัญญามีโอกาสสูงมาก",
                                     "ลูกค้าเลือกเราเป็นตัวหลัก คู่แข่งอื่นเป็นแค่ backup",
-                                    "ถูกเชิญมาเพื่อ benchmark ราคา โอกาสต่ำ"
+                                    "ถูกเชิญมาเพื่อ benchmark ราคา โอกาสต่ำ",
+                                    SalesResultViewModel.UNDETERMINED_LABEL
                                 ).forEach { opt ->
                                     SelectOption(opt, s.dealPosition == opt) { onDealPositionChanged(opt) }
                                 }
                             }
                         }
-                        SectionCard(title = "5. Solution เดิมของลูกค้า", icon = Icons.Default.History) {
+                        SectionCard(
+                            title = "5. Solution เดิมของลูกค้า",
+                            icon = Icons.Default.History,
+                            required = true,
+                            errorText = requiredErrorFor(s.showRequiredErrors, s.previousSolution)
+                        ) {
                             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                 listOf(
                                     "ไม่มี Solution เดิม",
                                     "มีระบบเดิมที่ไม่ใช่คู่แข่ง",
-                                    "ใช้คู่แข่งอยู่และไม่มีปัญหา"
+                                    "ใช้คู่แข่งอยู่และไม่มีปัญหา",
+                                    SalesResultViewModel.UNDETERMINED_LABEL
                                 ).forEach { opt ->
                                     SelectOption(opt, s.previousSolution == opt) { onPreviousSolutionChanged(opt) }
                                 }
@@ -359,18 +379,29 @@ private fun SalesResultContent(
                     onToggle = { expandContract = !expandContract }
                 ) {
                     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                        SectionCard(title = "6. ประเภทคู่สัญญา", icon = Icons.Default.Groups) {
+                        SectionCard(
+                            title = "6. ประเภทคู่สัญญา",
+                            icon = Icons.Default.Groups,
+                            required = true,
+                            errorText = requiredErrorFor(s.showRequiredErrors, s.counterpartyMultiplier)
+                        ) {
                             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                 listOf(
                                     "ดีลกับ Main Contractor โดยตรง",
                                     "ดีลผ่าน Installer — Main Contractor ได้งานแล้ว",
-                                    "ดีลผ่าน Installer — Main Contractor ยังไม่ได้งาน"
+                                    "ดีลผ่าน Installer — Main Contractor ยังไม่ได้งาน",
+                                    SalesResultViewModel.UNDETERMINED_LABEL
                                 ).forEach { opt ->
                                     SelectOption(opt, s.counterpartyMultiplier == opt) { onCounterpartyMultiplierChanged(opt) }
                                 }
                             }
                         }
-                        SectionCard(title = "7. ความรวดเร็วในการตอบรับ", icon = Icons.Default.Speed) {
+                        SectionCard(
+                            title = "7. ความรวดเร็วในการตอบรับ",
+                            icon = Icons.Default.Speed,
+                            required = true,
+                            errorText = requiredErrorFor(s.showRequiredErrors, s.responseSpeed)
+                        ) {
                             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                 listOf("เร็ว", "ปกติ", "ช้าหรือเงียบ").forEach { opt ->
                                     SelectOption(opt, s.responseSpeed == opt) { onResponseSpeedChanged(opt) }
@@ -462,21 +493,35 @@ private fun SalesResultContent(
 private fun SectionCard(
     title: String,
     icon: androidx.compose.ui.graphics.vector.ImageVector,
+    required: Boolean = false,
+    errorText: String? = null,
     content: @Composable () -> Unit
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = White),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        border = if (errorText != null) BorderStroke(1.dp, RedPrimary) else null
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 12.dp)) {
                 Icon(icon, null, tint = RedPrimary, modifier = Modifier.size(20.dp))
                 Spacer(Modifier.width(8.dp))
                 Text(title, fontWeight = FontWeight.Bold, fontSize = 15.sp, color = TextDark)
+                if (required) {
+                    Text(" *", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = RedPrimary)
+                }
             }
             content()
+            if (errorText != null) {
+                Text(
+                    errorText,
+                    fontSize = 12.sp,
+                    color = RedPrimary,
+                    modifier = Modifier.padding(top = 8.dp)
+                )
+            }
         }
     }
 }
@@ -565,6 +610,9 @@ private fun SelectOption(
         Text(text, fontSize = 14.sp, color = if (isSelected) TextDark else TextGray)
     }
 }
+
+private fun requiredErrorFor(showErrors: Boolean, value: String): String? =
+    if (showErrors && value.isBlank()) "กรุณาเลือก 1 ข้อ" else null
 
 private const val MAX_RESULT_PHOTOS = 5
 
