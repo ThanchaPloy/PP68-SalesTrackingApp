@@ -1,6 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <network-security-config>
-    <base-config cleartextTrafficPermitted="false">
+    <!-- Debug only: plain HTTP is needed to reach a backend on the LAN (see the commented
+         http:// entries in local.properties), and user CAs let a proxy inspect traffic. -->
+    <base-config cleartextTrafficPermitted="true">
         <trust-anchors>
             <certificates src="system" />
             <certificates src="user" />
