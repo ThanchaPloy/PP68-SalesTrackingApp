@@ -567,6 +567,12 @@ fun ImagePreviewDialog(imageUrl: String, onDismiss: () -> Unit) {
     }
 }
 
+// หนึ่งบรรทัดที่พร้อมวาด พร้อมความสูงที่มันกิน — เก็บไว้ก่อนเพื่อวัดความสูงแถวได้ล่วงหน้า
+private data class PdfLine(val text: String, val x: Float, val paint: Paint, val lineHeight: Float)
+
+private fun pdfLines(text: String, x: Float, paint: Paint, maxWidth: Float, lineHeight: Float): List<PdfLine> =
+    wrapTextLines(text, paint, maxWidth).map { PdfLine(it, x, paint, lineHeight) }
+
 private fun wrapTextLines(text: String, paint: Paint, maxWidth: Float): List<String> {
     if (text.isBlank()) return emptyList()
     val lines = mutableListOf<String>()
@@ -888,129 +894,87 @@ suspend fun exportToPdf(context: Context, fileName: String, activities: List<Exp
     canvas.drawLine(30f, y, 810f, y, paint); y += 20f
 
     activities.forEach { item ->
-        checkPageBreak(50f)
-        
-        // --- 1. Date ---
-        canvas.drawText(item.date.take(10), 30f, y, bodyPaint)
-        
-        // We will keep track of the maximum Y reached by each column for this row
-        var maxY = y
-        
-        // --- 2. Company & Contact ---
-        var currentYCol2 = y
-        val projectComp = "${item.companyName ?: ""} (${item.projectName ?: ""})"
-        wrapTextLines(projectComp, bodyPaint, 170f).forEach { line ->
-            canvas.drawText(line, 100f, currentYCol2, bodyPaint)
-            currentYCol2 += 14f
-        }
-        if (!item.contactName.isNullOrBlank()) {
-            wrapTextLines("ผู้ติดต่อ: ${item.contactName}", subPaint, 170f).forEach { line ->
-                canvas.drawText(line, 100f, currentYCol2, subPaint)
-                currentYCol2 += 13f
+        // สร้างบรรทัดของทุกคอลัมน์ก่อน เพื่อรู้ความสูงจริงของแถวก่อนจะวาด
+        // เดิมจองพื้นที่แค่ 50f ตายตัว แถวที่สรุปยาวจึงถูกวาดทะลุขอบหน้า A4 (สูง 595) แล้วหายไป
+        // โดยไม่ขึ้นหน้าใหม่ให้ — เนื้อหาที่เกินไม่เคยปรากฏใน PDF เลย
+        val col2 = buildList {
+            addAll(pdfLines("${item.companyName ?: ""} (${item.projectName ?: ""})", 100f, bodyPaint, 170f, 14f))
+            if (!item.contactName.isNullOrBlank()) {
+                addAll(pdfLines("ผู้ติดต่อ: ${item.contactName}", 100f, subPaint, 170f, 13f))
             }
         }
-        maxY = maxOf(maxY, currentYCol2)
 
-        // --- 3. Activity / Location / Check-in ---
-        var currentYCol3 = y
-        val topicLines = wrapTextLines("${item.topic ?: "N/A"} (${item.activityType?.uppercase() ?: "N/A"})", bodyPaint, 190f)
-        topicLines.forEach { line ->
-            canvas.drawText(line, 280f, currentYCol3, bodyPaint)
-            currentYCol3 += 14f
-        }
-        if (!item.note.isNullOrBlank()) {
-            wrapTextLines("Notes: ${item.note}", subPaint, 190f).forEach { line ->
-                canvas.drawText(line, 280f, currentYCol3, subPaint)
-                currentYCol3 += 13f
+        val col3 = buildList {
+            addAll(pdfLines("${item.topic ?: "N/A"} (${item.activityType?.uppercase() ?: "N/A"})", 280f, bodyPaint, 190f, 14f))
+            if (!item.note.isNullOrBlank()) {
+                addAll(pdfLines("Notes: ${item.note}", 280f, subPaint, 190f, 13f))
             }
-        }
-        if (item.activityType == "onsite" || item.checkInTime != null) {
-            val checkInStr = buildString {
-                if (item.checkInTime != null) {
-                    val timeFormatted = try {
-                        val instant = java.time.Instant.parse(item.checkInTime)
-                        instant.atZone(java.time.ZoneId.systemDefault()).format(java.time.format.DateTimeFormatter.ofPattern("dd MMM HH:mm"))
-                    } catch (e: Exception) { item.checkInTime.take(16).replace("T", " ") }
-                    append("Check-in: $timeFormatted")
-                    if (!item.checkInStatus.isNullOrBlank()) append(" (${item.checkInStatus})")
-                } else {
-                    append("Check-in: ไม่มีข้อมูล")
-                }
-            }
-            wrapTextLines(checkInStr, subPaint, 190f).forEach { line ->
-                canvas.drawText(line, 280f, currentYCol3, subPaint)
-                currentYCol3 += 13f
-            }
-            if (!item.locationName.isNullOrBlank()) {
-                wrapTextLines("สถานที่: ${item.locationName}", subPaint, 190f).forEach { line ->
-                    canvas.drawText(line, 280f, currentYCol3, subPaint)
-                    currentYCol3 += 13f
-                }
-            }
-        }
-        maxY = maxOf(maxY, currentYCol3)
-
-        // --- 4. Results & Status ---
-        var currentYCol4 = y
-        canvas.drawText("Status: ${item.status}", 480f, currentYCol4, bodyPaint)
-        currentYCol4 += 16f
-        
-        if (item.resultDetails.isNotEmpty()) {
-            item.resultDetails.forEach { res ->
-                val summaryText = res.summary ?: "N/A"
-                val summaryLines = wrapTextLines("• สรุปผล: $summaryText", resultPaint, 320f)
-                summaryLines.forEach { line ->
-                    canvas.drawText(line, 480f, currentYCol4, resultPaint)
-                    currentYCol4 += 14f
-                }
-
-                val detailParts = mutableListOf<String>()
-                if (!res.newStatus.isNullOrBlank()) detailParts.add("สถานะใหม่: ${res.newStatus}")
-                if (!res.opportunityScore.isNullOrBlank()) detailParts.add("โอกาส: ${res.opportunityScore}%")
-                if (res.isProposalSent) detailParts.add("proposal: ใช่ (${res.proposalDate ?: ""})") else detailParts.add("proposal: ไม่ใช่")
-                if (res.dmInvolved) detailParts.add("DM: มี")
-                if (res.competitorCount > 0) detailParts.add("คู่แข่ง: ${res.competitorCount} ราย")
-                if (!res.previousSolution.isNullOrBlank()) detailParts.add("โซลูชั่นเดิม: ${res.previousSolution}")
-                if (!res.lossReason.isNullOrBlank()) detailParts.add("เหตุผลแพ้: ${res.lossReason}")
-
-                if (detailParts.isNotEmpty()) {
-                    detailParts.forEach { detail ->
-                        val dLines = wrapTextLines("  - $detail", subPaint, 320f)
-                        dLines.forEach { line ->
-                            canvas.drawText(line, 480f, currentYCol4, subPaint)
-                            currentYCol4 += 13f
-                        }
+            if (item.activityType == "onsite" || item.checkInTime != null) {
+                val checkInStr = buildString {
+                    if (item.checkInTime != null) {
+                        val timeFormatted = try {
+                            java.time.Instant.parse(item.checkInTime)
+                                .atZone(java.time.ZoneId.systemDefault())
+                                .format(java.time.format.DateTimeFormatter.ofPattern("dd MMM HH:mm"))
+                        } catch (e: Exception) { item.checkInTime.take(16).replace("T", " ") }
+                        append("Check-in: $timeFormatted")
+                        if (!item.checkInStatus.isNullOrBlank()) append(" (${item.checkInStatus})")
+                    } else {
+                        append("Check-in: ไม่มีข้อมูล")
                     }
                 }
-                
-                // --- Images for PDF ---
-                if (res.photoUrls.isNotEmpty()) {
-                    currentYCol4 += 6f
-                    canvas.drawText("มีรูปภาพแนบ ${res.photoUrls.size} รูป (กรุณาดูในรายงาน Excel)", 480f, currentYCol4, subPaint)
-                    currentYCol4 += 13f
-                }
-                
-                currentYCol4 += 6f
-            }
-        } else {
-            item.results.forEach { res ->
-                val resLines = wrapTextLines("• $res", resultPaint, 320f)
-                resLines.forEach { line ->
-                    canvas.drawText(line, 480f, currentYCol4, resultPaint)
-                    currentYCol4 += 14f
+                addAll(pdfLines(checkInStr, 280f, subPaint, 190f, 13f))
+                if (!item.locationName.isNullOrBlank()) {
+                    addAll(pdfLines("สถานที่: ${item.locationName}", 280f, subPaint, 190f, 13f))
                 }
             }
         }
-        maxY = maxOf(maxY, currentYCol4)
-        
-        y = maxY + 8f
-        // Check if we need page break before next row or if we just drew past the page
-        if (y > 540f) {
-            checkPageBreak(50f) 
-        } else {
-            canvas.drawLine(30f, y, 810f, y, Paint().apply { strokeWidth=0.5f; color=android.graphics.Color.LTGRAY })
-            y += 14f
+
+        val col4 = buildList {
+            add(PdfLine("Status: ${item.status}", 480f, bodyPaint, 16f))
+            if (item.resultDetails.isNotEmpty()) {
+                item.resultDetails.forEach { res ->
+                    addAll(pdfLines("• สรุปผล: ${res.summary ?: "N/A"}", 480f, resultPaint, 320f, 14f))
+                    val detailParts = mutableListOf<String>()
+                    if (!res.newStatus.isNullOrBlank()) detailParts.add("สถานะใหม่: ${res.newStatus}")
+                    if (!res.opportunityScore.isNullOrBlank()) detailParts.add("โอกาส: ${res.opportunityScore}")
+                    if (res.isProposalSent) detailParts.add("proposal: ใช่ (${res.proposalDate ?: ""})") else detailParts.add("proposal: ไม่ใช่")
+                    if (res.dmInvolved) detailParts.add("DM: มี")
+                    if (res.competitorCount > 0) detailParts.add("คู่แข่ง: ${res.competitorCount} ราย")
+                    if (!res.previousSolution.isNullOrBlank()) detailParts.add("โซลูชั่นเดิม: ${res.previousSolution}")
+                    if (!res.lossReason.isNullOrBlank()) detailParts.add("เหตุผลแพ้: ${res.lossReason}")
+                    detailParts.forEach { detail ->
+                        addAll(pdfLines("  - $detail", 480f, subPaint, 320f, 13f))
+                    }
+                    if (res.photoUrls.isNotEmpty()) {
+                        add(PdfLine("", 480f, subPaint, 6f))
+                        add(PdfLine("มีรูปภาพแนบ ${res.photoUrls.size} รูป (กรุณาดูในรายงาน Excel)", 480f, subPaint, 13f))
+                    }
+                    add(PdfLine("", 480f, subPaint, 6f))
+                }
+            } else {
+                item.results.forEach { res ->
+                    addAll(pdfLines("• $res", 480f, resultPaint, 320f, 14f))
+                }
+            }
         }
+
+        val rowHeight = listOf(col2, col3, col4).maxOf { col -> col.sumOf { it.lineHeight.toDouble() } }.toFloat()
+        // ponytail: แถวที่สูงเกินหนึ่งหน้ายังล้นอยู่ — ถ้าเจอสรุปยาวขนาดนั้นจริงค่อยทำให้แถวไหลข้ามหน้าได้
+        checkPageBreak(rowHeight + 8f)
+
+        canvas.drawText(item.date.take(10), 30f, y, bodyPaint)
+        listOf(col2, col3, col4).forEach { col ->
+            var cy = y
+            col.forEach { line ->
+                if (line.text.isNotEmpty()) canvas.drawText(line.text, line.x, cy, line.paint)
+                cy += line.lineHeight
+            }
+        }
+
+        y += rowHeight + 8f
+        canvas.drawLine(30f, y, 810f, y, Paint().apply { strokeWidth = 0.5f; color = android.graphics.Color.LTGRAY })
+        y += 14f
     }
     doc.finishPage(page)
 
