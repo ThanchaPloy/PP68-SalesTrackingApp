@@ -1,5 +1,6 @@
 package com.example.pp68_salestrackingapp.ui.screen.customer
 
+import android.widget.Toast
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -10,6 +11,7 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
@@ -71,7 +73,15 @@ fun AddCustomerContent(
     onSaved: () -> Unit,
     onEvent: (AddCustomerEvent) -> Unit
 ) {
-    LaunchedEffect(uiState.isSaved) { if (uiState.isSaved) onSaved() }
+    // หน้านี้ปิดตัวเองทันทีที่บันทึกเสร็จ ข้อความจึงต้องเป็น Toast ที่อยู่รอดข้ามหน้าจอ
+    // ไม่ใช่ snackbar ที่จะหายไปพร้อมหน้านี้
+    val context = LocalContext.current
+    LaunchedEffect(uiState.isSaved) {
+        if (uiState.isSaved) {
+            uiState.saveNotice?.let { Toast.makeText(context, it, Toast.LENGTH_LONG).show() }
+            onSaved()
+        }
+    }
 
     Scaffold(
         topBar = {

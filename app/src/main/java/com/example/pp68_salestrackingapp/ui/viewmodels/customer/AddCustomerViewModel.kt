@@ -34,7 +34,9 @@ data class AddCustomerUiState(
     // ui
     val isLoading:    Boolean = false,
     val isSaved:      Boolean = false,
-    val saveError:    String? = null
+    val saveError:    String? = null,
+    // บันทึกสำเร็จแต่ยังไม่ถึง server — ไม่ใช่ error ผู้ใช้ทำงานต่อได้ แค่ควรรู้ว่ายังไม่จบ
+    val saveNotice:   String? = null
 )
 
 // ─── Events ───────────────────────────────────────────────────
@@ -167,13 +169,24 @@ class AddCustomerViewModel @Inject constructor(
 
             // ✅ Create = POST, Edit = PATCH
             val result = if (s.custId != null) {
-                customerRepo.updateCustomer(s.custId, customer)
+                customerRepo.updateCustomer(s.custId, customer).map { s.custId }
             } else {
-                customerRepo.addCustomer(customer).map { Unit }
+                customerRepo.addCustomer(customer)
             }
 
             result.fold(
-                onSuccess = { _uiState.update { it.copy(isLoading = false, isSaved = true) } },
+                onSuccess = { savedId ->
+                    // id ที่ยังขึ้นต้นด้วย TEMP- แปลว่า server ยังไม่รับ (ออฟไลน์หรือตอบ error)
+                    // ข้อมูลอยู่ในเครื่องแล้วและ outbox จะลองใหม่ให้ จึงบอกตามจริงแทนที่จะขึ้น error
+                    val pending = savedId.startsWith("TEMP-")
+                    _uiState.update {
+                        it.copy(
+                            isLoading = false,
+                            isSaved = true,
+                            saveNotice = if (pending) "บันทึกลงเครื่องแล้ว กำลังรอส่งขึ้นเซิร์ฟเวอร์" else null
+                        )
+                    }
+                },
                 onFailure = { e ->
                     _uiState.update { it.copy(isLoading = false, saveError = e.message) }
                 }

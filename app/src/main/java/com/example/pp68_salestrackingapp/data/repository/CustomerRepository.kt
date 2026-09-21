@@ -161,10 +161,11 @@ class CustomerRepository @Inject constructor(
                     val errBody = response.errorBody()?.string()
                     Log.e("CustomerRepo", "POST failed ${response.code()}: $errBody")
                     syncManager.scheduleSync()
-                    // ponytail: temporary diagnostic — surface real HTTP failures to the UI
-                    // instead of silently reporting success; revert to Result.success(Unit)
-                    // once the api-ploy migration is confirmed working.
-                    kotlin.Result.failure(Exception("HTTP ${response.code()}: $errBody"))
+                    // ลูกค้าถูกบันทึกลงเครื่องเรียบร้อยแล้วและ outbox จะลองส่งใหม่ให้ จึงไม่ใช่
+                    // ความล้มเหลวที่ผู้ใช้ต้องแก้ — คืน tempId เหมือนกรณีออฟไลน์ ผู้เรียกดูได้จาก
+                    // คำนำหน้า TEMP- ว่ายังไม่ถึง server แล้วค่อยบอกผู้ใช้ตามจริง
+                    // รายละเอียด HTTP เก็บไว้ใน log ข้างบน ไม่ต้องยัดใส่หน้าจอ
+                    kotlin.Result.success(tempId)
                 }
             } catch (e: IOException) {
                 syncManager.scheduleSync()
