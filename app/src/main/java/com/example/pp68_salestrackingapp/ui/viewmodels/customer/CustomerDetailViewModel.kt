@@ -41,6 +41,11 @@ class CustomerDetailViewModel @Inject constructor(
     private val _deleteSuccess = MutableStateFlow(false)
     val deleteSuccess: StateFlow<Boolean> = _deleteSuccess.asStateFlow()
 
+    private val _deleteError = MutableStateFlow<String?>(null)
+    val deleteError: StateFlow<String?> = _deleteError.asStateFlow()
+
+    fun clearDeleteError() { _deleteError.value = null }
+
     private var currentCustId: String? = null
 
     fun load(custId: String) {
@@ -81,9 +86,12 @@ class CustomerDetailViewModel @Inject constructor(
 
     fun deleteContact(contactId: String) {
         viewModelScope.launch {
-            customerRepo.deleteContact(contactId).onSuccess {
-                currentCustId?.let { refreshContacts(it) }
-            }
+            customerRepo.deleteContact(contactId).fold(
+                onSuccess = { currentCustId?.let { refreshContacts(it) } },
+                // เดิมมีแต่ onSuccess — ลบไม่สำเร็จก็ไม่มีอะไรเกิดขึ้น รายชื่อยังอยู่เหมือนเดิม
+                // และผู้ใช้ไม่รู้ว่าเพราะอะไร
+                onFailure = { e -> _deleteError.value = e.message ?: "ลบผู้ติดต่อไม่สำเร็จ" }
+            )
         }
     }
 
@@ -91,12 +99,15 @@ class CustomerDetailViewModel @Inject constructor(
         val custId = currentCustId ?: return
         viewModelScope.launch {
             _isLoading.value = true
+            _deleteError.value = null
             customerRepo.deleteCustomer(custId).fold(
                 onSuccess = {
                     _deleteSuccess.value = true
                 },
+                // เดิมตรงนี้เป็น lambda ว่างพร้อมคอมเมนต์ "Handle error" — กดลบแล้วเงียบสนิท
+                // ผู้ใช้ไม่รู้ว่าเกิดอะไรขึ้น และกดซ้ำได้เรื่อย ๆ โดยไม่มีอะไรเปลี่ยน
                 onFailure = { e ->
-                    // Handle error
+                    _deleteError.value = e.message ?: "ลบไม่สำเร็จ"
                 }
             )
             _isLoading.value = false

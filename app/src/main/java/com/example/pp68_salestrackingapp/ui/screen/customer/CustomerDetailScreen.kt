@@ -67,12 +67,22 @@ fun CustomerDetailScreen(
     val closedProjects by viewModel.closedProjects.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
     val deleteSuccess by viewModel.deleteSuccess.collectAsState()
+    val deleteError by viewModel.deleteError.collectAsState()
 
     LaunchedEffect(custId) { viewModel.load(custId) }
 
     LaunchedEffect(deleteSuccess) {
         if (deleteSuccess) {
             onBack()
+        }
+    }
+
+    // ลบไม่สำเร็จต้องบอกเหตุผล — เดิมเงียบสนิท ผู้ใช้กดแล้วไม่มีอะไรเกิดขึ้น
+    val context = LocalContext.current
+    LaunchedEffect(deleteError) {
+        deleteError?.let {
+            Toast.makeText(context, it, Toast.LENGTH_LONG).show()
+            viewModel.clearDeleteError()
         }
     }
 
