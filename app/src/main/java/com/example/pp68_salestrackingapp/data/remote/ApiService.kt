@@ -318,11 +318,6 @@ interface ApiService {
     @POST("rpc/set_app_context")
     suspend fun setAppContext(@Body body: @JvmSuppressWildcards Map<String, String>): Response<Unit>
 
-    @POST("rpc/get_branch_members")
-    @Headers("Content-Profile: public")
-    suspend fun getBranchMembers(
-        @Body body: @JvmSuppressWildcards Map<String, String>
-    ): Response<List<Map<String, String>>>
 }
 
 data class ProductMasterDto(

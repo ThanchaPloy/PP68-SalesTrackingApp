@@ -39,7 +39,6 @@ class AddProjectViewModelTest {
         coEvery { branchRepo.syncFromRemote() } coAnswers { Result.success(Unit) }
         coEvery { branchRepo.observeBranches() } coAnswers { emptyList() }
         coEvery { projectRepo.getMembersByBranch(any()) } coAnswers { Result.success(emptyList()) }
-        coEvery { projectRepo.getBranchMembersRpc(any()) } returns Result.success(emptyList())
         coEvery { customerRepo.getContactPersons(any()) } coAnswers { Result.success(emptyList()) }
         coEvery { branchRepo.getBranchById(any()) } returns null
         coEvery { projectRepo.createProject(any(), any()) } returns Result.success(
@@ -69,9 +68,6 @@ class AddProjectViewModelTest {
         every { authRepo.currentUser() } returns AuthUser("U1", "u@test.com", "sale", "PJ-001")
         coEvery { branchRepo.getBranchById("PJ-001") } returns Branch("PJ-001", "Project Team", "Bangkok")
         coEvery { branchRepo.observeBranches() } returns listOf(Branch("PJ-001", "Project Team", "Bangkok"))
-        coEvery { projectRepo.getBranchMembersRpc("U1") } returns Result.success(
-            listOf("U1" to "Owner", "U2" to "Support")
-        )
 
         initViewModel()
         advanceUntilIdle()
@@ -91,7 +87,6 @@ class AddProjectViewModelTest {
             Branch("TS-002", "North B", "North"),
             Branch("TS-003", "South A", "South")
         )
-        coEvery { projectRepo.getBranchMembersRpc("U1") } returns Result.success(listOf("U1" to "Me"))
 
         initViewModel()
         advanceUntilIdle()
@@ -123,7 +118,6 @@ class AddProjectViewModelTest {
             Branch("TS-001", "North A", "North"),
             Branch("TS-003", "South A", "South")
         )
-        coEvery { projectRepo.getBranchMembersRpc("U1") } returns Result.success(listOf("U1" to "Owner"))
 
         initViewModel()
         advanceUntilIdle()
