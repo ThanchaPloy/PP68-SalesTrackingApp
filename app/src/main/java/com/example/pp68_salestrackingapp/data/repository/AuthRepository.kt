@@ -25,8 +25,17 @@ class AuthRepository @Inject constructor(
                 if (response.isSuccessful && response.body() != null) {
                     val loginResp = response.body()!!
 
-                    // 1. บันทึก Token และล้างข้อมูลเก่าในเครื่อง
+                    // 1. บันทึก Token แล้วพยายามดันงานที่ยังค้างขึ้นเซิร์ฟเวอร์ก่อนล้างเครื่อง
                     tokenManager.saveToken(loginResp.token)
+                    // session หมดอายุจะลบแค่ token ไม่ลบ Room — เช็คอิน/บันทึกผลที่ทำตอนออฟไลน์
+                    // จึงยังค้างอยู่ ถ้าล้างเลยโดยไม่ดันขึ้นก่อน งานนั้นหายถาวรเงียบ ๆ
+                    // (logout กันเรื่องนี้ไว้แล้ว แต่ทางเข้า login ไม่เคยกัน)
+                    // ตอนนี้มี token ใหม่ที่ใช้ได้แล้ว จึงมีโอกาสส่งสำเร็จ
+                    try {
+                        if (outboxSyncManager.hasPendingChanges()) outboxSyncManager.doSync()
+                    } catch (_: Exception) {
+                        // ยังออฟไลน์อยู่ก็ปล่อยผ่าน — ล้างต่อเพื่อไม่ให้ข้อมูลผู้ใช้เก่าค้างในเครื่อง
+                    }
                     database.clearAllTables()
 
                     // 2. ดึงข้อมูลผู้ใช้ (รองรับทั้ง Ktor/PostgREST backend และ Node.js backend)
