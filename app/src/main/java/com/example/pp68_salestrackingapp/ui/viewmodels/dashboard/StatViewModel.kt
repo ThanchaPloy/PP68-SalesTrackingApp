@@ -1,4 +1,4 @@
-﻿package com.example.pp68_salestrackingapp.ui.viewmodels.dashboard
+package com.example.pp68_salestrackingapp.ui.viewmodels.dashboard
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope

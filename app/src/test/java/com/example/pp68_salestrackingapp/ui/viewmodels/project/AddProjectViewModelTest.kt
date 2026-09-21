@@ -1,10 +1,9 @@
-package com.example.pp68_salestrackingapp.ui.viewmodels.activity
+package com.example.pp68_salestrackingapp.ui.viewmodels.project
 
 import androidx.arch.core.executor.testing.InstantTaskExecutorRule
 import com.example.pp68_salestrackingapp.data.model.*
 import com.example.pp68_salestrackingapp.data.remote.ApiService
 import com.example.pp68_salestrackingapp.data.repository.*
-import com.example.pp68_salestrackingapp.ui.screen.project.*
 import io.mockk.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi

@@ -1,4 +1,4 @@
-package com.example.pp68_salestrackingapp.ui.utils
+package com.example.pp68_salestrackingapp.utils
 
 object ProjectProgressUtils {
 

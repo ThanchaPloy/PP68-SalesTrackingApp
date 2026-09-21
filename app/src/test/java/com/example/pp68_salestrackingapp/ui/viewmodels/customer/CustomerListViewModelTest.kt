@@ -4,7 +4,6 @@ import androidx.arch.core.executor.testing.InstantTaskExecutorRule
 import app.cash.turbine.test
 import com.example.pp68_salestrackingapp.data.model.*
 import com.example.pp68_salestrackingapp.data.repository.*
-import com.example.pp68_salestrackingapp.ui.screen.customer.CustomerListViewModel
 import io.mockk.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi

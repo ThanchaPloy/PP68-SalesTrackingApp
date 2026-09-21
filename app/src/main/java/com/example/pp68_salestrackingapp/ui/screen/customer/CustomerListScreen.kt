@@ -35,6 +35,7 @@ import com.example.pp68_salestrackingapp.ui.components.AddFloatingActionButton
 import com.example.pp68_salestrackingapp.ui.components.AppTopBar
 import com.example.pp68_salestrackingapp.ui.components.BottomNavBar
 import com.example.pp68_salestrackingapp.ui.theme.SalesTrackingTheme
+import com.example.pp68_salestrackingapp.ui.viewmodels.customer.CustomerListViewModel
 
 private fun String.stripThaiPrefix(): String {
     val prefixes = listOf(

@@ -1,4 +1,4 @@
-﻿package com.example.pp68_salestrackingapp.data.remote
+package com.example.pp68_salestrackingapp.data.remote
 
 import com.example.pp68_salestrackingapp.data.model.*
 import com.google.gson.annotations.SerializedName

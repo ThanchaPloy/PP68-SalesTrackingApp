@@ -1,4 +1,4 @@
-package com.example.pp68_salestrackingapp.ui.screen.customer
+package com.example.pp68_salestrackingapp.ui.viewmodels.customer
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
