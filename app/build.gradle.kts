@@ -36,13 +36,11 @@ android {
 
         val postgrestUrl = localProperties.getProperty("POSTGREST_URL")
             ?: "https://api-ploy.cskmitl.com/"
-        val jwtSecret    = localProperties.getProperty("JWT_SECRET") ?: ""
         val baseAuthUrl  = localProperties.getProperty("BASE_AUTH_URL")
             ?: "https://api-ploy.cskmitl.com/"
         val uploadUrl    = localProperties.getProperty("UPLOAD_URL")
             ?: "https://api-ploy.cskmitl.com/"
         buildConfigField("String", "POSTGREST_URL", "\"$postgrestUrl\"")
-        buildConfigField("String", "JWT_SECRET",    "\"$jwtSecret\"")
         buildConfigField("String", "GCP_ENDPOINT", "\"https://api-ploy.cskmitl.com\"")
         buildConfigField("String", "BASE_AUTH_URL", "\"$baseAuthUrl\"")
         buildConfigField("String", "UPLOAD_URL",    "\"$uploadUrl\"")
