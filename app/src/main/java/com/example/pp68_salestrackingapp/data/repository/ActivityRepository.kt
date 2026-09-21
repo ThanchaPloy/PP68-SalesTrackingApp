@@ -288,10 +288,14 @@ class ActivityRepository @Inject constructor(
                 val nowStr = java.time.Instant.now().toString()
                 val updates = mutableMapOf<String, Any>("check_in_lat" to lat, "check_in_long" to lng, "check_in_time" to nowStr, "plan_status" to "checked_in", "is_location_verified" to isVerified)
                 distanceDeviation?.let { updates["distance_deviation"] = it }
-                apiService.updateActivity("eq.$activityId", updates)
+                // HTTP error ไม่โยน exception — ถ้าไม่ตรวจผลแล้วปัก is_synced = true ไว้เลย
+                // outbox จะข้ามแถวนี้ตลอดไป แล้วการเช็คอินจะหายจาก server อย่างถาวร
+                val response = apiService.updateActivity("eq.$activityId", updates)
+                val isActuallyUpdated = response.isSuccessful && response.body()?.isNotEmpty() == true
                 activityDao.getActivityById(activityId)?.let {
-                    activityDao.insertActivity(it.copy(status = "checked_in", checkInLat = lat, checkInLong = lng, checkInTime = nowStr, isLocationVerified = isVerified, distanceDeviation = distanceDeviation, isSynced = true))
+                    activityDao.insertActivity(it.copy(status = "checked_in", checkInLat = lat, checkInLong = lng, checkInTime = nowStr, isLocationVerified = isVerified, distanceDeviation = distanceDeviation, isSynced = isActuallyUpdated))
                 }
+                if (!isActuallyUpdated) syncManager.scheduleSync()
                 kotlin.Result.success(Unit)
             } catch (e: Exception) {
                 val nowStr = java.time.Instant.now().toString()
