@@ -297,9 +297,7 @@ fun DatePickerField(
             selectedDate?.let { s ->
                 try {
                     val dateStr = if (s.length >= 10) s.take(10) else s
-                    SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
-                        .apply { timeZone = TimeZone.getTimeZone("UTC") }
-                        .parse(dateStr)?.time
+                    isoDateFormat().parse(dateStr)?.time
                 } catch (_: Exception) { null }
             } ?: System.currentTimeMillis()
         }
@@ -309,12 +307,7 @@ fun DatePickerField(
             confirmButton = {
                 TextButton(onClick = {
                     datePickerState.selectedDateMillis?.let { millis ->
-                        val date = SimpleDateFormat(
-                            "yyyy-MM-dd", Locale.getDefault()
-                        ).apply {
-                            timeZone = TimeZone.getTimeZone("UTC")
-                        }.format(Date(millis))
-                        onDateSelected(date)
+                        onDateSelected(isoDateFormat().format(Date(millis)))
                     }
                     showPicker = false
                 }) { Text("ยืนยัน", color = AppColors.Primary) }
@@ -335,3 +328,8 @@ fun DatePickerField(
         }
     }
 }
+
+// วันที่ที่ส่งขึ้น server ต้องเป็นปี ค.ศ. เสมอ — Locale.getDefault() บนเครื่องที่ตั้งภาษาไทย
+// ทำให้ SimpleDateFormat ใช้ BuddhistCalendar แล้วได้ "2569-04-06" แทน "2026-04-06"
+internal fun isoDateFormat(): SimpleDateFormat =
+    SimpleDateFormat("yyyy-MM-dd", Locale.US).apply { timeZone = TimeZone.getTimeZone("UTC") }
