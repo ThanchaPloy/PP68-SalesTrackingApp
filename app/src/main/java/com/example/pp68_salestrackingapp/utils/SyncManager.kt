@@ -4,7 +4,9 @@ import android.content.Context
 import android.util.Log
 import androidx.work.*
 import com.example.pp68_salestrackingapp.data.local.*
+import com.example.pp68_salestrackingapp.data.model.ActivityPlanItem
 import com.example.pp68_salestrackingapp.data.model.ActivityResult
+import com.example.pp68_salestrackingapp.data.model.ChecklistInsertDto
 import com.example.pp68_salestrackingapp.data.model.ProjectContact
 import com.example.pp68_salestrackingapp.data.remote.ApiService
 import com.example.pp68_salestrackingapp.di.TokenManager
@@ -64,7 +66,8 @@ class SyncManager @Inject constructor(
             contactDao.getUnsyncedContacts().isNotEmpty() ||
             projectDao.getUnsyncedProjects().isNotEmpty() ||
             activityDao.getUnsyncedActivities().isNotEmpty() ||
-            resultDao.getUnsyncedResults().isNotEmpty()
+            resultDao.getUnsyncedResults().isNotEmpty() ||
+            planItemDao.getUnsyncedAppointmentIds().isNotEmpty()
     }
 
     internal suspend fun doSync() {
@@ -340,7 +343,39 @@ class SyncManager @Inject constructor(
             }
         }
 
+        // checklist ต้องมาหลังนัดหมาย เพราะรายการที่ผูกกับ TEMP- id ต้องรอให้นัดหมายได้ id จริงก่อน
+        // (updateAppointmentId ด้านบนย้าย appointmentId ให้แล้ว) ไม่งั้นจะส่งขึ้นไปผูกกับ id ที่ไม่มีจริง
+        for (appointmentId in planItemDao.getUnsyncedAppointmentIds()) {
+            if (appointmentId.startsWith("TEMP-")) continue
+            try {
+                val items = planItemDao.getPlanItemsByAppointmentId(appointmentId)
+                if (activityRepositoryPush(appointmentId, items)) {
+                    planItemDao.updateSyncStatusByAppointment(appointmentId, true)
+                }
+            } catch (e: Exception) {
+                Log.e("SyncManager", "Failed to sync checklist for $appointmentId: ${e.message}")
+            }
+        }
+
         Log.d("SyncManager", "Sync finished")
+    }
+
+    /**
+     * ส่ง checklist ทั้งชุดของนัดหมายหนึ่ง — ลบของเก่าบน server แล้วใส่ชุดใหม่
+     * ฝั่ง backend ทำ upsert ให้แล้ว การส่งซ้ำจึงไม่ชน primary key
+     */
+    private suspend fun activityRepositoryPush(appointmentId: String, items: List<ActivityPlanItem>): Boolean {
+        return try {
+            val deleted = apiService.deleteChecklistByAppointment("eq.$appointmentId")
+            if (!deleted.isSuccessful) return false
+            if (items.isEmpty()) return true
+            val dtos = items.map {
+                ChecklistInsertDto(appointmentId = appointmentId, masterId = it.masterId, isDone = it.isDone, actName = it.actName)
+            }
+            apiService.insertChecklist(dtos).isSuccessful
+        } catch (e: Exception) {
+            false
+        }
     }
 
     private fun buildResultBody(result: ActivityResult): Map<String, Any?> {

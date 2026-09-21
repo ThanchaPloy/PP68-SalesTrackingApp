@@ -206,16 +206,35 @@ class ActivityRepository @Inject constructor(
     suspend fun savePlanItems(appointmentId: String, items: List<ActivityPlanItem>) {
         withContext(Dispatchers.IO) {
             planItemDao.deletePlanItemsByAppointmentId(appointmentId)
-            planItemDao.insertPlanItems(items)
-            if (!appointmentId.startsWith("TEMP-")) {
-                try {
-                    apiService.deleteChecklistByAppointment("eq.$appointmentId")
-                    if (items.isNotEmpty()) {
-                        val dtos = items.map { ChecklistInsertDto(appointmentId = appointmentId, masterId = it.masterId, isDone = it.isDone, actName = it.actName) }
-                        apiService.insertChecklist(dtos)
-                    }
-                } catch (_: Exception) { }
+            // เก็บลงเครื่องแบบยังไม่ซิงค์ไว้ก่อน แล้วค่อยปลดธงเมื่อส่งขึ้น server สำเร็จ
+            // ถ้าพลาด outbox จะเห็นและลองใหม่ให้ — เดิมกลืน error เงียบ ๆ แล้วติ๊กหายถาวร
+            planItemDao.insertPlanItems(items.map { it.copy(isSynced = false) })
+            if (appointmentId.startsWith("TEMP-")) {
+                // นัดหมายยังไม่มี id จริง ต้องรอให้มันซิงค์ก่อน checklist ถึงจะผูกถูกแถว
+                syncManager.scheduleSync()
+                return@withContext
             }
+            val pushed = pushChecklist(appointmentId, items)
+            if (pushed) {
+                planItemDao.updateSyncStatusByAppointment(appointmentId, true)
+            } else {
+                syncManager.scheduleSync()
+            }
+        }
+    }
+
+    /** คืน true เมื่อ server รับชุด checklist นี้ครบแล้วเท่านั้น */
+    internal suspend fun pushChecklist(appointmentId: String, items: List<ActivityPlanItem>): Boolean {
+        return try {
+            val deleted = apiService.deleteChecklistByAppointment("eq.$appointmentId")
+            if (!deleted.isSuccessful) return false
+            if (items.isEmpty()) return true
+            val dtos = items.map {
+                ChecklistInsertDto(appointmentId = appointmentId, masterId = it.masterId, isDone = it.isDone, actName = it.actName)
+            }
+            apiService.insertChecklist(dtos).isSuccessful
+        } catch (e: Exception) {
+            false
         }
     }
 
@@ -254,11 +273,19 @@ class ActivityRepository @Inject constructor(
 
     suspend fun updateChecklistItem(appointmentId: String, masterId: Int, isDone: Boolean) {
         withContext(Dispatchers.IO) {
-            try {
-                planItemDao.updateItemStatus(appointmentId, masterId, isDone)
+            planItemDao.updateItemStatus(appointmentId, masterId, isDone)
+            val landed = try {
                 val updates = mapOf<String, Any>("is_checked" to isDone)
                 apiService.updateChecklist(appointmentId = "eq.$appointmentId", masterId = "eq.$masterId", updates = updates)
-            } catch (e: Exception) { }
+                    .isSuccessful
+            } catch (e: Exception) {
+                false
+            }
+            // ปักธงไว้ให้ outbox เก็บไปส่งใหม่ — เดิมกลืน error แล้วติ๊กนั้นหายจาก server ถาวร
+            if (!landed) {
+                planItemDao.markItemUnsynced(appointmentId, masterId)
+                syncManager.scheduleSync()
+            }
         }
     }
 

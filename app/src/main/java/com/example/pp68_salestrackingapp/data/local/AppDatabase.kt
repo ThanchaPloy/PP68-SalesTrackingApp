@@ -19,7 +19,7 @@ import com.example.pp68_salestrackingapp.data.model.*
         AppointmentContact::class,
         ActivityResultPhoto::class
     ],
-    version = 48,
+    version = 49,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -352,6 +352,14 @@ abstract class AppDatabase : RoomDatabase() {
         val MIGRATION_47_48 = object : Migration(47, 48) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE activity_table ADD COLUMN location_name TEXT")
+            }
+        }
+
+        // checklist ไม่เคยมีธงซิงค์ ทำให้ outbox มองข้ามทั้งตาราง — ติ๊กตอนออฟไลน์แล้วหายถาวร
+        // ตั้งค่าเริ่มต้นเป็น 1 เพราะแถวที่มีอยู่ตอนอัปเกรดคือแถวที่ซิงค์แล้วทั้งหมด
+        val MIGRATION_48_49 = object : Migration(48, 49) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE activity_plan_item ADD COLUMN is_synced INTEGER NOT NULL DEFAULT 1")
             }
         }
     }

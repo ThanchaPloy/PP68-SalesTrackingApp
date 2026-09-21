@@ -20,4 +20,13 @@ interface ActivityPlanItemDao {
 
     @Query("UPDATE activity_plan_item SET appointmentId = :newId WHERE appointmentId = :oldId")
     suspend fun updateAppointmentId(oldId: String, newId: String)
+
+    @Query("SELECT DISTINCT appointmentId FROM activity_plan_item WHERE is_synced = 0")
+    suspend fun getUnsyncedAppointmentIds(): List<String>
+
+    @Query("UPDATE activity_plan_item SET is_synced = :isSynced WHERE appointmentId = :appointmentId")
+    suspend fun updateSyncStatusByAppointment(appointmentId: String, isSynced: Boolean)
+
+    @Query("UPDATE activity_plan_item SET is_synced = 0 WHERE appointmentId = :appointmentId AND masterId = :masterId")
+    suspend fun markItemUnsynced(appointmentId: String, masterId: Int)
 }
