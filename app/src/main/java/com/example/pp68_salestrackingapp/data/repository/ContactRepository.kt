@@ -36,23 +36,34 @@ class ContactRepository @Inject constructor(
 
                 val allContacts = mutableListOf<ContactPerson>()
                 val chunks = customerIds.chunked(50)
+                var allChunksSucceeded = true
                 for (chunk in chunks) {
                     try {
                         val batchQuery = "in.(" + chunk.joinToString(",") + ")"
                         val resp = apiService.getContactsByCustomerIds(custIds = batchQuery)
                         if (resp.isSuccessful && resp.body() != null) {
                             allContacts.addAll(resp.body()!!)
+                        } else {
+                            allChunksSucceeded = false
+                            Log.e("ContactRepo", "Batch contact fetch failed: HTTP ${resp.code()}")
                         }
                     } catch (e: Exception) {
+                        allChunksSucceeded = false
                         Log.e("ContactRepo", "Batch contact fetch error: ${e.message}")
                     }
                 }
 
                 val deduped = allContacts.distinctBy { it.contactId }.map { it.copy(isSynced = true) }
-                if (deduped.isNotEmpty()) {
-                    contactDao.clearAndInsert(deduped)
+                // clearAndInsert ลบผู้ติดต่อที่ซิงค์แล้วทิ้งทั้งหมดก่อนใส่ชุดใหม่ ซึ่งถูกต้องเฉพาะตอนที่
+                // ชุดใหม่ครบจริง ๆ ถ้าดึงมาได้แค่บางก้อน (เน็ตสะดุดกลางคัน) การลบจะกวาดผู้ติดต่อ
+                // ของก้อนที่ดึงไม่สำเร็จหายไปจากแอปด้วย — กรณีนั้นให้เติมทับอย่างเดียว ไม่ลบ
+                if (allChunksSucceeded) {
+                    if (deduped.isNotEmpty()) contactDao.clearAndInsert(deduped)
+                    kotlin.Result.success(Unit)
+                } else {
+                    if (deduped.isNotEmpty()) contactDao.insertAll(deduped)
+                    kotlin.Result.failure(Exception("ดึงผู้ติดต่อได้ไม่ครบ กรุณาลองใหม่"))
                 }
-                kotlin.Result.success(Unit)
             } catch (e: Exception) {
                 Log.e("ContactRepo", "refreshContacts error: ${e.message}", e)
                 kotlin.Result.failure(e)

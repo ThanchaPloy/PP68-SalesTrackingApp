@@ -219,13 +219,24 @@ class CustomerRepository @Inject constructor(
     suspend fun deleteCustomer(custId: String): kotlin.Result<Unit> {
         return withContext(Dispatchers.IO) {
             try {
-                apiService.deleteActivitiesByCustomer("eq.$custId")
+                // ทุกขั้นของ cascade ต้องสำเร็จก่อนจะลบลูกค้า — เดิมทิ้งผลลัพธ์ของขั้นก่อนหน้าไว้
+                // ถ้าขั้นไหนพังเงียบ ๆ แล้วลบลูกค้าสำเร็จ จะเหลือนัดหมาย/โปรเจคกำพร้าบน server
+                // ที่ชี้ไปหาลูกค้าที่ไม่มีอยู่แล้ว และ server ไม่มี FK คอยดักให้
+                val cascade = mutableListOf<Pair<String, retrofit2.Response<*>>>()
+                cascade += "นัดหมาย" to apiService.deleteActivitiesByCustomer("eq.$custId")
                 val projects = projectDao.getProjectsByCustomer(custId).first()
                 projects.forEach {
-                    apiService.deleteProjectContacts("eq.${it.projectId}")
+                    cascade += "ผู้ติดต่อของโครงการ" to apiService.deleteProjectContacts("eq.${it.projectId}")
                 }
-                apiService.deleteProjectsByCustomer("eq.$custId")
-                apiService.deleteContactsByCustomer("eq.$custId")
+                cascade += "โครงการ" to apiService.deleteProjectsByCustomer("eq.$custId")
+                cascade += "ผู้ติดต่อ" to apiService.deleteContactsByCustomer("eq.$custId")
+
+                val failed = cascade.firstOrNull { !it.second.isSuccessful }
+                if (failed != null) {
+                    return@withContext kotlin.Result.failure(
+                        Exception("ลบ${failed.first}ไม่สำเร็จ (HTTP ${failed.second.code()}) จึงยังไม่ลบลูกค้า")
+                    )
+                }
 
                 val response = apiService.deleteCustomer("eq.$custId")
                 if (response.isSuccessful) {
