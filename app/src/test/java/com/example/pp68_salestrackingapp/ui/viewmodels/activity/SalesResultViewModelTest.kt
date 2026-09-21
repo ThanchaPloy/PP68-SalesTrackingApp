@@ -242,6 +242,95 @@ class SalesResultViewModelTest {
         assertTrue(vm.uiState.value.isSaved)
     }
 
+    @Test
+    fun `loading a pre-requirement result fills the blank answers so it stays editable`() = runTest {
+        coEvery { activityRepo.getActivityById("A1") } returns Result.success(
+            listOf(
+                SalesActivity(
+                    activityId = "A1",
+                    userId = "U1",
+                    customerId = null,
+                    projectId = null,
+                    activityType = "Visit",
+                    activityDate = "2026-04-01",
+                    status = "done"
+                )
+            )
+        )
+        // บันทึกที่สร้างก่อนข้อ 4-7 กลายเป็นข้อบังคับ — ทั้งสี่ช่องเป็น null
+        coEvery { activityRepo.getActivityResult("A1") } returns ActivityResult(
+            resultId = "R-OLD",
+            activityId = "A1",
+            summary = "เข้าพบตามนัด",
+            dealPosition = null,
+            previousSolution = null,
+            counterpartyMultiplier = null,
+            responseSpeed = null
+        )
+        coEvery { activityRepo.saveActivityResult(any(), any()) } returns Result.success(Unit)
+
+        val vm = SalesResultViewModel(
+            SavedStateHandle(mapOf("activityId" to "A1")),
+            projectRepo,
+            activityRepo,
+            authRepo
+        )
+        advanceUntilIdle()
+
+        val s = vm.uiState.value
+        assertEquals(SalesResultViewModel.UNDETERMINED_LABEL, s.dealPosition)
+        assertEquals(SalesResultViewModel.UNDETERMINED_LABEL, s.previousSolution)
+        assertEquals(SalesResultViewModel.UNDETERMINED_LABEL, s.counterpartyMultiplier)
+        assertEquals(SalesResultViewModel.RESPONSE_SPEED_DEFAULT, s.responseSpeed)
+
+        // แก้แค่สรุปการเข้าพบแล้วบันทึกได้เลย ไม่ติด validation
+        vm.onSummaryChanged("แก้คำผิด")
+        vm.save()
+        advanceUntilIdle()
+
+        assertFalse(vm.uiState.value.showRequiredErrors)
+    }
+
+    @Test
+    fun `loading a result that already has answers must not overwrite them`() = runTest {
+        coEvery { activityRepo.getActivityById("A1") } returns Result.success(
+            listOf(
+                SalesActivity(
+                    activityId = "A1",
+                    userId = "U1",
+                    customerId = null,
+                    projectId = null,
+                    activityType = "Visit",
+                    activityDate = "2026-04-01",
+                    status = "done"
+                )
+            )
+        )
+        coEvery { activityRepo.getActivityResult("A1") } returns ActivityResult(
+            resultId = "R-NEW",
+            activityId = "A1",
+            summary = "เข้าพบตามนัด",
+            dealPosition = "incumbent",
+            previousSolution = "no_solution",
+            counterpartyMultiplier = "direct_main_contractor",
+            responseSpeed = "slow_silent"
+        )
+
+        val vm = SalesResultViewModel(
+            SavedStateHandle(mapOf("activityId" to "A1")),
+            projectRepo,
+            activityRepo,
+            authRepo
+        )
+        advanceUntilIdle()
+
+        val s = vm.uiState.value
+        assertEquals("ลูกค้าใช้เราอยู่แล้ว การต่อสัญญามีโอกาสสูงมาก", s.dealPosition)
+        assertEquals("ไม่มี Solution เดิม", s.previousSolution)
+        assertEquals("ดีลกับ Main Contractor โดยตรง", s.counterpartyMultiplier)
+        assertEquals("ช้าหรือเงียบ", s.responseSpeed)
+    }
+
     // ป้ายที่หน้าจอแสดงต้องเป็นคีย์ในตารางแปลงค่าเป๊ะ ไม่งั้นจะส่งข้อความไทยดิบขึ้น server เงียบ ๆ
     // (ตัวแปลงมี fallback เป็น `?: value` จึงไม่มีใครฟ้องตอนพิมพ์ผิด)
     @Test

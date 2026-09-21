@@ -146,6 +146,12 @@ class SalesResultViewModel @Inject constructor(
         }
     }
 
+    // ข้อ 4-7 เพิ่งกลายเป็นข้อบังคับ บันทึกที่สร้างก่อนหน้านั้นจึงมีค่าว่างได้ — ถ้าปล่อยว่างไว้
+    // เซลส์ที่เปิดมาแก้แค่คำผิดจะติด validation ทั้งที่จำคำตอบตอนนั้นไม่ได้แล้ว จึงเติมค่าตั้งต้นให้
+    // แทน (ข้อ 4-6 ได้ "ยังระบุไม่ได้", ข้อ 7 ได้ค่ากลาง) ค่าที่เคยบันทึกไว้จริงไม่ถูกแตะ
+    private fun restoreChoice(stored: String?, reverse: Map<String, String>, fallback: String): String =
+        if (stored.isNullOrBlank()) fallback else reverse[stored] ?: stored
+
     private fun applyResultToState(result: ActivityResult) {
         val existingReason = result.lossReason ?: ""
         val (reason, other) = if (existingReason in lossReasonOptions) {
@@ -163,10 +169,10 @@ class SalesResultViewModel @Inject constructor(
                 newStatus              = STATUS_REVERSE[result.newStatus] ?: result.newStatus ?: "",
                 isStatusUpdateEnabled  = !result.newStatus.isNullOrBlank(),
                 opportunityScore       = OPPORTUNITY_REVERSE[result.opportunityScore] ?: result.opportunityScore ?: it.opportunityScore,
-                dealPosition           = DEAL_POSITION_REVERSE[result.dealPosition] ?: result.dealPosition ?: "",
-                previousSolution       = SOLUTION_REVERSE[result.previousSolution] ?: result.previousSolution ?: "",
-                counterpartyMultiplier = COUNTERPARTY_REVERSE[result.counterpartyMultiplier] ?: result.counterpartyMultiplier ?: "",
-                responseSpeed          = RESPONSE_SPEED_REVERSE[result.responseSpeed] ?: result.responseSpeed ?: "",
+                dealPosition           = restoreChoice(result.dealPosition, DEAL_POSITION_REVERSE, UNDETERMINED_LABEL),
+                previousSolution       = restoreChoice(result.previousSolution, SOLUTION_REVERSE, UNDETERMINED_LABEL),
+                counterpartyMultiplier = restoreChoice(result.counterpartyMultiplier, COUNTERPARTY_REVERSE, UNDETERMINED_LABEL),
+                responseSpeed          = restoreChoice(result.responseSpeed, RESPONSE_SPEED_REVERSE, RESPONSE_SPEED_DEFAULT),
                 isProposalSent         = result.isProposalSent,
                 proposalDate           = result.proposalDate,
                 competitorCount        = result.competitorCount,
@@ -252,6 +258,8 @@ class SalesResultViewModel @Inject constructor(
             "ปกติ"           to "normal",
             "ช้าหรือเงียบ"   to "slow_silent"
         )
+        // ข้อ 7 ไม่มีตัวเลือก "ยังระบุไม่ได้" จึงใช้ค่ากลางเป็นค่าตั้งต้นให้บันทึกเก่าที่ยังว่าง
+        const val RESPONSE_SPEED_DEFAULT = "ปกติ"
         val STATUS_MAP = mapOf(
             "Lead" to "Lead", "New Project" to "New Project", "Quotation" to "Quotation",
             "Bidding" to "Bidding", "Make a Decision" to "Make a Decision", "Assured" to "Assured",
