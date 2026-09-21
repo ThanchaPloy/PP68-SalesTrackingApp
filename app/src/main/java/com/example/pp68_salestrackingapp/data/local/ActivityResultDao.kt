@@ -7,7 +7,9 @@ import kotlinx.coroutines.flow.Flow
 @Dao
 interface ActivityResultDao {
     // ✅ เอาเฉพาะ version ล่าสุด (is_latest = 1) — ใช้ดูค่าปัจจุบันของบันทึกผล
-    @Query("SELECT * FROM activity_result WHERE appointment_id = :id AND is_latest = 1 LIMIT 1")
+    // ORDER BY version สำคัญ: ถ้าข้อมูลที่ดึงจาก server มีหลายแถวเป็น latest พร้อมกัน
+    // (เคยเกิดได้จากทาง outbox) LIMIT 1 เฉย ๆ จะคืนแถวไหนก็ได้ รวมถึงเวอร์ชันเก่า
+    @Query("SELECT * FROM activity_result WHERE appointment_id = :id AND is_latest = 1 ORDER BY version DESC LIMIT 1")
     suspend fun getResultByActivityId(id: String): ActivityResult?
 
     // ✅ ดึง version ใดก็ได้ตาม id ตรงๆ (ใช้เปิดดูประวัติ version เก่า) ไม่กรอง is_latest
