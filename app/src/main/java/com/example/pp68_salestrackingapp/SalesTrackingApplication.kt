@@ -5,22 +5,35 @@ import android.content.pm.PackageManager
 import androidx.core.content.ContextCompat
 import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
+import coil.ImageLoader
+import coil.ImageLoaderFactory
 import com.example.pp68_salestrackingapp.service.ProximityMonitorService
 import com.example.pp68_salestrackingapp.utils.NotificationChannels
 import dagger.hilt.android.HiltAndroidApp
+import okhttp3.OkHttpClient
 import javax.inject.Inject
 
 private const val TILE_CACHE_DURATION_MS = 60L * 24 * 60 * 60 * 1000 // 60 วัน
 
 @HiltAndroidApp
-class SalesTrackingApplication : Application(), Configuration.Provider {
+class SalesTrackingApplication : Application(), Configuration.Provider, ImageLoaderFactory {
 
     @Inject
     lateinit var workerFactory: HiltWorkerFactory
 
+    @Inject
+    lateinit var okHttpClient: OkHttpClient
+
     override val workManagerConfiguration: Configuration
         get() = Configuration.Builder()
             .setWorkerFactory(workerFactory)
+            .build()
+
+    // รูปเข้าเยี่ยมอยู่หลังการยืนยันตัวตนแล้ว — Coil ต้องใช้ client ตัวเดียวกับที่ยิง API
+    // ไม่งั้นมันสร้าง OkHttpClient ของตัวเองที่ไม่มี AuthInterceptor แล้วโหลดรูปไม่ได้
+    override fun newImageLoader(): ImageLoader =
+        ImageLoader.Builder(this)
+            .okHttpClient { okHttpClient }
             .build()
 
     override fun onCreate() {

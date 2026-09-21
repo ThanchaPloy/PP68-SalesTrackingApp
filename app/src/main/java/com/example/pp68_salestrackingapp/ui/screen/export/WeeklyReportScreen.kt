@@ -28,6 +28,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.window.Dialog
+import com.example.pp68_salestrackingapp.SalesTrackingApplication
 import com.example.pp68_salestrackingapp.utils.formatPhotoUrl
 import androidx.core.content.FileProvider
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -633,18 +634,15 @@ private suspend fun getPhotoBytes(context: Context, photoUrl: String): ByteArray
                 context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
             }
         } else {
-            // For remote URLs, fetch bytes directly
+            // /uploads อยู่หลังการยืนยันตัวตนแล้ว จึงต้องยิงผ่าน OkHttpClient ตัวเดียวกับที่ยิง API
+            // (ตัวที่มี AuthInterceptor แนบ Bearer token ให้) — HttpURLConnection ดิบไม่มี token
+            // และจะได้ 401 ทำให้รูปในไฟล์ Excel หายไปทั้งหมด
+            val client = (context.applicationContext as? SalesTrackingApplication)?.okHttpClient
+                ?: return null
             withContext(Dispatchers.IO) {
-                val url = java.net.URL(formattedUrl)
-                val connection = url.openConnection() as java.net.HttpURLConnection
-                connection.connectTimeout = 15000
-                connection.readTimeout = 15000
-                connection.doInput = true
-                connection.connect()
-                if (connection.responseCode == java.net.HttpURLConnection.HTTP_OK) {
-                    connection.inputStream.use { it.readBytes() }
-                } else {
-                    null
+                val request = okhttp3.Request.Builder().url(formattedUrl).build()
+                client.newCall(request).execute().use { response ->
+                    if (response.isSuccessful) response.body?.bytes() else null
                 }
             }
         }
