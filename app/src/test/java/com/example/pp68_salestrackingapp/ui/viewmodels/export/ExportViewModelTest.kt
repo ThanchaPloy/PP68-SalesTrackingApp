@@ -4,7 +4,6 @@ import androidx.arch.core.executor.testing.InstantTaskExecutorRule
 import com.example.pp68_salestrackingapp.data.model.Project
 import com.example.pp68_salestrackingapp.data.repository.ActivityRepository
 import com.example.pp68_salestrackingapp.data.repository.ProjectRepository
-import com.example.pp68_salestrackingapp.ui.screen.export.ExportViewModel
 import com.example.pp68_salestrackingapp.ui.viewmodels.activity.ActivityCard
 import io.mockk.coEvery
 import io.mockk.every

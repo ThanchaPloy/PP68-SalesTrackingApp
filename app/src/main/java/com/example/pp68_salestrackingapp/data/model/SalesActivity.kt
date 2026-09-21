@@ -97,6 +97,10 @@ data class SalesActivity(
     val contactName: String? = null,
     @ColumnInfo(name = "weekly_note")
     val weeklyNote: String? = null,
+    // ชื่อสถานที่จากพิกัด (reverse geocode ผ่าน Nominatim) — resolve ครั้งเดียวแล้วเก็บไว้
+    // ไม่ต้องยิง Nominatim ซ้ำทุกครั้งที่ export รายงาน (public server จำกัด ~1 req/วินาที)
+    @ColumnInfo(name = "location_name")
+    val locationName: String? = null,
 
     @ColumnInfo(name = "is_synced")
     val isSynced: Boolean = true

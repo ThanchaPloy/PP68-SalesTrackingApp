@@ -1,4 +1,4 @@
-﻿package com.example.pp68_salestrackingapp.data.repository
+package com.example.pp68_salestrackingapp.data.repository
 
 import android.util.Log
 import com.example.pp68_salestrackingapp.data.local.*
@@ -338,7 +338,7 @@ class ActivityRepository @Inject constructor(
                 val cards = activities.map { activity ->
                     val project = activity.projectId?.let { projects[it] }
                     val customer = activity.customerId?.let { customers[it] }
-                    ActivityCard(activityId = activity.activityId, activityType = activity.activityType, projectName = project?.projectName ?: activity.projectName, companyName = customer?.companyName ?: activity.companyName, contactName = activity.contactName, objective = activity.detail, planStatus = activity.status, plannedDate = activity.activityDate, plannedTime = activity.plannedTime, plannedEndTime = activity.plannedEndTime, weeklyNote = activity.weeklyNote ?: activity.note, customerId = activity.customerId, checkInTime = activity.checkInTime, isLocationVerified = activity.isLocationVerified, plannedLat = activity.plannedLat, plannedLong = activity.plannedLong)
+                    ActivityCard(activityId = activity.activityId, activityType = activity.activityType, projectName = project?.projectName ?: activity.projectName, companyName = customer?.companyName ?: activity.companyName, contactName = activity.contactName, objective = activity.detail, planStatus = activity.status, plannedDate = activity.activityDate, plannedTime = activity.plannedTime, plannedEndTime = activity.plannedEndTime, weeklyNote = activity.weeklyNote ?: activity.note, customerId = activity.customerId, checkInTime = activity.checkInTime, isLocationVerified = activity.isLocationVerified, plannedLat = activity.plannedLat, plannedLong = activity.plannedLong, locationName = activity.locationName)
                 }
                 kotlin.Result.success(cards)
             } catch (e: Exception) {
@@ -509,6 +509,12 @@ class ActivityRepository @Inject constructor(
 
     suspend fun getResultPhotos(resultId: String): List<String> {
         return withContext(Dispatchers.IO) { photoDao.getPhotosByResultId(resultId).map { it.photoUrl } }
+    }
+
+    // เก็บชื่อสถานที่ที่ reverse geocode มาแล้วไว้ใน Room — เป็น local-only field
+    // ไม่ต้องตั้ง is_synced = false เพราะไม่ได้ส่งขึ้น server (ไม่มี @SerializedName)
+    suspend fun cacheLocationName(activityId: String, locationName: String) {
+        withContext(Dispatchers.IO) { activityDao.updateLocationName(activityId, locationName) }
     }
 
     private suspend fun syncProjectStatus(result: ActivityResult) {

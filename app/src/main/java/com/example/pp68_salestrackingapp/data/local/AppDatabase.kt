@@ -19,7 +19,7 @@ import com.example.pp68_salestrackingapp.data.model.*
         AppointmentContact::class,
         ActivityResultPhoto::class
     ],
-    version = 47,
+    version = 48,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -345,6 +345,13 @@ abstract class AppDatabase : RoomDatabase() {
         val MIGRATION_46_47 = object : Migration(46, 47) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("DROP TABLE IF EXISTS project_sales_member")
+            }
+        }
+
+        // ✅ cache ชื่อสถานที่ที่ reverse geocode มาแล้ว กันยิง Nominatim ซ้ำทุกครั้งที่ export
+        val MIGRATION_47_48 = object : Migration(47, 48) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE activity_table ADD COLUMN location_name TEXT")
             }
         }
     }

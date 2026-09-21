@@ -1,4 +1,4 @@
-package com.example.pp68_salestrackingapp.ui.screen.export
+package com.example.pp68_salestrackingapp.ui.viewmodels.export
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -122,11 +122,25 @@ class ExportViewModel @Inject constructor(
                 val exportItems = mutableListOf<ExportActivityItem>()
 
                 // 1. ✅ ประมวลผลกิจกรรมที่มีนัดหมาย (ดึงเฉพาะบันทึกหลังการขายเวอร์ชันล่าสุด + รูปภาพทั้งหมด)
-                filteredActivities.forEachIndexed { index, act ->
-                    // Nominatim usage policy caps public server calls at ~1 req/sec — throttle
-                    // between rows so exporting a busy week doesn't get the shared client rate-limited
-                    if (index > 0 && act.plannedLat != null && act.plannedLong != null) {
+                var didGeocode = false
+                filteredActivities.forEach { act ->
+                    // ต้องยิง Nominatim เฉพาะนัดหมายที่มีพิกัดแต่ยังไม่เคย resolve ชื่อสถานที่ไว้
+                    // (resolve แล้วเก็บลง Room ครั้งเดียว — export รอบถัดไปใช้ค่าที่ cache ไว้เลย)
+                    val needsGeocode = act.locationName.isNullOrBlank() &&
+                        act.plannedLat != null && act.plannedLong != null
+                    // Nominatim usage policy caps public server calls at ~1 req/sec — หน่วงเฉพาะ
+                    // ระหว่างการยิงจริงเท่านั้น ถ้าอ่านจาก cache ได้หมดก็ไม่ต้องรอเลย
+                    if (needsGeocode && didGeocode) {
                         kotlinx.coroutines.delay(1100)
+                    }
+                    val resolvedLocationName = if (needsGeocode) {
+                        didGeocode = true
+                        getAddressFromLatLong(act.plannedLat, act.plannedLong)
+                            .also { name ->
+                                if (name.isNotBlank()) activityRepo.cacheLocationName(act.activityId, name)
+                            }
+                    } else {
+                        act.locationName ?: ""
                     }
                     val matchedResults = allResults.filter { it.activityId == act.activityId }
                     val latestResult = matchedResults
@@ -184,7 +198,7 @@ class ExportViewModel @Inject constructor(
                                 if (checkIn != null && planned != null && checkIn > planned) statuses.add("ช้ากว่าเวลานัด")
                                 if (statuses.isEmpty()) null else statuses.joinToString(", ")
                             },
-                            locationName = getAddressFromLatLong(act.plannedLat, act.plannedLong)
+                            locationName = resolvedLocationName
                         )
                     )
                 }

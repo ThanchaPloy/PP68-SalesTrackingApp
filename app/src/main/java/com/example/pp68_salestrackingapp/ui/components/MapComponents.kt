@@ -36,12 +36,12 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import com.example.pp68_salestrackingapp.data.remote.NominatimClient
 import com.example.pp68_salestrackingapp.data.remote.NominatimPlace
+import com.example.pp68_salestrackingapp.utils.OsmMapnikTileSource
 import com.example.pp68_salestrackingapp.utils.fetchCurrentLocation
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.osmdroid.events.MapEventsReceiver
-import org.osmdroid.tileprovider.tilesource.TileSourceFactory
 import org.osmdroid.util.GeoPoint
 import org.osmdroid.views.MapView
 import org.osmdroid.views.overlay.Marker
@@ -56,6 +56,8 @@ private val BgField     = Color(0xFFF8F8F8)
 private val BorderGray  = Color(0xFFE8E8E8)
 
 private const val DEFAULT_ZOOM = 15.0
+// เดิม 400ms — สั้นเกินไปสำหรับ public Nominatim ที่จำกัด ~1 req/วินาที
+private const val SEARCH_DEBOUNCE_MS = 800L
 
 @Composable
 fun MapPickerField(
@@ -84,7 +86,12 @@ fun MapPickerField(
     var suggestions       by remember { mutableStateOf<List<NominatimPlace>>(emptyList()) }
     var isSearching       by remember { mutableStateOf(false) }
     var showSuggestions   by remember { mutableStateOf(false) }
-    var searchJob:  Job?  = remember { null }
+    var searchError       by remember { mutableStateOf<String?>(null) }
+    // ต้องเก็บใน remember holder — ถ้าประกาศเป็น local var ธรรมดา ค่าจะหายทุกครั้งที่ recompose
+    // (ซึ่งเกิดทุกครั้งที่พิมพ์) ทำให้ cancel() ไม่เคยทำงาน แล้วยิง Nominatim ทุกตัวอักษรที่พิมพ์
+    val searchJobRef      = remember { mutableStateOf<Job?>(null) }
+    // จำผลค้นหาเดิมไว้ในหน่วยความจำ — พิมพ์คำเดิมซ้ำ/ลบแล้วพิมพ์ใหม่ ไม่ต้องยิงเน็ตอีก
+    val searchCache       = remember { mutableStateMapOf<String, List<NominatimPlace>>() }
 
     val hasLocation = lat != null && lng != null && lat != 0.0 && lng != 0.0
     val effectiveLat = if (lat == null || lat == 0.0) 13.7563 else lat
@@ -137,23 +144,44 @@ fun MapPickerField(
 
     // ── Search function (debounce 400ms, Nominatim) ──────────
     fun searchPlaces(query: String) {
-        searchJob?.cancel()
-        if (query.length < 2) {
+        searchJobRef.value?.cancel()
+        searchError = null
+        val trimmed = query.trim()
+        if (trimmed.length < 3) {
             suggestions     = emptyList()
             showSuggestions = false
             return
         }
-        searchJob = scope.launch {
-            delay(400)
+        searchCache[trimmed]?.let { cached ->
+            suggestions     = cached
+            showSuggestions = cached.isNotEmpty()
+            return
+        }
+        searchJobRef.value = scope.launch {
+            // Nominatim public server จำกัด ~1 request/วินาที — หน่วงให้ผู้ใช้พิมพ์จบก่อนค่อยยิง
+            delay(SEARCH_DEBOUNCE_MS)
             isSearching = true
             try {
-                val results = NominatimClient.service.search(query = query)
+                val results = NominatimClient.service.search(query = trimmed)
+                searchCache[trimmed] = results
                 suggestions     = results
                 showSuggestions = results.isNotEmpty()
+                searchError     = if (results.isEmpty()) "ไม่พบสถานที่ที่ค้นหา" else null
+            } catch (e: retrofit2.HttpException) {
+                Log.e("MapComponents", "Nominatim search failed: HTTP ${e.code()}", e)
+                suggestions     = emptyList()
+                showSuggestions = false
+                // เดิม error ถูกกลืนเงียบๆ ผู้ใช้เลยแยกไม่ออกว่า "ไม่พบผลลัพธ์" กับ "ถูกจำกัดการใช้งาน"
+                searchError = if (e.code() == 429) {
+                    "ค้นหาถี่เกินไป กรุณารอสักครู่แล้วลองใหม่"
+                } else {
+                    "ค้นหาไม่สำเร็จ (HTTP ${e.code()})"
+                }
             } catch (e: Exception) {
                 Log.e("MapComponents", "Nominatim search failed", e)
                 suggestions     = emptyList()
                 showSuggestions = false
+                searchError     = "ค้นหาไม่สำเร็จ ตรวจสอบการเชื่อมต่ออินเทอร์เน็ต"
             } finally {
                 isSearching = false
             }
@@ -190,7 +218,7 @@ fun MapPickerField(
             trailingIcon = {
                 if (searchQuery.isNotBlank()) {
                     IconButton(onClick = {
-                        searchQuery = ""; suggestions = emptyList(); showSuggestions = false
+                        searchQuery = ""; suggestions = emptyList(); showSuggestions = false; searchError = null
                     }) { Icon(Icons.Default.Clear, null, tint = TextGray) }
                 }
             },
@@ -210,6 +238,17 @@ fun MapPickerField(
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
             keyboardActions = KeyboardActions(onSearch = { focusManager.clearFocus(); showSuggestions = false })
         )
+
+        // แจ้งผู้ใช้เมื่อค้นหาไม่สำเร็จ — เดิมกลืน error เงียบๆ ผู้ใช้เลยเห็นแค่ "ไม่มีอะไรขึ้น"
+        // แยกไม่ออกว่าไม่พบผลลัพธ์จริง หรือถูก Nominatim จำกัดการใช้งานอยู่
+        searchError?.let { message ->
+            Text(
+                message,
+                fontSize = 11.sp,
+                color = RedPrimary,
+                modifier = Modifier.padding(start = 4.dp, top = 4.dp)
+            )
+        }
 
         // Suggestion Dropdown
         if (showSuggestions && suggestions.isNotEmpty()) {
@@ -255,7 +294,7 @@ fun MapPickerField(
                     modifier = Modifier.fillMaxSize(),
                     factory = { ctx ->
                         MapView(ctx).apply {
-                            setTileSource(TileSourceFactory.MAPNIK)
+                            setTileSource(OsmMapnikTileSource)
                             setMultiTouchControls(true)
                             controller.setZoom(DEFAULT_ZOOM)
                             controller.setCenter(GeoPoint(effectiveLat, effectiveLng))

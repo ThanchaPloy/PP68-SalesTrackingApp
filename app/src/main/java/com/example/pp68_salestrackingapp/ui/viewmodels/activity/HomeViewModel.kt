@@ -1,4 +1,4 @@
-﻿package com.example.pp68_salestrackingapp.ui.viewmodels.activity
+package com.example.pp68_salestrackingapp.ui.viewmodels.activity
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -33,7 +33,8 @@ data class ActivityCard(
     val checkInTime:   String? = null,
     val isLocationVerified: Boolean? = null,
     val plannedLat:    Double? = null,
-    val plannedLong:   Double? = null
+    val plannedLong:   Double? = null,
+    val locationName:  String? = null
 )
 
 data class HomeUiState(

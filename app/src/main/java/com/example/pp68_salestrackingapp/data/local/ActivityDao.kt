@@ -110,6 +110,9 @@ interface ActivityDao {
     @Query("UPDATE activity_table SET is_synced = :isSynced WHERE appointment_id = :activityId")
     suspend fun updateSyncStatus(activityId: String, isSynced: Boolean)
 
+    @Query("UPDATE activity_table SET location_name = :locationName WHERE appointment_id = :activityId")
+    suspend fun updateLocationName(activityId: String, locationName: String)
+
     @Query("UPDATE activity_table SET cust_id = :newCustId WHERE cust_id = :oldCustId")
     suspend fun updateCustIdForActivities(oldCustId: String, newCustId: String)
 

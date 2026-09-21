@@ -34,8 +34,8 @@ import com.example.pp68_salestrackingapp.data.model.SalesActivity
 import com.example.pp68_salestrackingapp.ui.theme.SalesTrackingTheme
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.viewinterop.AndroidView
+import com.example.pp68_salestrackingapp.utils.OsmMapnikTileSource
 import com.example.pp68_salestrackingapp.utils.fetchCurrentLocation
-import org.osmdroid.tileprovider.tilesource.TileSourceFactory
 import org.osmdroid.util.BoundingBox
 import org.osmdroid.util.GeoPoint
 import org.osmdroid.views.MapView
@@ -202,7 +202,7 @@ fun CheckInContent(
                         modifier = Modifier.fillMaxSize(),
                         factory = { ctx ->
                             MapView(ctx).apply {
-                                setTileSource(TileSourceFactory.MAPNIK)
+                                setTileSource(OsmMapnikTileSource)
                                 setMultiTouchControls(true)
                                 setBuiltInZoomControls(false)
                                 controller.setZoom(15.0)
