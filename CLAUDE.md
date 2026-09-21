@@ -32,7 +32,9 @@ The server lives in a **separate repo** at `../backend` (`C:\Users\pc\StudioProj
 ./gradlew compileKotlin       # fastest correctness check
 ```
 
-Config comes from `application.conf` with every value overridable by env var (`DATABASE_URL`, `DB_USER`, `DB_PASSWORD`, `JWT_SECRET`, `PORT`, `UPLOAD_DIR`). `Application.kt` loads a root `.env` into system properties at startup. `.env.remote` points at the deployed Cloud SQL instance. There are **no backend tests**.
+Config comes from `application.conf` with every value overridable by env var (`DATABASE_URL`, `DB_USER`, `DB_PASSWORD`, `JWT_SECRET`, `PORT`, `UPLOAD_DIR`). `Application.kt` loads a root `.env` into system properties at startup. There are **no backend tests**.
+
+`DatabaseFactory` builds a plain HikariCP pool over `org.postgresql.Driver` from `DATABASE_URL`. The Cloud SQL socket-factory dependency in `build.gradle.kts` is **not wired up** — both `.env` and `.env.remote` currently point at the same self-hosted PostgreSQL on the LAN, not at a managed instance.
 
 ## Architecture
 
