@@ -17,7 +17,8 @@ junit                  = "4.13.2"
 junitVersion           = "1.2.1"
 espressoCore           = "3.6.1"
 ktor                   = "2.3.12"
-osmdroid               = "6.1.20"
+maplibre               = "11.13.5"
+maplibreAnnotation     = "3.0.2"
 firebaseBom = "33.7.0"
 
 [libraries]
@@ -50,7 +51,8 @@ ktor-client-core                  = { group = "io.ktor",                  name =
 ktor-client-okhttp                = { group = "io.ktor",                  name = "ktor-client-okhttp",            version.ref = "ktor" }
 ktor-client-content-negotiation   = { group = "io.ktor",                  name = "ktor-client-content-negotiation",version.ref = "ktor" }
 ktor-serialization-gson            = { group = "io.ktor",                  name = "ktor-serialization-gson",       version.ref = "ktor" }
-osmdroid                           = { group = "org.osmdroid",             name = "osmdroid-android",              version.ref = "osmdroid" }
+maplibre                           = { group = "org.maplibre.gl",          name = "android-sdk",                   version.ref = "maplibre" }
+maplibre-annotation                = { group = "org.maplibre.gl",          name = "android-plugin-annotation-v9",  version.ref = "maplibreAnnotation" }
 junit                             = { group = "junit",                    name = "junit",                         version.ref = "junit" }
 androidx-junit                    = { group = "androidx.test.ext",        name = "junit",                         version.ref = "junitVersion" }
 androidx-espresso-core            = { group = "androidx.test.espresso",   name = "espresso-core",                  version.ref = "espressoCore" }

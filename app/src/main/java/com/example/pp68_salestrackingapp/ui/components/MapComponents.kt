@@ -2,7 +2,6 @@ package com.example.pp68_salestrackingapp.ui.components
 
 import android.Manifest
 import android.content.pm.PackageManager
-import android.util.Log
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -10,7 +9,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -30,34 +29,24 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
-import com.example.pp68_salestrackingapp.data.remote.NominatimClient
-import com.example.pp68_salestrackingapp.data.remote.NominatimPlace
-import com.example.pp68_salestrackingapp.utils.OsmMapnikTileSource
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.pp68_salestrackingapp.data.model.PlaceSuggestion
+import com.example.pp68_salestrackingapp.data.repository.PlaceSearchState
+import com.example.pp68_salestrackingapp.ui.viewmodels.place.PlaceSearchViewModel
+import com.example.pp68_salestrackingapp.utils.MapConfig
 import com.example.pp68_salestrackingapp.utils.fetchCurrentLocation
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
-import org.osmdroid.events.MapEventsReceiver
-import org.osmdroid.util.GeoPoint
-import org.osmdroid.views.MapView
-import org.osmdroid.views.overlay.Marker
-import org.osmdroid.views.overlay.MapEventsOverlay
-import org.osmdroid.views.overlay.mylocation.GpsMyLocationProvider
-import org.osmdroid.views.overlay.mylocation.MyLocationNewOverlay
+import org.maplibre.android.geometry.LatLng
 
 private val RedPrimary  = Color(0xFFCC1D1D)
 private val TextDark    = Color(0xFF1A1A1A)
 private val TextGray    = Color(0xFF888888)
 private val BgField     = Color(0xFFF8F8F8)
 private val BorderGray  = Color(0xFFE8E8E8)
-
-private const val DEFAULT_ZOOM = 15.0
-// เดิม 400ms — สั้นเกินไปสำหรับ public Nominatim ที่จำกัด ~1 req/วินาที
-private const val SEARCH_DEBOUNCE_MS = 800L
 
 @Composable
 fun MapPickerField(
@@ -69,8 +58,12 @@ fun MapPickerField(
 ) {
     val context      = LocalContext.current
     val focusManager = LocalFocusManager.current
-    val scope        = rememberCoroutineScope()
     val isPreview    = LocalInspectionMode.current
+
+    // @Preview ไม่มี Hilt graph — เรียก hiltViewModel() แล้วจะพัง
+    val searchViewModel: PlaceSearchViewModel? = if (isPreview) null else hiltViewModel()
+    val searchState by (searchViewModel?.state?.collectAsStateWithLifecycle()
+        ?: remember { mutableStateOf(PlaceSearchState.Idle) })
 
     var hasLocationPermission by remember {
         mutableStateOf(
@@ -81,34 +74,13 @@ fun MapPickerField(
         )
     }
 
-    // ── State ────────────────────────────────────────────────
-    var searchQuery       by remember { mutableStateOf("") }
-    var suggestions       by remember { mutableStateOf<List<NominatimPlace>>(emptyList()) }
-    var isSearching       by remember { mutableStateOf(false) }
-    var showSuggestions   by remember { mutableStateOf(false) }
-    var searchError       by remember { mutableStateOf<String?>(null) }
-    // ต้องเก็บใน remember holder — ถ้าประกาศเป็น local var ธรรมดา ค่าจะหายทุกครั้งที่ recompose
-    // (ซึ่งเกิดทุกครั้งที่พิมพ์) ทำให้ cancel() ไม่เคยทำงาน แล้วยิง Nominatim ทุกตัวอักษรที่พิมพ์
-    val searchJobRef      = remember { mutableStateOf<Job?>(null) }
-    // จำผลค้นหาเดิมไว้ในหน่วยความจำ — พิมพ์คำเดิมซ้ำ/ลบแล้วพิมพ์ใหม่ ไม่ต้องยิงเน็ตอีก
-    val searchCache       = remember { mutableStateMapOf<String, List<NominatimPlace>>() }
+    var searchQuery     by remember { mutableStateOf("") }
+    var showSuggestions by remember { mutableStateOf(false) }
+    var selectedPlaceLabel by remember { mutableStateOf<String?>(null) }
 
-    val hasLocation = lat != null && lng != null && lat != 0.0 && lng != 0.0
-    val effectiveLat = if (lat == null || lat == 0.0) 13.7563 else lat
-    val effectiveLng = if (lng == null || lng == 0.0) 100.5018 else lng
-
-    val onLocationPickedState = rememberUpdatedState(onLocationPicked)
-    val markerRef = remember { mutableStateOf<Marker?>(null) }
-    val myLocationOverlayRef = remember { mutableStateOf<MyLocationNewOverlay?>(null) }
-    val mapViewRef = remember { mutableStateOf<MapView?>(null) }
-    val lastCenteredPoint = remember { mutableStateOf<GeoPoint?>(null) }
-
-    DisposableEffect(Unit) {
-        onDispose {
-            myLocationOverlayRef.value?.disableMyLocation()
-            mapViewRef.value?.onDetach()
-        }
-    }
+    val hasLocation  = lat != null && lng != null && lat != 0.0 && lng != 0.0
+    val effectiveLat = if (lat == null || lat == 0.0) MapConfig.DEFAULT_LAT else lat
+    val effectiveLng = if (lng == null || lng == 0.0) MapConfig.DEFAULT_LNG else lng
 
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -126,6 +98,8 @@ fun MapPickerField(
     LaunchedEffect(lat, lng) {
         if (!hasLocation) {
             searchQuery = ""
+            selectedPlaceLabel = null
+            searchViewModel?.clear()
         }
     }
 
@@ -142,74 +116,39 @@ fun MapPickerField(
         }
     }
 
-    // ── Search function (debounce 400ms, Nominatim) ──────────
-    fun searchPlaces(query: String) {
-        searchJobRef.value?.cancel()
-        searchError = null
-        val trimmed = query.trim()
-        if (trimmed.length < 3) {
-            suggestions     = emptyList()
-            showSuggestions = false
-            return
-        }
-        searchCache[trimmed]?.let { cached ->
-            suggestions     = cached
-            showSuggestions = cached.isNotEmpty()
-            return
-        }
-        searchJobRef.value = scope.launch {
-            // Nominatim public server จำกัด ~1 request/วินาที — หน่วงให้ผู้ใช้พิมพ์จบก่อนค่อยยิง
-            delay(SEARCH_DEBOUNCE_MS)
-            isSearching = true
-            try {
-                val results = NominatimClient.service.search(query = trimmed)
-                searchCache[trimmed] = results
-                suggestions     = results
-                showSuggestions = results.isNotEmpty()
-                searchError     = if (results.isEmpty()) "ไม่พบสถานที่ที่ค้นหา" else null
-            } catch (e: retrofit2.HttpException) {
-                Log.e("MapComponents", "Nominatim search failed: HTTP ${e.code()}", e)
-                suggestions     = emptyList()
-                showSuggestions = false
-                // เดิม error ถูกกลืนเงียบๆ ผู้ใช้เลยแยกไม่ออกว่า "ไม่พบผลลัพธ์" กับ "ถูกจำกัดการใช้งาน"
-                searchError = if (e.code() == 429) {
-                    "ค้นหาถี่เกินไป กรุณารอสักครู่แล้วลองใหม่"
-                } else {
-                    "ค้นหาไม่สำเร็จ (HTTP ${e.code()})"
-                }
-            } catch (e: Exception) {
-                Log.e("MapComponents", "Nominatim search failed", e)
-                suggestions     = emptyList()
-                showSuggestions = false
-                searchError     = "ค้นหาไม่สำเร็จ ตรวจสอบการเชื่อมต่ออินเทอร์เน็ต"
-            } finally {
-                isSearching = false
-            }
-        }
-    }
-
-    fun selectPlace(place: NominatimPlace) {
-        val placeLat = place.lat.toDoubleOrNull() ?: return
-        val placeLng = place.lon.toDoubleOrNull() ?: return
-
-        onLocationPicked(placeLat, placeLng)
-        searchQuery     = place.displayName.ifBlank { "%.4f, %.4f".format(placeLat, placeLng) }
+    fun selectPlace(place: PlaceSuggestion) {
+        // ใช้พิกัดจากผลค้นหาเลย ไม่ยิง Place Details ซ้ำ — ประหยัด credit
+        onLocationPicked(place.latitude, place.longitude)
+        searchQuery = place.name
+        selectedPlaceLabel = listOfNotNull(
+            place.name.takeIf { it.isNotBlank() },
+            place.formattedAddress.takeIf { it.isNotBlank() && it != place.name }
+        ).joinToString(" · ")
         showSuggestions = false
-        suggestions     = emptyList()
+        searchViewModel?.onPlaceSelected(place.name)
         focusManager.clearFocus()
     }
 
+    val suggestions = (searchState as? PlaceSearchState.Success)?.places.orEmpty()
+    val statusMessage = when (searchState) {
+        PlaceSearchState.Empty -> "ไม่พบสถานที่ กรุณาลองใช้คำค้นอื่นหรือเลือกตำแหน่งบนแผนที่"
+        PlaceSearchState.Offline -> "ไม่พบการเชื่อมต่ออินเทอร์เน็ต"
+        PlaceSearchState.RateLimited -> "ใช้งานการค้นหาสถานที่เกินจำนวนที่กำหนด กรุณาลองใหม่ภายหลัง"
+        is PlaceSearchState.Error -> (searchState as PlaceSearchState.Error).message
+        else -> null
+    }
+
     Column(verticalArrangement = Arrangement.spacedBy(0.dp)) {
-        // Search Bar
         OutlinedTextField(
             value         = searchQuery,
             onValueChange = {
                 searchQuery = it
-                searchPlaces(it)
+                showSuggestions = true
+                searchViewModel?.onQueryChanged(it)
             },
             placeholder = { Text("ค้นหาสถานที่...", color = TextGray, fontSize = 14.sp) },
             leadingIcon = {
-                if (isSearching) {
+                if (searchState is PlaceSearchState.Loading) {
                     CircularProgressIndicator(color = RedPrimary, modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
                 } else {
                     Icon(Icons.Default.Search, null, tint = RedPrimary)
@@ -218,15 +157,17 @@ fun MapPickerField(
             trailingIcon = {
                 if (searchQuery.isNotBlank()) {
                     IconButton(onClick = {
-                        searchQuery = ""; suggestions = emptyList(); showSuggestions = false; searchError = null
+                        searchQuery = ""
+                        showSuggestions = false
+                        searchViewModel?.clear()
                     }) { Icon(Icons.Default.Clear, null, tint = TextGray) }
                 }
             },
             modifier = Modifier.fillMaxWidth(),
             shape    = RoundedCornerShape(
                 topStart = 10.dp, topEnd = 10.dp,
-                bottomStart = if (showSuggestions) 0.dp else 10.dp,
-                bottomEnd = if (showSuggestions) 0.dp else 10.dp
+                bottomStart = if (showSuggestions && suggestions.isNotEmpty()) 0.dp else 10.dp,
+                bottomEnd = if (showSuggestions && suggestions.isNotEmpty()) 0.dp else 10.dp
             ),
             colors = OutlinedTextFieldDefaults.colors(
                 unfocusedBorderColor = BorderGray,
@@ -239,18 +180,16 @@ fun MapPickerField(
             keyboardActions = KeyboardActions(onSearch = { focusManager.clearFocus(); showSuggestions = false })
         )
 
-        // แจ้งผู้ใช้เมื่อค้นหาไม่สำเร็จ — เดิมกลืน error เงียบๆ ผู้ใช้เลยเห็นแค่ "ไม่มีอะไรขึ้น"
-        // แยกไม่ออกว่าไม่พบผลลัพธ์จริง หรือถูก Nominatim จำกัดการใช้งานอยู่
-        searchError?.let { message ->
+        // บอกสาเหตุเสมอเมื่อค้นไม่ได้ผล ผู้ใช้จะได้แยกออกว่า "ไม่เจอ" กับ "ระบบมีปัญหา/เกินโควตา"
+        if (showSuggestions && statusMessage != null) {
             Text(
-                message,
+                statusMessage,
                 fontSize = 11.sp,
                 color = RedPrimary,
                 modifier = Modifier.padding(start = 4.dp, top = 4.dp)
             )
         }
 
-        // Suggestion Dropdown
         if (showSuggestions && suggestions.isNotEmpty()) {
             Surface(
                 modifier = Modifier.fillMaxWidth(),
@@ -259,17 +198,36 @@ fun MapPickerField(
                 shadowElevation = 4.dp,
                 border = androidx.compose.foundation.BorderStroke(1.dp, BorderGray)
             ) {
-                LazyColumn(modifier = Modifier.heightIn(max = 200.dp)) {
-                    items(suggestions) { place ->
+                LazyColumn(modifier = Modifier.heightIn(max = 220.dp)) {
+                    itemsIndexed(suggestions) { index, place ->
                         Row(
-                            modifier = Modifier.fillMaxWidth().clickable { selectPlace(place) }.padding(horizontal = 16.dp, vertical = 12.dp),
+                            modifier = Modifier.fillMaxWidth().clickable { selectPlace(place) }.padding(horizontal = 16.dp, vertical = 10.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
                             Icon(Icons.Default.LocationOn, null, tint = RedPrimary, modifier = Modifier.size(18.dp))
-                            Text(place.displayName, fontSize = 13.sp, fontWeight = FontWeight.Medium, color = TextDark, maxLines = 2)
+                            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                Text(
+                                    place.name,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = TextDark,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                Text(
+                                    listOfNotNull(
+                                        place.formattedAddress.takeIf { it.isNotBlank() && it != place.name },
+                                        place.area?.takeIf { it.isNotBlank() && !place.formattedAddress.contains(it) }
+                                    ).joinToString(" · "),
+                                    fontSize = 11.sp,
+                                    color = TextGray,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
                         }
-                        if (suggestions.last() != place) HorizontalDivider(color = BorderGray, thickness = 0.5.dp)
+                        if (index < suggestions.lastIndex) HorizontalDivider(color = BorderGray, thickness = 0.5.dp)
                     }
                 }
             }
@@ -277,7 +235,6 @@ fun MapPickerField(
 
         Spacer(Modifier.height(4.dp))
 
-        // Map
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -290,75 +247,21 @@ fun MapPickerField(
                     Text("Map Preview Not Available", color = Color.DarkGray)
                 }
             } else {
-                AndroidView(
+                MapLibreMapView(
                     modifier = Modifier.fillMaxSize(),
-                    factory = { ctx ->
-                        MapView(ctx).apply {
-                            setTileSource(OsmMapnikTileSource)
-                            setMultiTouchControls(true)
-                            controller.setZoom(DEFAULT_ZOOM)
-                            controller.setCenter(GeoPoint(effectiveLat, effectiveLng))
-
-                            val eventsOverlay = MapEventsOverlay(object : MapEventsReceiver {
-                                override fun singleTapConfirmedHelper(p: GeoPoint): Boolean {
-                                    onLocationPickedState.value(p.latitude, p.longitude)
-                                    focusManager.clearFocus()
-                                    showSuggestions = false
-                                    return true
-                                }
-                                override fun longPressHelper(p: GeoPoint): Boolean = false
-                            })
-                            overlays.add(eventsOverlay)
-
-                            val marker = Marker(this).apply {
-                                setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
-                                position = GeoPoint(effectiveLat, effectiveLng)
-                            }
-                            if (hasLocation) overlays.add(marker)
-                            markerRef.value = marker
-
-                            val myLocationOverlay = MyLocationNewOverlay(GpsMyLocationProvider(ctx), this)
-                            overlays.add(myLocationOverlay)
-                            myLocationOverlayRef.value = myLocationOverlay
-                            if (hasLocationPermission) myLocationOverlay.enableMyLocation()
-
-                            mapViewRef.value = this
-                            lastCenteredPoint.value = GeoPoint(effectiveLat, effectiveLng)
-                        }
-                    },
-                    update = { mapView ->
-                        val point = GeoPoint(effectiveLat, effectiveLng)
-                        val marker = markerRef.value
-                        if (marker != null) {
-                            marker.position = point
-                            if (hasLocation) {
-                                if (!mapView.overlays.contains(marker)) mapView.overlays.add(marker)
-                            } else {
-                                mapView.overlays.remove(marker)
-                            }
-                        }
-                        // เช็คก่อนว่า point เปลี่ยนจริงไหม — ไม่งั้นแผนที่จะดีดกลับตำแหน่งเดิมทุกครั้งที่
-                        // recompose (เช่น แค่พิมพ์ในช่องค้นหา) ทับการ pan/zoom ที่ผู้ใช้ทำเองอยู่
-                        if (lastCenteredPoint.value != point) {
-                            mapView.controller.setCenter(point)
-                            lastCenteredPoint.value = point
-                        }
-
-                        val myLocationOverlay = myLocationOverlayRef.value
-                        if (myLocationOverlay != null) {
-                            if (hasLocationPermission && !myLocationOverlay.isMyLocationEnabled) {
-                                myLocationOverlay.enableMyLocation()
-                            } else if (!hasLocationPermission && myLocationOverlay.isMyLocationEnabled) {
-                                myLocationOverlay.disableMyLocation()
-                            }
-                        }
-
-                        mapView.invalidate()
+                    markers = if (hasLocation) listOf(MapMarker(effectiveLat, effectiveLng)) else emptyList(),
+                    cameraTarget = LatLng(effectiveLat, effectiveLng),
+                    cameraZoom = if (hasLocation) MapConfig.PLACE_SELECTED_ZOOM else MapConfig.DEFAULT_ZOOM,
+                    onMapTap = { tappedLat, tappedLng ->
+                        // ปักหมุดเองเมื่อค้นหาไม่พบ — ไม่ต้องมี place id ก็บันทึกพิกัดได้
+                        onLocationPicked(tappedLat, tappedLng)
+                        selectedPlaceLabel = null
+                        showSuggestions = false
+                        focusManager.clearFocus()
                     }
                 )
             }
 
-            // hint overlay
             Surface(
                 modifier = Modifier.align(Alignment.TopCenter).padding(8.dp),
                 shape = RoundedCornerShape(16.dp),
@@ -369,7 +272,18 @@ fun MapPickerField(
             }
         }
 
-        // Selected coordinates & actions
+        // ชื่อ/ที่อยู่ของสถานที่ที่เลือกจากผลค้นหา
+        selectedPlaceLabel?.let { label ->
+            Text(
+                label,
+                fontSize = 11.sp,
+                color = TextDark,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(top = 6.dp)
+            )
+        }
+
         Row(
             modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
             horizontalArrangement = Arrangement.SpaceBetween,

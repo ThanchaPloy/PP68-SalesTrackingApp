@@ -10,6 +10,16 @@ import retrofit2.http.*
 
 interface ApiService {
 
+    // ── Place search (proxy ไป Geoapify ที่ backend — API key ไม่อยู่ในแอป) ──
+    @GET("places/autocomplete")
+    suspend fun searchPlaces(@Query("text") text: String): Response<List<PlaceSuggestion>>
+
+    @GET("places/reverse")
+    suspend fun reverseGeocode(
+        @Query("lat") lat: Double,
+        @Query("lon") lon: Double
+    ): Response<List<PlaceSuggestion>>
+
     // ── User ─────────────────────────────────────────────────────
     // Real DB table is "employee", but the deployed Ktor backend exposes it at /user
     // with params user_id / branch_id and raw emp_code/emp_name/... JSON keys (see UserDto).

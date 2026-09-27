@@ -33,16 +33,10 @@ import com.example.pp68_salestrackingapp.ui.viewmodels.activity.ActivityDetailUi
 import com.example.pp68_salestrackingapp.data.model.SalesActivity
 import com.example.pp68_salestrackingapp.ui.theme.SalesTrackingTheme
 import androidx.compose.ui.tooling.preview.Preview
-import androidx.compose.ui.viewinterop.AndroidView
-import com.example.pp68_salestrackingapp.utils.OsmMapnikTileSource
+import com.example.pp68_salestrackingapp.ui.components.MapLibreMapView
+import com.example.pp68_salestrackingapp.ui.components.MapMarker
+import org.maplibre.android.geometry.LatLng
 import com.example.pp68_salestrackingapp.utils.fetchCurrentLocation
-import org.osmdroid.util.BoundingBox
-import org.osmdroid.util.GeoPoint
-import org.osmdroid.views.MapView
-import org.osmdroid.views.overlay.Marker
-import org.osmdroid.views.overlay.Polyline
-import org.osmdroid.views.overlay.mylocation.GpsMyLocationProvider
-import org.osmdroid.views.overlay.mylocation.MyLocationNewOverlay
 
 private val RedPrimary = Color(0xFFCC1D1D)
 private val White      = Color.White
@@ -179,99 +173,29 @@ fun CheckInContent(
         ) {
             Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
                 if (currentLat != null && currentLng != null) {
-                    val context = LocalContext.current
-                    val currentPos = GeoPoint(currentLat, currentLng)
+                    val currentPos = LatLng(currentLat, currentLng)
                     val targetLat = uiState.activity?.plannedLat
                     val targetLng = uiState.activity?.plannedLong
                     val lineColor = if (uiState.isLocationMismatch) RedPrimary else Color(0xFF10B981)
-                    val hasLocationPermission = ContextCompat.checkSelfPermission(
-                        context, Manifest.permission.ACCESS_FINE_LOCATION
-                    ) == PackageManager.PERMISSION_GRANTED
-                    val myLocationOverlayRef = remember { mutableStateOf<MyLocationNewOverlay?>(null) }
-                    val mapViewRef = remember { mutableStateOf<MapView?>(null) }
-                    val lastFittedBounds = remember { mutableStateOf<Pair<GeoPoint, GeoPoint>?>(null) }
+                    val targetPos = if (targetLat != null && targetLng != null) {
+                        LatLng(targetLat, targetLng)
+                    } else null
 
-                    DisposableEffect(Unit) {
-                        onDispose {
-                            myLocationOverlayRef.value?.disableMyLocation()
-                            mapViewRef.value?.onDetach()
+                    val markers = buildList {
+                        add(MapMarker(currentPos.latitude, currentPos.longitude, RedPrimary.toArgb()))
+                        targetPos?.let {
+                            add(MapMarker(it.latitude, it.longitude, android.graphics.Color.parseColor("#2196F3")))
                         }
                     }
 
-                    AndroidView(
+                    MapLibreMapView(
                         modifier = Modifier.fillMaxSize(),
-                        factory = { ctx ->
-                            MapView(ctx).apply {
-                                setTileSource(OsmMapnikTileSource)
-                                setMultiTouchControls(true)
-                                setBuiltInZoomControls(false)
-                                controller.setZoom(15.0)
-                                controller.setCenter(currentPos)
-
-                                val myLocationOverlay = MyLocationNewOverlay(GpsMyLocationProvider(ctx), this)
-                                overlays.add(myLocationOverlay)
-                                myLocationOverlayRef.value = myLocationOverlay
-                                if (hasLocationPermission) myLocationOverlay.enableMyLocation()
-
-                                mapViewRef.value = this
-                            }
-                        },
-                        update = { mapView ->
-                            mapView.overlays.removeAll { it !== myLocationOverlayRef.value }
-
-                            val myLocationOverlay = myLocationOverlayRef.value
-                            if (myLocationOverlay != null) {
-                                if (hasLocationPermission && !myLocationOverlay.isMyLocationEnabled) {
-                                    myLocationOverlay.enableMyLocation()
-                                } else if (!hasLocationPermission && myLocationOverlay.isMyLocationEnabled) {
-                                    myLocationOverlay.disableMyLocation()
-                                }
-                            }
-
-                            val currentMarker = Marker(mapView).apply {
-                                position = currentPos
-                                title = "ตำแหน่งปัจจุบันของคุณ"
-                                snippet = "คุณอยู่ที่นี่"
-                                setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
-                            }
-                            mapView.overlays.add(currentMarker)
-
-                            if (targetLat != null && targetLng != null) {
-                                val targetPos = GeoPoint(targetLat, targetLng)
-
-                                val targetMarker = Marker(mapView).apply {
-                                    position = targetPos
-                                    title = "จุดนัดหมาย"
-                                    snippet = "เป้าหมายการเช็คอิน"
-                                    setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
-                                    icon = androidx.core.content.ContextCompat.getDrawable(
-                                        mapView.context, org.osmdroid.library.R.drawable.marker_default
-                                    )?.mutate()?.apply {
-                                        setTint(android.graphics.Color.parseColor("#2196F3"))
-                                    }
-                                }
-                                mapView.overlays.add(targetMarker)
-
-                                val line = Polyline(mapView).apply {
-                                    setPoints(listOf(currentPos, targetPos))
-                                    outlinePaint.color = lineColor.toArgb()
-                                    outlinePaint.strokeWidth = 5f
-                                    outlinePaint.pathEffect = android.graphics.DashPathEffect(floatArrayOf(20f, 10f), 0f)
-                                }
-                                mapView.overlays.add(0, line)
-
-                                // เช็คก่อนว่าจุดสองจุดนี้เปลี่ยนจริงไหม — ไม่งั้นจะรีเซ็ตซูม/แพนที่ผู้ใช้
-                                // ปรับเองทุกครั้งที่ recompose (เช่น isFetchingLocation เปลี่ยน)
-                                val boundsKey = currentPos to targetPos
-                                if (lastFittedBounds.value != boundsKey) {
-                                    lastFittedBounds.value = boundsKey
-                                    val bounds = BoundingBox.fromGeoPoints(listOf(currentPos, targetPos))
-                                    mapView.post { mapView.zoomToBoundingBox(bounds, true, 150) }
-                                }
-                            }
-
-                            mapView.invalidate()
-                        }
+                        markers = markers,
+                        cameraTarget = currentPos,
+                        line = targetPos?.let { listOf(currentPos, it) },
+                        lineColor = lineColor.toArgb(),
+                        // เห็นทั้งตำแหน่งเราและจุดนัดหมายพร้อมกัน เหมือนพฤติกรรมเดิม
+                        fitBounds = targetPos?.let { listOf(currentPos, it) }
                     )
                 } else {
                     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {

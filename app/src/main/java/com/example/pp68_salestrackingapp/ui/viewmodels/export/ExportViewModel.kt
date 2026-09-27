@@ -16,7 +16,7 @@ import java.time.format.DateTimeFormatter
 import java.time.temporal.WeekFields
 import java.util.Locale
 import com.example.pp68_salestrackingapp.utils.formatPhotoUrl
-import com.example.pp68_salestrackingapp.data.remote.NominatimClient
+import com.example.pp68_salestrackingapp.data.repository.PlaceSearchRepository
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.Dispatchers
 import javax.inject.Inject
@@ -92,7 +92,8 @@ data class ExportProjectItem(
 @HiltViewModel
 class ExportViewModel @Inject constructor(
     private val activityRepo: ActivityRepository,
-    private val projectRepo: ProjectRepository
+    private val projectRepo: ProjectRepository,
+    private val placeSearchRepository: PlaceSearchRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ExportUiState())
@@ -139,14 +140,14 @@ class ExportViewModel @Inject constructor(
                 // 1. ✅ ประมวลผลกิจกรรมที่มีนัดหมาย (ดึงเฉพาะบันทึกหลังการขายเวอร์ชันล่าสุด + รูปภาพทั้งหมด)
                 var didGeocode = false
                 filteredActivities.forEach { act ->
-                    // ต้องยิง Nominatim เฉพาะนัดหมายที่มีพิกัดแต่ยังไม่เคย resolve ชื่อสถานที่ไว้
-                    // (resolve แล้วเก็บลง Room ครั้งเดียว — export รอบถัดไปใช้ค่าที่ cache ไว้เลย)
+                    // แปลงพิกัดเป็นชื่อสถานที่เฉพาะนัดหมายที่ยังไม่เคยแปลงไว้
+                    // (แปลงแล้วเก็บลง Room ครั้งเดียว — export รอบถัดไปใช้ค่าที่ cache ไว้เลย)
                     val needsGeocode = act.locationName.isNullOrBlank() &&
                         act.plannedLat != null && act.plannedLong != null
-                    // Nominatim usage policy caps public server calls at ~1 req/sec — หน่วงเฉพาะ
-                    // ระหว่างการยิงจริงเท่านั้น ถ้าอ่านจาก cache ได้หมดก็ไม่ต้องรอเลย
+                    // เว้นจังหวะระหว่างการยิงจริงเพื่อไม่ให้ export สัปดาห์ที่มีนัดหมายใหม่เยอะ
+                    // ยิงรัวจนกินโควตา Geoapify รวดเดียว — ถ้าอ่านจาก cache ได้หมดก็ไม่ต้องรอเลย
                     if (needsGeocode && didGeocode) {
-                        kotlinx.coroutines.delay(1100)
+                        kotlinx.coroutines.delay(300)
                     }
                     val resolvedLocationName = if (needsGeocode) {
                         didGeocode = true
@@ -316,14 +317,10 @@ class ExportViewModel @Inject constructor(
     
     private suspend fun getAddressFromLatLong(lat: Double?, lon: Double?): String {
         if (lat == null || lon == null) return ""
-        return withContext(Dispatchers.IO) {
-            try {
-                val place = NominatimClient.service.reverse(lat, lon)
-                place.displayName
-            } catch (e: Exception) {
-                ""
-            }
-        }
+        // ผ่าน backend proxy เหมือนการค้นหา — โควตา Geoapify ถูกนับรวมที่เดียว
+        // ผลที่ได้ถูก cache ลง Room ต่อ (ดู loadWeeklyData) จึงยิงแค่ครั้งเดียวต่อนัดหมาย
+        val place = placeSearchRepository.reverseGeocode(lat, lon) ?: return ""
+        return place.formattedAddress.ifBlank { place.name }
     }
 
     fun generateActivityCsvString(): String {

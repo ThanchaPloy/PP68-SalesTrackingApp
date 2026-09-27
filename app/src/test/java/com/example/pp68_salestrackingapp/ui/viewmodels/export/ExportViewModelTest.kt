@@ -35,6 +35,7 @@ class ExportViewModelTest {
     private val testDispatcher = StandardTestDispatcher()
     private val activityRepo = mockk<ActivityRepository>(relaxed = true)
     private val projectRepo = mockk<ProjectRepository>(relaxed = true)
+    private val placeSearchRepo = mockk<com.example.pp68_salestrackingapp.data.repository.PlaceSearchRepository>(relaxed = true)
     private lateinit var viewModel: ExportViewModel
 
     @Before
@@ -42,7 +43,7 @@ class ExportViewModelTest {
         Dispatchers.setMain(testDispatcher)
         every { projectRepo.getAllProjectsFlow() } returns flowOf(emptyList())
         every { activityRepo.getAllResultsFlow() } returns flowOf(emptyList())
-        viewModel = ExportViewModel(activityRepo, projectRepo)
+        viewModel = ExportViewModel(activityRepo, projectRepo, placeSearchRepo)
     }
 
     @After

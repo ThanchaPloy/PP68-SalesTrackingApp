@@ -348,7 +348,7 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
-        // ✅ cache ชื่อสถานที่ที่ reverse geocode มาแล้ว กันยิง Nominatim ซ้ำทุกครั้งที่ export
+        // ✅ cache ชื่อสถานที่ที่ reverse geocode มาแล้ว กันยิงซ้ำทุกครั้งที่ export
         val MIGRATION_47_48 = object : Migration(47, 48) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE activity_table ADD COLUMN location_name TEXT")

@@ -22,9 +22,6 @@ android {
         localProperties.load(FileInputStream(localPropertiesFile))
     }
 
-    val osmUserAgent: String = localProperties.getProperty("OSM_USER_AGENT")
-        ?: "SalesTrackingApp-Tangnam/1.0 (tangnamsalesproject@gmail.com)"
-
     defaultConfig {
         applicationId = "com.example.pp68_salestrackingapp"
         minSdk = 26
@@ -44,8 +41,6 @@ android {
         buildConfigField("String", "GCP_ENDPOINT", "\"https://api-ploy.cskmitl.com\"")
         buildConfigField("String", "BASE_AUTH_URL", "\"$baseAuthUrl\"")
         buildConfigField("String", "UPLOAD_URL",    "\"$uploadUrl\"")
-
-        buildConfigField("String", "OSM_USER_AGENT", "\"$osmUserAgent\"")
     }
     signingConfigs {
         create("release") {
@@ -129,8 +124,9 @@ dependencies {
     implementation(libs.ktor.client.content.negotiation)
     implementation(libs.ktor.serialization.gson)
 
-    // OpenStreetMap (osmdroid)
-    implementation(libs.osmdroid)
+    // MapLibre — vector tiles จาก OpenFreeMap
+    implementation(libs.maplibre)
+    implementation(libs.maplibre.annotation)
 
     // Room
     implementation(libs.room.runtime)
