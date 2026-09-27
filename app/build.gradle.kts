@@ -159,7 +159,6 @@ dependencies {
     // ✅ Firebase Realtime Database
     implementation(libs.firebase.database)
     implementation(libs.firebase.messaging)
-    implementation(libs.firebase.analytics)
 
     // Unit & Integration Testing
     testImplementation("junit:junit:4.13.2")
