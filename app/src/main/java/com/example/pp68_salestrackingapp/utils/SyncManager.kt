@@ -197,7 +197,8 @@ class SyncManager @Inject constructor(
                     "project_long"      to project.projectLong,
                     "opportunity_score" to project.opportunityScore,
                     "remark"            to project.remark,
-                    "loss_reason"       to project.lossReason
+                    "loss_reason"       to project.lossReason,
+                    "loss_reason_note"  to project.lossReasonNote
                 ).filterValues { it != null }.toMutableMap()
 
                 if (!isUpdate) {

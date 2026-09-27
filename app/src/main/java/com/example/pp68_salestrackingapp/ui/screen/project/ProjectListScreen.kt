@@ -471,7 +471,7 @@ fun ProjectListItem(project: Project, onClick: () -> Unit) {
                     ) {
                         Icon(Icons.Default.Info, null, tint = Color(0xFF991B1B), modifier = Modifier.size(14.dp))
                         Text(
-                            text = "สาเหตุ: ${project.lossReason}",
+                            text = "สาเหตุ: ${project.lossReasonNote?.takeIf { it.isNotBlank() } ?: project.lossReason}",
                             fontSize = 11.sp,
                             color = Color(0xFF991B1B),
                             fontWeight = FontWeight.Medium,

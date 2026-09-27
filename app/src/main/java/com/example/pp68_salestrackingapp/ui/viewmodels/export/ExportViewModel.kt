@@ -182,7 +182,7 @@ class ExportViewModel @Inject constructor(
                                 previousSolution = latestResult.previousSolution,
                                 counterpartyMultiplier = latestResult.counterpartyMultiplier,
                                 summary = latestResult.summary,
-                                lossReason = latestResult.lossReason,
+                                lossReason = latestResult.lossReasonNote?.takeIf { it.isNotBlank() } ?: latestResult.lossReason,
                                 photoUrls = photos
                             )
                         )
@@ -249,7 +249,7 @@ class ExportViewModel @Inject constructor(
                         previousSolution = res.previousSolution,
                         counterpartyMultiplier = res.counterpartyMultiplier,
                         summary = res.summary,
-                        lossReason = res.lossReason,
+                        lossReason = res.lossReasonNote?.takeIf { it.isNotBlank() } ?: res.lossReason,
                         photoUrls = photos
                     )
 

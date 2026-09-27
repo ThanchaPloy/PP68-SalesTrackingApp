@@ -304,6 +304,105 @@ class AddProjectViewModelTest {
     }
 
     @Test
+    fun `save with other loss reason should send code and note as separate fields`() = runTest {
+        val projectSlot = slot<Project>()
+        coEvery { projectRepo.createProject(capture(projectSlot), "USR-001") } returns Result.success(
+            Project(projectId = "PJ-NEW", custId = "C1", projectName = "New Project Alpha", branchId = "TS-001")
+        )
+        initViewModel()
+        advanceUntilIdle()
+
+        viewModel.onEvent(AddProjectEvent.ProjectNameChanged("New Project Alpha"))
+        viewModel.onEvent(AddProjectEvent.CustomerSelected("C1", "Client A"))
+        viewModel.onEvent(AddProjectEvent.TeamSelected("TS-001", "North A"))
+        viewModel.onEvent(AddProjectEvent.StatusChanged("Lost"))
+        viewModel.onEvent(AddProjectEvent.LossReasonChanged("อื่น ๆ"))
+        viewModel.onEvent(AddProjectEvent.OtherLossReasonChanged("ลูกค้าเปลี่ยนใจกะทันหัน"))
+        viewModel.onEvent(AddProjectEvent.Save)
+        advanceUntilIdle()
+
+        assertEquals("อื่น ๆ", projectSlot.captured.lossReason)
+        assertEquals("ลูกค้าเปลี่ยนใจกะทันหัน", projectSlot.captured.lossReasonNote)
+        assertTrue(viewModel.uiState.value.isSaved)
+    }
+
+    @Test
+    fun `save with fixed loss reason should send code with no note`() = runTest {
+        val projectSlot = slot<Project>()
+        coEvery { projectRepo.createProject(capture(projectSlot), "USR-001") } returns Result.success(
+            Project(projectId = "PJ-NEW", custId = "C1", projectName = "New Project Alpha", branchId = "TS-001")
+        )
+        initViewModel()
+        advanceUntilIdle()
+
+        viewModel.onEvent(AddProjectEvent.ProjectNameChanged("New Project Alpha"))
+        viewModel.onEvent(AddProjectEvent.CustomerSelected("C1", "Client A"))
+        viewModel.onEvent(AddProjectEvent.TeamSelected("TS-001", "North A"))
+        viewModel.onEvent(AddProjectEvent.StatusChanged("Failed"))
+        viewModel.onEvent(AddProjectEvent.LossReasonChanged("สู้ราคาไม่ไหว"))
+        viewModel.onEvent(AddProjectEvent.Save)
+        advanceUntilIdle()
+
+        assertEquals("สู้ราคาไม่ไหว", projectSlot.captured.lossReason)
+        assertNull(projectSlot.captured.lossReasonNote)
+        assertTrue(viewModel.uiState.value.isSaved)
+    }
+
+    @Test
+    fun `loadProject with free text loss reason should split into other option and note`() = runTest {
+        coEvery { projectRepo.getProjectById("P123") } returns Result.success(
+            Project(
+                projectId = "P123",
+                custId = "C1",
+                projectName = "Old Name",
+                projectStatus = "Lost",
+                branchId = "TS-001",
+                lossReason = "อื่น ๆ",
+                lossReasonNote = "งบประมาณถูกตัด"
+            )
+        )
+        coEvery { customerRepo.getCustomerById("C1") } returns Result.success(
+            Customer("C1", "Client A", null, null, null, null, null, null, null)
+        )
+        coEvery { branchRepo.observeBranches() } returns listOf(Branch("TS-001", "North A", "North"))
+
+        initViewModel()
+        advanceUntilIdle()
+        viewModel.onEvent(AddProjectEvent.LoadProject("P123"))
+        advanceUntilIdle()
+
+        assertEquals("อื่น ๆ", viewModel.uiState.value.lossReason)
+        assertEquals("งบประมาณถูกตัด", viewModel.uiState.value.otherLossReason)
+    }
+
+    @Test
+    fun `loadProject with fixed loss reason should not populate other text`() = runTest {
+        coEvery { projectRepo.getProjectById("P123") } returns Result.success(
+            Project(
+                projectId = "P123",
+                custId = "C1",
+                projectName = "Old Name",
+                projectStatus = "Lost",
+                branchId = "TS-001",
+                lossReason = "เทคโนโลยีไม่ผ่าน",
+                lossReasonNote = null
+            )
+        )
+        coEvery { customerRepo.getCustomerById("C1") } returns Result.success(
+            Customer("C1", "Client A", null, null, null, null, null, null, null)
+        )
+        coEvery { branchRepo.observeBranches() } returns listOf(Branch("TS-001", "North A", "North"))
+
+        initViewModel()
+        advanceUntilIdle()
+        viewModel.onEvent(AddProjectEvent.LoadProject("P123"))
+        advanceUntilIdle()
+
+        assertEquals("เทคโนโลยีไม่ผ่าน", viewModel.uiState.value.lossReason)
+        assertEquals("", viewModel.uiState.value.otherLossReason)
+    }
+
+    @Test
     fun `save failure should set saveError`() = runTest {
         coEvery { projectRepo.createProject(any(), any()) } returns Result.failure(Exception("save failed"))
         initViewModel()

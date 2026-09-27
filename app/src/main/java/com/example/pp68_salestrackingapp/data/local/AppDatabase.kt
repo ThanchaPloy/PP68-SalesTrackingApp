@@ -19,7 +19,7 @@ import com.example.pp68_salestrackingapp.data.model.*
         AppointmentContact::class,
         ActivityResultPhoto::class
     ],
-    version = 49,
+    version = 50,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -360,6 +360,15 @@ abstract class AppDatabase : RoomDatabase() {
         val MIGRATION_48_49 = object : Migration(48, 49) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE activity_plan_item ADD COLUMN is_synced INTEGER NOT NULL DEFAULT 1")
+            }
+        }
+
+        // W4: แยกรหัสเหตุผลที่แพ้ออกจากข้อความอิสระ — loss_reason เดิมเก็บทั้งรหัส 3 แบบ และ
+        // ข้อความที่พิมพ์เองปนกัน คอลัมน์ใหม่นี้เก็บเฉพาะข้อความอิสระ ส่วน loss_reason จะเหลือแค่รหัส
+        val MIGRATION_49_50 = object : Migration(49, 50) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE project ADD COLUMN lossReasonNote TEXT")
+                db.execSQL("ALTER TABLE activity_result ADD COLUMN loss_reason_note TEXT")
             }
         }
     }

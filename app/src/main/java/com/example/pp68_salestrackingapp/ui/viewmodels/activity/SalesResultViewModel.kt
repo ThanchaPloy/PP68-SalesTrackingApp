@@ -95,12 +95,7 @@ class SalesResultViewModel @Inject constructor(
 
     private var custId: String? = null
 
-    val lossReasonOptions = listOf(
-        "ผลิตไม่ได้/ผลิตไม่ทัน",
-        "เทคโนโลยีไม่ผ่าน",
-        "สู้ราคาไม่ไหว",
-        "อื่น ๆ"
-    )
+    val lossReasonOptions = com.example.pp68_salestrackingapp.utils.LossReasons.OPTIONS
 
     init {
         val pId = savedStateHandle.get<String>("projectId")
@@ -187,13 +182,14 @@ class SalesResultViewModel @Inject constructor(
         if (stored.isNullOrBlank()) fallback else reverse[stored] ?: stored
 
     private fun applyResultToState(result: ActivityResult) {
-        val existingReason = result.lossReason ?: ""
-        val (reason, other) = if (existingReason in lossReasonOptions) {
-            existingReason to ""
-        } else if (existingReason.isNotBlank()) {
-            "อื่น ๆ" to existingReason
-        } else {
-            "" to ""
+        // ✅ W4: อ่านตรงจากสองฟิลด์ที่แยกแล้ว (lossReason=รหัส, lossReasonNote=ข้อความอิสระ)
+        // เดางวนต่อเฉพาะแถวเก่าที่ backend ยังไม่ได้ migrate
+        val (reason, other) = when {
+            !result.lossReasonNote.isNullOrBlank() ->
+                (result.lossReason ?: com.example.pp68_salestrackingapp.utils.LossReasons.OTHER) to result.lossReasonNote
+            result.lossReason.isNullOrBlank() -> "" to ""
+            result.lossReason in lossReasonOptions -> result.lossReason to ""
+            else -> com.example.pp68_salestrackingapp.utils.LossReasons.OTHER to result.lossReason
         }
 
         _uiState.update {
@@ -494,8 +490,11 @@ class SalesResultViewModel @Inject constructor(
             _uiState.update { it.copy(isSaving = true, error = null) }
             val user = authRepo.currentUser()
             try {
-                val finalLossReason = if (s.isStatusUpdateEnabled && (s.newStatus == "Lost" || s.newStatus == "Failed")) {
-                    if (s.lossReason == "อื่น ๆ") s.otherLossReason else s.lossReason
+                // ✅ W4: ส่งรหัสกับข้อความอิสระแยกกัน แทนการยุบเป็นก้อนเดียว
+                val isLostOrFailed = s.isStatusUpdateEnabled && (s.newStatus == "Lost" || s.newStatus == "Failed")
+                val finalLossReason = if (isLostOrFailed) s.lossReason else null
+                val finalLossReasonNote = if (isLostOrFailed && s.lossReason == com.example.pp68_salestrackingapp.utils.LossReasons.OTHER) {
+                    s.otherLossReason
                 } else null
 
                 val finalResultId = s.resultId ?: ""
@@ -524,7 +523,8 @@ class SalesResultViewModel @Inject constructor(
                     photoLat               = cover?.lat,
                     photoLng               = cover?.lng,
                     photoDeviceModel       = cover?.deviceModel,
-                    lossReason             = finalLossReason
+                    lossReason             = finalLossReason,
+                    lossReasonNote         = finalLossReasonNote
                 )
 
                 val saveResult = when (s.mode) {

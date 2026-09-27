@@ -103,6 +103,10 @@ data class ActivityResult(
     @SerializedName("loss_reason")
     val lossReason: String? = null,
 
+    @ColumnInfo(name = "loss_reason_note")
+    @SerializedName("loss_reason_note")
+    val lossReasonNote: String? = null,
+
     // ✅ version history: การแก้ไขบันทึกผลแต่ละครั้งสร้างแถวใหม่แทนการเขียนทับของเดิม
     @ColumnInfo(name = "version")
     @SerializedName("version")

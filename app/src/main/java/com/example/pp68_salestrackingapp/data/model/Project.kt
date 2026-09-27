@@ -84,6 +84,10 @@ data class Project(
     @SerializedName("loss_reason")
     val lossReason: String? = null,
 
+    @ColumnInfo(name = "lossReasonNote")
+    @SerializedName("loss_reason_note")
+    val lossReasonNote: String? = null,
+
     @ColumnInfo(name = "user_id")
     @SerializedName("request_by")
     val requestBy: String? = null,

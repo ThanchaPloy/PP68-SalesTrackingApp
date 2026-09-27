@@ -139,6 +139,7 @@ class ProjectRepository @Inject constructor(
                     "billing_branch_id" to project.billingBranchId,
                     "opportunity_score" to project.opportunityScore,
                     "loss_reason" to project.lossReason,
+                    "loss_reason_note" to project.lossReasonNote,
                     "start_date" to project.startDate,
                     "closing_date" to project.closingDate,
                     "progress_pct" to project.progressPct,

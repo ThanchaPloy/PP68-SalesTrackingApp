@@ -599,7 +599,7 @@ private fun ProjectHeaderCard(
                                 modifier = Modifier.padding(start = 24.dp)
                             ) {
                                 Icon(Icons.Default.Info, null, tint = Color(0xFF991B1B), modifier = Modifier.size(14.dp))
-                                Text(text = "สาเหตุ: ${project.lossReason}", fontSize = 12.sp, color = Color(0xFF991B1B))
+                                Text(text = "สาเหตุ: ${project.lossReasonNote?.takeIf { it.isNotBlank() } ?: project.lossReason}", fontSize = 12.sp, color = Color(0xFF991B1B))
                             }
                         }
                     }

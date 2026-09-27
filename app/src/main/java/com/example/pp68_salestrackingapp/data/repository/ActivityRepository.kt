@@ -582,7 +582,7 @@ class ActivityRepository @Inject constructor(
         try {
             val project = projectDao.getProjectById(pid)
             if (project != null && project.projectStatus != newStatus) {
-                val updated = project.copy(projectStatus = newStatus, lossReason = result.lossReason)
+                val updated = project.copy(projectStatus = newStatus, lossReason = result.lossReason, lossReasonNote = result.lossReasonNote)
                 // result.activityId is the appointment this result came from — null for standalone results
                 projectRepo.updateProject(updated, resultAppointmentId = result.activityId)
             }

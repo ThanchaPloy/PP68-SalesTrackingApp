@@ -9,10 +9,7 @@ import com.example.pp68_salestrackingapp.data.model.SalesActivity
 import com.example.pp68_salestrackingapp.data.repository.ActivityRepository
 import com.example.pp68_salestrackingapp.data.repository.AuthRepository
 import com.example.pp68_salestrackingapp.data.repository.ProjectRepository
-import io.mockk.coEvery
-import io.mockk.coVerify
-import io.mockk.every
-import io.mockk.mockk
+import io.mockk.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -684,6 +681,120 @@ class SalesResultViewModelTest {
         assertEquals(13.7, cover?.lat)
         assertEquals(100.5, cover?.lng)
         assertEquals("Pixel", cover?.deviceModel)
+    }
+
+    @Test
+    fun `save with other loss reason should send code and note as separate fields`() = runTest {
+        coEvery { activityRepo.getActivityById("A1") } returns Result.success(
+            listOf(
+                SalesActivity(
+                    activityId = "A1",
+                    userId = "U1",
+                    customerId = null,
+                    projectId = null,
+                    activityType = "Visit",
+                    activityDate = "2026-04-01",
+                    status = "planned"
+                )
+            )
+        )
+        val resultSlot = slot<ActivityResult>()
+        coEvery { activityRepo.saveActivityResult(capture(resultSlot), any()) } returns Result.success(Unit)
+
+        val vm = SalesResultViewModel(
+            SavedStateHandle(mapOf("activityId" to "A1")),
+            projectRepo,
+            activityRepo,
+            authRepo
+        )
+        advanceUntilIdle()
+        vm.onSummaryChanged("summary")
+        vm.answerRequiredAnalysis()
+        vm.onStatusToggle(true)
+        vm.onNewStatusSelected("Lost")
+        vm.onLossReasonChanged("อื่น ๆ")
+        vm.onOtherLossReasonChanged("ลูกค้าเปลี่ยนใจกะทันหัน")
+
+        vm.save()
+        advanceUntilIdle()
+
+        assertTrue(vm.uiState.value.isSaved)
+        assertEquals("อื่น ๆ", resultSlot.captured.lossReason)
+        assertEquals("ลูกค้าเปลี่ยนใจกะทันหัน", resultSlot.captured.lossReasonNote)
+    }
+
+    @Test
+    fun `save with fixed loss reason should send code with no note`() = runTest {
+        coEvery { activityRepo.getActivityById("A1") } returns Result.success(
+            listOf(
+                SalesActivity(
+                    activityId = "A1",
+                    userId = "U1",
+                    customerId = null,
+                    projectId = null,
+                    activityType = "Visit",
+                    activityDate = "2026-04-01",
+                    status = "planned"
+                )
+            )
+        )
+        val resultSlot = slot<ActivityResult>()
+        coEvery { activityRepo.saveActivityResult(capture(resultSlot), any()) } returns Result.success(Unit)
+
+        val vm = SalesResultViewModel(
+            SavedStateHandle(mapOf("activityId" to "A1")),
+            projectRepo,
+            activityRepo,
+            authRepo
+        )
+        advanceUntilIdle()
+        vm.onSummaryChanged("summary")
+        vm.answerRequiredAnalysis()
+        vm.onStatusToggle(true)
+        vm.onNewStatusSelected("Failed")
+        vm.onLossReasonChanged("สู้ราคาไม่ไหว")
+
+        vm.save()
+        advanceUntilIdle()
+
+        assertTrue(vm.uiState.value.isSaved)
+        assertEquals("สู้ราคาไม่ไหว", resultSlot.captured.lossReason)
+        assertNull(resultSlot.captured.lossReasonNote)
+    }
+
+    @Test
+    fun `loading a result with free text loss reason should split into other option and note`() = runTest {
+        coEvery { activityRepo.getActivityById("A1") } returns Result.success(
+            listOf(
+                SalesActivity(
+                    activityId = "A1",
+                    userId = "U1",
+                    customerId = null,
+                    projectId = null,
+                    activityType = "Visit",
+                    activityDate = "2026-04-01",
+                    status = "done"
+                )
+            )
+        )
+        coEvery { activityRepo.getActivityResult("A1") } returns ActivityResult(
+            resultId = "R-OLD-2",
+            activityId = "A1",
+            summary = "เข้าพบตามนัด",
+            lossReason = "อื่น ๆ",
+            lossReasonNote = "งบประมาณถูกตัด"
+        )
+
+        val vm = SalesResultViewModel(
+            SavedStateHandle(mapOf("activityId" to "A1")),
+            projectRepo,
+            activityRepo,
+            authRepo
+        )
+        advanceUntilIdle()
+
+        assertEquals("อื่น ๆ", vm.uiState.value.lossReason)
+        assertEquals("งบประมาณถูกตัด", vm.uiState.value.otherLossReason)
     }
 
     @Ignore("Method not yet implemented: projectRepo.updateProjectFields() does not exist in ProjectRepository")

@@ -101,12 +101,7 @@ class AddProjectViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(AddProjectUiState())
     val uiState: StateFlow<AddProjectUiState> = _uiState
 
-    val lossReasonOptions = listOf(
-        "ผลิตไม่ได้/ผลิตไม่ทัน",
-        "เทคโนโลยีไม่ผ่าน",
-        "สู้ราคาไม่ไหว",
-        "อื่น ๆ"
-    )
+    val lossReasonOptions = com.example.pp68_salestrackingapp.utils.LossReasons.OPTIONS
 
     val opportunityOptions = listOf("HOT", "WARM", "COLD") // ✅ ตัวเลือกโอกาสการขาย
 
@@ -206,13 +201,15 @@ class AddProjectViewModel @Inject constructor(
             _uiState.update { it.copy(isLoading = true) }
             projectRepo.getProjectById(id).fold(
                 onSuccess = { project ->
-                    val existingReason = project.lossReason ?: ""
-                    val (reason, other) = if (existingReason in lossReasonOptions) {
-                        existingReason to ""
-                    } else if (existingReason.isNotBlank()) {
-                        "อื่น ๆ" to existingReason
-                    } else {
-                        "" to ""
+                    // ✅ W4: อ่านตรงจากสองฟิลด์ที่แยกแล้ว (lossReason=รหัส, lossReasonNote=ข้อความอิสระ)
+                    // เดางวนต่อเฉพาะแถวเก่าที่ backend ยังไม่ได้ migrate (lossReasonNote ว่าง แต่
+                    // lossReason ไม่ตรงรหัสที่รู้จัก) — ครอบคลุมช่วงเปลี่ยนผ่านเท่านั้น
+                    val (reason, other) = when {
+                        !project.lossReasonNote.isNullOrBlank() ->
+                            (project.lossReason ?: com.example.pp68_salestrackingapp.utils.LossReasons.OTHER) to project.lossReasonNote
+                        project.lossReason.isNullOrBlank() -> "" to ""
+                        project.lossReason in lossReasonOptions -> project.lossReason to ""
+                        else -> com.example.pp68_salestrackingapp.utils.LossReasons.OTHER to project.lossReason
                     }
 
                     _uiState.update {
@@ -454,8 +451,11 @@ class AddProjectViewModel @Inject constructor(
                 val userId    = user?.userId ?: "USR-0000"
                 val branchId  = s.selectedTeamId ?: user?.teamId ?: "XX-0001"
 
-                val finalLossReason = if (s.projectStatus == "Lost" || s.projectStatus == "Failed") {
-                    if (s.lossReason == "อื่น ๆ") s.otherLossReason else s.lossReason
+                // ✅ W4: ส่งรหัสกับข้อความอิสระแยกกัน แทนการยุบเป็นก้อนเดียว
+                val isLostOrFailed = s.projectStatus == "Lost" || s.projectStatus == "Failed"
+                val finalLossReason = if (isLostOrFailed) s.lossReason else null
+                val finalLossReasonNote = if (isLostOrFailed && s.lossReason == com.example.pp68_salestrackingapp.utils.LossReasons.OTHER) {
+                    s.otherLossReason
                 } else null
 
                 // ✅ projectId จะถูกสร้างใน repository โดยใช้รูปแบบ project number
@@ -475,6 +475,7 @@ class AddProjectViewModel @Inject constructor(
                     projectLat            = s.siteLat,
                     projectLong           = s.siteLong,
                     lossReason            = finalLossReason,
+                    lossReasonNote        = finalLossReasonNote,
                     createBy              = userId
                 )
 

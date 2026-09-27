@@ -890,7 +890,7 @@ private fun SalesResultScreenPreview() {
             onLossReasonChanged = {},
             onOtherLossReasonChanged = {},
             onToggleChecklistItem = {},
-            lossReasonOptions = listOf("ผลิตไม่ได้/ผลิตไม่ทัน", "เทคโนโลยีไม่ผ่าน", "สู้ราคาไม่ไหว", "อื่น ๆ"),
+            lossReasonOptions = com.example.pp68_salestrackingapp.utils.LossReasons.OPTIONS,
             onPhotoCaptured = {},
             onPhotosPicked = {},
             onRemovePhoto = {},
