@@ -271,10 +271,7 @@ fun AddProjectContent(
             }
 
             // ── Project Status * ──────────────────────────────
-            val statusList = listOf(
-                "Lead", "New Project", "Quotation", "Bidding",
-                "Make a Decision", "Assured", "PO", "Lost", "Failed"
-            )
+            val statusList = com.example.pp68_salestrackingapp.utils.ProjectStages.SELECTABLE
             FormField("สถานะโครงการ", required = true) {
                 DropdownField(
                     value       = uiState.projectStatus ?: "",

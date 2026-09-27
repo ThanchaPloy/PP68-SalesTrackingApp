@@ -10,6 +10,7 @@ import com.example.pp68_salestrackingapp.data.model.AuthUser
 import com.example.pp68_salestrackingapp.data.model.Project
 import com.example.pp68_salestrackingapp.data.model.SalesActivity
 import com.example.pp68_salestrackingapp.data.model.Customer
+import com.example.pp68_salestrackingapp.utils.ProjectStages
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -164,12 +165,12 @@ class StatsViewModel @Inject constructor(
 
         // â”€â”€ Monthly â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         val closedSales = myProjects
-            .filter { it.projectStatus in listOf("PO", "Completed") &&
+            .filter { it.projectStatus == "PO" &&
                     isInRange(it.closingDate ?: it.startDate, monthStart, monthEnd) }
             .sumOf { it.expectedValue ?: 0.0 }
 
         val activeProjectsList = myProjects.filter {
-            it.projectStatus !in listOf("Completed", "Lost", "Failed")
+            it.projectStatus !in ProjectStages.LOST
         }
         val activeValue = activeProjectsList.sumOf { it.expectedValue ?: 0.0 }
         
@@ -189,14 +190,11 @@ class StatsViewModel @Inject constructor(
         val monthlyVisitListRaw = activities.filter { a -> a.status.lowercase() == "completed" && isInRange(a.activityDate, monthStart, monthEnd) }
         val monthlyVisit = monthlyVisitListRaw.size
 
-        val closingMonthList = myProjects.filter { p -> p.projectStatus !in listOf("Completed", "Lost", "Failed") && isSameMonth(p.closingDate, currentMonth) }
+        val closingMonthList = myProjects.filter { p -> p.projectStatus !in ProjectStages.LOST && isSameMonth(p.closingDate, currentMonth) }
         val closingMonthCount = closingMonthList.size
 
         // â”€â”€ Pipeline stages â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-        val stageOrder = listOf(
-            "Lead", "New Project", "Quotation", "Bidding",
-            "Make a Decision", "Assured", "PO", "Completed", "Lost", "Failed"
-        )
+        val stageOrder = ProjectStages.SELECTABLE
         val stageCounts = stageOrder.map { stage ->
             val stageProjects = myProjects.filter { it.projectStatus == stage }
             PipelineStageCount(
@@ -213,7 +211,7 @@ class StatsViewModel @Inject constructor(
             val scored = myProjects.filter {
                 val pScore = it.opportunityScore?.uppercase() ?: ""
                 pScore.contains(score) &&
-                        it.projectStatus !in listOf("Completed", "Lost", "Failed")
+                        it.projectStatus !in ProjectStages.LOST
             }
             OpportunityGroup(
                 score      = score,
@@ -227,7 +225,7 @@ class StatsViewModel @Inject constructor(
             weeklyNewLeadsList = weeklyLeadsList,
             weeklyNewProjectsList = weeklyNewProjList,
             weeklyVisitList    = weeklyVisitListRaw,
-            monthlyClosedSalesList = myProjects.filter { it.projectStatus in listOf("PO", "Completed") && isInRange(it.closingDate ?: it.startDate, monthStart, monthEnd) },
+            monthlyClosedSalesList = myProjects.filter { it.projectStatus == "PO" && isInRange(it.closingDate ?: it.startDate, monthStart, monthEnd) },
             monthlyNewLeadsList = monthlyLeadsList,
             monthlyNewProjectsList = monthlyNewProjList,
             activeProjectsList = activeProjectsList,

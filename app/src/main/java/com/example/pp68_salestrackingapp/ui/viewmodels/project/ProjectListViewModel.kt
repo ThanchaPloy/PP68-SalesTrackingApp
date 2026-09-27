@@ -6,6 +6,7 @@ import com.example.pp68_salestrackingapp.data.repository.ProjectRepository
 import com.example.pp68_salestrackingapp.data.repository.AuthRepository
 import com.example.pp68_salestrackingapp.data.model.Project
 import com.example.pp68_salestrackingapp.data.model.AuthUser
+import com.example.pp68_salestrackingapp.utils.ProjectStages
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.FlowPreview
@@ -63,17 +64,15 @@ class ProjectListViewModel @Inject constructor(
                 
                 var filtered = all.filter { p ->
                     when (criteria.tabIndex) {
-                        1 -> { // Closed: PO & closing date reached, OR Completed
-                            p.projectStatus == "Completed" || 
-                            (p.projectStatus == "PO" && p.closingDate != null && p.closingDate <= today)
+                        1 -> { // Closed: PO & closing date reached
+                            p.projectStatus == "PO" && p.closingDate != null && p.closingDate <= today
                         }
                         2 -> { // Inactive: Lost or Failed
-                            p.projectStatus == "Lost" || p.projectStatus == "Failed"
+                            p.projectStatus in ProjectStages.LOST
                         }
                         else -> { // Active: Everything else
-                            val isClosed = p.projectStatus == "Completed" || 
-                                           (p.projectStatus == "PO" && p.closingDate != null && p.closingDate <= today)
-                            val isInactive = p.projectStatus == "Lost" || p.projectStatus == "Failed"
+                            val isClosed = p.projectStatus == "PO" && p.closingDate != null && p.closingDate <= today
+                            val isInactive = p.projectStatus in ProjectStages.LOST
                             !isClosed && !isInactive
                         }
                     }

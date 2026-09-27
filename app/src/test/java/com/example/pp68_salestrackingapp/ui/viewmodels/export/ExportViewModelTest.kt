@@ -122,7 +122,7 @@ class ExportViewModelTest {
         val pStarted = Project("P1", "C1", projectName = "Alpha", startDate = "2026-04-01", projectStatus = "Lead", expectedValue = 100.0)
         val pClosing = Project("P2", "C1", projectName = "Beta", closingDate = "2026-04-30", projectStatus = "Quotation", expectedValue = 200.0)
         val pActiveOtherMonth = Project("P3", "C1", projectName = "Gamma", startDate = "2026-03-01", projectStatus = "Assured", expectedValue = 300.0)
-        val pFinalOtherMonth = Project("P4", "C1", projectName = "Delta", startDate = "2026-03-01", projectStatus = "Completed", expectedValue = 400.0)
+        val pFinalOtherMonth = Project("P4", "C1", projectName = "Delta", startDate = "2026-03-01", projectStatus = "Lost", expectedValue = 400.0)
         every { projectRepo.getAllProjectsFlow() } returns flowOf(listOf(pStarted, pClosing, pActiveOtherMonth, pFinalOtherMonth))
 
         viewModel.loadMonthlyData(ym)
@@ -144,7 +144,7 @@ class ExportViewModelTest {
                     custId = "C1",
                     projectName = "InvalidDateProject",
                     startDate = "not-a-date",
-                    projectStatus = "Completed"
+                    projectStatus = "PO"
                 )
             )
         )

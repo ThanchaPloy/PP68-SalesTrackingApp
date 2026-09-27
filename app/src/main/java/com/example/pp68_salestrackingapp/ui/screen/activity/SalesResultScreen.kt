@@ -244,10 +244,7 @@ private fun SalesResultContent(
                             )
                         }
                         if (s.isStatusUpdateEnabled) {
-                            val statusList = listOf(
-                                "Lead", "New Project", "Quotation", "Bidding",
-                                "Make a Decision", "Assured", "PO", "Lost", "Failed"
-                            )
+                            val statusList = com.example.pp68_salestrackingapp.utils.ProjectStages.SELECTABLE
                             DropdownField(
                                 value       = s.newStatus,
                                 placeholder = "เลือกสถานะใหม่",

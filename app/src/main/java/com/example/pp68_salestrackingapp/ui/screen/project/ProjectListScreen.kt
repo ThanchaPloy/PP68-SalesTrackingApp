@@ -53,7 +53,6 @@ fun ProjectStatusBadge(status: String?) {
         "Working"         -> Color(0xFFF0F9FF) to Color(0xFF0E7490)
         "Quality Issue"   -> Color(0xFFFFF7ED) to Color(0xFFC2410C)
         "PO"              -> Color(0xFFE0F2FE) to Color(0xFF0369A1)
-        "Completed"       -> Color(0xFFF3F4F6) to Color(0xFF374151)
         "Lost"            -> Color(0xFFFEE2E2) to Color(0xFF991B1B)
         "Failed"          -> Color(0xFF1F2937) to Color(0xFF9CA3AF)
         else              -> Color(0xFFF3F4F6) to Color(0xFF6B7280)
@@ -66,7 +65,6 @@ fun ProjectStatusBadge(status: String?) {
         "Make a Decision" -> "Decision"
         "Assured"         -> "Assured"
         "PO"              -> "PO"
-        "Completed"       -> "Completed"
         "Lost"            -> "Lost"
         "Failed"          -> "Failed"
         else              -> status ?: "-"
@@ -315,10 +313,7 @@ fun FilterModal(
             
             Text("Project Status", fontWeight = FontWeight.SemiBold, fontSize = 15.sp, color = TextDark)
             Spacer(Modifier.height(12.dp))
-            val statuses = listOf(
-                "Lead", "New Project", "Quotation", "Bidding", 
-                "Make a Decision", "Assured", "PO","Lost", "Failed"
-            )
+            val statuses = com.example.pp68_salestrackingapp.utils.ProjectStages.SELECTABLE
             FlowRow(mainAxisSpacing = 8.dp, crossAxisSpacing = 8.dp) {
                 statuses.forEach { s ->
                     FilterTag(label = s, isSelected = s in selectedStatuses, onClick = { onStatusToggle(s) })
@@ -525,7 +520,7 @@ fun ProjectListScreenPreview() {
             custId = "C003",
             projectName = "Small Shop Interior",
             expectedValue = 250000.0,
-            projectStatus = "Completed",
+            projectStatus = "PO",
             opportunityScore = "COLD",
             progressPct = 100
         )

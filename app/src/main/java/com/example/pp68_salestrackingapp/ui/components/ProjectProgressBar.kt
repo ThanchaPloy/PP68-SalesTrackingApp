@@ -24,7 +24,7 @@ fun ProjectProgressBar(
     modifier:    Modifier = Modifier,
     showLabel:   Boolean  = true
 ) {
-    val pct      = progressPct ?: 0
+    val pct      = progressPct ?: ProjectProgressUtils.getProgressPercent(status)
     val progress = pct / 100f
     val color    = ProjectProgressUtils.getProgressColor(status)
     val bgColor  = Color(0xFFEEEEEE)

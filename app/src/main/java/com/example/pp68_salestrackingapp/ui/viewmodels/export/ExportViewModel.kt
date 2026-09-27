@@ -16,6 +16,7 @@ import java.time.format.DateTimeFormatter
 import java.time.temporal.WeekFields
 import java.util.Locale
 import com.example.pp68_salestrackingapp.utils.formatPhotoUrl
+import com.example.pp68_salestrackingapp.utils.ProjectStages
 import com.example.pp68_salestrackingapp.data.repository.PlaceSearchRepository
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.Dispatchers
@@ -294,7 +295,7 @@ class ExportViewModel @Inject constructor(
                         val isStartedThisMonth = startD?.let { YearMonth.from(it) == yearMonth } ?: false
                         val isClosingThisMonth = closeD?.let { YearMonth.from(it) == yearMonth } ?: false
 
-                        isStartedThisMonth || isClosingThisMonth || p.projectStatus !in listOf("Completed", "Lost", "Failed")
+                        isStartedThisMonth || isClosingThisMonth || p.projectStatus !in ProjectStages.LOST
                     } catch (e: Exception) { true }
                 }.map {
                     ExportProjectItem(

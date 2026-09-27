@@ -58,7 +58,6 @@ private val pipelineColors = listOf(
     "Make a Decision"  to Color(0xFFEF5350),
     "Assured"          to Color(0xFFE57373),
     "PO"               to Color(0xFFEF9A9A),
-    "Completed"        to Color(0xFFFFCDD2),
     "Lost"             to Color(0xFFBDBDBD),
     "Failed"           to Color(0xFFE0E0E0)
 )

@@ -581,7 +581,7 @@ fun CustomerDetailScreenPreview() {
             branchId = "B001",
             projectName = "Project Alpha",
             expectedValue = 1000000.0,
-            projectStatus = "Active",
+            projectStatus = "Bidding",
             startDate = "2024-01-01",
             closingDate = null,
             desiredCompletionDate = "2024-12-31",

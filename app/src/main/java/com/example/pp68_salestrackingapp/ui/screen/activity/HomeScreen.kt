@@ -62,12 +62,12 @@ private data class StatusConfig(
 )
 // ✅ "checked_in" ชี้ไป "report" ตรง ๆ (ไม่ใช่ "finish" อีกแล้ว) — เดิมพา user ไป
 // ActivityDetailScreen ให้กดปุ่ม Finish ที่ไม่ได้บันทึกข้อมูลอะไร แค่เปลี่ยนสถานะแล้วเด้งกลับ Home
-// ให้แตะการ์ดซ้ำ ตอนนี้ปุ่ม "บันทึกผล" เดียวกับที่ completed/cancelled ใช้อยู่แล้วพาไปหน้าบันทึกผลได้เลย
+// ให้แตะการ์ดซ้ำ ตอนนี้ปุ่ม "บันทึกผล" เดียวกับที่ completed ใช้อยู่แล้วพาไปหน้าบันทึกผลได้เลย
+// "cancelled" เอาออกแล้ว — ไม่มีจุดไหนในแอปตั้งค่านี้ให้ appointment.status เลย (ไม่มีปุ่ม/flow ยกเลิกนัด)
 private val statusConfigs = mapOf(
     "planned"    to StatusConfig("กำลังดำเนินการ", GreenStatus,  Color(0xFFE8F5E9), "checkin"),
     "checked_in" to StatusConfig("กำลังดำเนินการ", GreenStatus,  Color(0xFFE8F5E9), "report"),
-    "completed"  to StatusConfig("เสร็จสิ้น",        GrayStatus, Color(0xFFECEFF1), "report"),
-    "cancelled"  to StatusConfig("รอรายงานผล",    OrangeStatus, Color(0xFFFFF3E0), "report")
+    "completed"  to StatusConfig("เสร็จสิ้น",        GrayStatus, Color(0xFFECEFF1), "report")
 )
 
 @Composable
@@ -246,7 +246,7 @@ fun ActivityCard(
     val hasNote    = !card.weeklyNote.isNullOrBlank() || card.hasResult
     val canDelete  = card.planStatus == "planned"
     // นัดแบบ call/online ไม่มีขั้นเช็คอิน — สถานะ "planned" จึงพาไปหน้าบันทึกผลตรง ๆ
-    // เหมือนกับที่ "checked_in"/"completed"/"cancelled" ทำอยู่แล้ว
+    // เหมือนกับที่ "checked_in"/"completed" ทำอยู่แล้ว
     val isCallOrOnline = card.activityType == "call" || card.activityType == "online"
 
     var showDeleteDialog by remember { mutableStateOf(false) }

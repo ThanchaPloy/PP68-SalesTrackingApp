@@ -92,7 +92,6 @@ fun ProjectStatusBadge(status: String?) {
         "Product Processing" -> Color(0xFFE0F2FE) to Color(0xFF0369A1)
         "Working"            -> Color(0xFFDCFCE7) to Color(0xFF166534)
         "Quality Issue"      -> Color(0xFFFFEDD5) to Color(0xFFC2410C)
-        "Completed"          -> Color(0xFFF3F4F6) to Color(0xFF374151)
         "Lost"               -> Color(0xFFFEE2E2) to Color(0xFF991B1B)
         "Failed"             -> Color(0xFF1F2937) to Color(0xFF9CA3AF)
         else                 -> Color(0xFFF3F4F6) to Color(0xFF6B7280)

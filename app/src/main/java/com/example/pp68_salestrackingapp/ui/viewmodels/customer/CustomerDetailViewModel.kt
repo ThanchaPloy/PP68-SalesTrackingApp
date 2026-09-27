@@ -8,6 +8,7 @@ import com.example.pp68_salestrackingapp.data.model.Project
 import com.example.pp68_salestrackingapp.data.repository.AuthRepository
 import com.example.pp68_salestrackingapp.data.repository.CustomerRepository
 import com.example.pp68_salestrackingapp.data.repository.ProjectRepository
+import com.example.pp68_salestrackingapp.utils.ProjectStages
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -62,7 +63,7 @@ class CustomerDetailViewModel @Inject constructor(
                 refreshContacts(custId)
 
                 // 3. ดึง Project แยก active/closed
-                val closedStatuses = setOf("Completed", "Lost", "Failed")
+                val closedStatuses = ProjectStages.LOST
                 val allProjects = projectRepo.getAllProjectsFlow().first()
                     .filter { it.custId == custId }
 

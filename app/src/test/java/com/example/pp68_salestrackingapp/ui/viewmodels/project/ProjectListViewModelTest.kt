@@ -51,7 +51,6 @@ class ProjectListViewModelTest {
 
     private val allProjects = listOf(
         Project(projectId = "P1", projectName = "Active Quotation", projectStatus = "Quotation", custId = "C1"),
-        Project(projectId = "P2", projectName = "Completed", projectStatus = "Completed", custId = "C1"),
         Project(projectId = "P3", projectName = "PO Closed", projectStatus = "PO", closingDate = pastDate, custId = "C1"),
         Project(projectId = "P4", projectName = "PO Active", projectStatus = "PO", closingDate = futureDate, custId = "C1"),
         Project(projectId = "P5", projectName = "Lost", projectStatus = "Lost", custId = "C1"),
@@ -126,13 +125,13 @@ class ProjectListViewModelTest {
             assertTrue(result.any { it.projectId == "P4" })
             assertTrue(result.any { it.projectId == "P7" })
             assertTrue(result.any { it.projectId == "P8" })
-            assertFalse(result.any { it.projectId == "P2" || it.projectId == "P3" || it.projectId == "P5" || it.projectId == "P6" })
+            assertFalse(result.any { it.projectId == "P3" || it.projectId == "P5" || it.projectId == "P6" })
             cancelAndIgnoreRemainingEvents()
         }
     }
 
     @Test
-    fun givenClosedTab_whenSelected_thenReturnsCompletedAndPastPoOnly() = runTest {
+    fun givenClosedTab_whenSelected_thenReturnsPastPoOnly() = runTest {
         initVm()
         viewModel.onSelectTab(1)
 
@@ -141,7 +140,6 @@ class ProjectListViewModelTest {
             advanceTimeBy(305)
             val result = awaitItem()
 
-            assertTrue(result.any { it.projectId == "P2" })
             assertTrue(result.any { it.projectId == "P3" })
             assertFalse(result.any { it.projectId == "P4" || it.projectId == "P5" || it.projectId == "P6" })
             cancelAndIgnoreRemainingEvents()
