@@ -156,8 +156,6 @@ dependencies {
     // ✅ Firebase BOM — จัดการ version ให้อัตโนมัติ
     implementation(platform(libs.firebase.bom))
 
-    // ✅ Firebase Realtime Database
-    implementation(libs.firebase.database)
     implementation(libs.firebase.messaging)
 
     // Unit & Integration Testing

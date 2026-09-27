@@ -7,7 +7,6 @@ import com.example.pp68_salestrackingapp.data.model.ContactPerson
 import com.example.pp68_salestrackingapp.data.model.Project
 import com.example.pp68_salestrackingapp.data.model.ProjectContact
 import com.example.pp68_salestrackingapp.data.remote.ApiService
-import com.example.pp68_salestrackingapp.data.remote.FirebaseRealtimeService
 import com.example.pp68_salestrackingapp.utils.SyncManager
 import android.util.Log
 import kotlinx.coroutines.Dispatchers
@@ -23,7 +22,6 @@ class ProjectRepository @Inject constructor(
     private val projectDao: ProjectDao,
     private val projectContactDao: ProjectContactDao,
     private val contactDao: ContactDao,
-    private val firebaseService: FirebaseRealtimeService,
     private val syncManager: SyncManager
 ) {
     fun getAllProjectsFlow(): Flow<List<Project>> = projectDao.getAllProjects()
@@ -121,7 +119,7 @@ class ProjectRepository @Inject constructor(
     // resultAppointmentId: appointment_id จริงของผลการขายที่ทำให้ project_status เปลี่ยน (null สำหรับ
     // standalone หรือแก้โครงการตรงๆ) — backend ใช้ค่านี้บันทึก project_stage_log.appointment_id ตรงๆ
     // ไม่มีการเดาจากวันที่ใกล้เคียงฝั่ง backend แล้ว เพราะนัดหมายใกล้วันที่สุดอาจไม่ใช่ของโครงการนี้เลย
-    suspend fun updateProject(project: Project, updatedBy: String = "", resultAppointmentId: String? = null): kotlin.Result<Unit> {
+    suspend fun updateProject(project: Project, resultAppointmentId: String? = null): kotlin.Result<Unit> {
         return withContext(Dispatchers.IO) {
             val localProject = project.copy(isSynced = false)
             projectDao.insertProject(localProject)
@@ -149,7 +147,6 @@ class ProjectRepository @Inject constructor(
                 if (response.isSuccessful && response.body()?.isNotEmpty() == true) {
                     val returnedProject = response.body()!!.first().copy(isSynced = true)
                     projectDao.insertProject(returnedProject)
-                    firebaseService.updateProjectStatus(project.projectId, project.projectStatus ?: "", project.projectName, updatedBy)
                     kotlin.Result.success(Unit)
                 } else {
                     syncManager.scheduleSync()
@@ -269,10 +266,6 @@ class ProjectRepository @Inject constructor(
             if (response.isSuccessful && response.body()?.isNotEmpty() == true) {
                 val returnedProject = response.body()!!.first().copy(isSynced = true)
                 projectDao.insertProject(returnedProject)
-                val newStatus = fields["project_status"] as? String
-                if (newStatus != null) {
-                    firebaseService.updateProjectStatus(projectId, newStatus, returnedProject.projectName, "")
-                }
                 Result.success(Unit)
             } else Result.failure(Exception("API Error: ${response.code()}"))
         } catch (e: Exception) { Result.failure(e) }

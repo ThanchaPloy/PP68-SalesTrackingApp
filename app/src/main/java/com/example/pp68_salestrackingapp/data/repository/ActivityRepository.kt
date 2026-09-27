@@ -556,7 +556,7 @@ class ActivityRepository @Inject constructor(
             if (project != null && project.projectStatus != newStatus) {
                 val updated = project.copy(projectStatus = newStatus, lossReason = result.lossReason)
                 // result.activityId is the appointment this result came from — null for standalone results
-                projectRepo.updateProject(updated, result.createdBy ?: "", resultAppointmentId = result.activityId)
+                projectRepo.updateProject(updated, resultAppointmentId = result.activityId)
             }
         } catch (e: Exception) { Log.e("ActivityRepository", "Update Project Status Failed: ${e.message}") }
     }
