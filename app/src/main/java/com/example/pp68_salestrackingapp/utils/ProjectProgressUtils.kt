@@ -2,17 +2,9 @@ package com.example.pp68_salestrackingapp.utils
 
 object ProjectProgressUtils {
 
-    fun getProgress(status: String?): Float = when (status) {
-        "Lead"             -> 0.10f
-        "New Project"      -> 0.20f
-        "Quotation"        -> 0.40f
-        "Bidding"          -> 0.50f
-        "Make a Decision"  -> 0.70f
-        "Assured"          -> 0.80f
-        "PO"               -> 1.00f
-        "Lost", "Failed"   -> 0.00f
-        else               -> 0.00f
-    }
+    // W5a: % มาจาก ProjectStages (master data + fallback) แทนตารางในนี้เอง จุดเดียวพอ
+    fun getProgress(status: String?): Float =
+        if (status == null) 0f else ProjectStages.probabilityPct(status) / 100f
 
     fun getProgressPercent(status: String?): Int =
         (getProgress(status) * 100).toInt()

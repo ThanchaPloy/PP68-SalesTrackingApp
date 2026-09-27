@@ -245,6 +245,13 @@ interface ApiService {
     @GET("activity_master")
     suspend fun getMasterActivities(@Query("is_active") isActive: String = "eq.true", @Query("limit") limit: Int = 100): Response<List<ActivityMasterDto>>
 
+    // W5a: master data สำหรับตัวเลือก stage/เหตุผล — ข้อมูลอ้างอิงร่วมกันทุกคน
+    @GET("project_stage_master")
+    suspend fun getProjectStageMasters(@Query("is_active") isActive: String = "eq.true"): Response<List<ProjectStageMasterDto>>
+
+    @GET("loss_reason_master")
+    suspend fun getLossReasonMasters(@Query("is_active") isActive: String = "eq.true"): Response<List<LossReasonMasterDto>>
+
     // ── Activity Result ──────────────────────────────────────────
     @POST("activity_result")
     @Headers("Prefer: return=representation", "Content-Profile: public")
