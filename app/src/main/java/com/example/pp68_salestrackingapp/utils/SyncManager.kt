@@ -16,6 +16,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.util.Collections
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -35,6 +36,21 @@ class SyncManager @Inject constructor(
     private val planItemDao: ActivityPlanItemDao,
     private val projectContactDao: ProjectContactDao
 ) {
+    // ── 403 ที่ server ปฏิเสธถาวร (ไม่ใช่ออฟไลน์) ────────────────────
+    // เก็บใน memory อย่างเดียว ไม่ persist ลง Room โดยตั้งใจ — รีสตาร์ทแอปแล้วลองใหม่ได้เอง
+    // ถ้ายังไม่มีสิทธิ์จริงก็จะโดน mark ซ้ำอีกรอบ แถวที่ถูก mark จะไม่ถูก retry ซ้ำเงียบ ๆ
+    // ทุกรอบ sync (ทุก resume แอป) ไปตลอดกาลเหมือนก่อนแก้ — แลกกับที่ถ้าแอปถูกฆ่าแล้วเปิดใหม่
+    // จะลองอีกครั้งหนึ่งก่อนถูก block ซ้ำ ถือว่ายอมรับได้เพราะไม่ได้โกหกผู้ใช้แล้ว (ดู repository
+    // ที่เรียก markBlocked — ทุกจุดคืน Result.failure ให้ผู้ใช้เห็น error จริงตั้งแต่ครั้งแรกอยู่แล้ว)
+    private val blockedRows = Collections.synchronizedSet(mutableSetOf<String>())
+
+    fun markBlocked(entityType: String, id: String) {
+        blockedRows.add("$entityType:$id")
+    }
+
+    private fun isBlocked(entityType: String, id: String): Boolean =
+        "$entityType:$id" in blockedRows
+
     fun scheduleSync() {
         val constraints = Constraints.Builder()
             .setRequiredNetworkType(NetworkType.CONNECTED)
@@ -78,6 +94,7 @@ class SyncManager @Inject constructor(
 
         val unsyncedCustomers = customerDao.getUnsyncedCustomers()
         for (customer in unsyncedCustomers) {
+            if (isBlocked("customer", customer.custId)) continue
             try {
                 val body = mutableMapOf<String, Any?>(
                     "customer_name"         to customer.companyName,
@@ -128,6 +145,7 @@ class SyncManager @Inject constructor(
 
         val unsyncedContacts = contactDao.getUnsyncedContacts()
         for (contact in unsyncedContacts) {
+            if (isBlocked("contact", contact.contactId)) continue
             try {
                 val fields = buildMap<String, Any?> {
                     put("customer_code", contact.custId)
@@ -162,6 +180,7 @@ class SyncManager @Inject constructor(
 
         val unsyncedProjects = projectDao.getUnsyncedProjects()
         for (project in unsyncedProjects) {
+            if (isBlocked("project", project.projectId)) continue
             try {
                 val isUpdate = !project.projectId.startsWith("TEMP-")
                 val body = mutableMapOf<String, Any?>(
@@ -238,6 +257,7 @@ class SyncManager @Inject constructor(
 
         val unsyncedActivities = activityDao.getUnsyncedActivities()
         for (activity in unsyncedActivities) {
+            if (isBlocked("activity", activity.activityId)) continue
             try {
                 if (activity.activityId.startsWith("TEMP-")) {
                     val custCode = if (activity.customerId == "CST-UNKNOWN") null else activity.customerId
@@ -307,6 +327,7 @@ class SyncManager @Inject constructor(
 
         val unsyncedResults = resultDao.getUnsyncedResults()
         for (res in unsyncedResults) {
+            if (isBlocked("result", res.resultId)) continue
             try {
                 if (res.resultId.startsWith("TEMP-")) {
                     // ✅ ถ้ายังไม่เคยมี version ก่อนหน้า group id จะผูกกับ tempId ของตัวเองไปก่อน ต้องแก้เป็น realId ทีหลัง

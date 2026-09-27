@@ -100,6 +100,9 @@ class ContactRepository @Inject constructor(
                         contactDao.updateSyncStatus(localContact.contactId, true)
                     }
                     kotlin.Result.success(Unit)
+                } else if (response.code() == 403) {
+                    syncManager.markBlocked("contact", localContact.contactId)
+                    kotlin.Result.failure(Exception("บันทึกผู้ติดต่อไม่สำเร็จ: ไม่มีสิทธิ์ทำรายการนี้"))
                 } else {
                     val errBody = response.errorBody()?.string()
                     Log.e("ContactRepo", "POST failed ${response.code()}: $errBody")
@@ -134,6 +137,9 @@ class ContactRepository @Inject constructor(
                 if (response.isSuccessful && response.body()?.isNotEmpty() == true) {
                     contactDao.updateSyncStatus(contactId, true)
                     kotlin.Result.success(Unit)
+                } else if (response.code() == 403) {
+                    syncManager.markBlocked("contact", contactId)
+                    kotlin.Result.failure(Exception("แก้ไขผู้ติดต่อไม่สำเร็จ: ไม่มีสิทธิ์ทำรายการนี้"))
                 } else {
                     syncManager.scheduleSync()
                     kotlin.Result.success(Unit)

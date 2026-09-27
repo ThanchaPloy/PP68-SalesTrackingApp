@@ -93,4 +93,21 @@ class ActivityRepositoryCheckInTest {
         assertFalse(saved.captured.isSynced)
         verify { syncManager.scheduleSync() }
     }
+
+    // ✅ 403 คือ server ปฏิเสธถาวร ไม่ใช่ error ชั่วคราวแบบ 500 — ต้องบอกผู้ใช้ตรง ๆ (Result.failure)
+    // ไม่ใช่ปักธง success ปลอมแล้วปล่อยให้ outbox ลองซ้ำเงียบ ๆ ไปตลอดกาลเหมือน error อื่น
+    @Test
+    fun `a 403 check-in is reported as failure and blocked from retry, not queued`() = runTest {
+        coEvery { apiService.updateActivity(any(), any()) } returns
+            Response.error(403, "forbidden".toResponseBody("text/plain".toMediaType()))
+
+        val result = repo.checkIn("A1", 13.7563, 100.5018, isVerified = true, distanceDeviation = 12.0)
+
+        assertTrue(result.isFailure)
+        val saved = slot<SalesActivity>()
+        coVerify { activityDao.insertActivity(capture(saved)) }
+        assertFalse(saved.captured.isSynced)
+        verify { syncManager.markBlocked("activity", "A1") }
+        verify(exactly = 0) { syncManager.scheduleSync() }
+    }
 }

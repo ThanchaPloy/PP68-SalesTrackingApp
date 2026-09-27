@@ -151,6 +151,9 @@ class ActivityRepository @Inject constructor(
                         syncManager.scheduleSync()
                         kotlin.Result.success(tempId)
                     }
+                } else if (response.code() == 403) {
+                    syncManager.markBlocked("activity", tempId)
+                    kotlin.Result.failure(Exception("สร้างนัดหมายไม่สำเร็จ: ไม่มีสิทธิ์ทำรายการนี้"))
                 } else {
                     syncManager.scheduleSync()
                     kotlin.Result.success(tempId)
@@ -192,6 +195,9 @@ class ActivityRepository @Inject constructor(
                 if (response.isSuccessful && response.body()?.isNotEmpty() == true) {
                     activityDao.updateSyncStatus(activityId, true)
                     kotlin.Result.success(Unit)
+                } else if (response.code() == 403) {
+                    syncManager.markBlocked("activity", activityId)
+                    kotlin.Result.failure(Exception("แก้ไขนัดหมายไม่สำเร็จ: ไม่มีสิทธิ์ทำรายการนี้"))
                 } else {
                     syncManager.scheduleSync()
                     kotlin.Result.success(Unit)
@@ -322,8 +328,17 @@ class ActivityRepository @Inject constructor(
                 activityDao.getActivityById(activityId)?.let {
                     activityDao.insertActivity(it.copy(status = "checked_in", checkInLat = lat, checkInLong = lng, checkInTime = nowStr, isLocationVerified = isVerified, distanceDeviation = distanceDeviation, isSynced = isActuallyUpdated))
                 }
-                if (!isActuallyUpdated) syncManager.scheduleSync()
-                kotlin.Result.success(Unit)
+                if (!isActuallyUpdated && response.code() == 403) {
+                    // ❌ server ปฏิเสธถาวร (ไม่ใช่เคส "ไม่ตรวจผล" ที่คอมเมนต์ข้างบนพูดถึง — ตรงนั้นคือ
+                    // ตอบ 2xx แต่ body ว่าง) ต้องบอกผู้ใช้ตรง ๆ ว่าเช็คอินไม่สำเร็จ ไม่ใช่เงียบไว้แล้วลองซ้ำ
+                    syncManager.markBlocked("activity", activityId)
+                    // ✅ ViewModel เติม "เช็คอินไม่สำเร็จ: " นำหน้าเองแล้ว (ActivityDetailViewModel.confirmCheckin)
+                    // ข้อความตรงนี้จึงมีแค่เหตุผล ไม่งั้นจะซ้ำเป็น "เช็คอินไม่สำเร็จ: เช็คอินไม่สำเร็จ: ..."
+                    kotlin.Result.failure(Exception("ไม่มีสิทธิ์ทำรายการนี้"))
+                } else {
+                    if (!isActuallyUpdated) syncManager.scheduleSync()
+                    kotlin.Result.success(Unit)
+                }
             } catch (e: Exception) {
                 val nowStr = java.time.Instant.now().toString()
                 activityDao.getActivityById(activityId)?.let {
@@ -347,9 +362,19 @@ class ActivityRepository @Inject constructor(
                 val isActuallyUpdated = response.isSuccessful && response.body()?.isNotEmpty() == true
                 activityDao.getActivityById(activityId)?.let {
                     activityDao.insertActivity(it.copy(status = "completed", note = note, weeklyNote = note, isSynced = isActuallyUpdated))
-                    if (!isActuallyUpdated) syncManager.scheduleSync()
+                    if (!isActuallyUpdated) {
+                        // ✅ ผู้เรียกปัจจุบัน (SalesResultViewModel.save()) ไม่ได้เช็ค Result ตัวนี้อยู่แล้ว
+                        // (fire-and-forget ต่อท้ายหลังบันทึกผลสำเร็จ) แต่ยังต้อง markBlocked ไว้กัน
+                        // outbox ลองส่งซ้ำเงียบ ๆ ตลอดไปเหมือนจุดอื่น — คืน failure ไว้เผื่อผู้เรียกในอนาคตเช็ค
+                        if (response.code() == 403) syncManager.markBlocked("activity", activityId)
+                        else syncManager.scheduleSync()
+                    }
                 }
-                kotlin.Result.success(Unit)
+                if (!isActuallyUpdated && response.code() == 403) {
+                    kotlin.Result.failure(Exception("บันทึกสถานะเสร็จสิ้นไม่สำเร็จ: ไม่มีสิทธิ์ทำรายการนี้"))
+                } else {
+                    kotlin.Result.success(Unit)
+                }
             } catch (e: Exception) {
                 activityDao.getActivityById(activityId)?.let {
                     activityDao.insertActivity(it.copy(status = "completed", weeklyNote = note, isSynced = false))
@@ -514,6 +539,9 @@ class ActivityRepository @Inject constructor(
                 }
                 syncProjectStatus(localResult)
                 kotlin.Result.success(Unit)
+            } else if (apiResp.code() == 403) {
+                syncManager.markBlocked("result", tempId)
+                kotlin.Result.failure(Exception("บันทึกผลการขายไม่สำเร็จ: ไม่มีสิทธิ์ทำรายการนี้"))
             } else {
                 syncManager.scheduleSync()
                 kotlin.Result.success(Unit)

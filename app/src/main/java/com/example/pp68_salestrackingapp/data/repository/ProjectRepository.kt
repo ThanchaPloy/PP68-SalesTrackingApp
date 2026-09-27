@@ -105,7 +105,12 @@ class ProjectRepository @Inject constructor(
                     Log.e("ProjectRepo", "POST failed ${response.code()}: $err")
                     // ❌ ไม่ใช่ offline (นี่คือ server ปฏิเสธ request จริง เช่น validation error) —
                     // อย่าคืน success เพราะ caller จะเข้าใจว่าบันทึกสำเร็จทั้งที่ยังไม่ถูกสร้างบนเซิร์ฟเวอร์
-                    syncManager.scheduleSync()
+                    if (response.code() == 403) {
+                        // ปฏิเสธถาวร ไม่ใช่ error ชั่วคราว — ลองใหม่ก็ 403 ซ้ำทุกครั้ง ไม่ต้อง schedule retry
+                        syncManager.markBlocked("project", tempId)
+                    } else {
+                        syncManager.scheduleSync()
+                    }
                     Result.failure(Exception("บันทึกโครงการไม่สำเร็จ: HTTP ${response.code()} $err"))
                 }
             } catch (e: IOException) {
@@ -148,6 +153,9 @@ class ProjectRepository @Inject constructor(
                     val returnedProject = response.body()!!.first().copy(isSynced = true)
                     projectDao.insertProject(returnedProject)
                     kotlin.Result.success(Unit)
+                } else if (response.code() == 403) {
+                    syncManager.markBlocked("project", project.projectId)
+                    kotlin.Result.failure(Exception("แก้ไขโครงการไม่สำเร็จ: ไม่มีสิทธิ์ทำรายการนี้"))
                 } else {
                     syncManager.scheduleSync()
                     kotlin.Result.success(Unit)
