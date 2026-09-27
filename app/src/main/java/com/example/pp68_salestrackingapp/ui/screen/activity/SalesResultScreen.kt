@@ -355,12 +355,7 @@ private fun SalesResultContent(
                             errorText = requiredErrorFor(s.showRequiredErrors, s.dealPosition)
                         ) {
                             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                listOf(
-                                    "ลูกค้าใช้เราอยู่แล้ว การต่อสัญญามีโอกาสสูงมาก",
-                                    "ลูกค้าเลือกเราเป็นตัวหลัก คู่แข่งอื่นเป็นแค่ backup",
-                                    "ถูกเชิญมาเพื่อ benchmark ราคา โอกาสต่ำ",
-                                    SalesResultViewModel.UNDETERMINED_LABEL
-                                ).forEach { opt ->
+                                SalesResultViewModel.DEAL_POSITION_MAP.keys.forEach { opt ->
                                     SelectOption(opt, s.dealPosition == opt) { onDealPositionChanged(opt) }
                                 }
                             }
@@ -372,12 +367,7 @@ private fun SalesResultContent(
                             errorText = requiredErrorFor(s.showRequiredErrors, s.previousSolution)
                         ) {
                             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                listOf(
-                                    "ไม่มี Solution เดิม",
-                                    "มีระบบเดิมที่ไม่ใช่คู่แข่ง",
-                                    "ใช้คู่แข่งอยู่และไม่มีปัญหา",
-                                    SalesResultViewModel.UNDETERMINED_LABEL
-                                ).forEach { opt ->
+                                SalesResultViewModel.SOLUTION_MAP.keys.forEach { opt ->
                                     SelectOption(opt, s.previousSolution == opt) { onPreviousSolutionChanged(opt) }
                                 }
                             }
@@ -399,12 +389,7 @@ private fun SalesResultContent(
                             errorText = requiredErrorFor(s.showRequiredErrors, s.counterpartyMultiplier)
                         ) {
                             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                listOf(
-                                    "ดีลกับ Main Contractor โดยตรง",
-                                    "ดีลผ่าน Installer — Main Contractor ได้งานแล้ว",
-                                    "ดีลผ่าน Installer — Main Contractor ยังไม่ได้งาน",
-                                    SalesResultViewModel.UNDETERMINED_LABEL
-                                ).forEach { opt ->
+                                SalesResultViewModel.COUNTERPARTY_MAP.keys.forEach { opt ->
                                     SelectOption(opt, s.counterpartyMultiplier == opt) { onCounterpartyMultiplierChanged(opt) }
                                 }
                             }
@@ -416,7 +401,7 @@ private fun SalesResultContent(
                             errorText = requiredErrorFor(s.showRequiredErrors, s.responseSpeed)
                         ) {
                             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                listOf("เร็ว", "ปกติ", "ช้าหรือเงียบ").forEach { opt ->
+                                SalesResultViewModel.RESPONSE_SPEED_MAP.keys.forEach { opt ->
                                     SelectOption(opt, s.responseSpeed == opt) { onResponseSpeedChanged(opt) }
                                 }
                             }

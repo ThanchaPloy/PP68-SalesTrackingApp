@@ -252,6 +252,10 @@ interface ApiService {
     @GET("loss_reason_master")
     suspend fun getLossReasonMasters(@Query("is_active") isActive: String = "eq.true"): Response<List<LossReasonMasterDto>>
 
+    // W5b: คำถามปัจจัยข้อ 4-7 ของหน้าบันทึกผลการขาย
+    @GET("deal_factor_question")
+    suspend fun getDealFactorQuestions(): Response<List<DealFactorQuestionDto>>
+
     // ── Activity Result ──────────────────────────────────────────
     @POST("activity_result")
     @Headers("Prefer: return=representation", "Content-Profile: public")

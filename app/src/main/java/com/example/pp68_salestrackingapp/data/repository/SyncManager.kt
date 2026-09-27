@@ -1,6 +1,7 @@
 package com.example.pp68_salestrackingapp.data.repository
 
 import android.util.Log
+import com.example.pp68_salestrackingapp.utils.DealFactors
 import com.example.pp68_salestrackingapp.utils.LossReasons
 import com.example.pp68_salestrackingapp.utils.ProjectStages
 import kotlinx.coroutines.launch
@@ -60,8 +61,9 @@ class SyncManager @Inject constructor(
                 try {
                     ProjectStages.applyServerData(masterDataRepo.getProjectStages())
                     LossReasons.applyServerData(masterDataRepo.getLossReasons())
+                    DealFactors.applyServerData(masterDataRepo.getDealFactorQuestions())
                 } catch (e: Exception) {
-                    Log.e("SyncManager", "Failed to sync stage/loss-reason master data: ${e.message}")
+                    Log.e("SyncManager", "Failed to sync stage/loss-reason/deal-factor master data: ${e.message}")
                 }
             }
         }

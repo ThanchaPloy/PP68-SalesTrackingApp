@@ -170,6 +170,7 @@ class AuthRepository @Inject constructor(
                 tokenManager.clearToken()
                 com.example.pp68_salestrackingapp.utils.ProjectStages.clearServerData()
                 com.example.pp68_salestrackingapp.utils.LossReasons.clearServerData()
+                com.example.pp68_salestrackingapp.utils.DealFactors.clearServerData()
                 kotlin.Result.success(Unit)
             } catch (e: Exception) {
                 kotlin.Result.failure(e)

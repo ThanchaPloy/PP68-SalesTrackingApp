@@ -263,31 +263,25 @@ class SalesResultViewModel @Inject constructor(
         // ข้อ 4-6 บังคับเลือก จึงต้องมีทางออกให้เซลส์ที่ยังไม่รู้คำตอบ — ไม่งั้นจะกดมั่วเพื่อให้ผ่าน
         // แล้วได้ข้อมูลเพี้ยนแทนที่จะได้ค่าว่าง
         const val UNDETERMINED_LABEL = "ยังระบุไม่ได้"
-        private const val UNDETERMINED_CODE = "undetermined"
 
-        val DEAL_POSITION_MAP = mapOf(
-            "ลูกค้าใช้เราอยู่แล้ว การต่อสัญญามีโอกาสสูงมาก" to "incumbent",
-            "ลูกค้าเลือกเราเป็นตัวหลัก คู่แข่งอื่นเป็นแค่ backup"  to "vendor_of_choice",
-            "ถูกเชิญมาเพื่อ benchmark ราคา โอกาสต่ำ"              to "invited_to_compare",
-            UNDETERMINED_LABEL                                    to UNDETERMINED_CODE
-        )
-        val SOLUTION_MAP = mapOf(
-            "ไม่มี Solution เดิม"              to "no_solution",
-            "มีระบบเดิมที่ไม่ใช่คู่แข่ง"       to "non_competitor_system",
-            "ใช้คู่แข่งอยู่และไม่มีปัญหา"      to "competitor_no_issue",
-            UNDETERMINED_LABEL                 to UNDETERMINED_CODE
-        )
-        val COUNTERPARTY_MAP = mapOf(
-            "ดีลกับ Main Contractor โดยตรง"                       to "direct_main_contractor",
-            "ดีลผ่าน Installer — Main Contractor ได้งานแล้ว"      to "via_installer_main_awarded",
-            "ดีลผ่าน Installer — Main Contractor ยังไม่ได้งาน"    to "via_installer_main_pending",
-            UNDETERMINED_LABEL                                    to UNDETERMINED_CODE
-        )
-        val RESPONSE_SPEED_MAP = mapOf(
-            "เร็ว"           to "fast",
-            "ปกติ"           to "normal",
-            "ช้าหรือเงียบ"   to "slow_silent"
-        )
+        // W5b: ตัวเลือกทั้ง 4 ข้อนี้มาจาก DealFactors (master data + fallback) แทนการ hardcode
+        // ในไฟล์นี้ตรงๆ — ชื่อ/ชนิดคงเดิมทุกตัว (Map<Label, Code>) เพื่อไม่ต้องแก้จุดเรียกใช้เดิม
+        val DEAL_POSITION_MAP: Map<String, String>
+            get() = com.example.pp68_salestrackingapp.utils.DealFactors.labelToCode(
+                com.example.pp68_salestrackingapp.utils.DealFactors.DEAL_POSITION
+            )
+        val SOLUTION_MAP: Map<String, String>
+            get() = com.example.pp68_salestrackingapp.utils.DealFactors.labelToCode(
+                com.example.pp68_salestrackingapp.utils.DealFactors.PREVIOUS_SOLUTION
+            )
+        val COUNTERPARTY_MAP: Map<String, String>
+            get() = com.example.pp68_salestrackingapp.utils.DealFactors.labelToCode(
+                com.example.pp68_salestrackingapp.utils.DealFactors.COUNTERPARTY_TYPE
+            )
+        val RESPONSE_SPEED_MAP: Map<String, String>
+            get() = com.example.pp68_salestrackingapp.utils.DealFactors.labelToCode(
+                com.example.pp68_salestrackingapp.utils.DealFactors.RESPONSE_SPEED
+            )
         // ข้อ 7 ไม่มีตัวเลือก "ยังระบุไม่ได้" จึงใช้ค่ากลางเป็นค่าตั้งต้นให้บันทึกเก่าที่ยังว่าง
         const val RESPONSE_SPEED_DEFAULT = "ปกติ"
         val STATUS_MAP = mapOf(
@@ -297,10 +291,25 @@ class SalesResultViewModel @Inject constructor(
         )
         val OPPORTUNITY_MAP = mapOf("สูง (HOT)" to "HOT", "กลาง (WARM)" to "WARM", "ต่ำ (COLD)" to "COLD")
 
-        val DEAL_POSITION_REVERSE    = DEAL_POSITION_MAP.entries.associate { (k, v) -> v to k }
-        val SOLUTION_REVERSE         = SOLUTION_MAP.entries.associate { (k, v) -> v to k }
-        val COUNTERPARTY_REVERSE     = COUNTERPARTY_MAP.entries.associate { (k, v) -> v to k }
-        val RESPONSE_SPEED_REVERSE   = RESPONSE_SPEED_MAP.entries.associate { (k, v) -> v to k }
+        // W5b: อ่านจาก DealFactors สดทุกครั้ง (ไม่ใช่ derive จาก MAP ด้านบนตอน class-init เพราะ
+        // companion object เริ่มทำงานก่อน SyncManager เรียก applyServerData() เสมอ — ถ้า derive
+        // ครั้งเดียวตอน init ค่าจะถูกแช่แข็งไว้ที่ fallback ตลอดไป ไม่มีวันเห็นข้อมูลจาก server เลย)
+        val DEAL_POSITION_REVERSE: Map<String, String>
+            get() = com.example.pp68_salestrackingapp.utils.DealFactors.codeToLabel(
+                com.example.pp68_salestrackingapp.utils.DealFactors.DEAL_POSITION
+            )
+        val SOLUTION_REVERSE: Map<String, String>
+            get() = com.example.pp68_salestrackingapp.utils.DealFactors.codeToLabel(
+                com.example.pp68_salestrackingapp.utils.DealFactors.PREVIOUS_SOLUTION
+            )
+        val COUNTERPARTY_REVERSE: Map<String, String>
+            get() = com.example.pp68_salestrackingapp.utils.DealFactors.codeToLabel(
+                com.example.pp68_salestrackingapp.utils.DealFactors.COUNTERPARTY_TYPE
+            )
+        val RESPONSE_SPEED_REVERSE: Map<String, String>
+            get() = com.example.pp68_salestrackingapp.utils.DealFactors.codeToLabel(
+                com.example.pp68_salestrackingapp.utils.DealFactors.RESPONSE_SPEED
+            )
         val STATUS_REVERSE           = STATUS_MAP.entries.associate { (k, v) -> v to k }
         val OPPORTUNITY_REVERSE      = OPPORTUNITY_MAP.entries.associate { (k, v) -> v to k }
     }

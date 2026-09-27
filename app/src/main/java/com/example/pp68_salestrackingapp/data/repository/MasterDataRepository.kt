@@ -1,5 +1,7 @@
 package com.example.pp68_salestrackingapp.data.repository
 
+import com.example.pp68_salestrackingapp.data.model.DealFactorOption
+import com.example.pp68_salestrackingapp.data.model.DealFactorQuestion
 import com.example.pp68_salestrackingapp.data.model.LossReasonMaster
 import com.example.pp68_salestrackingapp.data.model.ProjectStageMaster
 import com.example.pp68_salestrackingapp.data.remote.ApiService
@@ -37,6 +39,23 @@ class MasterDataRepository @Inject constructor(
             val resp = apiService.getLossReasonMasters()
             if (resp.isSuccessful && resp.body() != null) {
                 resp.body()!!.map { LossReasonMaster(code = it.code, label = it.label, sequence = it.sequence) }
+            } else emptyList()
+        } catch (e: Exception) { emptyList() }
+    }
+
+    suspend fun getDealFactorQuestions(): List<DealFactorQuestion> = withContext(Dispatchers.IO) {
+        try {
+            val resp = apiService.getDealFactorQuestions()
+            if (resp.isSuccessful && resp.body() != null) {
+                resp.body()!!.map { q ->
+                    DealFactorQuestion(
+                        questionKey = q.questionKey,
+                        label = q.label,
+                        sequence = q.sequence,
+                        defaultCode = q.defaultCode,
+                        options = q.options.map { DealFactorOption(code = it.code, label = it.label, sequence = it.sequence) }
+                    )
+                }
             } else emptyList()
         } catch (e: Exception) { emptyList() }
     }
