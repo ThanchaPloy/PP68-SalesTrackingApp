@@ -35,6 +35,7 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.example.pp68_salestrackingapp.data.model.PlanItemDto
 import com.example.pp68_salestrackingapp.utils.formatPhotoUrl
 import coil.compose.AsyncImage
 import com.example.pp68_salestrackingapp.ui.components.DatePickerField
@@ -91,6 +92,7 @@ fun SalesResultScreen(
         onSummaryChanged                = viewModel::onSummaryChanged,
         onLossReasonChanged             = viewModel::onLossReasonChanged,
         onOtherLossReasonChanged        = viewModel::onOtherLossReasonChanged,
+        onToggleChecklistItem           = viewModel::toggleChecklistItem,
         lossReasonOptions               = viewModel.lossReasonOptions,
         onPhotoCaptured                 = { uri -> viewModel.onPhotoCaptured(context, uri) },
         onPhotosPicked                  = { uris -> viewModel.onPhotosPicked(context, uris) },
@@ -121,6 +123,7 @@ private fun SalesResultContent(
     onSummaryChanged: (String) -> Unit,
     onLossReasonChanged: (String) -> Unit,
     onOtherLossReasonChanged: (String) -> Unit,
+    onToggleChecklistItem: (Int) -> Unit,
     lossReasonOptions: List<String>,
     onPhotoCaptured: (Uri) -> Unit,
     onPhotosPicked: (List<Uri>) -> Unit,
@@ -192,6 +195,19 @@ private fun SalesResultContent(
                                 fontSize = 13.sp, color = Color(0xFFE65100), fontWeight = FontWeight.Medium
                             )
                         }
+                    }
+                }
+
+                // ✅ เช็คลิสต์วัตถุประสงค์ — ย้ายมาจาก ActivityDetailScreen ให้ติ๊กพร้อมกับตอนเขียนสรุป
+                // แทนที่จะเป็นอีกหน้าที่ต้องแวะก่อน ว่างเปล่าเมื่อไม่มีนัดหมายผูกอยู่ (โหมด STANDALONE) จึงไม่แสดง
+                if (s.planItems.isNotEmpty()) {
+                    SectionCard(title = "เป้าหมายที่ทำสำเร็จในการเข้าพบนี้", icon = Icons.Default.CheckCircle) {
+                        ChecklistSection(
+                            items       = s.planItems,
+                            selectedIds = s.selectedItemIds,
+                            enabled     = !s.isReadOnlyVersion,
+                            onToggle    = onToggleChecklistItem
+                        )
                     }
                 }
 
@@ -484,6 +500,41 @@ private fun SalesResultContent(
                 }
 
                 Spacer(Modifier.height(40.dp))
+            }
+        }
+    }
+}
+
+@Composable
+private fun ChecklistSection(
+    items: List<PlanItemDto>,
+    selectedIds: Set<Int>,
+    enabled: Boolean,
+    onToggle: (Int) -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        items.forEach { item ->
+            val isSelected = selectedIds.contains(item.masterId)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .then(if (enabled) Modifier.clickable { onToggle(item.masterId) } else Modifier)
+                    .padding(vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Checkbox(
+                    checked         = isSelected,
+                    onCheckedChange = { onToggle(item.masterId) },
+                    enabled         = enabled,
+                    colors          = CheckboxDefaults.colors(checkedColor = RedPrimary)
+                )
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    item.masterDetails?.actName ?: "ไม่ระบุเป้าหมาย",
+                    fontSize   = 14.sp,
+                    color      = if (isSelected) TextDark else TextGray,
+                    fontWeight = if (isSelected) FontWeight.Medium else FontWeight.Normal
+                )
             }
         }
     }
@@ -841,6 +892,7 @@ private fun SalesResultScreenPreview() {
             onSummaryChanged = {},
             onLossReasonChanged = {},
             onOtherLossReasonChanged = {},
+            onToggleChecklistItem = {},
             lossReasonOptions = listOf("ผลิตไม่ได้/ผลิตไม่ทัน", "เทคโนโลยีไม่ผ่าน", "สู้ราคาไม่ไหว", "อื่น ๆ"),
             onPhotoCaptured = {},
             onPhotosPicked = {},

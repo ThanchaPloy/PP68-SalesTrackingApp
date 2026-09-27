@@ -95,7 +95,6 @@ fun SalesTrackingApp() {
                 onAddClick  = { navController.navigate(Route.CreateActivity.path) },
                 onCardClick = { id -> navController.navigate(Route.ActivityDetail.createRoute(id)) },
                 onCheckin = { id -> navController.navigate(Route.CheckIn.createRoute(id)) },
-                onFinish  = { id -> navController.navigate(Route.ActivityDetail.createRoute(id)) },
                 onReport  = { id -> navController.navigate(Route.SalesResult.createRoute(id)) },
                 onNotificationClick = { navController.navigate(Route.Notification.path) },
                 onSettingsClick     = { navController.navigate(Route.Settings.path) },
@@ -147,7 +146,7 @@ fun SalesTrackingApp() {
                 onBack = { navController.popBackStack() },
                 onEdit = { id -> navController.navigate(Route.EditActivity.createRoute(id)) },
                 onCheckin = { id -> navController.navigate(Route.CheckIn.createRoute(id)) },
-                onFinish = { navController.popBackStack() },
+                onSaveResult = { id -> navController.navigate(Route.SalesResult.createRoute(id)) },
                 onNotificationClick = { navController.navigate(Route.Notification.path) },
                 onSettingsClick = { navController.navigate(Route.Settings.path) },
                 onLogoutClick = onLogout

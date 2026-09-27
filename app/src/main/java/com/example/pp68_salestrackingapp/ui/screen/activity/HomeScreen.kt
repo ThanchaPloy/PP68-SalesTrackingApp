@@ -60,9 +60,12 @@ private data class StatusConfig(
     val bgColor:   Color,
     val action:    String?
 )
+// ✅ "checked_in" ชี้ไป "report" ตรง ๆ (ไม่ใช่ "finish" อีกแล้ว) — เดิมพา user ไป
+// ActivityDetailScreen ให้กดปุ่ม Finish ที่ไม่ได้บันทึกข้อมูลอะไร แค่เปลี่ยนสถานะแล้วเด้งกลับ Home
+// ให้แตะการ์ดซ้ำ ตอนนี้ปุ่ม "บันทึกผล" เดียวกับที่ completed/cancelled ใช้อยู่แล้วพาไปหน้าบันทึกผลได้เลย
 private val statusConfigs = mapOf(
     "planned"    to StatusConfig("กำลังดำเนินการ", GreenStatus,  Color(0xFFE8F5E9), "checkin"),
-    "checked_in" to StatusConfig("กำลังดำเนินการ", GreenStatus,  Color(0xFFE8F5E9), "finish"),
+    "checked_in" to StatusConfig("กำลังดำเนินการ", GreenStatus,  Color(0xFFE8F5E9), "report"),
     "completed"  to StatusConfig("เสร็จสิ้น",        GrayStatus, Color(0xFFECEFF1), "report"),
     "cancelled"  to StatusConfig("รอรายงานผล",    OrangeStatus, Color(0xFFFFF3E0), "report")
 )
@@ -72,7 +75,6 @@ fun HomeScreen(
     onAddClick:          () -> Unit,
     onCardClick:         (String) -> Unit,
     onCheckin:           (String) -> Unit,
-    onFinish:            (String) -> Unit,
     onReport:            (String) -> Unit,
     onNotificationClick: () -> Unit = {},
     onSettingsClick:     () -> Unit = {},
@@ -139,7 +141,6 @@ fun HomeScreen(
         onAddClick          = onAddClick,
         onCardClick         = onCardClick,
         onCheckin           = onCheckin,
-        onFinish            = onFinish,
         onReport            = onReport,
         onDelete            = { viewModel.deleteActivity(it) },
         onNotificationClick = onNotificationClick,
@@ -157,7 +158,6 @@ private fun HomeScreenContent(
     onAddClick:          () -> Unit,
     onCardClick:         (String) -> Unit,
     onCheckin:           (String) -> Unit,
-    onFinish:            (String) -> Unit,
     onReport:            (String) -> Unit,
     onDelete:            (String) -> Unit,
     onNotificationClick: () -> Unit,
@@ -217,7 +217,6 @@ private fun HomeScreenContent(
                             card      = card,
                             onClick   = { onCardClick(card.activityId) },
                             onCheckin = { onCheckin(card.activityId) },
-                            onFinish  = { onFinish(card.activityId) },
                             onReport  = { onReport(card.activityId) },
                             onDelete  = { onDelete(card.activityId) }
                         )
@@ -236,7 +235,6 @@ fun ActivityCard(
     card:      ActivityCard,
     onClick:   () -> Unit,
     onCheckin: () -> Unit,
-    onFinish:  () -> Unit,
     onReport:  () -> Unit,
     onDelete:  () -> Unit
 ) {
@@ -247,6 +245,9 @@ fun ActivityCard(
 
     val hasNote    = !card.weeklyNote.isNullOrBlank() || card.hasResult
     val canDelete  = card.planStatus == "planned"
+    // นัดแบบ call/online ไม่มีขั้นเช็คอิน — สถานะ "planned" จึงพาไปหน้าบันทึกผลตรง ๆ
+    // เหมือนกับที่ "checked_in"/"completed"/"cancelled" ทำอยู่แล้ว
+    val isCallOrOnline = card.activityType == "call" || card.activityType == "online"
 
     var showDeleteDialog by remember { mutableStateOf(false) }
 
@@ -370,20 +371,17 @@ fun ActivityCard(
                     }
                 }
 
-                statusConf.action?.let { action ->
+                // ปุ่มเล็กมีให้เฉพาะนัด onsite ที่ยังไม่เช็คอิน (action="checkin") — เคสอื่นทั้งหมด
+                // ใช้ปุ่ม "บันทึกผล" เต็มความกว้างด้านล่างแทน
+                if (statusConf.action == "checkin" && !isCallOrOnline) {
                     Spacer(Modifier.width(10.dp))
-                    val isCallOrOnline = card.activityType == "call" || card.activityType == "online"
-                    when (action) {
-                        "checkin" -> {
-                            if (isCallOrOnline) ActionButton("Finish", BlueBtn, onClick = onFinish)
-                            else ActionButton("Check-in", BlueBtn, onClick = onCheckin)
-                        }
-                        "finish"  -> ActionButton("Finish", BlueBtn, onClick = onFinish)
-                    }
+                    ActionButton("Check-in", BlueBtn, onClick = onCheckin)
                 }
             }
 
-            if (statusConf.action == "report") {
+            val showReportButton = statusConf.action == "report" ||
+                    (statusConf.action == "checkin" && isCallOrOnline)
+            if (showReportButton) {
                 Spacer(Modifier.height(10.dp))
                 Button(
                     onClick  = onReport,
@@ -629,7 +627,6 @@ fun HomeScreenPreview() {
             onAddClick = {},
             onCardClick = {},
             onCheckin = {},
-            onFinish = {},
             onReport = {},
             onNotificationClick = {},
             onSettingsClick = {},

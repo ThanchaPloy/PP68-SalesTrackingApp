@@ -47,6 +47,9 @@ class SalesResultViewModelTest {
         Dispatchers.setMain(dispatcher)
         coEvery { activityRepo.getActivityById(any()) } returns Result.success(emptyList())
         coEvery { activityRepo.getActivityResult(any()) } returns null
+        // relaxed mockk ไม่รู้วิธีสังเคราะห์ kotlin.Result ที่ยังไม่ได้ stub ไว้ให้ (คืน Object เปล่ามาแทน
+        // แล้ว cast เป็น List พังเป็น ClassCastException) ต้อง stub ไว้ล่วงหน้าเหมือน getActivityById ข้างบน
+        coEvery { activityRepo.getPlanItems(any()) } returns Result.success(emptyList())
     }
 
     @After
@@ -119,6 +122,85 @@ class SalesResultViewModelTest {
         assertTrue(vm.uiState.value.isStatusUpdateEnabled)
         assertEquals("done summary", vm.uiState.value.visitSummary)
         assertFalse(vm.uiState.value.isLoading)
+    }
+
+    // ✅ เช็คลิสต์วัตถุประสงค์ย้ายมาจาก ActivityDetailScreen — ต้องโหลดมาให้ครบตอนเปิดหน้า
+    @Test
+    fun `init with activityId should load its checklist`() = runTest {
+        coEvery { activityRepo.getActivityById("A1") } returns Result.success(
+            listOf(
+                SalesActivity(
+                    activityId = "A1",
+                    userId = "U1",
+                    customerId = "C1",
+                    projectId = "PRJ-1",
+                    activityType = "Visit",
+                    activityDate = "2026-04-01",
+                    status = "checked_in"
+                )
+            )
+        )
+        coEvery { projectRepo.getProjectById("PRJ-1") } returns Result.success(
+            Project(projectId = "PRJ-1", custId = "C1", projectName = "Project A")
+        )
+        coEvery { activityRepo.getPlanItems("A1") } returns Result.success(
+            listOf(
+                com.example.pp68_salestrackingapp.data.model.PlanItemDto(masterId = 1, isDone = true),
+                com.example.pp68_salestrackingapp.data.model.PlanItemDto(masterId = 2, isDone = false)
+            )
+        )
+
+        val vm = SalesResultViewModel(
+            SavedStateHandle(mapOf("activityId" to "A1")),
+            projectRepo,
+            activityRepo,
+            authRepo
+        )
+        advanceUntilIdle()
+
+        assertEquals(2, vm.uiState.value.planItems.size)
+        assertEquals(setOf(1), vm.uiState.value.selectedItemIds)
+    }
+
+    @Test
+    fun `toggling a checklist item updates state and syncs to the server`() = runTest {
+        coEvery { activityRepo.getActivityById("A1") } returns Result.success(
+            listOf(
+                SalesActivity(
+                    activityId = "A1",
+                    userId = "U1",
+                    customerId = null,
+                    projectId = null,
+                    activityType = "Visit",
+                    activityDate = "2026-04-01",
+                    status = "checked_in"
+                )
+            )
+        )
+        coEvery { activityRepo.getPlanItems("A1") } returns Result.success(
+            listOf(com.example.pp68_salestrackingapp.data.model.PlanItemDto(masterId = 5, isDone = false))
+        )
+
+        val vm = SalesResultViewModel(
+            SavedStateHandle(mapOf("activityId" to "A1")),
+            projectRepo,
+            activityRepo,
+            authRepo
+        )
+        advanceUntilIdle()
+
+        vm.toggleChecklistItem(5)
+        advanceUntilIdle()
+
+        assertEquals(setOf(5), vm.uiState.value.selectedItemIds)
+        coVerify(exactly = 1) { activityRepo.updatePlanItemStatus("A1", 5, true) }
+        coVerify(exactly = 1) { activityRepo.updateChecklistItem("A1", 5, true) }
+
+        vm.toggleChecklistItem(5)
+        advanceUntilIdle()
+
+        assertTrue(vm.uiState.value.selectedItemIds.isEmpty())
+        coVerify(exactly = 1) { activityRepo.updatePlanItemStatus("A1", 5, false) }
     }
 
     @Test
@@ -417,6 +499,67 @@ class SalesResultViewModelTest {
         assertTrue(vm.uiState.value.isSaved)
         assertNull(vm.uiState.value.error)
         coVerify(exactly = 1) { activityRepo.saveActivityResult(any(), any()) }
+    }
+
+    // ✅ ไม่มีปุ่ม "Finish" แยกอีกต่อไป — บันทึกผลสำเร็จตอนนี้เป็นจุดเดียวที่ปิดนัดหมาย
+    @Test
+    fun `save success in FROM_APPOINTMENT mode also marks the appointment finished`() = runTest {
+        coEvery { activityRepo.getActivityById("A1") } returns Result.success(
+            listOf(
+                SalesActivity(
+                    activityId = "A1",
+                    userId = "U1",
+                    customerId = null,
+                    projectId = null,
+                    activityType = "Visit",
+                    activityDate = "2026-04-01",
+                    status = "checked_in"
+                )
+            )
+        )
+        coEvery { activityRepo.saveActivityResult(any(), any()) } returns Result.success(Unit)
+        coEvery { activityRepo.finishActivity(any(), any(), any()) } returns Result.success(Unit)
+
+        val vm = SalesResultViewModel(
+            SavedStateHandle(mapOf("activityId" to "A1")),
+            projectRepo,
+            activityRepo,
+            authRepo
+        )
+        advanceUntilIdle()
+        vm.onSummaryChanged("summary")
+        vm.answerRequiredAnalysis()
+
+        vm.save()
+        advanceUntilIdle()
+
+        assertTrue(vm.uiState.value.isSaved)
+        coVerify(exactly = 1) { activityRepo.finishActivity("A1", any(), null) }
+    }
+
+    // standalone ไม่มีนัดหมายจริงให้ปิด — ต้องไม่เผลอเรียก finishActivity ด้วย activityId ที่ไม่มีอยู่
+    @Test
+    fun `save success in STANDALONE mode does not try to finish an appointment`() = runTest {
+        coEvery { projectRepo.getProjectById("PRJ-1") } returns Result.success(
+            Project(projectId = "PRJ-1", custId = "C1", projectName = "Project A")
+        )
+        coEvery { activityRepo.saveStandaloneResult(any(), any(), any()) } returns Result.success(Unit)
+
+        val vm = SalesResultViewModel(
+            SavedStateHandle(mapOf("projectId" to "PRJ-1")),
+            projectRepo,
+            activityRepo,
+            authRepo
+        )
+        advanceUntilIdle()
+        vm.onSummaryChanged("summary")
+        vm.answerRequiredAnalysis()
+
+        vm.save()
+        advanceUntilIdle()
+
+        assertTrue(vm.uiState.value.isSaved)
+        coVerify(exactly = 0) { activityRepo.finishActivity(any(), any(), any()) }
     }
 
     @Test

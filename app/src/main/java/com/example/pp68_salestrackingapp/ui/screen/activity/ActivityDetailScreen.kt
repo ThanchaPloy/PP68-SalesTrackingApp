@@ -58,7 +58,9 @@ fun ActivityDetailScreen(
     onBack:     () -> Unit,
     onEdit:     (String) -> Unit = {},
     onCheckin:  (String) -> Unit = {},
-    onFinish:   () -> Unit = {},
+    // นำไปหน้าบันทึกผลตรง ๆ — ไม่มี API call ระหว่างทางแล้ว การเปลี่ยนสถานะเป็น completed
+    // เกิดขึ้นตอนบันทึกผลสำเร็จ (SalesResultViewModel.save()) ไม่ใช่ตอนกดปุ่มนี้
+    onSaveResult: (String) -> Unit = {},
     onNotificationClick: () -> Unit = {},
     onSettingsClick:     () -> Unit = {},
     onLogoutClick:       () -> Unit = {},
@@ -77,19 +79,13 @@ fun ActivityDetailScreen(
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
-    LaunchedEffect(s.isFinished) {
-        if (s.isFinished) {
-            onFinish()
-        }
-    }
-
     ActivityDetailContent(
         s            = s,
         onBack       = onBack,
         onEdit       = { onEdit(activityId) },
         onCheckin    = { onCheckin(activityId) },
         onToggleItem = { viewModel.toggleItem(it) },
-        onFinish     = { viewModel.finishActivity() },
+        onSaveResult = { onSaveResult(activityId) },
         onClearError = { viewModel.clearError() },
         onNotificationClick = onNotificationClick,
         onSettingsClick     = onSettingsClick,
@@ -105,7 +101,7 @@ fun ActivityDetailContent(
     onEdit: () -> Unit,
     onCheckin: () -> Unit,
     onToggleItem: (Int) -> Unit,
-    onFinish: () -> Unit,
+    onSaveResult: () -> Unit,
     onClearError: () -> Unit,
     onNotificationClick: () -> Unit = {},
     onSettingsClick:     () -> Unit = {},
@@ -219,6 +215,9 @@ fun ActivityDetailContent(
 
                 Spacer(Modifier.height(40.dp))
 
+                // ✅ ไม่มีปุ่ม "Finish" อีกต่อไป — เดิมกดแล้วแค่เปลี่ยนสถานะเป็น completed โดยไม่มีข้อมูล
+                // อะไรเกิดขึ้นจริง แล้วเด้งกลับ Home ให้แตะการ์ดซ้ำเพื่อไปหน้าบันทึกผล ซ้ำซ้อนโดยใช่เหตุ
+                // สถานะ completed ตอนนี้เกิดจากบันทึกผลสำเร็จเท่านั้น (ดู SalesResultViewModel.save())
                 when (s.activity?.status) {
                     "planned" -> {
                         val isOnsiteVisit = s.activity?.activityType == "onsite"
@@ -236,38 +235,28 @@ fun ActivityDetailContent(
                             }
                         } else {
                             Button(
-                                onClick  = onFinish,
+                                onClick  = onSaveResult,
                                 modifier = Modifier.fillMaxWidth().height(54.dp),
                                 colors   = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32)),
-                                shape    = RoundedCornerShape(12.dp),
-                                enabled  = !s.isFinishing
+                                shape    = RoundedCornerShape(12.dp)
                             ) {
-                                if (s.isFinishing) {
-                                    CircularProgressIndicator(color = White, modifier = Modifier.size(20.dp))
-                                } else {
-                                    Icon(Icons.Default.CheckCircle, null, tint = White, modifier = Modifier.size(20.dp))
-                                    Spacer(Modifier.width(8.dp))
-                                    Text("บันทึกผลการนัดหมาย", fontWeight = FontWeight.Bold, color = White)
-                                }
+                                Icon(Icons.Default.CheckCircle, null, tint = White, modifier = Modifier.size(20.dp))
+                                Spacer(Modifier.width(8.dp))
+                                Text("ไปหน้าบันทึกผล", fontWeight = FontWeight.Bold, color = White)
                             }
                         }
                     }
 
                     "checked_in" -> {
                         Button(
-                            onClick  = onFinish,
+                            onClick  = onSaveResult,
                             modifier = Modifier.fillMaxWidth().height(54.dp),
                             colors   = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32)),
-                            shape    = RoundedCornerShape(12.dp),
-                            enabled  = !s.isFinishing
+                            shape    = RoundedCornerShape(12.dp)
                         ) {
-                            if (s.isFinishing) {
-                                CircularProgressIndicator(color = White, modifier = Modifier.size(20.dp))
-                            } else {
-                                Icon(Icons.Default.CheckCircle, null, tint = White, modifier = Modifier.size(20.dp))
-                                Spacer(Modifier.width(8.dp))
-                                Text("บันทึกผลการนัดหมาย", fontWeight = FontWeight.Bold, color = White)
-                            }
+                            Icon(Icons.Default.CheckCircle, null, tint = White, modifier = Modifier.size(20.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text("ไปหน้าบันทึกผล", fontWeight = FontWeight.Bold, color = White)
                         }
                     }
                 }
@@ -387,7 +376,7 @@ fun ActivityDetailScreenPreview() {
             onEdit = {},
             onCheckin = {},
             onToggleItem = {},
-            onFinish = {},
+            onSaveResult = {},
             onClearError = {}
         )
     }

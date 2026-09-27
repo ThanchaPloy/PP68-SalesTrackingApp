@@ -28,11 +28,7 @@ data class ActivityDetailUiState(
     val isLocationMismatch: Boolean = false,
     val currentDistance: Double = 0.0, // in meters
     val isCheckingIn: Boolean = false,
-    
-    // Finish
-    val isFinishing: Boolean = false,
-    val isFinished:  Boolean = false,
-    val isCompleted: Boolean = false,
+
     val error: String? = null
 )
 
@@ -188,25 +184,6 @@ class ActivityDetailViewModel @Inject constructor(
         viewModelScope.launch {
             repo.updatePlanItemStatus(activityId, masterId, isDone)
             repo.updateChecklistItem(activityId, masterId, isDone)
-        }
-    }
-
-    fun finishActivity() {
-        val activityId = _uiState.value.activity?.activityId ?: return
-        val doneIds    = _uiState.value.selectedItemIds.toList()
-
-        viewModelScope.launch {
-            _uiState.update { it.copy(isFinishing = true, error = null) }
-
-            repo.finishActivity(
-                activityId    = activityId,
-                doneMasterIds = doneIds,
-                note          = null
-            ).onSuccess {
-                _uiState.update { it.copy(isFinishing = false, isFinished = true) }
-            }.onFailure { e ->
-                _uiState.update { it.copy(isFinishing = false, error = "Finish ไม่สำเร็จ: ${e.message}") }
-            }
         }
     }
 

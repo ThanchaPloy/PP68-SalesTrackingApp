@@ -8,6 +8,7 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.pp68_salestrackingapp.data.model.ActivityResult
+import com.example.pp68_salestrackingapp.data.model.PlanItemDto
 import com.example.pp68_salestrackingapp.data.model.Project
 import com.example.pp68_salestrackingapp.data.repository.ActivityRepository
 import com.example.pp68_salestrackingapp.data.repository.AuthRepository
@@ -49,6 +50,11 @@ data class SalesResultUiState(
     val lossReason: String = "",
     val otherLossReason: String = "",
     val lossReasonError: String? = null,
+
+    // ✅ เช็คลิสต์วัตถุประสงค์ของนัดหมาย — ย้ายมาจาก ActivityDetailScreen เดิม ให้ติ๊กพร้อมกับ
+    // ตอนเขียนสรุปแทนที่จะเป็นอีกหน้าที่ต้องแวะก่อน (ว่างเปล่าเมื่อเป็น STANDALONE ที่ไม่มีนัดหมายผูกอยู่)
+    val planItems: List<PlanItemDto> = emptyList(),
+    val selectedItemIds: Set<Int> = emptySet(),
     // true หลังกดบันทึกแล้วยังมีข้อ 4-7 ที่ไม่ได้เลือก — ให้หน้าจอกางแท็บที่ผิดและขึ้นข้อความใต้ข้อนั้น
     val showRequiredErrors: Boolean = false,
 
@@ -118,14 +124,15 @@ class SalesResultViewModel @Inject constructor(
             
             if (activity != null) {
                 _uiState.update { it.copy(
-                    activityId = id, 
-                    projectId = activity.projectId, 
+                    activityId = id,
+                    projectId = activity.projectId,
                     mode = ResultMode.FROM_APPOINTMENT,
                     reportDate = activity.activityDate
                 ) }
                 activity.projectId?.let { loadProjectData(it) }
                 // ดึงผลลัพธ์ล่าสุดที่ผูกกับ Appointment นี้ (ถ้ามี)
                 activityRepo.getActivityResult(id)?.let { applyResultToState(it); loadPhotosForResult(it) }
+                loadChecklist(id)
             } else {
                 // 2. ถ้าไม่ใช่ อาจเป็น Result ID โดยตรง (กรณี Standalone หรือคลิกจาก History)
                 val result = activityRepo.getResultById(id)
@@ -140,9 +147,36 @@ class SalesResultViewModel @Inject constructor(
                     applyResultToState(result)
                     loadPhotosForResult(result)
                     result.projectId?.let { loadProjectData(it) }
+                    result.activityId?.let { loadChecklist(it) }
                 }
             }
             _uiState.update { it.copy(isLoading = false) }
+        }
+    }
+
+    // ✅ เช็คลิสต์วัตถุประสงค์ของนัดหมาย — โหลดเฉพาะโหมด FROM_APPOINTMENT ที่มี activityId จริง
+    private suspend fun loadChecklist(activityId: String) {
+        val items = activityRepo.getPlanItems(activityId).getOrDefault(emptyList())
+        _uiState.update {
+            it.copy(
+                planItems       = items,
+                selectedItemIds = items.filter { item -> item.isDone }.map { item -> item.masterId }.toSet()
+            )
+        }
+    }
+
+    // ก็อปพฤติกรรมจาก ActivityDetailViewModel.toggleItem() เดิม — ติ๊กแล้วซิงค์ขึ้น server ทันที
+    // ทีละรายการ ไม่รอรวมส่งตอนกด "บันทึก" เพื่อให้ไม่หายถ้าปิดแอประหว่างทาง
+    fun toggleChecklistItem(masterId: Int) {
+        val current = _uiState.value.selectedItemIds.toMutableSet()
+        if (current.contains(masterId)) current.remove(masterId) else current.add(masterId)
+        _uiState.update { it.copy(selectedItemIds = current) }
+
+        val activityId = _uiState.value.activityId ?: return
+        val isDone = current.contains(masterId)
+        viewModelScope.launch {
+            activityRepo.updatePlanItemStatus(activityId, masterId, isDone)
+            activityRepo.updateChecklistItem(activityId, masterId, isDone)
         }
     }
 
@@ -498,8 +532,17 @@ class SalesResultViewModel @Inject constructor(
                     ResultMode.STANDALONE -> activityRepo.saveStandaloneResult(s.projectId!!, resultToSave, photoUrls)
                 }
 
-                if (saveResult.isSuccess) { _uiState.update { it.copy(isSaving = false, isSaved = true) } }
-                else { _uiState.update { it.copy(isSaving = false, error = saveResult.exceptionOrNull()?.message) } }
+                if (saveResult.isSuccess) {
+                    // ✅ นี่คือจุดเดียวที่นัดหมายเปลี่ยนเป็น completed — ไม่มีปุ่ม "Finish" แยกอีกต่อไป
+                    // (เดิมอยู่ที่ ActivityDetailViewModel.finishActivity() ถูกเรียกจากปุ่มที่ไม่ได้
+                    // บันทึกข้อมูลอะไรเลย) standalone ไม่มีนัดหมายจริงให้ปิด จึงข้ามขั้นนี้ไป
+                    if (s.mode == ResultMode.FROM_APPOINTMENT) {
+                        s.activityId?.let { activityRepo.finishActivity(it, s.selectedItemIds.toList(), note = null) }
+                    }
+                    _uiState.update { it.copy(isSaving = false, isSaved = true) }
+                } else {
+                    _uiState.update { it.copy(isSaving = false, error = saveResult.exceptionOrNull()?.message) }
+                }
             } catch (e: Exception) { _uiState.update { it.copy(isSaving = false, error = e.message) } }
         }
     }
