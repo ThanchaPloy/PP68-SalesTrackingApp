@@ -201,7 +201,6 @@ fun NotificationSettingsScreen(
     NotificationSettingsContent(
         s = s,
         onBack = onBack,
-        onPushEnabledChange = viewModel::onPushEnabledChange,
         onVisitReminderChange = viewModel::onVisitReminderChange
     )
 }
@@ -211,7 +210,6 @@ fun NotificationSettingsScreen(
 fun NotificationSettingsContent(
     s: NotificationSettingsUiState,
     onBack: () -> Unit,
-    onPushEnabledChange: (Boolean) -> Unit,
     onVisitReminderChange: (Boolean) -> Unit
 ) {
     Scaffold(
@@ -226,24 +224,6 @@ fun NotificationSettingsContent(
         containerColor = BgLight
     ) { padding ->
         Column(modifier = Modifier.fillMaxSize().padding(padding)) {
-            Text(
-                "ทั่วไป",
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Bold,
-                color = TextGray,
-                modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp)
-            )
-            Surface(color = White) {
-                Column {
-                    SettingToggleItem(
-                        label     = "เปิดการแจ้งเตือน",
-                        isEnabled = s.pushEnabled,
-                        onToggle  = onPushEnabledChange
-                    )
-                    HorizontalDivider(Modifier.padding(horizontal = 24.dp), color = Color(0xFFEEEEEE))
-                }
-            }
-
             Text(
                 "การแจ้งเตือน",
                 fontSize = 12.sp,
@@ -486,7 +466,6 @@ fun NotificationSettingsScreenPreview() {
         NotificationSettingsContent(
             s = NotificationSettingsUiState(),
             onBack = {},
-            onPushEnabledChange = {},
             onVisitReminderChange = {}
         )
     }

@@ -9,7 +9,6 @@ import kotlinx.coroutines.flow.update
 import javax.inject.Inject
 
 data class NotificationSettingsUiState(
-    val pushEnabled:    Boolean = true,
     val visitReminder:  Boolean = true
 )
 
@@ -25,16 +24,8 @@ class NotificationSettingsViewModel @Inject constructor(
 
     private fun loadPreferences() {
         _uiState.update {
-            it.copy(
-                pushEnabled   = tokenManager.isPushEnabled(),
-                visitReminder = tokenManager.isVisitReminderEnabled()
-            )
+            it.copy(visitReminder = tokenManager.isVisitReminderEnabled())
         }
-    }
-
-    fun onPushEnabledChange(enabled: Boolean) {
-        tokenManager.savePushEnabled(enabled)
-        _uiState.update { it.copy(pushEnabled = enabled) }
     }
 
     fun onVisitReminderChange(enabled: Boolean) {

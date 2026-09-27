@@ -94,23 +94,6 @@ class TokenManager @Inject constructor(
         }.apply()
     }
 
-    // ✅ เพิ่ม FCM token functions
-    fun saveFcmToken(token: String) {
-        prefs.edit().putString("fcm_token", token).apply()
-    }
-
-    fun getFcmToken(): String? {
-        return prefs.getString("fcm_token", null)
-    }
-
-    fun savePushEnabled(enabled: Boolean) {
-        prefs.edit().putBoolean("push_enabled", enabled).apply()
-    }
-
-    fun isPushEnabled(): Boolean {
-        return prefs.getBoolean("push_enabled", true) // default = เปิด
-    }
-
     fun saveVisitReminderEnabled(enabled: Boolean) {
         prefs.edit().putBoolean("visit_reminder_enabled", enabled).apply()
     }

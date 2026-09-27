@@ -7,7 +7,6 @@ plugins {
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.hilt.android)
     alias(libs.plugins.ksp)
-    id("com.google.gms.google-services")
     id("jacoco")
 }
 
@@ -152,11 +151,6 @@ dependencies {
 
     // ต้องมี room-ktx สำหรับ Flow support
     implementation("androidx.room:room-ktx:2.6.1")
-
-    // ✅ Firebase BOM — จัดการ version ให้อัตโนมัติ
-    implementation(platform(libs.firebase.bom))
-
-    implementation(libs.firebase.messaging)
 
     // Unit & Integration Testing
     testImplementation("junit:junit:4.13.2")

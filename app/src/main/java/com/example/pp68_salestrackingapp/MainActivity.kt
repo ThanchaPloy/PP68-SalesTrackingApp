@@ -11,32 +11,26 @@ import dagger.hilt.android.AndroidEntryPoint
 import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Build
-import android.util.Log
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import com.example.pp68_salestrackingapp.data.remote.ApiService
 import com.example.pp68_salestrackingapp.di.TokenManager
 import com.example.pp68_salestrackingapp.utils.SyncManager
-import com.google.firebase.messaging.FirebaseMessaging
-import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
 
     @Inject lateinit var apiService: ApiService
-    @Inject lateinit var authService: com.example.pp68_salestrackingapp.data.remote.AuthService
     @Inject lateinit var tokenManager: TokenManager
     @Inject lateinit var syncManager: SyncManager
 
+    // ผลของการขอสิทธิ์ไม่ต้องทำอะไรต่อ — การแจ้งเตือนนัดหมายตั้งไว้ล่วงหน้าด้วย AlarmManager
+    // ตั้งแต่ตอนสร้างนัด ระบบจะยิงเองเมื่อถึงเวลาถ้าผู้ใช้อนุญาต
     private val requestPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
-    ) { isGranted ->
-        if (isGranted) {
-            getFcmToken()
-        }
-    }
+    ) { }
 
 
 
@@ -66,44 +60,10 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun askNotificationPermission() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            when {
-                ContextCompat.checkSelfPermission(
-                    this, Manifest.permission.POST_NOTIFICATIONS
-                ) == PackageManager.PERMISSION_GRANTED -> {
-                    getFcmToken()
-                }
-                else -> {
-                    requestPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-                }
-            }
-        } else {
-            getFcmToken()
-        }
-    }
-
-
-
-    private fun getFcmToken() {
-        FirebaseMessaging.getInstance().token.addOnCompleteListener { task ->
-            if (task.isSuccessful) {
-                val token = task.result
-                Log.d("FCM", "Current Token: $token")
-                tokenManager.saveFcmToken(token)
-                
-                // ✅ ส่ง Token ไปที่ Server จริงๆ
-                val userId = tokenManager.getUserData()?.userId
-                if (userId != null) {
-                    lifecycleScope.launch {
-                        try {
-                            authService.updateFcmToken(mapOf("fcm_token" to token))
-                            Log.d("FCM", "ส่ง Token ไป Server สำเร็จ")
-                        } catch (e: Exception) {
-                            Log.e("FCM", "ส่ง Token ล้มเหลว: ${e.message}")
-                        }
-                    }
-                }
-            }
-        }
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
+        val granted = ContextCompat.checkSelfPermission(
+            this, Manifest.permission.POST_NOTIFICATIONS
+        ) == PackageManager.PERMISSION_GRANTED
+        if (!granted) requestPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
     }
 }

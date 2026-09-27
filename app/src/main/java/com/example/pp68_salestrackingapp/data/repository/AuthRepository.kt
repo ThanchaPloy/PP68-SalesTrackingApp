@@ -62,9 +62,6 @@ class AuthRepository @Inject constructor(
                         branchId = finalBranchId
                     )
 
-                    // 4. อัปเดต FCM Token สำหรับการแจ้งเตือน
-                    updateFcmTokenOnServer(finalUserId)
-
                     kotlin.Result.success(loginResp)
                 } else {
                     kotlin.Result.failure(Exception("รหัสพนักงานหรือรหัสผ่านไม่ถูกต้อง"))
@@ -116,9 +113,6 @@ class AuthRepository @Inject constructor(
                         branchId = userDetail?.branchId ?: branchId
                     )
 
-                    // อัปเดต FCM Token สำหรับผู้ใช้ใหม่
-                    updateFcmTokenOnServer(finalUserId)
-
                     kotlin.Result.success(loginResp)
                 } else {
                     val errBody = response.errorBody()?.string() ?: ""
@@ -129,19 +123,6 @@ class AuthRepository @Inject constructor(
                 }
             } catch (e: Exception) {
                 kotlin.Result.failure(e)
-            }
-        }
-    }
-
-    private suspend fun updateFcmTokenOnServer(userId: String) {
-        val fcmToken = tokenManager.getFcmToken()
-        if (!fcmToken.isNullOrBlank()) {
-            try {
-                authService.updateFcmToken(
-                    updates = mapOf("fcm_token" to fcmToken)
-                )
-            } catch (e: Exception) {
-                // หากอัปเดตไม่สำเร็จก็ให้ทำงานส่วนหลักต่อไปได้
             }
         }
     }

@@ -54,14 +54,6 @@
             android:exported="false" />
 
         <service
-            android:name=".service.SalesTrackingFirebaseService"
-            android:exported="false">
-            <intent-filter>
-                <action android:name="com.google.firebase.MESSAGING_EVENT" />
-            </intent-filter>
-        </service>
-
-        <service
             android:name=".service.ProximityMonitorService"
             android:exported="false"
             android:foregroundServiceType="location" />

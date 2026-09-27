@@ -9,11 +9,21 @@ import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.example.pp68_salestrackingapp.MainActivity
 import com.example.pp68_salestrackingapp.R
+import com.example.pp68_salestrackingapp.di.TokenManager
 import com.example.pp68_salestrackingapp.utils.NotificationChannels
+import dagger.hilt.android.AndroidEntryPoint
+import javax.inject.Inject
 
+@AndroidEntryPoint
 class AppointmentAlarmReceiver : BroadcastReceiver() {
 
+    @Inject lateinit var tokenManager: TokenManager
+
     override fun onReceive(context: Context, intent: Intent) {
+        // เช็คตอนยิง ไม่ใช่ตอนตั้ง — นัดถูกตั้งปลุกไว้ล่วงหน้าตั้งแต่ตอนสร้าง ถ้าเช็คแค่ตอนตั้ง
+        // การปิดสวิตช์ทีหลังจะไม่มีผลกับนัดที่ตั้งไว้แล้ว ผู้ใช้ก็ยังโดนเตือนอยู่ดี
+        if (!tokenManager.isVisitReminderEnabled()) return
+
         val activityId = intent.getStringExtra("activity_id") ?: return
         val companyName = intent.getStringExtra("company_name") ?: "สถานที่นัดหมาย"
         val topic = intent.getStringExtra("topic") ?: "นัดหมายพบลูกค้า"

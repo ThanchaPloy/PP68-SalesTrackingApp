@@ -100,7 +100,7 @@ Two files define what actually exists at runtime — check them before assuming 
 - **Proximity reminders**: `ProximityMonitorService` notifies within a **500 m** radius.
 - **Sales results are versioned, never overwritten.** Each save writes a new `activity_result` row sharing a `result_group_id`, with `version` incremented and `is_latest` moved to the new row. Queries for "current" state must filter `is_latest = 1`; history screens read the whole group.
 - **Opportunity score propagates via a DB trigger**, not client code — writing `activity_result` updates the parent `project` server-side.
-- **Project status changes are mirrored to Firebase Realtime DB** (`FirebaseRealtimeService`) for an external web dashboard. Failures are logged and swallowed.
+- **Appointment reminders are local only** — `AppointmentAlarmScheduler` sets `AlarmManager` alarms at 30/15/0 minutes before the planned time when the appointment is created, and `AppointmentAlarmReceiver` checks `TokenManager.isVisitReminderEnabled()` at fire time. There is no server-initiated push: Firebase (Cloud Messaging, Realtime DB, Analytics) was removed from both repos, along with the status mirror that fed an external web dashboard. A dashboard that needs status history should read `project_stage_log`, which holds strictly more than the mirror ever did. `employee.fcm_token` is still in the database but nothing reads or writes it.
 
 ## Traps
 

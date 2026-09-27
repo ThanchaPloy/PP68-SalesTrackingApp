@@ -147,7 +147,6 @@ fun SettingScreenContent(
             - Backend: Kotlin + Ktor
             - Database: PostgreSQL
             - Authentication: JWT
-            - Push Notification: Firebase Cloud Messaging
 
             © 2026 PP68 Sales Tracking. All rights reserved.
             """.trimIndent(),
@@ -165,7 +164,6 @@ fun SettingScreenContent(
             - ชื่อ-นามสกุล และอีเมล
             - ตำแหน่งที่ตั้ง GPS (เฉพาะตอน Check-in)
             - ข้อมูลกิจกรรมการขายและนัดหมาย
-            - FCM Token สำหรับการแจ้งเตือน
             
             2. การใช้ข้อมูล
             ข้อมูลของคุณถูกใช้เพื่อ:

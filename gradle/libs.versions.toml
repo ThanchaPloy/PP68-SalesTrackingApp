@@ -19,7 +19,6 @@ espressoCore           = "3.6.1"
 ktor                   = "2.3.12"
 maplibre               = "11.13.5"
 maplibreAnnotation     = "3.0.2"
-firebaseBom = "33.7.0"
 
 [libraries]
 androidx-core-ktx                 = { group = "androidx.core",            name = "core-ktx",                      version.ref = "coreKtx" }
@@ -56,8 +55,6 @@ maplibre-annotation                = { group = "org.maplibre.gl",          name 
 junit                             = { group = "junit",                    name = "junit",                         version.ref = "junit" }
 androidx-junit                    = { group = "androidx.test.ext",        name = "junit",                         version.ref = "junitVersion" }
 androidx-espresso-core            = { group = "androidx.test.espresso",   name = "espresso-core",                  version.ref = "espressoCore" }
-firebase-bom = { group = "com.google.firebase", name = "firebase-bom", version.ref = "firebaseBom" }
-firebase-messaging = { group = "com.google.firebase", name = "firebase-messaging" }
 
 [plugins]
 android-application = { id = "com.android.application",          version.ref = "agp" }
