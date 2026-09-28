@@ -22,6 +22,9 @@ import javax.inject.Inject
 
 data class CreateAppointmentUiState(
     val activityId:          String? = null,
+    // W6: ค่าดั้งเดิมตอนโหลดมาแก้ไข ใช้เช็คว่าห้ามแก้ไข/ลบเพราะใกล้วันนัดหรือยัง (ไม่ใช้ค่าที่กำลังพิมพ์แก้)
+    val originalStatus:      String? = null,
+    val originalPlannedDate: String? = null,
     val selectedProjectId:   String? = null,
     val selectedProjectName: String? = null,
     val selectedCustomerId:  String? = null,
@@ -273,6 +276,8 @@ class CreateAppointmentViewModel @Inject constructor(
                 _uiState.update {
                     it.copy(
                         activityId        = activity.activityId,
+                        originalStatus      = activity.status,
+                        originalPlannedDate = activity.activityDate,
                         selectedProjectId = activity.projectId,
                         selectedCustomerId = activity.customerId,
                         titleTopic        = activity.detail ?: "",
@@ -495,6 +500,12 @@ class CreateAppointmentViewModel @Inject constructor(
             // สร้างนัดหมายใหม่ย้อนหลังไม่ได้ — เช็คเฉพาะตอนสร้างใหม่ ไม่บล็อกการแก้ไขนัดหมายเดิมที่วันที่ผ่านไปแล้ว
             s.activityId == null && isPastDate(s.plannedDate) -> {
                 _uiState.update { it.copy(saveError = "ไม่สามารถสร้างนัดหมายย้อนหลังได้") }
+                false
+            }
+            // W6: ห้ามแก้ไขแผนที่ยังไม่เสร็จ (planned) เมื่อเหลือเวลา <= 7 วันก่อนวันนัดเดิม — เช็คจาก
+            // ค่าดั้งเดิมตอนโหลดมา ไม่ใช่วันที่ที่กำลังพิมพ์แก้อยู่ในฟอร์ม
+            s.activityId != null && com.example.pp68_salestrackingapp.utils.AppointmentStatus.isEditLocked(s.originalStatus, s.originalPlannedDate) -> {
+                _uiState.update { it.copy(saveError = "ไม่สามารถแก้ไขแผนนี้ได้ เนื่องจากเหลือเวลาไม่ถึง 7 วันก่อนวันนัดหมาย") }
                 false
             }
             s.activityType == "onsite" && (s.lat == null || s.lng == null) -> {

@@ -137,8 +137,11 @@ fun ActivityDetailContent(
                 modifier = Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(20.dp),
                 verticalArrangement = Arrangement.spacedBy(20.dp)
             ) {
+                val effectiveStatus = com.example.pp68_salestrackingapp.utils.AppointmentStatus.effective(
+                    s.activity?.status, s.activity?.activityDate
+                )
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    StatusBadge(s.activity?.status ?: "planned")
+                    StatusBadge(effectiveStatus)
                     Spacer(Modifier.weight(1f))
                     // ✅ ให้แก้ไขได้ทุกสถานะ รวมถึงหลัง check-in/บันทึกผล (completed) แล้ว
                     IconButton(onClick = onEdit) {
@@ -218,7 +221,7 @@ fun ActivityDetailContent(
                 // ✅ ไม่มีปุ่ม "Finish" อีกต่อไป — เดิมกดแล้วแค่เปลี่ยนสถานะเป็น completed โดยไม่มีข้อมูล
                 // อะไรเกิดขึ้นจริง แล้วเด้งกลับ Home ให้แตะการ์ดซ้ำเพื่อไปหน้าบันทึกผล ซ้ำซ้อนโดยใช่เหตุ
                 // สถานะ completed ตอนนี้เกิดจากบันทึกผลสำเร็จเท่านั้น (ดู SalesResultViewModel.save())
-                when (s.activity?.status) {
+                when (effectiveStatus) {
                     "planned" -> {
                         val isOnsiteVisit = s.activity?.activityType == "onsite"
 
@@ -247,7 +250,7 @@ fun ActivityDetailContent(
                         }
                     }
 
-                    "checked_in" -> {
+                    "checked_in", com.example.pp68_salestrackingapp.utils.AppointmentStatus.MISSING -> {
                         Button(
                             onClick  = onSaveResult,
                             modifier = Modifier.fillMaxWidth().height(54.dp),
@@ -271,6 +274,7 @@ private fun StatusBadge(status: String) {
         "planned" -> "planned" to Color(0xFF1976D2)
         "checked_in" -> "checked_in" to Color(0xFF2E7D32)
         "completed" -> "completed" to Color(0xFF546E7A)
+        com.example.pp68_salestrackingapp.utils.AppointmentStatus.MISSING -> "ขาดนัด" to Color(0xFFC62828)
         else -> status.uppercase() to TextGray
     }
     Surface(color = color.copy(0.1f), shape = RoundedCornerShape(4.dp)) {

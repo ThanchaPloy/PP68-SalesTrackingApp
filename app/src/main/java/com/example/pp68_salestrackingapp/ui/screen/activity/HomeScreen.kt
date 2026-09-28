@@ -67,7 +67,11 @@ private data class StatusConfig(
 private val statusConfigs = mapOf(
     "planned"    to StatusConfig("กำลังดำเนินการ", GreenStatus,  Color(0xFFE8F5E9), "checkin"),
     "checked_in" to StatusConfig("กำลังดำเนินการ", GreenStatus,  Color(0xFFE8F5E9), "report"),
-    "completed"  to StatusConfig("เสร็จสิ้น",        GrayStatus, Color(0xFFECEFF1), "report")
+    "completed"  to StatusConfig("เสร็จสิ้น",        GrayStatus, Color(0xFFECEFF1), "report"),
+    // W6: เลยวันนัดไปแล้วยังไม่เช็คอิน/บันทึกผล — เช็คอินไม่ได้อีกแล้ว แต่ยังบันทึกผลย้อนหลังได้
+    // เหมือน checked_in/completed (action="report" เหมือนกัน ไม่ใช่ "checkin")
+    com.example.pp68_salestrackingapp.utils.AppointmentStatus.MISSING to
+        StatusConfig("ขาดนัด", Color(0xFFC62828), Color(0xFFFFEBEE), "report")
 )
 
 @Composable
@@ -240,11 +244,14 @@ fun ActivityCard(
 ) {
     val typeConf   = typeConfigs[card.activityType]
         ?: TypeConfig(card.activityType.uppercase(), Icons.Default.Event, TextGray)
-    val statusConf = statusConfigs[card.planStatus]
-        ?: StatusConfig(card.planStatus, TextGray, BgLight, null)
+    val effectiveStatus = com.example.pp68_salestrackingapp.utils.AppointmentStatus.effective(card.planStatus, card.plannedDate)
+    val statusConf = statusConfigs[effectiveStatus]
+        ?: StatusConfig(effectiveStatus, TextGray, BgLight, null)
 
     val hasNote    = !card.weeklyNote.isNullOrBlank() || card.hasResult
-    val canDelete  = card.planStatus == "planned"
+    // W6: ห้ามลบแผนที่ยังไม่เสร็จ (planned) เมื่อเหลือเวลา <= 7 วันก่อนวันนัด กันลบกระชั้นชิด
+    val canDelete  = card.planStatus == "planned" &&
+        !com.example.pp68_salestrackingapp.utils.AppointmentStatus.isEditLocked(card.planStatus, card.plannedDate)
     // นัดแบบ call/online ไม่มีขั้นเช็คอิน — สถานะ "planned" จึงพาไปหน้าบันทึกผลตรง ๆ
     // เหมือนกับที่ "checked_in"/"completed" ทำอยู่แล้ว
     val isCallOrOnline = card.activityType == "call" || card.activityType == "online"

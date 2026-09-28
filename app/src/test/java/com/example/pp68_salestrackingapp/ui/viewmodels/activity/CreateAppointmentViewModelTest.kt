@@ -468,4 +468,81 @@ class CreateAppointmentViewModelTest {
         coVerify(exactly = 0) { activityRepo.addActivity(any()) }
         coVerify(exactly = 0) { activityRepo.savePlanItems(any(), any()) }
     }
+
+    // W6: ห้ามแก้ไขแผนที่ยังไม่เสร็จ (planned) เมื่อเหลือเวลา <= 7 วันก่อนวันนัดเดิม
+    @Test
+    fun `save edit mode should be blocked when the original appointment is within the 7-day lock window`() = runTest {
+        configureBaseData()
+        coEvery { activityRepo.getMasterActivities() } returns emptyList()
+        every { authRepo.currentUser() } returns AuthUser("U1", "u@test.com", "sale")
+        val vm = CreateAppointmentViewModel(context, activityRepo, projectRepo, customerRepo, authRepo)
+        advanceUntilIdle()
+
+        val soon = java.time.LocalDate.now().plusDays(3).toString()
+        coEvery { activityRepo.getActivityById("A-SOON") } returns Result.success(
+            listOf(
+                SalesActivity(
+                    activityId = "A-SOON",
+                    userId = "U1",
+                    customerId = "C1",
+                    projectId = "PRJ-1",
+                    activityType = "onsite",
+                    detail = "old",
+                    activityDate = soon,
+                    plannedTime = "10:00 AM",
+                    status = "planned"
+                )
+            )
+        )
+        coEvery { activityRepo.getPlanItems("A-SOON") } returns Result.success(emptyList())
+        coEvery { activityRepo.getAppointmentContacts("A-SOON") } returns emptyList()
+
+        vm.onEvent(CreateAppointmentEvent.LoadActivity("A-SOON"))
+        advanceUntilIdle()
+        vm.onEvent(CreateAppointmentEvent.LocationPicked(13.7563, 100.5018))
+        vm.onEvent(CreateAppointmentEvent.Save)
+        advanceUntilIdle()
+
+        assertEquals("ไม่สามารถแก้ไขแผนนี้ได้ เนื่องจากเหลือเวลาไม่ถึง 7 วันก่อนวันนัดหมาย", vm.uiState.value.saveError)
+        assertFalse(vm.uiState.value.isSaved)
+        coVerify(exactly = 0) { activityRepo.updateActivity(any(), any()) }
+    }
+
+    @Test
+    fun `save edit mode should proceed when the original appointment is more than 7 days away`() = runTest {
+        configureBaseData()
+        coEvery { activityRepo.getMasterActivities() } returns emptyList()
+        every { authRepo.currentUser() } returns AuthUser("U1", "u@test.com", "sale")
+        coEvery { activityRepo.updateActivity(any(), any()) } returns Result.success(Unit)
+        val vm = CreateAppointmentViewModel(context, activityRepo, projectRepo, customerRepo, authRepo)
+        advanceUntilIdle()
+
+        val farOut = java.time.LocalDate.now().plusDays(30).toString()
+        coEvery { activityRepo.getActivityById("A-FAR") } returns Result.success(
+            listOf(
+                SalesActivity(
+                    activityId = "A-FAR",
+                    userId = "U1",
+                    customerId = "C1",
+                    projectId = "PRJ-1",
+                    activityType = "onsite",
+                    detail = "old",
+                    activityDate = farOut,
+                    plannedTime = "10:00 AM",
+                    status = "planned"
+                )
+            )
+        )
+        coEvery { activityRepo.getPlanItems("A-FAR") } returns Result.success(emptyList())
+        coEvery { activityRepo.getAppointmentContacts("A-FAR") } returns emptyList()
+
+        vm.onEvent(CreateAppointmentEvent.LoadActivity("A-FAR"))
+        advanceUntilIdle()
+        vm.onEvent(CreateAppointmentEvent.LocationPicked(13.7563, 100.5018))
+        vm.onEvent(CreateAppointmentEvent.Save)
+        advanceUntilIdle()
+
+        assertTrue(vm.uiState.value.isSaved)
+        coVerify(exactly = 1) { activityRepo.updateActivity("A-FAR", any()) }
+    }
 }

@@ -90,7 +90,11 @@ fun CheckInScreen(
         }
     }
 
-    if (s.activity?.status == "checked_in") {
+    // W6: เช็คอินไม่ได้อีกแล้วถ้าเช็คอินไปแล้ว หรือถ้าเลยวันนัดไปแล้วยังไม่ได้เช็คอิน (ขาดนัด)
+    val checkInEffectiveStatus = com.example.pp68_salestrackingapp.utils.AppointmentStatus.effective(
+        s.activity?.status, s.activity?.activityDate
+    )
+    if (checkInEffectiveStatus == "checked_in" || checkInEffectiveStatus == com.example.pp68_salestrackingapp.utils.AppointmentStatus.MISSING) {
         LaunchedEffect(Unit) { onBack() }
     }
 
