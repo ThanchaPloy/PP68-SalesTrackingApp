@@ -341,8 +341,31 @@ private fun SalesResultContent(
                 HorizontalDivider(color = BorderGray)
                 Text("วิเคราะห์ข้อมูลเพิ่มเติม", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = RedPrimary)
 
+                // W6-2: โครงการที่เคยตอบข้อ 4-7 ครบแล้ว ไม่ต้องถามซ้ำ — โชว์ค่าที่ตอบไว้แบบอ่านอย่างเดียว
+                // ให้เปลี่ยนที่หน้าโครงการแทน
+                val dealFactorsLocked = s.project?.let {
+                    !it.dealPosition.isNullOrBlank() && !it.previousSolution.isNullOrBlank() &&
+                        !it.counterpartyType.isNullOrBlank() && !it.responseSpeed.isNullOrBlank()
+                } == true
+
+                if (dealFactorsLocked) {
+                    SectionCard(title = "วิเคราะห์ข้อมูลเพิ่มเติม (ข้อ 4-7)", icon = Icons.Default.Lock) {
+                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Text("ตำแหน่งของดีล: ${s.dealPosition}", fontSize = 14.sp)
+                            Text("Solution เดิมของลูกค้า: ${s.previousSolution}", fontSize = 14.sp)
+                            Text("ประเภทคู่สัญญา: ${s.counterpartyMultiplier}", fontSize = 14.sp)
+                            Text("ความรวดเร็วในการตอบรับ: ${s.responseSpeed}", fontSize = 14.sp)
+                            Text(
+                                "ดึงค่าจากครั้งก่อนของโครงการนี้ — ต้องการเปลี่ยนให้ไปแก้ที่หน้าโครงการ",
+                                fontSize = 12.sp, color = TextGray
+                            )
+                        }
+                    }
+                }
+
                 // ข้อ 4-7 วิเคราะห์ดีลผูกกับโครงการ (เขียนลง project_code) — ไม่ผูกโครงการก็ไม่มีที่เก็บ จึงไม่ถาม
-                if (s.projectId != null) {
+                // โครงการที่ตอบครบแล้วก็ไม่ถามซ้ำเหมือนกัน (โชว์เป็น read-only ด้านบนแทน)
+                if (s.projectId != null && !dealFactorsLocked) {
                     CollapsibleSection(
                         title = "Tab Solution & ตำแหน่งดีล",
                         icon = Icons.Default.SettingsSuggest,

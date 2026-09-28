@@ -19,7 +19,7 @@ import com.example.pp68_salestrackingapp.data.model.*
         AppointmentContact::class,
         ActivityResultPhoto::class
     ],
-    version = 50,
+    version = 51,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -369,6 +369,17 @@ abstract class AppDatabase : RoomDatabase() {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE project ADD COLUMN lossReasonNote TEXT")
                 db.execSQL("ALTER TABLE activity_result ADD COLUMN loss_reason_note TEXT")
+            }
+        }
+
+        // W6-2: ปัจจัยข้อ 4-7 sync มาจาก activity_result ล่าสุดของโครงการผ่าน backend trigger
+        // (เหมือน opportunityScore) ให้ project เก็บสำเนาไว้ในเครื่องด้วย เพื่อ prefill หน้าบันทึกผล
+        val MIGRATION_50_51 = object : Migration(50, 51) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE project ADD COLUMN dealPosition TEXT")
+                db.execSQL("ALTER TABLE project ADD COLUMN previousSolution TEXT")
+                db.execSQL("ALTER TABLE project ADD COLUMN counterpartyType TEXT")
+                db.execSQL("ALTER TABLE project ADD COLUMN responseSpeed TEXT")
             }
         }
     }

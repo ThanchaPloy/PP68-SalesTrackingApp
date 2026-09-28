@@ -56,6 +56,11 @@ data class AddProjectUiState(
     val lossReason:             String  = "",
     val otherLossReason:        String  = "",
     val lossReasonError:        String? = null,
+    // W6-2: ปัจจัยข้อ 4-7 — แก้ไขได้ทางเดียวคือที่นี่ หน้าบันทึกผลแค่ prefill มาโชว์เฉยๆ
+    val dealPosition:           String  = "",
+    val previousSolution:       String  = "",
+    val counterpartyType:       String  = "",
+    val responseSpeed:          String  = "",
     // Quick Add Customer
     val isQuickAddCustomerOpen: Boolean = false,
     val quickAddCompanyName:    String  = "",
@@ -79,6 +84,10 @@ sealed class AddProjectEvent {
     data class LocationPicked(val lat: Double, val lng: Double)   : AddProjectEvent()
     data class LossReasonChanged(val value: String)               : AddProjectEvent()
     data class OtherLossReasonChanged(val value: String)          : AddProjectEvent()
+    data class DealPositionChanged(val value: String)             : AddProjectEvent()
+    data class PreviousSolutionChanged(val value: String)         : AddProjectEvent()
+    data class CounterpartyTypeChanged(val value: String)         : AddProjectEvent()
+    data class ResponseSpeedChanged(val value: String)            : AddProjectEvent()
     
     // Quick Add Events
     data class ToggleQuickAddCustomer(val isOpen: Boolean)        : AddProjectEvent()
@@ -104,6 +113,12 @@ class AddProjectViewModel @Inject constructor(
     val lossReasonOptions = com.example.pp68_salestrackingapp.utils.LossReasons.OPTIONS
 
     val opportunityOptions = listOf("HOT", "WARM", "COLD") // ✅ ตัวเลือกโอกาสการขาย
+
+    // W6-2: ตัวเลือกปัจจัยข้อ 4-7 (เดียวกับที่ SalesResultViewModel ใช้ ที่มาจาก DealFactors master data)
+    val dealPositionOptions   get() = com.example.pp68_salestrackingapp.utils.DealFactors.labelToCode(com.example.pp68_salestrackingapp.utils.DealFactors.DEAL_POSITION).keys.toList()
+    val previousSolutionOptions get() = com.example.pp68_salestrackingapp.utils.DealFactors.labelToCode(com.example.pp68_salestrackingapp.utils.DealFactors.PREVIOUS_SOLUTION).keys.toList()
+    val counterpartyTypeOptions get() = com.example.pp68_salestrackingapp.utils.DealFactors.labelToCode(com.example.pp68_salestrackingapp.utils.DealFactors.COUNTERPARTY_TYPE).keys.toList()
+    val responseSpeedOptions  get() = com.example.pp68_salestrackingapp.utils.DealFactors.labelToCode(com.example.pp68_salestrackingapp.utils.DealFactors.RESPONSE_SPEED).keys.toList()
 
     init {
         loadCustomers()
@@ -212,6 +227,7 @@ class AddProjectViewModel @Inject constructor(
                         else -> com.example.pp68_salestrackingapp.utils.LossReasons.OTHER to project.lossReason
                     }
 
+                    val dealFactors = com.example.pp68_salestrackingapp.utils.DealFactors
                     _uiState.update {
                         it.copy(
                             projectId              = project.projectId,
@@ -229,6 +245,10 @@ class AddProjectViewModel @Inject constructor(
                             selectedBillingBranchId = project.billingBranchId,
                             lossReason             = reason,
                             otherLossReason        = other,
+                            dealPosition           = dealFactors.codeToLabel(dealFactors.DEAL_POSITION)[project.dealPosition] ?: "",
+                            previousSolution       = dealFactors.codeToLabel(dealFactors.PREVIOUS_SOLUTION)[project.previousSolution] ?: "",
+                            counterpartyType       = dealFactors.codeToLabel(dealFactors.COUNTERPARTY_TYPE)[project.counterpartyType] ?: "",
+                            responseSpeed          = dealFactors.codeToLabel(dealFactors.RESPONSE_SPEED)[project.responseSpeed] ?: "",
                             isLoading              = false
                         )
                     }
@@ -361,6 +381,14 @@ class AddProjectViewModel @Inject constructor(
                 _uiState.update { it.copy(lossReason = event.value, lossReasonError = null) }
             is AddProjectEvent.OtherLossReasonChanged ->
                 _uiState.update { it.copy(otherLossReason = event.value, lossReasonError = null) }
+            is AddProjectEvent.DealPositionChanged ->
+                _uiState.update { it.copy(dealPosition = event.value) }
+            is AddProjectEvent.PreviousSolutionChanged ->
+                _uiState.update { it.copy(previousSolution = event.value) }
+            is AddProjectEvent.CounterpartyTypeChanged ->
+                _uiState.update { it.copy(counterpartyType = event.value) }
+            is AddProjectEvent.ResponseSpeedChanged ->
+                _uiState.update { it.copy(responseSpeed = event.value) }
             is AddProjectEvent.ToggleQuickAddCustomer -> {
                 _uiState.update { it.copy(isQuickAddCustomerOpen = event.isOpen, quickAddCompanyName = "", quickAddCustType = "") }
             }
@@ -458,6 +486,9 @@ class AddProjectViewModel @Inject constructor(
                     s.otherLossReason
                 } else null
 
+                // W6-2: แปลงป้าย -> รหัสก่อนส่ง เว้นว่างไว้เมื่อยังไม่เลือก (แก้ไขได้ที่นี่เท่านั้น)
+                val dealFactors = com.example.pp68_salestrackingapp.utils.DealFactors
+
                 // ✅ projectId จะถูกสร้างใน repository โดยใช้รูปแบบ project number
                 val projectToSave = Project(
                     projectId             = s.projectId ?: "",
@@ -476,6 +507,10 @@ class AddProjectViewModel @Inject constructor(
                     projectLong           = s.siteLong,
                     lossReason            = finalLossReason,
                     lossReasonNote        = finalLossReasonNote,
+                    dealPosition          = dealFactors.labelToCode(dealFactors.DEAL_POSITION)[s.dealPosition],
+                    previousSolution      = dealFactors.labelToCode(dealFactors.PREVIOUS_SOLUTION)[s.previousSolution],
+                    counterpartyType      = dealFactors.labelToCode(dealFactors.COUNTERPARTY_TYPE)[s.counterpartyType],
+                    responseSpeed         = dealFactors.labelToCode(dealFactors.RESPONSE_SPEED)[s.responseSpeed],
                     createBy              = userId
                 )
 

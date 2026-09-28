@@ -402,6 +402,88 @@ class AddProjectViewModelTest {
         assertEquals("", viewModel.uiState.value.otherLossReason)
     }
 
+    // W6-2: หน้าโครงการเป็นที่เดียวที่แก้ปัจจัยข้อ 4-7 ได้ — โหลดโครงการต้องแปลงรหัสกลับเป็นป้ายให้ dropdown โชว์ถูก
+    @Test
+    fun `loadProject should map deal-factor codes back to labels`() = runTest {
+        coEvery { projectRepo.getProjectById("P123") } returns Result.success(
+            Project(
+                projectId = "P123",
+                custId = "C1",
+                projectName = "Old Name",
+                branchId = "TS-001",
+                dealPosition = "incumbent",
+                previousSolution = "no_solution",
+                counterpartyType = "direct_main_contractor",
+                responseSpeed = "fast"
+            )
+        )
+        coEvery { customerRepo.getCustomerById("C1") } returns Result.success(
+            Customer("C1", "Client A", null, null, null, null, null, null, null)
+        )
+        coEvery { branchRepo.observeBranches() } returns listOf(Branch("TS-001", "North A", "North"))
+
+        initViewModel()
+        advanceUntilIdle()
+        viewModel.onEvent(AddProjectEvent.LoadProject("P123"))
+        advanceUntilIdle()
+
+        val s = viewModel.uiState.value
+        assertEquals("ลูกค้าใช้เราอยู่แล้ว การต่อสัญญามีโอกาสสูงมาก", s.dealPosition)
+        assertEquals("ไม่มี Solution เดิม", s.previousSolution)
+        assertEquals("ดีลกับ Main Contractor โดยตรง", s.counterpartyType)
+        assertEquals("เร็ว", s.responseSpeed)
+    }
+
+    // ยังไม่เคยตอบ (โครงการใหม่/ยังไม่มีค่า) ต้องไม่พังหรือใส่ค่าแปลกมา — เป็นค่าว่างเฉยๆ
+    @Test
+    fun `loadProject with no deal-factor answers yet should leave them blank`() = runTest {
+        coEvery { projectRepo.getProjectById("P123") } returns Result.success(
+            Project(projectId = "P123", custId = "C1", projectName = "Old Name", branchId = "TS-001")
+        )
+        coEvery { customerRepo.getCustomerById("C1") } returns Result.success(
+            Customer("C1", "Client A", null, null, null, null, null, null, null)
+        )
+        coEvery { branchRepo.observeBranches() } returns listOf(Branch("TS-001", "North A", "North"))
+
+        initViewModel()
+        advanceUntilIdle()
+        viewModel.onEvent(AddProjectEvent.LoadProject("P123"))
+        advanceUntilIdle()
+
+        val s = viewModel.uiState.value
+        assertEquals("", s.dealPosition)
+        assertEquals("", s.previousSolution)
+        assertEquals("", s.counterpartyType)
+        assertEquals("", s.responseSpeed)
+    }
+
+    @Test
+    fun `save should map deal-factor labels back to codes`() = runTest {
+        val projectSlot = slot<Project>()
+        coEvery { projectRepo.createProject(capture(projectSlot), "USR-001") } returns Result.success(
+            Project(projectId = "PJ-NEW", custId = "C1", projectName = "New Project Alpha", branchId = "TS-001")
+        )
+        initViewModel()
+        advanceUntilIdle()
+
+        viewModel.onEvent(AddProjectEvent.ProjectNameChanged("New Project Alpha"))
+        viewModel.onEvent(AddProjectEvent.CustomerSelected("C1", "Client A"))
+        viewModel.onEvent(AddProjectEvent.TeamSelected("TS-001", "North A"))
+        viewModel.onEvent(AddProjectEvent.StatusChanged("Lead"))
+        viewModel.onEvent(AddProjectEvent.DealPositionChanged("ลูกค้าใช้เราอยู่แล้ว การต่อสัญญามีโอกาสสูงมาก"))
+        viewModel.onEvent(AddProjectEvent.PreviousSolutionChanged("ไม่มี Solution เดิม"))
+        viewModel.onEvent(AddProjectEvent.CounterpartyTypeChanged("ดีลกับ Main Contractor โดยตรง"))
+        viewModel.onEvent(AddProjectEvent.ResponseSpeedChanged("เร็ว"))
+        viewModel.onEvent(AddProjectEvent.Save)
+        advanceUntilIdle()
+
+        assertEquals("incumbent", projectSlot.captured.dealPosition)
+        assertEquals("no_solution", projectSlot.captured.previousSolution)
+        assertEquals("direct_main_contractor", projectSlot.captured.counterpartyType)
+        assertEquals("fast", projectSlot.captured.responseSpeed)
+        assertTrue(viewModel.uiState.value.isSaved)
+    }
+
     @Test
     fun `save failure should set saveError`() = runTest {
         coEvery { projectRepo.createProject(any(), any()) } returns Result.failure(Exception("save failed"))

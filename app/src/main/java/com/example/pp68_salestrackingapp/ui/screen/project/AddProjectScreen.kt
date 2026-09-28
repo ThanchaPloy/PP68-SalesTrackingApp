@@ -51,7 +51,11 @@ fun AddProjectScreen(
         uiState = uiState,
         onEvent = viewModel::onEvent,
         onBack = onBack,
-        lossReasonOptions = viewModel.lossReasonOptions
+        lossReasonOptions = viewModel.lossReasonOptions,
+        dealPositionOptions = viewModel.dealPositionOptions,
+        previousSolutionOptions = viewModel.previousSolutionOptions,
+        counterpartyTypeOptions = viewModel.counterpartyTypeOptions,
+        responseSpeedOptions = viewModel.responseSpeedOptions
     )
 }
 
@@ -61,7 +65,11 @@ fun AddProjectContent(
     uiState: AddProjectUiState,
     onEvent: (AddProjectEvent) -> Unit,
     onBack: () -> Unit,
-    lossReasonOptions: List<String> = emptyList()
+    lossReasonOptions: List<String> = emptyList(),
+    dealPositionOptions: List<String> = emptyList(),
+    previousSolutionOptions: List<String> = emptyList(),
+    counterpartyTypeOptions: List<String> = emptyList(),
+    responseSpeedOptions: List<String> = emptyList()
 ) {
     Scaffold(
         topBar = {
@@ -312,6 +320,40 @@ fun AddProjectContent(
                         }
                     }
                 }
+            }
+
+            // ── ปัจจัยข้อ 4-7 (W6-2) — แก้ไขได้ที่นี่เท่านั้น หน้าบันทึกผลแค่ prefill มาโชว์ ──
+            FormField("4. ตำแหน่งของดีล") {
+                DropdownField(
+                    value       = uiState.dealPosition,
+                    placeholder = "เลือกตำแหน่งของดีล",
+                    options     = dealPositionOptions,
+                    onSelect    = { idx -> onEvent(AddProjectEvent.DealPositionChanged(dealPositionOptions[idx])) }
+                )
+            }
+            FormField("5. Solution เดิมของลูกค้า") {
+                DropdownField(
+                    value       = uiState.previousSolution,
+                    placeholder = "เลือก Solution เดิม",
+                    options     = previousSolutionOptions,
+                    onSelect    = { idx -> onEvent(AddProjectEvent.PreviousSolutionChanged(previousSolutionOptions[idx])) }
+                )
+            }
+            FormField("6. ประเภทคู่สัญญา") {
+                DropdownField(
+                    value       = uiState.counterpartyType,
+                    placeholder = "เลือกประเภทคู่สัญญา",
+                    options     = counterpartyTypeOptions,
+                    onSelect    = { idx -> onEvent(AddProjectEvent.CounterpartyTypeChanged(counterpartyTypeOptions[idx])) }
+                )
+            }
+            FormField("7. ความรวดเร็วในการตอบรับ") {
+                DropdownField(
+                    value       = uiState.responseSpeed,
+                    placeholder = "เลือกความรวดเร็วในการตอบรับ",
+                    options     = responseSpeedOptions,
+                    onSelect    = { idx -> onEvent(AddProjectEvent.ResponseSpeedChanged(responseSpeedOptions[idx])) }
+                )
             }
 
             // ── Site Location + Google Maps ──────────────────

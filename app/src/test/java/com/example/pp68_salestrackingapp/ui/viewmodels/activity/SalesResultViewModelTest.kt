@@ -80,6 +80,85 @@ class SalesResultViewModelTest {
         assertFalse(vm.uiState.value.isLoading)
     }
 
+    // W6-2: โครงการนี้เคยตอบข้อ 4-7 ไว้แล้ว (จาก trigger sync ฝั่ง backend) — หน้านี้ต้องดึงมา prefill
+    // ให้เอง ไม่ใช่ถามใหม่ทุกครั้ง
+    @Test
+    fun `init with projectId should prefill blank deal-factor answers from the project`() = runTest {
+        coEvery { projectRepo.getProjectById("PRJ-1") } returns Result.success(
+            Project(
+                projectId = "PRJ-1",
+                custId = "C1",
+                projectName = "Project A",
+                dealPosition = "incumbent",
+                previousSolution = "no_solution",
+                counterpartyType = "direct_main_contractor",
+                responseSpeed = "fast"
+            )
+        )
+
+        val vm = SalesResultViewModel(
+            SavedStateHandle(mapOf("projectId" to "PRJ-1")),
+            projectRepo,
+            activityRepo,
+            authRepo
+        )
+        advanceUntilIdle()
+
+        val s = vm.uiState.value
+        assertEquals("ลูกค้าใช้เราอยู่แล้ว การต่อสัญญามีโอกาสสูงมาก", s.dealPosition)
+        assertEquals("ไม่มี Solution เดิม", s.previousSolution)
+        assertEquals("ดีลกับ Main Contractor โดยตรง", s.counterpartyMultiplier)
+        assertEquals("เร็ว", s.responseSpeed)
+    }
+
+    // โครงการเคยตอบครบแล้ว ห้ามบังคับตอบซ้ำ — ค่าที่ prefill มาต้องพอให้บันทึกผ่านได้เลย
+    @Test
+    fun `save should not require deal-factor answers when the project already has them`() = runTest {
+        coEvery { activityRepo.getActivityById("A1") } returns Result.success(
+            listOf(
+                SalesActivity(
+                    activityId = "A1",
+                    userId = "U1",
+                    customerId = "C1",
+                    projectId = "PRJ-1",
+                    activityType = "Visit",
+                    activityDate = "2026-04-01",
+                    status = "planned"
+                )
+            )
+        )
+        coEvery { projectRepo.getProjectById("PRJ-1") } returns Result.success(
+            Project(
+                projectId = "PRJ-1",
+                custId = "C1",
+                projectName = "Project A",
+                projectStatus = "Lead",
+                dealPosition = "incumbent",
+                previousSolution = "no_solution",
+                counterpartyType = "direct_main_contractor",
+                responseSpeed = "fast"
+            )
+        )
+        coEvery { activityRepo.saveActivityResult(any(), any()) } returns Result.success(Unit)
+
+        val vm = SalesResultViewModel(
+            SavedStateHandle(mapOf("activityId" to "A1")),
+            projectRepo,
+            activityRepo,
+            authRepo
+        )
+        advanceUntilIdle()
+        vm.onSummaryChanged("summary")
+
+        vm.save()
+        advanceUntilIdle()
+
+        assertFalse(vm.uiState.value.showRequiredErrors)
+        assertNull(vm.uiState.value.error)
+        assertTrue(vm.uiState.value.isSaved)
+        coVerify(exactly = 1) { activityRepo.saveActivityResult(any(), any()) }
+    }
+
     @Test
     fun `init with activityId should load existing result mapping`() = runTest {
         coEvery { activityRepo.getActivityById("A1") } returns Result.success(

@@ -68,6 +68,24 @@ data class Project(
     @SerializedName("opportunity_score")
     val opportunityScore: String? = null,
 
+    // W6-2: ปัจจัยข้อ 4-7 sync มาจาก activity_result ล่าสุดของโครงการนี้ผ่าน DB trigger (เหมือน
+    // opportunityScore ด้านบน) — แก้ไขได้ทางเดียวคือ PATCH โครงการ ไม่ใช่หน้าบันทึกผล
+    @ColumnInfo(name = "dealPosition")
+    @SerializedName("deal_position")
+    val dealPosition: String? = null,
+
+    @ColumnInfo(name = "previousSolution")
+    @SerializedName("current_solution")
+    val previousSolution: String? = null,
+
+    @ColumnInfo(name = "counterpartyType")
+    @SerializedName("counterparty_type")
+    val counterpartyType: String? = null,
+
+    @ColumnInfo(name = "responseSpeed")
+    @SerializedName("response_speed")
+    val responseSpeed: String? = null,
+
     @ColumnInfo(name = "progressPct")
     @SerializedName("progress_pct")
     val progressPct: Int? = null,

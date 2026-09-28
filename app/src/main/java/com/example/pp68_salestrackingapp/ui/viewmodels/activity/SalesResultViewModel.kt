@@ -246,7 +246,13 @@ class SalesResultViewModel @Inject constructor(
                         it.copy(
                             project = p,
                             currentStatus = p.projectStatus ?: "",
-                            opportunityScore = if (it.opportunityScore.isNullOrBlank()) p.opportunityScore else it.opportunityScore
+                            opportunityScore = if (it.opportunityScore.isNullOrBlank()) p.opportunityScore else it.opportunityScore,
+                            // W6-2: ดึงปัจจัยข้อ 4-7 ที่เคยตอบไว้ของโครงการนี้มา prefill — เฉพาะฟิลด์
+                            // ที่ยังว่าง (ไม่แตะถ้ามีคำตอบจริงของ result นี้โดยเฉพาะอยู่แล้วจาก applyResultToState)
+                            dealPosition = it.dealPosition.ifBlank { DEAL_POSITION_REVERSE[p.dealPosition] ?: "" },
+                            previousSolution = it.previousSolution.ifBlank { SOLUTION_REVERSE[p.previousSolution] ?: "" },
+                            counterpartyMultiplier = it.counterpartyMultiplier.ifBlank { COUNTERPARTY_REVERSE[p.counterpartyType] ?: "" },
+                            responseSpeed = it.responseSpeed.ifBlank { RESPONSE_SPEED_REVERSE[p.responseSpeed] ?: "" }
                         )
                     }
                 },
@@ -256,6 +262,12 @@ class SalesResultViewModel @Inject constructor(
             )
         }
     }
+
+    // W6-2: โครงการนี้เคยมีคำตอบข้อ 4-7 ครบแล้วหรือยัง — ถ้าครบ หน้านี้ไม่ต้องถามซ้ำ (แก้ได้แค่หน้าโครงการ)
+    // ถ้ายังไม่ครบ (โครงการใหม่/ยังไม่เคยตอบ) หน้านี้ยังต้องถามและบังคับตอบเหมือนเดิม
+    private fun projectHasAllDealFactors(p: Project?): Boolean =
+        p != null && !p.dealPosition.isNullOrBlank() && !p.previousSolution.isNullOrBlank() &&
+            !p.counterpartyType.isNullOrBlank() && !p.responseSpeed.isNullOrBlank()
 
     companion object {
         const val MAX_PHOTOS = 5
@@ -468,9 +480,11 @@ class SalesResultViewModel @Inject constructor(
 
         // ข้อ 4-7 วิเคราะห์ดีลผูกกับโครงการ (เขียนลง project_code) — นัดหมาย/แผนที่ไม่ได้ผูกโครงการ
         // ไม่มีที่เก็บค่าพวกนี้ จึงไม่ต้องถามและไม่บังคับตอบ
+        // W6-2: โครงการที่เคยตอบครบแล้วก็ไม่ต้องบังคับซ้ำ — ค่าที่ prefill มาจาก loadProjectData
+        // จะถูกส่งไปพร้อม result อยู่แล้ว, ให้บังคับเฉพาะโครงการใหม่/ยังไม่เคยตอบเท่านั้น
         // ข้อ 4-7 อยู่ในแท็บที่พับไว้ ผู้ใช้จึงอาจไม่เคยเห็นว่ายังไม่ได้ตอบ — ตั้ง flag ให้หน้าจอกางแท็บ
         // ที่ยังขาดและชี้ทีละข้อ แทนที่จะขึ้นแค่ข้อความรวมแล้วผู้ใช้หาไม่เจอ
-        if (!s.projectId.isNullOrBlank() &&
+        if (!s.projectId.isNullOrBlank() && !projectHasAllDealFactors(s.project) &&
             (s.dealPosition.isBlank() || s.previousSolution.isBlank() ||
              s.counterpartyMultiplier.isBlank() || s.responseSpeed.isBlank())
         ) {
