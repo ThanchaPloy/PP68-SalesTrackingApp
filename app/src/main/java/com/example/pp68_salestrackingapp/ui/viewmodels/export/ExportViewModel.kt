@@ -200,8 +200,10 @@ class ExportViewModel @Inject constructor(
                             projectName = act.projectName,
                             companyName = act.companyName,
                             topic = act.objective,
-                            note = act.weeklyNote ?: "", 
-                            status = act.planStatus,
+                            note = act.weeklyNote ?: "",
+                            // W6: แผนที่เลยวันนัดไปแล้วยังไม่เช็คอิน/บันทึกผล ให้รายงานเห็น "missing"
+                            // เหมือนที่แอปโชว์ "ขาดนัด" ด้วย ไม่ใช่โชว์ raw status ดิบว่ายัง "planned"
+                            status = com.example.pp68_salestrackingapp.utils.AppointmentStatus.effective(act.planStatus, act.plannedDate),
                             results = summaryList,
                             resultDetails = resultDetailsList,
                             activityType = act.activityType,

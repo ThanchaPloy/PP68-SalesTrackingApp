@@ -79,6 +79,30 @@ class ExportViewModelTest {
         assertEquals("Discuss", state.activities.first().topic)
     }
 
+    // W6: รายงานต้องเห็น "missing" เหมือนที่แอปโชว์ "ขาดนัด" ไม่ใช่ raw status "planned" ดิบๆ
+    @Test
+    fun `loadWeeklyData should map an overdue planned activity to missing status`() = runTest {
+        val yesterday = LocalDate.now().minusDays(1)
+        val overdue = ActivityCard(
+            activityId = "A1",
+            activityType = "visit",
+            projectName = "P1",
+            companyName = "C1",
+            contactName = null,
+            objective = "Discuss",
+            planStatus = "planned",
+            plannedDate = yesterday.toString(),
+            plannedTime = "10:00",
+            plannedEndTime = "11:00"
+        )
+        coEvery { activityRepo.getMyActivitiesWithDetails() } returns Result.success(listOf(overdue))
+
+        viewModel.loadWeeklyData(yesterday.minusDays(3), yesterday.plusDays(3))
+        advanceUntilIdle()
+
+        assertEquals("missing", viewModel.uiState.value.activities.first().status)
+    }
+
     @Test
     fun `loadWeeklyData failure should set error`() = runTest {
         coEvery { activityRepo.getMyActivitiesWithDetails() } returns Result.failure(Exception("boom"))
