@@ -250,7 +250,46 @@ class SalesResultViewModelTest {
     }
 
     @Test
-    fun `save should block when analysis questions 4-7 are unanswered`() = runTest {
+    fun `save should block when analysis questions 4-7 are unanswered on a project-linked appointment`() = runTest {
+        coEvery { activityRepo.getActivityById("A1") } returns Result.success(
+            listOf(
+                SalesActivity(
+                    activityId = "A1",
+                    userId = "U1",
+                    customerId = "C1",
+                    projectId = "PRJ-1",
+                    activityType = "Visit",
+                    activityDate = "2026-04-01",
+                    status = "planned"
+                )
+            )
+        )
+        coEvery { projectRepo.getProjectById("PRJ-1") } returns Result.success(
+            Project(projectId = "PRJ-1", custId = "C1", projectName = "Project A", projectStatus = "Lead")
+        )
+        coEvery { activityRepo.saveActivityResult(any(), any()) } returns Result.success(Unit)
+
+        val vm = SalesResultViewModel(
+            SavedStateHandle(mapOf("activityId" to "A1")),
+            projectRepo,
+            activityRepo,
+            authRepo
+        )
+        advanceUntilIdle()
+        vm.onSummaryChanged("summary")
+
+        vm.save()
+        advanceUntilIdle()
+
+        assertTrue(vm.uiState.value.showRequiredErrors)
+        assertEquals("กรุณาตอบข้อ 4-7 ในหัวข้อวิเคราะห์ข้อมูลให้ครบ", vm.uiState.value.error)
+        assertFalse(vm.uiState.value.isSaved)
+        coVerify(exactly = 0) { activityRepo.saveActivityResult(any(), any()) }
+    }
+
+    // W6-1: นัดหมายที่ไม่ได้ผูกโครงการไม่มีที่เก็บคำตอบข้อ 4-7 (เขียนลง project_code) จึงไม่ต้องบังคับตอบ
+    @Test
+    fun `save should not require analysis questions 4-7 when the appointment has no linked project`() = runTest {
         coEvery { activityRepo.getActivityById("A1") } returns Result.success(
             listOf(
                 SalesActivity(
@@ -278,10 +317,10 @@ class SalesResultViewModelTest {
         vm.save()
         advanceUntilIdle()
 
-        assertTrue(vm.uiState.value.showRequiredErrors)
-        assertEquals("กรุณาตอบข้อ 4-7 ในหัวข้อวิเคราะห์ข้อมูลให้ครบ", vm.uiState.value.error)
-        assertFalse(vm.uiState.value.isSaved)
-        coVerify(exactly = 0) { activityRepo.saveActivityResult(any(), any()) }
+        assertFalse(vm.uiState.value.showRequiredErrors)
+        assertNull(vm.uiState.value.error)
+        assertTrue(vm.uiState.value.isSaved)
+        coVerify(exactly = 1) { activityRepo.saveActivityResult(any(), any()) }
     }
 
     @Test

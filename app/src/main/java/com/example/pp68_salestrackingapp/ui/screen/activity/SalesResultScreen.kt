@@ -341,68 +341,71 @@ private fun SalesResultContent(
                 HorizontalDivider(color = BorderGray)
                 Text("วิเคราะห์ข้อมูลเพิ่มเติม", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = RedPrimary)
 
-                CollapsibleSection(
-                    title = "Tab Solution & ตำแหน่งดีล",
-                    icon = Icons.Default.SettingsSuggest,
-                    isExpanded = expandSolution,
-                    onToggle = { expandSolution = !expandSolution }
-                ) {
-                    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                        SectionCard(
-                            title = "4. ตำแหน่งของดีล",
-                            icon = Icons.Default.Place,
-                            required = true,
-                            errorText = requiredErrorFor(s.showRequiredErrors, s.dealPosition)
-                        ) {
-                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                SalesResultViewModel.DEAL_POSITION_MAP.keys.forEach { opt ->
-                                    SelectOption(opt, s.dealPosition == opt) { onDealPositionChanged(opt) }
+                // ข้อ 4-7 วิเคราะห์ดีลผูกกับโครงการ (เขียนลง project_code) — ไม่ผูกโครงการก็ไม่มีที่เก็บ จึงไม่ถาม
+                if (s.projectId != null) {
+                    CollapsibleSection(
+                        title = "Tab Solution & ตำแหน่งดีล",
+                        icon = Icons.Default.SettingsSuggest,
+                        isExpanded = expandSolution,
+                        onToggle = { expandSolution = !expandSolution }
+                    ) {
+                        Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                            SectionCard(
+                                title = "4. ตำแหน่งของดีล",
+                                icon = Icons.Default.Place,
+                                required = true,
+                                errorText = requiredErrorFor(s.showRequiredErrors, s.dealPosition)
+                            ) {
+                                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    SalesResultViewModel.DEAL_POSITION_MAP.keys.forEach { opt ->
+                                        SelectOption(opt, s.dealPosition == opt) { onDealPositionChanged(opt) }
+                                    }
                                 }
                             }
-                        }
-                        SectionCard(
-                            title = "5. Solution เดิมของลูกค้า",
-                            icon = Icons.Default.History,
-                            required = true,
-                            errorText = requiredErrorFor(s.showRequiredErrors, s.previousSolution)
-                        ) {
-                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                SalesResultViewModel.SOLUTION_MAP.keys.forEach { opt ->
-                                    SelectOption(opt, s.previousSolution == opt) { onPreviousSolutionChanged(opt) }
+                            SectionCard(
+                                title = "5. Solution เดิมของลูกค้า",
+                                icon = Icons.Default.History,
+                                required = true,
+                                errorText = requiredErrorFor(s.showRequiredErrors, s.previousSolution)
+                            ) {
+                                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    SalesResultViewModel.SOLUTION_MAP.keys.forEach { opt ->
+                                        SelectOption(opt, s.previousSolution == opt) { onPreviousSolutionChanged(opt) }
+                                    }
                                 }
                             }
                         }
                     }
-                }
 
-                CollapsibleSection(
-                    title = "Tap สัญญา & การตอบรับ",
-                    icon = Icons.Default.Handshake,
-                    isExpanded = expandContract,
-                    onToggle = { expandContract = !expandContract }
-                ) {
-                    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                        SectionCard(
-                            title = "6. ประเภทคู่สัญญา",
-                            icon = Icons.Default.Groups,
-                            required = true,
-                            errorText = requiredErrorFor(s.showRequiredErrors, s.counterpartyMultiplier)
-                        ) {
-                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                SalesResultViewModel.COUNTERPARTY_MAP.keys.forEach { opt ->
-                                    SelectOption(opt, s.counterpartyMultiplier == opt) { onCounterpartyMultiplierChanged(opt) }
+                    CollapsibleSection(
+                        title = "Tap สัญญา & การตอบรับ",
+                        icon = Icons.Default.Handshake,
+                        isExpanded = expandContract,
+                        onToggle = { expandContract = !expandContract }
+                    ) {
+                        Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                            SectionCard(
+                                title = "6. ประเภทคู่สัญญา",
+                                icon = Icons.Default.Groups,
+                                required = true,
+                                errorText = requiredErrorFor(s.showRequiredErrors, s.counterpartyMultiplier)
+                            ) {
+                                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    SalesResultViewModel.COUNTERPARTY_MAP.keys.forEach { opt ->
+                                        SelectOption(opt, s.counterpartyMultiplier == opt) { onCounterpartyMultiplierChanged(opt) }
+                                    }
                                 }
                             }
-                        }
-                        SectionCard(
-                            title = "7. ความรวดเร็วในการตอบรับ",
-                            icon = Icons.Default.Speed,
-                            required = true,
-                            errorText = requiredErrorFor(s.showRequiredErrors, s.responseSpeed)
-                        ) {
-                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                SalesResultViewModel.RESPONSE_SPEED_MAP.keys.forEach { opt ->
-                                    SelectOption(opt, s.responseSpeed == opt) { onResponseSpeedChanged(opt) }
+                            SectionCard(
+                                title = "7. ความรวดเร็วในการตอบรับ",
+                                icon = Icons.Default.Speed,
+                                required = true,
+                                errorText = requiredErrorFor(s.showRequiredErrors, s.responseSpeed)
+                            ) {
+                                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    SalesResultViewModel.RESPONSE_SPEED_MAP.keys.forEach { opt ->
+                                        SelectOption(opt, s.responseSpeed == opt) { onResponseSpeedChanged(opt) }
+                                    }
                                 }
                             }
                         }

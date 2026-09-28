@@ -466,10 +466,13 @@ class SalesResultViewModel @Inject constructor(
         if (s.visitSummary.isBlank()) { _uiState.update { it.copy(error = "กรุณากรอกสรุปการเข้าพบ") }; return }
         if (s.photos.any { it.isUploading }) { _uiState.update { it.copy(error = "กรุณารอให้อัปโหลดรูปให้เสร็จก่อนบันทึก") }; return }
 
+        // ข้อ 4-7 วิเคราะห์ดีลผูกกับโครงการ (เขียนลง project_code) — นัดหมาย/แผนที่ไม่ได้ผูกโครงการ
+        // ไม่มีที่เก็บค่าพวกนี้ จึงไม่ต้องถามและไม่บังคับตอบ
         // ข้อ 4-7 อยู่ในแท็บที่พับไว้ ผู้ใช้จึงอาจไม่เคยเห็นว่ายังไม่ได้ตอบ — ตั้ง flag ให้หน้าจอกางแท็บ
         // ที่ยังขาดและชี้ทีละข้อ แทนที่จะขึ้นแค่ข้อความรวมแล้วผู้ใช้หาไม่เจอ
-        if (s.dealPosition.isBlank() || s.previousSolution.isBlank() ||
-            s.counterpartyMultiplier.isBlank() || s.responseSpeed.isBlank()
+        if (!s.projectId.isNullOrBlank() &&
+            (s.dealPosition.isBlank() || s.previousSolution.isBlank() ||
+             s.counterpartyMultiplier.isBlank() || s.responseSpeed.isBlank())
         ) {
             _uiState.update {
                 it.copy(showRequiredErrors = true, error = "กรุณาตอบข้อ 4-7 ในหัวข้อวิเคราะห์ข้อมูลให้ครบ")
