@@ -49,6 +49,10 @@ class SalesResultViewModelTest {
         // relaxed mockk ไม่รู้วิธีสังเคราะห์ kotlin.Result ที่ยังไม่ได้ stub ไว้ให้ (คืน Object เปล่ามาแทน
         // แล้ว cast เป็น List พังเป็น ClassCastException) ต้อง stub ไว้ล่วงหน้าเหมือน getActivityById ข้างบน
         coEvery { activityRepo.getPlanItems(any()) } returns Result.success(emptyList())
+        // ผูกโครงการเพิ่มตอนบันทึกผล: FROM_APPOINTMENT ที่ยังไม่มี projectId จะโหลดตัวเลือกโครงการ
+        // ตอน init เสมอ ต้อง stub ไว้ล่วงหน้าเหมือน getActivityById ไม่งั้น relaxed mock คืน null ให้
+        // Flow แล้ว .collect{} พังทุกเทสต์ที่ FROM_APPOINTMENT ไม่มีโครงการผูกอยู่
+        every { projectRepo.getAllProjectsFlow() } returns kotlinx.coroutines.flow.flowOf(emptyList())
     }
 
     @After
@@ -951,5 +955,155 @@ class SalesResultViewModelTest {
     @Test
     fun `save should use unknown user fallback when auth user missing`() = runTest {
         assertTrue(true)
+    }
+
+    // ผูกโครงการเพิ่มตอนบันทึกผล: นัดหมายที่ไม่ได้ผูกโครงการไว้แต่แรก
+    @Test
+    fun `init loads project options when a FROM_APPOINTMENT has no linked project`() = runTest {
+        coEvery { activityRepo.getActivityById("A1") } returns Result.success(
+            listOf(
+                SalesActivity(
+                    activityId = "A1", userId = "U1", customerId = null, projectId = null,
+                    activityType = "Visit", activityDate = "2026-04-01", status = "checked_in"
+                )
+            )
+        )
+        every { projectRepo.getAllProjectsFlow() } returns kotlinx.coroutines.flow.flowOf(
+            listOf(Project(projectId = "PRJ-1", custId = "C1", projectName = "Project A"))
+        )
+
+        val vm = SalesResultViewModel(
+            SavedStateHandle(mapOf("activityId" to "A1")), projectRepo, activityRepo, authRepo, draftStore
+        )
+        advanceUntilIdle()
+
+        assertEquals(listOf("PRJ-1" to "Project A"), vm.uiState.value.projectOptions)
+    }
+
+    @Test
+    fun `onProjectSelected links an existing project and loads its data`() = runTest {
+        coEvery { activityRepo.getActivityById("A1") } returns Result.success(
+            listOf(
+                SalesActivity(
+                    activityId = "A1", userId = "U1", customerId = null, projectId = null,
+                    activityType = "Visit", activityDate = "2026-04-01", status = "checked_in"
+                )
+            )
+        )
+        coEvery { projectRepo.getProjectById("PRJ-1") } returns Result.success(
+            Project(projectId = "PRJ-1", custId = "C1", projectName = "Project A", projectStatus = "Lead")
+        )
+
+        val vm = SalesResultViewModel(
+            SavedStateHandle(mapOf("activityId" to "A1")), projectRepo, activityRepo, authRepo, draftStore
+        )
+        advanceUntilIdle()
+
+        vm.onProjectSelected("PRJ-1")
+        advanceUntilIdle()
+
+        assertEquals("PRJ-1", vm.uiState.value.projectId)
+        assertEquals("Project A", vm.uiState.value.project?.projectName)
+    }
+
+    @Test
+    fun `saveQuickProject blocks when name or status is blank`() = runTest {
+        val vm = SalesResultViewModel(
+            SavedStateHandle(), projectRepo, activityRepo, authRepo, draftStore
+        )
+        advanceUntilIdle()
+
+        vm.saveQuickProject()
+
+        assertEquals("กรุณาระบุชื่อโครงการและสถานะให้ครบถ้วน", vm.uiState.value.quickAddProjectError)
+        coVerify(exactly = 0) { projectRepo.createProject(any(), any()) }
+    }
+
+    @Test
+    fun `saveQuickProject creates and links a new project`() = runTest {
+        coEvery { activityRepo.getActivityById("A1") } returns Result.success(
+            listOf(
+                SalesActivity(
+                    activityId = "A1", userId = "U1", customerId = null, projectId = null,
+                    activityType = "Visit", activityDate = "2026-04-01", status = "checked_in"
+                )
+            )
+        )
+        every { authRepo.currentUser() } returns AuthUser("U1", "u@test.com", "sale", "TS-001")
+        val createdProject = Project(projectId = "PRJ-NEW", custId = null, projectName = "New Project", projectStatus = "Lead")
+        coEvery { projectRepo.createProject(any(), "U1") } returns Result.success(createdProject)
+        coEvery { projectRepo.getProjectById("PRJ-NEW") } returns Result.success(createdProject)
+
+        val vm = SalesResultViewModel(
+            SavedStateHandle(mapOf("activityId" to "A1")), projectRepo, activityRepo, authRepo, draftStore
+        )
+        advanceUntilIdle()
+
+        vm.onQuickAddProjectNameChanged("New Project")
+        vm.onQuickAddProjectStatusChanged("Lead")
+        vm.saveQuickProject()
+        advanceUntilIdle()
+
+        assertEquals("PRJ-NEW", vm.uiState.value.projectId)
+        assertFalse(vm.uiState.value.isQuickAddProjectOpen)
+        coVerify(exactly = 1) { projectRepo.createProject(match { it.projectName == "New Project" && it.projectStatus == "Lead" }, "U1") }
+    }
+
+    @Test
+    fun `save success pushes the newly linked project back onto the appointment`() = runTest {
+        coEvery { activityRepo.getActivityById("A1") } returns Result.success(
+            listOf(
+                SalesActivity(
+                    activityId = "A1", userId = "U1", customerId = null, projectId = null,
+                    activityType = "Visit", activityDate = "2026-04-01", status = "checked_in"
+                )
+            )
+        )
+        coEvery { projectRepo.getProjectById("PRJ-1") } returns Result.success(
+            Project(projectId = "PRJ-1", custId = "C1", projectName = "Project A", projectStatus = "Lead")
+        )
+        coEvery { activityRepo.saveActivityResult(any(), any()) } returns Result.success(Unit)
+        coEvery { activityRepo.finishActivity(any(), any(), any()) } returns Result.success(Unit)
+
+        val vm = SalesResultViewModel(
+            SavedStateHandle(mapOf("activityId" to "A1")), projectRepo, activityRepo, authRepo, draftStore
+        )
+        advanceUntilIdle()
+        vm.onProjectSelected("PRJ-1")
+        advanceUntilIdle()
+        vm.onSummaryChanged("summary")
+        vm.answerRequiredAnalysis()
+
+        vm.save()
+        advanceUntilIdle()
+
+        assertTrue(vm.uiState.value.isSaved)
+        coVerify(exactly = 1) { activityRepo.updateActivity("A1", mapOf("project_code" to "PRJ-1")) }
+    }
+
+    @Test
+    fun `save success does not touch the appointment when no project was linked`() = runTest {
+        coEvery { activityRepo.getActivityById("A1") } returns Result.success(
+            listOf(
+                SalesActivity(
+                    activityId = "A1", userId = "U1", customerId = null, projectId = null,
+                    activityType = "Visit", activityDate = "2026-04-01", status = "checked_in"
+                )
+            )
+        )
+        coEvery { activityRepo.saveActivityResult(any(), any()) } returns Result.success(Unit)
+        coEvery { activityRepo.finishActivity(any(), any(), any()) } returns Result.success(Unit)
+
+        val vm = SalesResultViewModel(
+            SavedStateHandle(mapOf("activityId" to "A1")), projectRepo, activityRepo, authRepo, draftStore
+        )
+        advanceUntilIdle()
+        vm.onSummaryChanged("summary")
+
+        vm.save()
+        advanceUntilIdle()
+
+        assertTrue(vm.uiState.value.isSaved)
+        coVerify(exactly = 0) { activityRepo.updateActivity(any(), any()) }
     }
 }

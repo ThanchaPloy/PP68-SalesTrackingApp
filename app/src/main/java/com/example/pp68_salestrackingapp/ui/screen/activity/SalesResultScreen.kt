@@ -42,8 +42,11 @@ import com.example.pp68_salestrackingapp.ui.components.DatePickerField
 import com.example.pp68_salestrackingapp.ui.components.DiscardChangesDialog
 import com.example.pp68_salestrackingapp.ui.components.DraftBanner
 import com.example.pp68_salestrackingapp.ui.components.DropdownField
+import com.example.pp68_salestrackingapp.ui.components.FormField
+import com.example.pp68_salestrackingapp.ui.components.FormTextField
 import com.example.pp68_salestrackingapp.ui.theme.SalesTrackingTheme
 import com.example.pp68_salestrackingapp.ui.viewmodels.activity.ResultPhoto
+import com.example.pp68_salestrackingapp.ui.viewmodels.activity.ResultMode
 import com.example.pp68_salestrackingapp.ui.viewmodels.activity.SalesResultUiState
 import com.example.pp68_salestrackingapp.ui.viewmodels.activity.SalesResultViewModel
 import java.io.File
@@ -95,6 +98,11 @@ fun SalesResultScreen(
         onBack                          = attemptBack,
         onRestoreDraft                  = viewModel::restoreDraft,
         onDismissDraftPrompt            = viewModel::dismissDraftPrompt,
+        onProjectSelected               = viewModel::onProjectSelected,
+        onQuickAddProjectToggle         = viewModel::onQuickAddProjectToggle,
+        onQuickAddProjectNameChanged    = viewModel::onQuickAddProjectNameChanged,
+        onQuickAddProjectStatusChanged  = viewModel::onQuickAddProjectStatusChanged,
+        onSaveQuickProject              = viewModel::saveQuickProject,
         onReportDateChanged             = viewModel::onReportDateChanged,
         onStatusToggle                  = viewModel::onStatusToggle,
         onNewStatusSelected             = viewModel::onNewStatusSelected,
@@ -128,6 +136,11 @@ private fun SalesResultContent(
     onBack: () -> Unit,
     onRestoreDraft: () -> Unit = {},
     onDismissDraftPrompt: () -> Unit = {},
+    onProjectSelected: (String) -> Unit = {},
+    onQuickAddProjectToggle: (Boolean) -> Unit = {},
+    onQuickAddProjectNameChanged: (String) -> Unit = {},
+    onQuickAddProjectStatusChanged: (String) -> Unit = {},
+    onSaveQuickProject: () -> Unit = {},
     onReportDateChanged: (String) -> Unit,
     onStatusToggle: (Boolean) -> Unit,
     onNewStatusSelected: (String) -> Unit,
@@ -222,6 +235,73 @@ private fun SalesResultContent(
                                 "กำลังดูเวอร์ชันเก่า (version ${s.version}) — ไม่สามารถแก้ไขได้",
                                 fontSize = 13.sp, color = Color(0xFFE65100), fontWeight = FontWeight.Medium
                             )
+                        }
+                    }
+                }
+
+                // นัดหมายที่ไม่ได้ผูกโครงการไว้แต่แรก — ให้เลือกผูกเพิ่มได้ตอนนี้ (ไม่บังคับ) พอบันทึกผล
+                // สำเร็จ ตัวนัดหมายจริงจะถูกอัปเดตให้ผูกโครงการนี้ถาวรด้วย (ดู SalesResultViewModel.save())
+                if (s.mode == ResultMode.FROM_APPOINTMENT && s.projectId == null && !s.isReadOnlyVersion) {
+                    SectionCard(title = "ผูกโครงการ (ไม่ระบุก็ได้)", icon = Icons.Default.Business) {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            DropdownField(
+                                value = "",
+                                placeholder = "เลือกโครงการที่มีอยู่แล้ว",
+                                options = s.projectOptions.map { it.second },
+                                onSelect = { idx -> onProjectSelected(s.projectOptions[idx].first) }
+                            )
+                            TextButton(onClick = { onQuickAddProjectToggle(true) }) {
+                                Icon(Icons.Default.Add, null, tint = RedPrimary, modifier = Modifier.size(18.dp))
+                                Spacer(Modifier.width(4.dp))
+                                Text("สร้างโครงการด่วน", color = RedPrimary, fontSize = 14.sp)
+                            }
+                        }
+                    }
+                }
+
+                if (s.isQuickAddProjectOpen) {
+                    ModalBottomSheet(
+                        onDismissRequest = { onQuickAddProjectToggle(false) },
+                        containerColor = White
+                    ) {
+                        Column(
+                            modifier = Modifier.fillMaxWidth().padding(24.dp),
+                            verticalArrangement = Arrangement.spacedBy(16.dp)
+                        ) {
+                            Text("สร้างโครงการด่วน", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = RedPrimary)
+                            FormField("ชื่อโครงการ", required = true) {
+                                FormTextField(
+                                    value = s.quickAddProjectName,
+                                    onValueChange = onQuickAddProjectNameChanged,
+                                    placeholder = "ระบุชื่อโครงการ"
+                                )
+                            }
+                            FormField("สถานะ", required = true) {
+                                val statusList = com.example.pp68_salestrackingapp.utils.ProjectStages.SELECTABLE
+                                DropdownField(
+                                    value = s.quickAddProjectStatus,
+                                    placeholder = "เลือกสถานะ",
+                                    options = statusList,
+                                    onSelect = { idx -> onQuickAddProjectStatusChanged(statusList[idx]) }
+                                )
+                            }
+                            s.quickAddProjectError?.let {
+                                Text(it, color = RedPrimary, fontSize = 13.sp)
+                            }
+                            Button(
+                                onClick = onSaveQuickProject,
+                                modifier = Modifier.fillMaxWidth().height(48.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = RedPrimary),
+                                shape = RoundedCornerShape(10.dp),
+                                enabled = !s.isSavingQuickProject
+                            ) {
+                                if (s.isSavingQuickProject) {
+                                    CircularProgressIndicator(color = White, modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                                } else {
+                                    Text("บันทึกโครงการใหม่", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                            Spacer(Modifier.height(24.dp))
                         }
                     }
                 }

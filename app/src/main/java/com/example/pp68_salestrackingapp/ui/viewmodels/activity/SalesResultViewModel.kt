@@ -64,7 +64,16 @@ data class SalesResultUiState(
     val version: Int = 1,
     val isReadOnlyVersion: Boolean = false, // true = กำลังดู version เก่า (ไม่ใช่ล่าสุด) แก้ไขไม่ได้
 
-    val draftAvailable: Boolean = false
+    val draftAvailable: Boolean = false,
+
+    // ✅ ผูกโครงการเพิ่มตอนบันทึกผล — เฉพาะนัดหมายที่ไม่ได้ผูกโครงการไว้แต่แรก (ดู onProjectSelected/saveQuickProject)
+    val projectOptions: List<Pair<String, String>> = emptyList(),
+    val isLoadingProjectOptions: Boolean = false,
+    val isQuickAddProjectOpen: Boolean = false,
+    val quickAddProjectName: String = "",
+    val quickAddProjectStatus: String = "",
+    val isSavingQuickProject: Boolean = false,
+    val quickAddProjectError: String? = null
 )
 
 // ไม่รวมรูป (photos) — Uri ท้องถิ่น/ไฟล์ที่อัปโหลดแล้วกู้คืนข้ามเซสชันไม่ได้อย่างปลอดภัย ผู้ใช้ต้อง
@@ -233,9 +242,91 @@ class SalesResultViewModel @Inject constructor(
                     result.activityId?.let { loadChecklist(it) }
                 }
             }
+            // นัดหมายที่ไม่ได้ผูกโครงการไว้แต่แรก ให้ผูกเพิ่มได้ตอนบันทึกผล (ดู onProjectSelected/saveQuickProject)
+            if (_uiState.value.mode == ResultMode.FROM_APPOINTMENT && _uiState.value.projectId == null) {
+                loadProjectOptions()
+            }
             baseline = _uiState.value.toDraft()
             checkForDraft()
             _uiState.update { it.copy(isLoading = false) }
+        }
+    }
+
+    private fun loadProjectOptions() {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoadingProjectOptions = true) }
+            projectRepo.getAllProjectsFlow().collect { list ->
+                _uiState.update {
+                    it.copy(
+                        projectOptions = list.map { p -> p.projectId to p.projectName },
+                        isLoadingProjectOptions = false
+                    )
+                }
+            }
+        }
+    }
+
+    // เลือกโครงการที่มีอยู่แล้วมาผูกกับนัดหมายนี้ — ตัวนัดหมายจริงจะถูกอัปเดตให้ผูกด้วยตอนกดบันทึกผล (ดู save())
+    fun onProjectSelected(projectId: String) {
+        _uiState.update { it.copy(projectId = projectId) }
+        viewModelScope.launch { loadProjectData(projectId) }
+    }
+
+    fun onQuickAddProjectToggle(isOpen: Boolean) {
+        _uiState.update {
+            it.copy(
+                isQuickAddProjectOpen = isOpen,
+                quickAddProjectName = "",
+                quickAddProjectStatus = "",
+                quickAddProjectError = null
+            )
+        }
+    }
+
+    fun onQuickAddProjectNameChanged(value: String) {
+        _uiState.update { it.copy(quickAddProjectName = value, quickAddProjectError = null) }
+    }
+
+    fun onQuickAddProjectStatusChanged(value: String) {
+        _uiState.update { it.copy(quickAddProjectStatus = value, quickAddProjectError = null) }
+    }
+
+    // สร้างโครงการด่วน — กรอกแค่ชื่อ+สถานะ ฟิลด์อื่นเติมทีหลังได้ที่หน้าโครงการ (เหมือน saveQuickCustomer
+    // ใน AddProjectViewModel) แล้วผูกโครงการที่สร้างใหม่นี้เข้ากับนัดหมายทันที
+    fun saveQuickProject() {
+        val s = _uiState.value
+        if (s.quickAddProjectName.isBlank() || s.quickAddProjectStatus.isBlank()) {
+            _uiState.update { it.copy(quickAddProjectError = "กรุณาระบุชื่อโครงการและสถานะให้ครบถ้วน") }
+            return
+        }
+        viewModelScope.launch {
+            _uiState.update { it.copy(isSavingQuickProject = true) }
+            val userId = authRepo.currentUser()?.userId
+            val newProject = Project(
+                projectId = "",
+                projectName = s.quickAddProjectName.trim(),
+                projectStatus = s.quickAddProjectStatus,
+                branchId = authRepo.currentUser()?.teamId,
+                createBy = userId
+            )
+            projectRepo.createProject(newProject, userId ?: "").fold(
+                onSuccess = { created ->
+                    _uiState.update {
+                        it.copy(
+                            projectOptions = it.projectOptions + (created.projectId to created.projectName),
+                            projectId = created.projectId,
+                            isQuickAddProjectOpen = false,
+                            isSavingQuickProject = false,
+                            quickAddProjectName = "",
+                            quickAddProjectStatus = ""
+                        )
+                    }
+                    loadProjectData(created.projectId)
+                },
+                onFailure = { e ->
+                    _uiState.update { it.copy(isSavingQuickProject = false, quickAddProjectError = e.message) }
+                }
+            )
         }
     }
 
@@ -656,6 +747,11 @@ class SalesResultViewModel @Inject constructor(
                     // บันทึกข้อมูลอะไรเลย) standalone ไม่มีนัดหมายจริงให้ปิด จึงข้ามขั้นนี้ไป
                     if (s.mode == ResultMode.FROM_APPOINTMENT) {
                         s.activityId?.let { activityRepo.finishActivity(it, s.selectedItemIds.toList(), note = null) }
+                        // ผูกโครงการเพิ่มตอนบันทึกผล (นัดหมายที่ไม่ได้ผูกไว้แต่แรก) ต้องอัปเดตกลับไปที่
+                        // ตัวนัดหมายจริงด้วย ไม่งั้นเปิดนัดหมายนี้ครั้งหน้าจะยังว่างเหมือนเดิม
+                        if (s.activityId != null && s.projectId != null) {
+                            activityRepo.updateActivity(s.activityId, mapOf("project_code" to s.projectId))
+                        }
                     }
                     discardDraft()
                     _uiState.update { it.copy(isSaving = false, isSaved = true) }
