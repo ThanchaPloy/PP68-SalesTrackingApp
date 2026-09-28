@@ -158,7 +158,7 @@ fun CustomerListContent(
         },
         bottomBar = { BottomNavBar(currentTab = currentTab, onTabChange = onTabChange) },
         floatingActionButton = {
-            AddFloatingActionButton(onClick = onAddClick, contentDescription = "เพิ่มลูกค้า")
+            AddFloatingActionButton(onClick = onAddClick, contentDescription = "สร้าง Lead ใหม่")
         },
         containerColor = Color(0xFFF5F5F5)
     ) { padding ->

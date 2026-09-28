@@ -112,8 +112,10 @@ fun AddCustomerContent(
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = AppColors.TextPrimary)
                     }
+                    // ✅ หน้านี้สร้างรายชื่อแบบ Lead เสมอ (isLead=true ตอนบันทึก ไม่ว่าจะเลือกสถานะไหนก็ตาม)
+                    // ต้องบอกชัดว่าไม่ใช่การสร้างลูกค้าตัวจริง ไม่งั้นสับสนว่าทำไมค้นหาไม่เจอในระบบลูกค้าจริง
                     Text(
-                        if (uiState.custId != null) "Edit Customer" else "Add New Customer",
+                        if (uiState.custId != null) "Edit Customer" else "สร้าง Lead ใหม่",
                         fontWeight = FontWeight.Bold,
                         fontSize   = 18.sp,
                         color      = AppColors.Primary
@@ -131,6 +133,13 @@ fun AddCustomerContent(
                 .padding(horizontal = 20.dp, vertical = 16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+            if (uiState.custId == null) {
+                Text(
+                    "นี่คือการสร้าง Lead (ลูกค้ามุ่งหวัง) ยังไม่ใช่การสร้างลูกค้าจริงในระบบ",
+                    fontSize = 12.sp,
+                    color = AppColors.TextSecondary
+                )
+            }
             if (uiState.draftAvailable) {
                 DraftBanner(
                     message = "พบฉบับร่างที่บันทึกไว้ก่อนหน้านี้",
@@ -255,7 +264,7 @@ fun AddCustomerContent(
                         color = Color.White, modifier = Modifier.size(20.dp), strokeWidth = 2.dp
                     )
                 } else {
-                    Text(if (uiState.custId != null) "บันทึกการเปลี่ยนแปลงลูกค้า" else "บันทึกข้อมูลลูกค้า", fontSize = 16.sp,
+                    Text(if (uiState.custId != null) "บันทึกการเปลี่ยนแปลงลูกค้า" else "บันทึก Lead ใหม่", fontSize = 16.sp,
                         fontWeight = FontWeight.Bold, color = Color.White)
                 }
             }

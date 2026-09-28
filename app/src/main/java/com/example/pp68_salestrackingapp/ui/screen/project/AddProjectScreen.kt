@@ -428,7 +428,8 @@ fun AddProjectContent(
                         .padding(24.dp),
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
-                    Text("สร้างลูกค้าใหม่ (สร้างด่วน)", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = AppColors.Primary)
+                    // ✅ saveQuickCustomer() ตั้ง isLead=true เสมอ — ไม่ใช่การสร้างลูกค้าจริง ต้องบอกให้ชัด
+                    Text("สร้าง Lead ใหม่ (สร้างด่วน)", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = AppColors.Primary)
                     
                     FormField("ชื่อบริษัท/ชื่อลูกค้า", required = true) {
                         FormTextField(
@@ -458,7 +459,7 @@ fun AddProjectContent(
                         if (uiState.isSavingQuickCust) {
                             CircularProgressIndicator(color = androidx.compose.ui.graphics.Color.White, modifier = Modifier.size(24.dp))
                         } else {
-                            Text("บันทึกข้อมูลลูกค้า", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                            Text("บันทึก Lead ใหม่", fontSize = 16.sp, fontWeight = FontWeight.Bold)
                         }
                     }
                     Spacer(modifier = Modifier.height(32.dp))
