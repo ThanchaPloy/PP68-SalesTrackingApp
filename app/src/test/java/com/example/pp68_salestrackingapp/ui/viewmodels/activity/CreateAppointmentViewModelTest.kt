@@ -155,7 +155,7 @@ class CreateAppointmentViewModelTest {
         vm.onEvent(CreateAppointmentEvent.LoadInitialProject("PRJ-1"))
         vm.onEvent(CreateAppointmentEvent.TypeChanged("onsite"))
         vm.onEvent(CreateAppointmentEvent.TitleChanged("Visit"))
-        vm.onEvent(CreateAppointmentEvent.DateChanged("Apr 06, 2026"))
+        vm.onEvent(CreateAppointmentEvent.DateChanged("Apr 06, 2099"))
         vm.onEvent(CreateAppointmentEvent.StartTimeSelected("10:00 AM"))
         vm.onEvent(CreateAppointmentEvent.LocationPicked(13.7563, 100.5018))
         advanceUntilIdle()
@@ -178,7 +178,7 @@ class CreateAppointmentViewModelTest {
         vm.onEvent(CreateAppointmentEvent.LoadInitialProject("PRJ-1"))
         vm.onEvent(CreateAppointmentEvent.TypeChanged("onsite"))
         vm.onEvent(CreateAppointmentEvent.TitleChanged("Visit"))
-        vm.onEvent(CreateAppointmentEvent.DateChanged("Apr 06, 2026"))
+        vm.onEvent(CreateAppointmentEvent.DateChanged("Apr 06, 2099"))
         vm.onEvent(CreateAppointmentEvent.StartTimeSelected("10:00 AM"))
         advanceUntilIdle()
 
@@ -189,6 +189,29 @@ class CreateAppointmentViewModelTest {
             "กรุณาปักหมุดตำแหน่งนัดหมาย (จำเป็นสำหรับนัดแบบ On-site)",
             vm.uiState.value.saveError
         )
+        assertFalse(vm.uiState.value.isSaved)
+        coVerify(exactly = 0) { activityRepo.addActivity(any()) }
+    }
+
+    // สร้างนัดหมายใหม่เลือกวันที่ผ่านมาแล้วต้องเซฟไม่ได้
+    @Test
+    fun `creating a new appointment with a past date must not save`() = runTest {
+        configureBaseData()
+        coEvery { activityRepo.getMasterActivities() } returns listOf(ActivityMaster(1, "Lead", "L"))
+        every { authRepo.currentUser() } returns AuthUser("U1", "u@test.com", "sale")
+        val vm = CreateAppointmentViewModel(context, activityRepo, projectRepo, customerRepo, authRepo)
+        advanceUntilIdle()
+        vm.onEvent(CreateAppointmentEvent.LoadInitialProject("PRJ-1"))
+        vm.onEvent(CreateAppointmentEvent.TypeChanged("online"))
+        vm.onEvent(CreateAppointmentEvent.TitleChanged("Visit"))
+        vm.onEvent(CreateAppointmentEvent.DateChanged("Apr 06, 2026"))
+        vm.onEvent(CreateAppointmentEvent.StartTimeSelected("10:00 AM"))
+        advanceUntilIdle()
+
+        vm.onEvent(CreateAppointmentEvent.Save)
+        advanceUntilIdle()
+
+        assertEquals("ไม่สามารถสร้างนัดหมายย้อนหลังได้", vm.uiState.value.saveError)
         assertFalse(vm.uiState.value.isSaved)
         coVerify(exactly = 0) { activityRepo.addActivity(any()) }
     }
@@ -209,7 +232,7 @@ class CreateAppointmentViewModelTest {
             vm.onEvent(CreateAppointmentEvent.LoadInitialProject("PRJ-1"))
             vm.onEvent(CreateAppointmentEvent.TypeChanged(type))
             vm.onEvent(CreateAppointmentEvent.TitleChanged("Call topic"))
-            vm.onEvent(CreateAppointmentEvent.DateChanged("Apr 06, 2026"))
+            vm.onEvent(CreateAppointmentEvent.DateChanged("Apr 06, 2099"))
             vm.onEvent(CreateAppointmentEvent.StartTimeSelected("10:00 AM"))
             advanceUntilIdle()
 
@@ -235,7 +258,7 @@ class CreateAppointmentViewModelTest {
         vm.onEvent(CreateAppointmentEvent.LoadInitialProject("PRJ-1"))
         vm.onEvent(CreateAppointmentEvent.TypeChanged("onsite"))
         vm.onEvent(CreateAppointmentEvent.TitleChanged("Visit topic"))
-        vm.onEvent(CreateAppointmentEvent.DateChanged("Apr 06, 2026"))
+        vm.onEvent(CreateAppointmentEvent.DateChanged("Apr 06, 2099"))
         vm.onEvent(CreateAppointmentEvent.StartTimeSelected("09:00 AM"))
         vm.onEvent(CreateAppointmentEvent.EndTimeSelected("10:00 AM"))
         vm.onEvent(CreateAppointmentEvent.LocationPicked(13.7563, 100.5018))
@@ -385,7 +408,7 @@ class CreateAppointmentViewModelTest {
         vm.onEvent(CreateAppointmentEvent.LoadInitialProject("PRJ-1"))
         vm.onEvent(CreateAppointmentEvent.TypeChanged("onsite"))
         vm.onEvent(CreateAppointmentEvent.TitleChanged("topic"))
-        vm.onEvent(CreateAppointmentEvent.DateChanged("Apr 06, 2026"))
+        vm.onEvent(CreateAppointmentEvent.DateChanged("Apr 06, 2099"))
         vm.onEvent(CreateAppointmentEvent.StartTimeSelected("10:00 AM"))
         vm.onEvent(CreateAppointmentEvent.LocationPicked(13.7563, 100.5018))
         advanceUntilIdle()

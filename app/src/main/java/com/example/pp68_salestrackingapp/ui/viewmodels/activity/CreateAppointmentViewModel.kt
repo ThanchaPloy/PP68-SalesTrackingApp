@@ -492,6 +492,11 @@ class CreateAppointmentViewModel @Inject constructor(
                 _uiState.update { it.copy(saveError = "กรุณาเลือกเวลานัดหมาย") }
                 false
             }
+            // สร้างนัดหมายใหม่ย้อนหลังไม่ได้ — เช็คเฉพาะตอนสร้างใหม่ ไม่บล็อกการแก้ไขนัดหมายเดิมที่วันที่ผ่านไปแล้ว
+            s.activityId == null && isPastDate(s.plannedDate) -> {
+                _uiState.update { it.copy(saveError = "ไม่สามารถสร้างนัดหมายย้อนหลังได้") }
+                false
+            }
             s.activityType == "onsite" && (s.lat == null || s.lng == null) -> {
                 _uiState.update { it.copy(saveError = "กรุณาปักหมุดตำแหน่งนัดหมาย (จำเป็นสำหรับนัดแบบ On-site)") }
                 false
@@ -633,6 +638,16 @@ class CreateAppointmentViewModel @Inject constructor(
 
             _uiState.update { it.copy(isLoading = false, isSaved = true) }
         }
+    }
+
+    // plannedDate ปกติเป็น ISO "yyyy-MM-dd" (DatePickerField ส่งมาแบบนี้) แต่รับ fallback รูปแบบ
+    // "MMM dd, yyyy" ด้วยเหมือน parseToIsoDate — เผื่อ caller อื่นส่งมาคนละแบบ
+    private fun isPastDate(plannedDate: String?): Boolean {
+        if (plannedDate.isNullOrBlank()) return false
+        val date = runCatching { LocalDate.parse(plannedDate.take(10)) }
+            .getOrElse { runCatching { LocalDate.parse(parseToIsoDate(plannedDate)) }.getOrNull() }
+            ?: return false
+        return date.isBefore(LocalDate.now())
     }
 
     private fun parseToIsoDate(uiDate: String): String {
