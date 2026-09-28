@@ -8,6 +8,7 @@ import com.example.pp68_salestrackingapp.data.repository.AuthRepository
 import com.example.pp68_salestrackingapp.data.repository.ContactRepository
 import com.example.pp68_salestrackingapp.data.repository.CustomerRepository
 import com.example.pp68_salestrackingapp.data.repository.ProjectRepository
+import com.example.pp68_salestrackingapp.utils.DraftStore
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -40,11 +41,30 @@ data class AddContactUiState(
     val emailError:    String? = null,
     val isLoading: Boolean = false,
     val isSaved:   Boolean = false,
-    val saveError: String? = null
+    val saveError: String? = null,
+    val draftAvailable: Boolean = false
+)
+
+data class AddContactDraft(
+    val fullName: String = "",
+    val nickname: String = "",
+    val position: String = "",
+    val phoneNum: String = "",
+    val email: String = "",
+    val lineId: String = "",
+    val isActive: Boolean = true,
+    val isDecisionMaker: Boolean = false,
+    val selectedCompanyId: String? = null,
+    val selectedCompanyName: String? = null,
+    val selectedProjectId: String? = null,
+    val selectedProjectName: String? = null
 )
 
 sealed class AddContactEvent {
     data class LoadContact(val id: String) : AddContactEvent()
+    object CheckDraft : AddContactEvent()
+    object RestoreDraft : AddContactEvent()
+    object DismissDraftPrompt : AddContactEvent()
     data class CompanySelected(val id: String, val name: String) : AddContactEvent()
     data class ProjectSelected(val id: String, val name: String) : AddContactEvent()
     data class FullNameChanged(val value: String)  : AddContactEvent()
@@ -63,11 +83,62 @@ class AddContactViewModel @Inject constructor(
     private val contactRepo:  ContactRepository,
     private val customerRepo: CustomerRepository,
     private val projectRepo:  ProjectRepository,
-    private val authRepo:     AuthRepository
+    private val authRepo:     AuthRepository,
+    private val draftStore:   DraftStore
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(AddContactUiState())
     val uiState: StateFlow<AddContactUiState> = _uiState
+
+    private var baseline: AddContactDraft = AddContactDraft()
+    private var pendingDraft: AddContactDraft? = null
+
+    private fun AddContactUiState.toDraft() = AddContactDraft(
+        fullName, nickname, position, phoneNum, email, lineId, isActive, isDecisionMaker,
+        selectedCompanyId, selectedCompanyName, selectedProjectId, selectedProjectName
+    )
+
+    private fun draftKey() = "add_contact:${_uiState.value.contactId ?: "new"}"
+
+    private fun checkForDraft() {
+        val draft = draftStore.load(draftKey(), AddContactDraft::class.java) ?: return
+        pendingDraft = draft
+        _uiState.update { it.copy(draftAvailable = true) }
+    }
+
+    fun isDirty(): Boolean = _uiState.value.toDraft() != baseline
+
+    fun saveDraft() { draftStore.save(draftKey(), _uiState.value.toDraft()) }
+
+    fun discardDraft() { draftStore.clear(draftKey()) }
+
+    private fun restoreDraft() {
+        val d = pendingDraft ?: return
+        _uiState.update {
+            it.copy(
+                fullName = d.fullName,
+                nickname = d.nickname,
+                position = d.position,
+                phoneNum = d.phoneNum,
+                email = d.email,
+                lineId = d.lineId,
+                isActive = d.isActive,
+                isDecisionMaker = d.isDecisionMaker,
+                selectedCompanyId = d.selectedCompanyId,
+                selectedCompanyName = d.selectedCompanyName,
+                selectedProjectId = d.selectedProjectId,
+                selectedProjectName = d.selectedProjectName,
+                draftAvailable = false
+            )
+        }
+        d.selectedCompanyId?.let { loadProjectsForCompany(it) }
+        pendingDraft = null
+    }
+
+    private fun dismissDraftPrompt() {
+        pendingDraft = null
+        _uiState.update { it.copy(draftAvailable = false) }
+    }
 
     init { loadCompanies() }
 
@@ -93,6 +164,8 @@ class AddContactViewModel @Inject constructor(
                         isLoading = false
                     ) }
                     loadProjectsForCompany(contact.custId)
+                    baseline = _uiState.value.toDraft()
+                    checkForDraft()
                 } else {
                     _uiState.update { it.copy(isLoading = false, saveError = "ไม่พบข้อมูลผู้ติดต่อ") }
                 }
@@ -139,6 +212,9 @@ class AddContactViewModel @Inject constructor(
             is AddContactEvent.IsActiveToggled -> _uiState.update { it.copy(isActive = !it.isActive) }
             is AddContactEvent.IsDecisionMakerToggled -> _uiState.update { it.copy(isDecisionMaker = !it.isDecisionMaker) }
             is AddContactEvent.Save -> save()
+            is AddContactEvent.CheckDraft -> checkForDraft()
+            is AddContactEvent.RestoreDraft -> restoreDraft()
+            is AddContactEvent.DismissDraftPrompt -> dismissDraftPrompt()
         }
     }
 
@@ -182,7 +258,7 @@ class AddContactViewModel @Inject constructor(
             }
 
             result.fold(
-                onSuccess = { _uiState.update { it.copy(isLoading = false, isSaved = true) } },
+                onSuccess = { discardDraft(); _uiState.update { it.copy(isLoading = false, isSaved = true) } },
                 onFailure = { e -> _uiState.update { it.copy(isLoading = false, saveError = e.message) } }
             )
         }

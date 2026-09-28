@@ -38,10 +38,12 @@ class SalesResultViewModelTest {
     private val projectRepo = mockk<ProjectRepository>(relaxed = true)
     private val activityRepo = mockk<ActivityRepository>(relaxed = true)
     private val authRepo = mockk<AuthRepository>(relaxed = true)
+    private val draftStore = mockk<com.example.pp68_salestrackingapp.utils.DraftStore>(relaxed = true)
 
     @Before
     fun setUp() {
         Dispatchers.setMain(dispatcher)
+        every { draftStore.load<Any>(any(), any()) } returns null
         coEvery { activityRepo.getActivityById(any()) } returns Result.success(emptyList())
         coEvery { activityRepo.getActivityResult(any()) } returns null
         // relaxed mockk ไม่รู้วิธีสังเคราะห์ kotlin.Result ที่ยังไม่ได้ stub ไว้ให้ (คืน Object เปล่ามาแทน
@@ -70,7 +72,8 @@ class SalesResultViewModelTest {
             SavedStateHandle(mapOf("projectId" to "PRJ-1")),
             projectRepo,
             activityRepo,
-            authRepo
+            authRepo,
+            draftStore
         )
         advanceUntilIdle()
 
@@ -100,7 +103,8 @@ class SalesResultViewModelTest {
             SavedStateHandle(mapOf("projectId" to "PRJ-1")),
             projectRepo,
             activityRepo,
-            authRepo
+            authRepo,
+            draftStore
         )
         advanceUntilIdle()
 
@@ -145,7 +149,8 @@ class SalesResultViewModelTest {
             SavedStateHandle(mapOf("activityId" to "A1")),
             projectRepo,
             activityRepo,
-            authRepo
+            authRepo,
+            draftStore
         )
         advanceUntilIdle()
         vm.onSummaryChanged("summary")
@@ -189,7 +194,8 @@ class SalesResultViewModelTest {
             SavedStateHandle(mapOf("activityId" to "A1")),
             projectRepo,
             activityRepo,
-            authRepo
+            authRepo,
+            draftStore
         )
         advanceUntilIdle()
 
@@ -230,7 +236,8 @@ class SalesResultViewModelTest {
             SavedStateHandle(mapOf("activityId" to "A1")),
             projectRepo,
             activityRepo,
-            authRepo
+            authRepo,
+            draftStore
         )
         advanceUntilIdle()
 
@@ -261,7 +268,8 @@ class SalesResultViewModelTest {
             SavedStateHandle(mapOf("activityId" to "A1")),
             projectRepo,
             activityRepo,
-            authRepo
+            authRepo,
+            draftStore
         )
         advanceUntilIdle()
 
@@ -302,7 +310,8 @@ class SalesResultViewModelTest {
             SavedStateHandle(mapOf("activityId" to "A1")),
             projectRepo,
             activityRepo,
-            authRepo
+            authRepo,
+            draftStore
         )
         advanceUntilIdle()
 
@@ -352,7 +361,8 @@ class SalesResultViewModelTest {
             SavedStateHandle(mapOf("activityId" to "A1")),
             projectRepo,
             activityRepo,
-            authRepo
+            authRepo,
+            draftStore
         )
         advanceUntilIdle()
         vm.onSummaryChanged("summary")
@@ -388,7 +398,8 @@ class SalesResultViewModelTest {
             SavedStateHandle(mapOf("activityId" to "A1")),
             projectRepo,
             activityRepo,
-            authRepo
+            authRepo,
+            draftStore
         )
         advanceUntilIdle()
         vm.onSummaryChanged("summary")
@@ -423,7 +434,8 @@ class SalesResultViewModelTest {
             SavedStateHandle(mapOf("activityId" to "A1")),
             projectRepo,
             activityRepo,
-            authRepo
+            authRepo,
+            draftStore
         )
         advanceUntilIdle()
         vm.onSummaryChanged("summary")
@@ -470,7 +482,8 @@ class SalesResultViewModelTest {
             SavedStateHandle(mapOf("activityId" to "A1")),
             projectRepo,
             activityRepo,
-            authRepo
+            authRepo,
+            draftStore
         )
         advanceUntilIdle()
 
@@ -517,7 +530,8 @@ class SalesResultViewModelTest {
             SavedStateHandle(mapOf("activityId" to "A1")),
             projectRepo,
             activityRepo,
-            authRepo
+            authRepo,
+            draftStore
         )
         advanceUntilIdle()
 
@@ -545,7 +559,8 @@ class SalesResultViewModelTest {
             SavedStateHandle(),
             projectRepo,
             activityRepo,
-            authRepo
+            authRepo,
+            draftStore
         )
         advanceUntilIdle()
         vm.onSummaryChanged("summary")
@@ -566,7 +581,8 @@ class SalesResultViewModelTest {
             SavedStateHandle(mapOf("projectId" to "PRJ-1")),
             projectRepo,
             activityRepo,
-            authRepo
+            authRepo,
+            draftStore
         )
         advanceUntilIdle()
         vm.onSummaryChanged("summary")
@@ -602,7 +618,8 @@ class SalesResultViewModelTest {
             SavedStateHandle(mapOf("activityId" to "A1")),
             projectRepo,
             activityRepo,
-            authRepo
+            authRepo,
+            draftStore
         )
         advanceUntilIdle()
         vm.onSummaryChanged("summary")
@@ -639,7 +656,8 @@ class SalesResultViewModelTest {
             SavedStateHandle(mapOf("activityId" to "A1")),
             projectRepo,
             activityRepo,
-            authRepo
+            authRepo,
+            draftStore
         )
         advanceUntilIdle()
         vm.onSummaryChanged("summary")
@@ -664,7 +682,8 @@ class SalesResultViewModelTest {
             SavedStateHandle(mapOf("projectId" to "PRJ-1")),
             projectRepo,
             activityRepo,
-            authRepo
+            authRepo,
+            draftStore
         )
         advanceUntilIdle()
         vm.onSummaryChanged("summary")
@@ -703,7 +722,8 @@ class SalesResultViewModelTest {
             SavedStateHandle(mapOf("activityId" to "A1")),
             projectRepo,
             activityRepo,
-            authRepo
+            authRepo,
+            draftStore
         )
         advanceUntilIdle()
         vm.onSummaryChanged("summary")
@@ -724,7 +744,8 @@ class SalesResultViewModelTest {
             SavedStateHandle(mapOf("projectId" to "PRJ-404")),
             projectRepo,
             activityRepo,
-            authRepo
+            authRepo,
+            draftStore
         )
         advanceUntilIdle()
 
@@ -776,7 +797,8 @@ class SalesResultViewModelTest {
             SavedStateHandle(mapOf("activityId" to "A1")),
             projectRepo,
             activityRepo,
-            authRepo
+            authRepo,
+            draftStore
         )
         advanceUntilIdle()
 
@@ -823,7 +845,8 @@ class SalesResultViewModelTest {
             SavedStateHandle(mapOf("activityId" to "A1")),
             projectRepo,
             activityRepo,
-            authRepo
+            authRepo,
+            draftStore
         )
         advanceUntilIdle()
         vm.onSummaryChanged("summary")
@@ -863,7 +886,8 @@ class SalesResultViewModelTest {
             SavedStateHandle(mapOf("activityId" to "A1")),
             projectRepo,
             activityRepo,
-            authRepo
+            authRepo,
+            draftStore
         )
         advanceUntilIdle()
         vm.onSummaryChanged("summary")
@@ -907,7 +931,8 @@ class SalesResultViewModelTest {
             SavedStateHandle(mapOf("activityId" to "A1")),
             projectRepo,
             activityRepo,
-            authRepo
+            authRepo,
+            draftStore
         )
         advanceUntilIdle()
 

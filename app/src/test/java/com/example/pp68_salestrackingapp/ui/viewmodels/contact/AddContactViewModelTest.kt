@@ -33,6 +33,7 @@ class AddContactViewModelTest {
     private val customerRepository = mockk<CustomerRepository>(relaxed = true)
     private val projectRepository = mockk<ProjectRepository>(relaxed = true)
     private val authRepository = mockk<AuthRepository>(relaxed = true)
+    private val draftStore = mockk<com.example.pp68_salestrackingapp.utils.DraftStore>(relaxed = true)
     private lateinit var viewModel: AddContactViewModel
 
     private val mockCustomers = listOf(
@@ -48,6 +49,7 @@ class AddContactViewModelTest {
     @Before
     fun setUp() {
         Dispatchers.setMain(testDispatcher)
+        every { draftStore.load<Any>(any(), any()) } returns null
     }
 
     @After
@@ -56,7 +58,7 @@ class AddContactViewModelTest {
     }
 
     private fun createViewModel() {
-        viewModel = AddContactViewModel(contactRepository, customerRepository, projectRepository, authRepository)
+        viewModel = AddContactViewModel(contactRepository, customerRepository, projectRepository, authRepository, draftStore)
     }
 
     // TC-UNIT-VM-ADDCNT-01
@@ -395,5 +397,64 @@ class AddContactViewModelTest {
 
         assertEquals("รูปแบบ Email ไม่ถูกต้อง", viewModel.uiState.value.emailError)
         coVerify(exactly = 0) { contactRepository.addContact(any()) }
+    }
+
+    // draft autosave: representative coverage for the mechanism all 5 form ViewModels share
+    @Test
+    fun `isDirty is false right after opening and true once a field changes`() = runTest {
+        coEvery { customerRepository.getCustomers() } returns Result.success(emptyList())
+        createViewModel()
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        assertFalse(viewModel.isDirty())
+        viewModel.onEvent(AddContactEvent.FullNameChanged("Jane Doe"))
+        assertTrue(viewModel.isDirty())
+    }
+
+    @Test
+    fun `saveDraft persists the current form state under the new-contact key`() = runTest {
+        coEvery { customerRepository.getCustomers() } returns Result.success(emptyList())
+        createViewModel()
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        viewModel.onEvent(AddContactEvent.FullNameChanged("Jane Doe"))
+        viewModel.saveDraft()
+
+        val draftSlot = io.mockk.slot<AddContactDraft>()
+        io.mockk.verify { draftStore.save("add_contact:new", capture(draftSlot)) }
+        assertEquals("Jane Doe", draftSlot.captured.fullName)
+    }
+
+    @Test
+    fun `restoreDraft applies the saved fields and clears the prompt`() = runTest {
+        coEvery { customerRepository.getCustomers() } returns Result.success(emptyList())
+        val saved = AddContactDraft(fullName = "Restored Name", selectedCompanyId = "CUST-01")
+        every { draftStore.load("add_contact:new", AddContactDraft::class.java) } returns saved
+        createViewModel()
+        testDispatcher.scheduler.advanceUntilIdle()
+        viewModel.onEvent(AddContactEvent.CheckDraft)
+
+        assertTrue(viewModel.uiState.value.draftAvailable)
+
+        viewModel.onEvent(AddContactEvent.RestoreDraft)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        assertEquals("Restored Name", viewModel.uiState.value.fullName)
+        assertFalse(viewModel.uiState.value.draftAvailable)
+    }
+
+    @Test
+    fun `save success discards the pending draft`() = runTest {
+        coEvery { customerRepository.getCustomers() } returns Result.success(emptyList())
+        coEvery { contactRepository.addContact(any()) } returns Result.success(Unit)
+        createViewModel()
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        viewModel.onEvent(AddContactEvent.CompanySelected("CUST-01", "Acme Corp"))
+        viewModel.onEvent(AddContactEvent.FullNameChanged("Jane Doe"))
+        viewModel.onEvent(AddContactEvent.Save)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        io.mockk.verify { draftStore.clear("add_contact:new") }
     }
 }

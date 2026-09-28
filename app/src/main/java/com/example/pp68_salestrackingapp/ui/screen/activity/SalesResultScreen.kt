@@ -39,6 +39,8 @@ import com.example.pp68_salestrackingapp.data.model.PlanItemDto
 import com.example.pp68_salestrackingapp.utils.formatPhotoUrl
 import coil.compose.AsyncImage
 import com.example.pp68_salestrackingapp.ui.components.DatePickerField
+import com.example.pp68_salestrackingapp.ui.components.DiscardChangesDialog
+import com.example.pp68_salestrackingapp.ui.components.DraftBanner
 import com.example.pp68_salestrackingapp.ui.components.DropdownField
 import com.example.pp68_salestrackingapp.ui.theme.SalesTrackingTheme
 import com.example.pp68_salestrackingapp.ui.viewmodels.activity.ResultPhoto
@@ -73,10 +75,26 @@ fun SalesResultScreen(
         s.error?.let { snackbarHostState.showSnackbar(it) }
     }
 
+    var showDiscardDialog by remember { mutableStateOf(false) }
+    val attemptBack: () -> Unit = {
+        if (viewModel.isDirty()) showDiscardDialog = true else onBack()
+    }
+    androidx.activity.compose.BackHandler(onBack = attemptBack)
+
+    if (showDiscardDialog) {
+        DiscardChangesDialog(
+            onSaveDraft = { viewModel.saveDraft(); showDiscardDialog = false; onBack() },
+            onDiscard   = { viewModel.discardDraft(); showDiscardDialog = false; onBack() },
+            onDismiss   = { showDiscardDialog = false }
+        )
+    }
+
     SalesResultContent(
         s                               = s,
         snackbarHostState               = snackbarHostState,
-        onBack                          = onBack,
+        onBack                          = attemptBack,
+        onRestoreDraft                  = viewModel::restoreDraft,
+        onDismissDraftPrompt            = viewModel::dismissDraftPrompt,
         onReportDateChanged             = viewModel::onReportDateChanged,
         onStatusToggle                  = viewModel::onStatusToggle,
         onNewStatusSelected             = viewModel::onNewStatusSelected,
@@ -108,6 +126,8 @@ private fun SalesResultContent(
     s: SalesResultUiState,
     snackbarHostState: SnackbarHostState,
     onBack: () -> Unit,
+    onRestoreDraft: () -> Unit = {},
+    onDismissDraftPrompt: () -> Unit = {},
     onReportDateChanged: (String) -> Unit,
     onStatusToggle: (Boolean) -> Unit,
     onNewStatusSelected: (String) -> Unit,
@@ -178,6 +198,14 @@ private fun SalesResultContent(
                     .padding(20.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
+                if (s.draftAvailable) {
+                    DraftBanner(
+                        message = "พบฉบับร่างที่บันทึกไว้ก่อนหน้านี้",
+                        actionLabel = "กู้คืน",
+                        onAction = onRestoreDraft,
+                        onDismiss = onDismissDraftPrompt
+                    )
+                }
                 if (s.isReadOnlyVersion) {
                     Surface(
                         color = Color(0xFFFFF3E0),

@@ -89,11 +89,14 @@ fun HomeScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
 
+    val context = androidx.compose.ui.platform.LocalContext.current
+    var hasApptDraft by remember { mutableStateOf(false) }
     val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
         val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
             if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
                 viewModel.loadActivities()
+                hasApptDraft = com.example.pp68_salestrackingapp.utils.DraftStore.peekExists(context, "create_appointment:new")
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -152,7 +155,9 @@ fun HomeScreen(
         onLogoutClick       = onLogoutClick,
         currentTab          = currentTab,
         onTabChange         = onTabChange,
-        onMonthChange       = { viewModel.selectMonth(it) }
+        onMonthChange       = { viewModel.selectMonth(it) },
+        hasApptDraft        = hasApptDraft,
+        onDismissApptDraft  = { hasApptDraft = false }
     )
 }
 
@@ -169,7 +174,9 @@ private fun HomeScreenContent(
     onLogoutClick:       () -> Unit,
     currentTab:          Int,
     onTabChange:         (Int) -> Unit,
-    onMonthChange:       (YearMonth) -> Unit
+    onMonthChange:       (YearMonth) -> Unit,
+    hasApptDraft:        Boolean = false,
+    onDismissApptDraft:  () -> Unit = {}
 ) {
     Scaffold(
         topBar = {
@@ -206,6 +213,17 @@ private fun HomeScreenContent(
                 contentPadding      = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
                 verticalArrangement = Arrangement.spacedBy(0.dp)
             ) {
+                if (hasApptDraft) {
+                    item {
+                        com.example.pp68_salestrackingapp.ui.components.DraftBanner(
+                            message = "มีนัดหมายที่กรอกค้างไว้",
+                            actionLabel = "ทำต่อ",
+                            onAction = onAddClick,
+                            onDismiss = onDismissApptDraft,
+                            modifier = Modifier.padding(bottom = 8.dp)
+                        )
+                    }
+                }
                 uiState.groupedCards.forEach { (dateHeader, cards) ->
                     item {
                         Text(

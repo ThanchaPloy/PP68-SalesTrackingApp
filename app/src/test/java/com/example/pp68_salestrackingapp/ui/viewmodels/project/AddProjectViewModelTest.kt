@@ -26,11 +26,13 @@ class AddProjectViewModelTest {
     private val authRepo = mockk<AuthRepository>()
     private val branchRepo = mockk<BranchRepository>()
     private val apiService = mockk<ApiService>(relaxed = true)
+    private val draftStore = mockk<com.example.pp68_salestrackingapp.utils.DraftStore>(relaxed = true)
     private lateinit var viewModel: AddProjectViewModel
 
     @Before
     fun setup() {
         Dispatchers.setMain(testDispatcher)
+        every { draftStore.load<Any>(any(), any()) } returns null
 
         val user = AuthUser("USR-001", "test@test.com", "sale", "TS-001")
         every { authRepo.currentUser() } returns user
@@ -60,7 +62,7 @@ class AddProjectViewModelTest {
     }
 
     private fun initViewModel() {
-        viewModel = AddProjectViewModel(projectRepo, customerRepo, contactRepo, authRepo, branchRepo, apiService)
+        viewModel = AddProjectViewModel(projectRepo, customerRepo, contactRepo, authRepo, branchRepo, apiService, draftStore)
     }
 
     @Test

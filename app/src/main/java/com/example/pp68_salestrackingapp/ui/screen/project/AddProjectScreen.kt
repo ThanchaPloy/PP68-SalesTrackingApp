@@ -42,15 +42,31 @@ fun AddProjectScreen(
     LaunchedEffect(projectId) {
         if (projectId != null) {
             viewModel.onEvent(AddProjectEvent.LoadProject(projectId))
+        } else {
+            viewModel.onEvent(AddProjectEvent.CheckDraft)
         }
     }
 
     LaunchedEffect(uiState.isSaved) { if (uiState.isSaved) onSaved() }
 
+    var showDiscardDialog by remember { mutableStateOf(false) }
+    val attemptBack: () -> Unit = {
+        if (viewModel.isDirty()) showDiscardDialog = true else onBack()
+    }
+    androidx.activity.compose.BackHandler(onBack = attemptBack)
+
+    if (showDiscardDialog) {
+        DiscardChangesDialog(
+            onSaveDraft = { viewModel.saveDraft(); showDiscardDialog = false; onBack() },
+            onDiscard   = { viewModel.discardDraft(); showDiscardDialog = false; onBack() },
+            onDismiss   = { showDiscardDialog = false }
+        )
+    }
+
     AddProjectContent(
         uiState = uiState,
         onEvent = viewModel::onEvent,
-        onBack = onBack,
+        onBack = attemptBack,
         lossReasonOptions = viewModel.lossReasonOptions,
         dealPositionOptions = viewModel.dealPositionOptions,
         previousSolutionOptions = viewModel.previousSolutionOptions,
@@ -100,6 +116,14 @@ fun AddProjectContent(
                 .padding(horizontal = 20.dp, vertical = 16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+            if (uiState.draftAvailable) {
+                DraftBanner(
+                    message = "พบฉบับร่างที่บันทึกไว้ก่อนหน้านี้",
+                    actionLabel = "กู้คืน",
+                    onAction = { onEvent(AddProjectEvent.RestoreDraft) },
+                    onDismiss = { onEvent(AddProjectEvent.DismissDraftPrompt) }
+                )
+            }
             // ── Project Number ────────────────────────────────
             FormField("หมายเลขโครงการ") {
                 Surface(

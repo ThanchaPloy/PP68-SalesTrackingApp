@@ -9,6 +9,7 @@ import com.example.pp68_salestrackingapp.data.repository.ProjectRepository
 import com.example.pp68_salestrackingapp.data.model.ActivityMaster
 import com.example.pp68_salestrackingapp.data.model.SalesActivity
 import com.example.pp68_salestrackingapp.data.model.ActivityPlanItem
+import com.example.pp68_salestrackingapp.utils.DraftStore
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -63,15 +64,36 @@ data class CreateAppointmentUiState(
     val saveError:    String? = null,
 
     val showStartTimePicker: Boolean = false,
-    val showEndTimePicker:   Boolean = false
+    val showEndTimePicker:   Boolean = false,
+
+    val draftAvailable: Boolean = false
 )
 
 data class ProjectOption(val id: String, val name: String, val status: String)
 data class ContactOption(val id: String, val name: String, val companyName: String? = null)
 
+data class CreateAppointmentDraft(
+    val selectedProjectId: String? = null,
+    val selectedCustomerId: String? = null,
+    val titleTopic: String = "",
+    val activityType: String = "onsite",
+    val plannedDate: String? = null,
+    val startTime: String? = null,
+    val endTime: String? = null,
+    val lat: Double? = null,
+    val lng: Double? = null,
+    val selectedContactIds: Set<String> = emptySet(),
+    val selectedMasterIds: Set<Int> = emptySet(),
+    val isOtherSelected: Boolean = false,
+    val otherObjectiveText: String = ""
+)
+
 sealed class CreateAppointmentEvent {
     data class LoadActivity(val activityId: String)         : CreateAppointmentEvent()
     data class LoadInitialProject(val projectId: String)    : CreateAppointmentEvent()
+    object CheckDraft         : CreateAppointmentEvent()
+    object RestoreDraft       : CreateAppointmentEvent()
+    object DismissDraftPrompt : CreateAppointmentEvent()
     data class ProjectSelected(val id: String?, val name: String?, val status: String?) : CreateAppointmentEvent()
     data class CompanySelected(val id: String, val name: String) : CreateAppointmentEvent()
     data class TitleChanged(val value: String)              : CreateAppointmentEvent()
@@ -97,11 +119,63 @@ class CreateAppointmentViewModel @Inject constructor(
     private val activityRepo: ActivityRepository,
     private val projectRepo:  ProjectRepository,
     private val customerRepo: CustomerRepository,
-    private val authRepo:     AuthRepository
+    private val authRepo:     AuthRepository,
+    private val draftStore:   DraftStore
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(CreateAppointmentUiState())
     val uiState: StateFlow<CreateAppointmentUiState> = _uiState
+
+    private var baseline: CreateAppointmentDraft = CreateAppointmentDraft()
+    private var pendingDraft: CreateAppointmentDraft? = null
+
+    private fun CreateAppointmentUiState.toDraft() = CreateAppointmentDraft(
+        selectedProjectId, selectedCustomerId, titleTopic, activityType, plannedDate, startTime,
+        endTime, lat, lng, selectedContactIds, selectedMasterIds, isOtherSelected, otherObjectiveText
+    )
+
+    private fun draftKey() = "create_appointment:${_uiState.value.activityId ?: "new"}"
+
+    fun checkForDraft() {
+        val draft = draftStore.load(draftKey(), CreateAppointmentDraft::class.java) ?: return
+        pendingDraft = draft
+        _uiState.update { it.copy(draftAvailable = true) }
+    }
+
+    fun isDirty(): Boolean = _uiState.value.toDraft() != baseline
+
+    fun saveDraft() { draftStore.save(draftKey(), _uiState.value.toDraft()) }
+
+    fun discardDraft() { draftStore.clear(draftKey()) }
+
+    fun restoreDraft() {
+        val d = pendingDraft ?: return
+        _uiState.update {
+            it.copy(
+                selectedProjectId = d.selectedProjectId,
+                selectedCustomerId = d.selectedCustomerId,
+                titleTopic = d.titleTopic,
+                activityType = d.activityType,
+                plannedDate = d.plannedDate,
+                startTime = d.startTime,
+                endTime = d.endTime,
+                lat = d.lat,
+                lng = d.lng,
+                selectedContactIds = d.selectedContactIds,
+                selectedMasterIds = d.selectedMasterIds,
+                isOtherSelected = d.isOtherSelected,
+                otherObjectiveText = d.otherObjectiveText,
+                draftAvailable = false
+            )
+        }
+        d.selectedProjectId?.let { loadContactsForProject(it, d.selectedContactIds) }
+        pendingDraft = null
+    }
+
+    fun dismissDraftPrompt() {
+        pendingDraft = null
+        _uiState.update { it.copy(draftAvailable = false) }
+    }
 
     init {
         loadProjects()
@@ -294,6 +368,8 @@ class CreateAppointmentViewModel @Inject constructor(
                         isLoading         = false
                     )
                 }
+                baseline = _uiState.value.toDraft()
+                checkForDraft()
 
                 if (activity.projectId != null) {
                     loadContactsForProject(activity.projectId, selectedContactIds)
@@ -351,6 +427,9 @@ class CreateAppointmentViewModel @Inject constructor(
                         selectedCustomerId  = p.custId
                     )
                 }
+                // สร้างใหม่จากหน้าโครงการ ค่าที่ prefill มานี้ถือเป็นจุดเริ่มต้น ไม่ใช่ของที่ผู้ใช้แก้ไข
+                baseline = _uiState.value.toDraft()
+                checkForDraft()
                 loadContactsForProject(projectId)
             }
         }
@@ -463,6 +542,9 @@ class CreateAppointmentViewModel @Inject constructor(
                 _uiState.update { it.copy(showStartTimePicker = false, showEndTimePicker = false) }
 
             CreateAppointmentEvent.Save -> save()
+            CreateAppointmentEvent.CheckDraft -> checkForDraft()
+            CreateAppointmentEvent.RestoreDraft -> restoreDraft()
+            CreateAppointmentEvent.DismissDraftPrompt -> dismissDraftPrompt()
         }
     }
 
@@ -647,6 +729,7 @@ class CreateAppointmentViewModel @Inject constructor(
                 android.util.Log.e("CreateApptVM", "เริ่มติดตามตำแหน่งไม่สำเร็จ: ${e.message}")
             }
 
+            discardDraft()
             _uiState.update { it.copy(isLoading = false, isSaved = true) }
         }
     }

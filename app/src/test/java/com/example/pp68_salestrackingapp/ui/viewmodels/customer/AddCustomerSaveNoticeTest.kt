@@ -25,11 +25,13 @@ class AddCustomerSaveNoticeTest {
 
     private val customerRepo: CustomerRepository = mockk(relaxed = true)
     private val authRepo: AuthRepository = mockk(relaxed = true)
+    private val draftStore = mockk<com.example.pp68_salestrackingapp.utils.DraftStore>(relaxed = true)
     private val dispatcher = StandardTestDispatcher()
 
     @Before
     fun setUp() {
         Dispatchers.setMain(dispatcher)
+        every { draftStore.load<Any>(any(), any()) } returns null
         every { authRepo.currentUser() } returns AuthUser("U1", "u@test.com", "sale")
     }
 
@@ -37,7 +39,7 @@ class AddCustomerSaveNoticeTest {
     fun tearDown() = Dispatchers.resetMain()
 
     private fun vmReadyToSave(): AddCustomerViewModel =
-        AddCustomerViewModel(customerRepo, authRepo).apply {
+        AddCustomerViewModel(customerRepo, authRepo, draftStore).apply {
             onEvent(AddCustomerEvent.CompanyNameChanged("บริษัท ทดสอบ จำกัด"))
             onEvent(AddCustomerEvent.CustTypeChanged("Owner"))
         }

@@ -151,6 +151,27 @@ fun ContactListScreenContent(
     ) { padding ->
         Column(modifier = Modifier.fillMaxSize().padding(padding).padding(horizontal = 16.dp)) {
             Spacer(Modifier.height(12.dp))
+            val context = androidx.compose.ui.platform.LocalContext.current
+            var hasDraft by remember { mutableStateOf(false) }
+            val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+            androidx.compose.runtime.DisposableEffect(lifecycleOwner) {
+                val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+                    if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
+                        hasDraft = com.example.pp68_salestrackingapp.utils.DraftStore.peekExists(context, "add_contact:new")
+                    }
+                }
+                lifecycleOwner.lifecycle.addObserver(observer)
+                onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+            }
+            if (hasDraft) {
+                com.example.pp68_salestrackingapp.ui.components.DraftBanner(
+                    message = "มีผู้ติดต่อที่กรอกค้างไว้",
+                    actionLabel = "ทำต่อ",
+                    onAction = onAddClick,
+                    onDismiss = { hasDraft = false }
+                )
+                Spacer(Modifier.height(8.dp))
+            }
             OutlinedTextField(
                 value = searchQuery, onValueChange = onSearchChange,
                 modifier = Modifier.fillMaxWidth(),

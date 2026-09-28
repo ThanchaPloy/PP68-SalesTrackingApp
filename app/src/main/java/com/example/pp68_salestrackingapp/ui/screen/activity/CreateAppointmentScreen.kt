@@ -95,11 +95,27 @@ fun CreateAppointmentScreen(
             onEvent(CreateAppointmentEvent.LoadActivity(activityId))
         } else if (projectId != null) {
             onEvent(CreateAppointmentEvent.LoadInitialProject(projectId))
+        } else {
+            onEvent(CreateAppointmentEvent.CheckDraft)
         }
     }
 
     if (state.isSaved) {
         LaunchedEffect(Unit) { onSaved() }
+    }
+
+    var showDiscardDialog by remember { mutableStateOf(false) }
+    val attemptBack: () -> Unit = {
+        if (viewModel.isDirty()) showDiscardDialog = true else onBack()
+    }
+    androidx.activity.compose.BackHandler(onBack = attemptBack)
+
+    if (showDiscardDialog) {
+        com.example.pp68_salestrackingapp.ui.components.DiscardChangesDialog(
+            onSaveDraft = { viewModel.saveDraft(); showDiscardDialog = false; onBack() },
+            onDiscard   = { viewModel.discardDraft(); showDiscardDialog = false; onBack() },
+            onDismiss   = { showDiscardDialog = false }
+        )
     }
 
     Scaffold(
@@ -112,7 +128,7 @@ fun CreateAppointmentScreen(
                         .padding(horizontal = 8.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    IconButton(onClick = onBack) {
+                    IconButton(onClick = attemptBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, null, tint = TextDark)
                     }
                     Spacer(Modifier.weight(1f))
@@ -136,6 +152,14 @@ fun CreateAppointmentScreen(
                 .padding(horizontal = 20.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
+            if (state.draftAvailable) {
+                com.example.pp68_salestrackingapp.ui.components.DraftBanner(
+                    message = "พบฉบับร่างที่บันทึกไว้ก่อนหน้านี้",
+                    actionLabel = "กู้คืน",
+                    onAction = { onEvent(CreateAppointmentEvent.RestoreDraft) },
+                    onDismiss = { onEvent(CreateAppointmentEvent.DismissDraftPrompt) }
+                )
+            }
 
             FormField(label = "หัวข้อกิจกรรม", required = true) {
                 FormTextField(

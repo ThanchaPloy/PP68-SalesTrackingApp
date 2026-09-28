@@ -53,14 +53,30 @@ fun AddContactScreen(
     LaunchedEffect(contactId) {
         if (contactId != null) {
             viewModel.onEvent(AddContactEvent.LoadContact(contactId))
+        } else {
+            viewModel.onEvent(AddContactEvent.CheckDraft)
         }
     }
 
     LaunchedEffect(uiState.isSaved) { if (uiState.isSaved) onSaved() }
 
+    var showDiscardDialog by remember { mutableStateOf(false) }
+    val attemptBack: () -> Unit = {
+        if (viewModel.isDirty()) showDiscardDialog = true else onBack()
+    }
+    androidx.activity.compose.BackHandler(onBack = attemptBack)
+
+    if (showDiscardDialog) {
+        DiscardChangesDialog(
+            onSaveDraft = { viewModel.saveDraft(); showDiscardDialog = false; onBack() },
+            onDiscard   = { viewModel.discardDraft(); showDiscardDialog = false; onBack() },
+            onDismiss   = { showDiscardDialog = false }
+        )
+    }
+
     AddContactContent(
         uiState = uiState,
-        onBack  = onBack,
+        onBack  = attemptBack,
         onSaved = onSaved,
         onEvent = viewModel::onEvent
     )
@@ -105,6 +121,14 @@ fun AddContactContent(
                 .padding(horizontal = 20.dp, vertical = 16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+            if (uiState.draftAvailable) {
+                DraftBanner(
+                    message = "พบฉบับร่างที่บันทึกไว้ก่อนหน้านี้",
+                    actionLabel = "กู้คืน",
+                    onAction = { onEvent(AddContactEvent.RestoreDraft) },
+                    onDismiss = { onEvent(AddContactEvent.DismissDraftPrompt) }
+                )
+            }
 
             // ── Select Company * ──────────────────────────────
             FormField("เลือกบริษัท", required = true) {

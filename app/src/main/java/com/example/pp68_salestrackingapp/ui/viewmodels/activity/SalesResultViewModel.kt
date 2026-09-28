@@ -13,6 +13,7 @@ import com.example.pp68_salestrackingapp.data.model.Project
 import com.example.pp68_salestrackingapp.data.repository.ActivityRepository
 import com.example.pp68_salestrackingapp.data.repository.AuthRepository
 import com.example.pp68_salestrackingapp.data.repository.ProjectRepository
+import com.example.pp68_salestrackingapp.utils.DraftStore
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -61,7 +62,29 @@ data class SalesResultUiState(
     // ✅ รองรับ version history ของบันทึกผลการขาย
     val resultGroupId: String? = null,
     val version: Int = 1,
-    val isReadOnlyVersion: Boolean = false // true = กำลังดู version เก่า (ไม่ใช่ล่าสุด) แก้ไขไม่ได้
+    val isReadOnlyVersion: Boolean = false, // true = กำลังดู version เก่า (ไม่ใช่ล่าสุด) แก้ไขไม่ได้
+
+    val draftAvailable: Boolean = false
+)
+
+// ไม่รวมรูป (photos) — Uri ท้องถิ่น/ไฟล์ที่อัปโหลดแล้วกู้คืนข้ามเซสชันไม่ได้อย่างปลอดภัย ผู้ใช้ต้อง
+// แนบรูปใหม่เองถ้ากู้คืนฉบับร่าง ส่วนอื่นที่เป็นแค่ข้อความ/ตัวเลข/ตัวเลือกกู้คืนได้ตามปกติ
+data class SalesResultDraft(
+    val isStatusUpdateEnabled: Boolean = false,
+    val newStatus: String = "",
+    val opportunityScore: String? = null,
+    val dealPosition: String = "",
+    val previousSolution: String = "",
+    val counterpartyMultiplier: String = "",
+    val responseSpeed: String = "",
+    val isProposalSent: Boolean = false,
+    val proposalDate: String? = null,
+    val competitorCount: Int = 0,
+    val dmInvolved: Boolean = false,
+    val visitSummary: String = "",
+    val lossReason: String = "",
+    val otherLossReason: String = "",
+    val selectedItemIds: Set<Int> = emptySet()
 )
 
 enum class ResultMode {
@@ -87,13 +110,74 @@ class SalesResultViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val projectRepo: ProjectRepository,
     private val activityRepo: ActivityRepository,
-    private val authRepo: AuthRepository
+    private val authRepo: AuthRepository,
+    private val draftStore: DraftStore
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(SalesResultUiState())
     val uiState: StateFlow<SalesResultUiState> = _uiState
 
     private var custId: String? = null
+
+    private var baseline: SalesResultDraft = SalesResultDraft()
+    private var pendingDraft: SalesResultDraft? = null
+
+    private fun SalesResultUiState.toDraft() = SalesResultDraft(
+        isStatusUpdateEnabled, newStatus, opportunityScore, dealPosition, previousSolution,
+        counterpartyMultiplier, responseSpeed, isProposalSent, proposalDate, competitorCount,
+        dmInvolved, visitSummary, lossReason, otherLossReason, selectedItemIds
+    )
+
+    // เวอร์ชันเก่าดูอย่างเดียวแก้ไม่ได้อยู่แล้ว ไม่ต้องมี draft/dirty-check
+    private fun draftKey(): String? {
+        val s = _uiState.value
+        if (s.isReadOnlyVersion) return null
+        val id = s.activityId ?: s.projectId ?: s.resultId ?: return null
+        return "sales_result:$id"
+    }
+
+    fun checkForDraft() {
+        val key = draftKey() ?: return
+        val draft = draftStore.load(key, SalesResultDraft::class.java) ?: return
+        pendingDraft = draft
+        _uiState.update { it.copy(draftAvailable = true) }
+    }
+
+    fun isDirty(): Boolean = draftKey() != null && _uiState.value.toDraft() != baseline
+
+    fun saveDraft() { draftKey()?.let { draftStore.save(it, _uiState.value.toDraft()) } }
+
+    fun discardDraft() { draftKey()?.let { draftStore.clear(it) } }
+
+    fun restoreDraft() {
+        val d = pendingDraft ?: return
+        _uiState.update {
+            it.copy(
+                isStatusUpdateEnabled = d.isStatusUpdateEnabled,
+                newStatus = d.newStatus,
+                opportunityScore = d.opportunityScore,
+                dealPosition = d.dealPosition,
+                previousSolution = d.previousSolution,
+                counterpartyMultiplier = d.counterpartyMultiplier,
+                responseSpeed = d.responseSpeed,
+                isProposalSent = d.isProposalSent,
+                proposalDate = d.proposalDate,
+                competitorCount = d.competitorCount,
+                dmInvolved = d.dmInvolved,
+                visitSummary = d.visitSummary,
+                lossReason = d.lossReason,
+                otherLossReason = d.otherLossReason,
+                selectedItemIds = d.selectedItemIds,
+                draftAvailable = false
+            )
+        }
+        pendingDraft = null
+    }
+
+    fun dismissDraftPrompt() {
+        pendingDraft = null
+        _uiState.update { it.copy(draftAvailable = false) }
+    }
 
     val lossReasonOptions = com.example.pp68_salestrackingapp.utils.LossReasons.OPTIONS
 
@@ -103,7 +187,11 @@ class SalesResultViewModel @Inject constructor(
 
         if (idParam.isNullOrBlank()) {
             _uiState.update { it.copy(projectId = pId, mode = ResultMode.STANDALONE) }
-            pId?.let { loadProjectData(it) }
+            viewModelScope.launch {
+                pId?.let { loadProjectData(it) }
+                baseline = _uiState.value.toDraft()
+                checkForDraft()
+            }
         } else {
             loadInitialData(idParam)
         }
@@ -145,6 +233,8 @@ class SalesResultViewModel @Inject constructor(
                     result.activityId?.let { loadChecklist(it) }
                 }
             }
+            baseline = _uiState.value.toDraft()
+            checkForDraft()
             _uiState.update { it.copy(isLoading = false) }
         }
     }
@@ -237,30 +327,32 @@ class SalesResultViewModel @Inject constructor(
         _uiState.update { it.copy(photos = photos) }
     }
 
-    private fun loadProjectData(pId: String) {
-        viewModelScope.launch {
-            projectRepo.getProjectById(pId).fold(
-                onSuccess = { p ->
-                    custId = p.custId
-                    _uiState.update {
-                        it.copy(
-                            project = p,
-                            currentStatus = p.projectStatus ?: "",
-                            opportunityScore = if (it.opportunityScore.isNullOrBlank()) p.opportunityScore else it.opportunityScore,
-                            // W6-2: ดึงปัจจัยข้อ 4-7 ที่เคยตอบไว้ของโครงการนี้มา prefill — เฉพาะฟิลด์
-                            // ที่ยังว่าง (ไม่แตะถ้ามีคำตอบจริงของ result นี้โดยเฉพาะอยู่แล้วจาก applyResultToState)
-                            dealPosition = it.dealPosition.ifBlank { DEAL_POSITION_REVERSE[p.dealPosition] ?: "" },
-                            previousSolution = it.previousSolution.ifBlank { SOLUTION_REVERSE[p.previousSolution] ?: "" },
-                            counterpartyMultiplier = it.counterpartyMultiplier.ifBlank { COUNTERPARTY_REVERSE[p.counterpartyType] ?: "" },
-                            responseSpeed = it.responseSpeed.ifBlank { RESPONSE_SPEED_REVERSE[p.responseSpeed] ?: "" }
-                        )
-                    }
-                },
-                onFailure = { e ->
-                    _uiState.update { it.copy(error = "โหลดข้อมูลโครงการไม่สำเร็จ: ${e.message}") }
+    // W6: เดิมฟังก์ชันนี้ห่อด้วย viewModelScope.launch{} ของตัวเอง (fire-and-forget) ทำให้ผู้เรียก
+    // ไม่มีทาง await ผลลัพธ์ก่อนไปทำ logic ถัดไปได้ (เช่น applyResultToState ที่ควรรันหลังจากนี้เสมอ
+    // เพื่อให้ค่าจริงของ result ทับ prefill จากโครงการได้ถูกต้อง) เปลี่ยนเป็น suspend fun ธรรมดา
+    // ให้ผู้เรียกที่อยู่ใน coroutine อยู่แล้ว (init{}/loadInitialData) await ได้ตรงๆ
+    private suspend fun loadProjectData(pId: String) {
+        projectRepo.getProjectById(pId).fold(
+            onSuccess = { p ->
+                custId = p.custId
+                _uiState.update {
+                    it.copy(
+                        project = p,
+                        currentStatus = p.projectStatus ?: "",
+                        opportunityScore = if (it.opportunityScore.isNullOrBlank()) p.opportunityScore else it.opportunityScore,
+                        // W6-2: ดึงปัจจัยข้อ 4-7 ที่เคยตอบไว้ของโครงการนี้มา prefill — เฉพาะฟิลด์
+                        // ที่ยังว่าง (ไม่แตะถ้ามีคำตอบจริงของ result นี้โดยเฉพาะอยู่แล้วจาก applyResultToState)
+                        dealPosition = it.dealPosition.ifBlank { DEAL_POSITION_REVERSE[p.dealPosition] ?: "" },
+                        previousSolution = it.previousSolution.ifBlank { SOLUTION_REVERSE[p.previousSolution] ?: "" },
+                        counterpartyMultiplier = it.counterpartyMultiplier.ifBlank { COUNTERPARTY_REVERSE[p.counterpartyType] ?: "" },
+                        responseSpeed = it.responseSpeed.ifBlank { RESPONSE_SPEED_REVERSE[p.responseSpeed] ?: "" }
+                    )
                 }
-            )
-        }
+            },
+            onFailure = { e ->
+                _uiState.update { it.copy(error = "โหลดข้อมูลโครงการไม่สำเร็จ: ${e.message}") }
+            }
+        )
     }
 
     // W6-2: โครงการนี้เคยมีคำตอบข้อ 4-7 ครบแล้วหรือยัง — ถ้าครบ หน้านี้ไม่ต้องถามซ้ำ (แก้ได้แค่หน้าโครงการ)
@@ -565,6 +657,7 @@ class SalesResultViewModel @Inject constructor(
                     if (s.mode == ResultMode.FROM_APPOINTMENT) {
                         s.activityId?.let { activityRepo.finishActivity(it, s.selectedItemIds.toList(), note = null) }
                     }
+                    discardDraft()
                     _uiState.update { it.copy(isSaving = false, isSaved = true) }
                 } else {
                     _uiState.update { it.copy(isSaving = false, error = saveResult.exceptionOrNull()?.message) }

@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import com.example.pp68_salestrackingapp.data.model.Customer
+import com.example.pp68_salestrackingapp.utils.DraftStore
 import java.util.UUID
 import javax.inject.Inject
 
@@ -65,7 +66,32 @@ data class AddProjectUiState(
     val isQuickAddCustomerOpen: Boolean = false,
     val quickAddCompanyName:    String  = "",
     val quickAddCustType:       String  = "",
-    val isSavingQuickCust:      Boolean = false
+    val isSavingQuickCust:      Boolean = false,
+    val draftAvailable: Boolean = false
+)
+
+// ไม่เก็บ selectedCustomerName/selectedTeamName/selectedBillingBranchName — เป็นแค่ label ที่ resolve
+// จาก id แบบ async ทีหลัง (ดู loadProject) ไม่ใช่สิ่งที่ผู้ใช้กรอกเอง เก็บ id พออย่างเดียวพอสำหรับกู้คืน
+data class AddProjectDraft(
+    val projectName: String = "",
+    val branch: String = "",
+    val expectedValue: String = "",
+    val startDate: String? = null,
+    val closeDate: String? = null,
+    val projectStatus: String? = null,
+    val opportunityScore: String? = null,
+    val siteLat: Double? = null,
+    val siteLong: Double? = null,
+    val selectedCustomerId: String? = null,
+    val selectedContactIds: Set<String> = emptySet(),
+    val selectedTeamId: String? = null,
+    val selectedBillingBranchId: String? = null,
+    val lossReason: String = "",
+    val otherLossReason: String = "",
+    val dealPosition: String = "",
+    val previousSolution: String = "",
+    val counterpartyType: String = "",
+    val responseSpeed: String = ""
 )
 
 sealed class AddProjectEvent {
@@ -93,8 +119,11 @@ sealed class AddProjectEvent {
     data class ToggleQuickAddCustomer(val isOpen: Boolean)        : AddProjectEvent()
     data class QuickAddCustomerChanged(val name: String, val type: String) : AddProjectEvent()
     object SaveQuickAddCustomer                                   : AddProjectEvent()
-    
+
     object Save                                                   : AddProjectEvent()
+    object CheckDraft         : AddProjectEvent()
+    object RestoreDraft       : AddProjectEvent()
+    object DismissDraftPrompt : AddProjectEvent()
 }
 
 @HiltViewModel
@@ -104,11 +133,94 @@ class AddProjectViewModel @Inject constructor(
     private val contactRepo:  ContactRepository,
     private val authRepo:     AuthRepository,
     private val branchRepo:   BranchRepository,
-    private val apiService:   ApiService
+    private val apiService:   ApiService,
+    private val draftStore:   DraftStore
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(AddProjectUiState())
     val uiState: StateFlow<AddProjectUiState> = _uiState
+
+    private var baseline: AddProjectDraft = AddProjectDraft()
+    private var pendingDraft: AddProjectDraft? = null
+
+    private fun AddProjectUiState.toDraft() = AddProjectDraft(
+        projectName, branch, expectedValue, startDate, closeDate, projectStatus, opportunityScore,
+        siteLat, siteLong, selectedCustomerId, selectedContactIds,
+        selectedTeamId, selectedBillingBranchId,
+        lossReason, otherLossReason, dealPosition, previousSolution, counterpartyType, responseSpeed
+    )
+
+    private fun draftKey() = "add_project:${_uiState.value.projectId ?: "new"}"
+
+    private fun checkForDraft() {
+        val draft = draftStore.load(draftKey(), AddProjectDraft::class.java) ?: return
+        pendingDraft = draft
+        _uiState.update { it.copy(draftAvailable = true) }
+    }
+
+    fun isDirty(): Boolean = _uiState.value.toDraft() != baseline
+
+    fun saveDraft() { draftStore.save(draftKey(), _uiState.value.toDraft()) }
+
+    fun discardDraft() { draftStore.clear(draftKey()) }
+
+    private fun restoreDraft() {
+        val d = pendingDraft ?: return
+        _uiState.update {
+            it.copy(
+                projectName = d.projectName,
+                branch = d.branch,
+                expectedValue = d.expectedValue,
+                startDate = d.startDate,
+                closeDate = d.closeDate,
+                projectStatus = d.projectStatus,
+                opportunityScore = d.opportunityScore,
+                siteLat = d.siteLat,
+                siteLong = d.siteLong,
+                selectedCustomerId = d.selectedCustomerId,
+                selectedContactIds = d.selectedContactIds,
+                selectedTeamId = d.selectedTeamId,
+                selectedBillingBranchId = d.selectedBillingBranchId,
+                lossReason = d.lossReason,
+                otherLossReason = d.otherLossReason,
+                dealPosition = d.dealPosition,
+                previousSolution = d.previousSolution,
+                counterpartyType = d.counterpartyType,
+                responseSpeed = d.responseSpeed,
+                draftAvailable = false
+            )
+        }
+        // id อย่างเดียวไม่พอโชว์ผล ต้อง resolve ชื่อกลับมาเหมือนตอน loadProject()
+        d.selectedCustomerId?.let { cId ->
+            viewModelScope.launch {
+                customerRepo.getCustomerById(cId).onSuccess { c ->
+                    _uiState.update { it.copy(selectedCustomerName = c.companyName) }
+                }
+                val contactOptions = loadContactsAndReturn(cId)
+                _uiState.update { it.copy(contactOptions = contactOptions) }
+            }
+        }
+        d.selectedTeamId?.let { bid ->
+            viewModelScope.launch {
+                branchRepo.observeBranches().find { it.branchId == bid }?.let { b ->
+                    _uiState.update { it.copy(selectedTeamName = b.branchName) }
+                }
+            }
+        }
+        d.selectedBillingBranchId?.let { bid ->
+            viewModelScope.launch {
+                val billingName = _uiState.value.billingBranchOptions.find { it.first == bid }?.second
+                    ?: branchRepo.observeBranches().find { it.branchId == bid }?.branchName
+                if (billingName != null) _uiState.update { it.copy(selectedBillingBranchName = billingName) }
+            }
+        }
+        pendingDraft = null
+    }
+
+    private fun dismissDraftPrompt() {
+        pendingDraft = null
+        _uiState.update { it.copy(draftAvailable = false) }
+    }
 
     val lossReasonOptions = com.example.pp68_salestrackingapp.utils.LossReasons.OPTIONS
 
@@ -265,6 +377,10 @@ class AddProjectViewModel @Inject constructor(
                     projectRepo.getProjectContacts(id).onSuccess { contacts ->
                         val selectedIds = contacts.mapNotNull { it.contactId.trim() }.toSet()
                         _uiState.update { it.copy(selectedContactIds = selectedIds) }
+                        // ต้องตั้ง baseline หลังฟิลด์ที่นับใน draft (รวม selectedContactIds) โหลดครบแล้วเท่านั้น
+                        // ไม่งั้นพอ contact โหลดเสร็จทีหลังจะดูเหมือนผู้ใช้แก้ไขทั้งที่ไม่ได้แตะอะไรเลย
+                        baseline = _uiState.value.toDraft()
+                        checkForDraft()
                     }
 
                     project.branchId?.let { bid ->
@@ -399,6 +515,9 @@ class AddProjectViewModel @Inject constructor(
                 saveQuickCustomer()
             }
             is AddProjectEvent.Save -> save()
+            is AddProjectEvent.CheckDraft -> checkForDraft()
+            is AddProjectEvent.RestoreDraft -> restoreDraft()
+            is AddProjectEvent.DismissDraftPrompt -> dismissDraftPrompt()
         }
     }
 
@@ -474,6 +593,9 @@ class AddProjectViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, saveError = null) }
             val s = _uiState.value
+            // จับ key ตอนเริ่มเซฟ — ตอนสร้างใหม่ projectId ยังว่างตอนนี้ (key="new") แต่จะถูกเซ็ตเป็น
+            // id จริงก่อน draftStore.clear() ด้านล่างจะรัน ถ้าอ่าน key จาก state สดตอนนั้นจะเคลียร์ผิด key
+            val keyToClearOnSuccess = draftKey()
             try {
                 val user      = authRepo.currentUser()
                 val userId    = user?.userId ?: "USR-0000"
@@ -538,6 +660,7 @@ class AddProjectViewModel @Inject constructor(
                             return@onSuccess
                         }
                     }
+                    draftStore.clear(keyToClearOnSuccess)
                     _uiState.update { it.copy(isLoading = false, isSaved = true) }
                 }.onFailure { e ->
                     _uiState.update { it.copy(isLoading = false, saveError = e.message) }
