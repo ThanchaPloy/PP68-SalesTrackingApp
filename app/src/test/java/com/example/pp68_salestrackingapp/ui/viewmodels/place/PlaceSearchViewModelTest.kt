@@ -116,6 +116,19 @@ class PlaceSearchViewModelTest {
     }
 
     @Test
+    fun `วางพิกัดได้ผลทันทีโดยไม่เรียก API และพิกัดตรงเป๊ะ`() = runTest {
+        viewModel.onQueryChanged("13.540690, 100.613096")
+        advanceUntilIdle()
+
+        coVerify(exactly = 0) { repository.search(any()) }
+        val state = viewModel.state.value
+        assertTrue(state is PlaceSearchState.Success)
+        val place = (state as PlaceSearchState.Success).places.single()
+        assertEquals(13.540690, place.latitude, 0.0)
+        assertEquals(100.613096, place.longitude, 0.0)
+    }
+
+    @Test
     fun `เลือกสถานที่แล้วปิดผลการค้นหา`() = runTest {
         coEvery { repository.search(any()) } returns PlaceSearchState.Success(listOf(place("สยามพารากอน")))
 

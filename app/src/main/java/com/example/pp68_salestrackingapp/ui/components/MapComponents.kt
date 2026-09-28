@@ -146,7 +146,7 @@ fun MapPickerField(
                 showSuggestions = true
                 searchViewModel?.onQueryChanged(it)
             },
-            placeholder = { Text("ค้นหาสถานที่...", color = TextGray, fontSize = 14.sp) },
+            placeholder = { Text("ค้นหาสถานที่ หรือวางพิกัด...", color = TextGray, fontSize = 14.sp) },
             leadingIcon = {
                 if (searchState is PlaceSearchState.Loading) {
                     CircularProgressIndicator(color = RedPrimary, modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
