@@ -157,6 +157,9 @@ class AuthRepository @Inject constructor(
         } catch (e: Exception) { null }
     }
 
+    /** logout ยังไปต่อได้ แต่ต้องให้ผู้ใช้ยืนยันก่อน — ต่างจาก failure อื่นที่เป็นทางตัน */
+    class PendingRejectionException(message: String, val count: Int) : Exception(message)
+
     private data class UserDetailResult(
         val fullName:   String?,
         val branchId:   String?,
@@ -168,7 +171,7 @@ class AuthRepository @Inject constructor(
      * ที่ทำ offline ไว้หายถาวรตอน logout. ถ้า sync แล้วยังมีข้อมูลค้างอยู่ (เช่น ยังไม่มีเน็ต) จะไม่ยอม
      * logout เพื่อไม่ให้ข้อมูลหาย — คืน failure ให้ผู้เรียกแจ้งผู้ใช้แทน
      */
-    suspend fun logout(): kotlin.Result<Unit> {
+    suspend fun logout(force: Boolean = false): kotlin.Result<Unit> {
         return withContext(Dispatchers.IO) {
             try {
                 if (outboxSyncManager.hasPendingChanges()) {
@@ -188,6 +191,22 @@ class AuthRepository @Inject constructor(
                         )
                     )
                 }
+
+                // แถวที่เซิร์ฟเวอร์ปฏิเสธถาวรไม่บล็อก logout (บล็อกไปก็ไม่มีวันผ่าน) แต่ห้ามเงียบ —
+                // clearAllTables ด้านล่างจะลบทิ้งจริง ๆ ผู้ใช้จึงต้องได้เห็นว่าจะเสียอะไรและยืนยันเอง
+                val rejected = outboxSyncManager.rejectedSummary()
+                if (rejected.isNotEmpty() && !force) {
+                    val reasons = rejected.groupingBy { it.reason ?: "ไม่ทราบสาเหตุ" }.eachCount()
+                        .entries.joinToString("\n") { (reason, count) -> "• $reason ($count รายการ)" }
+                    Log.w("AuthRepository", "logout: มีแถวที่ถูกปฏิเสธถาวร ${rejected.size} รายการ")
+                    return@withContext kotlin.Result.failure(
+                        PendingRejectionException(
+                            "มีข้อมูล ${rejected.size} รายการที่เซิร์ฟเวอร์ไม่รับ และจะหายไปถ้าออกจากระบบตอนนี้\n$reasons",
+                            rejected.size
+                        )
+                    )
+                }
+
                 database.clearAllTables()
                 tokenManager.clearToken()
                 com.example.pp68_salestrackingapp.utils.ProjectStages.clearServerData()

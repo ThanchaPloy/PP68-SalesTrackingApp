@@ -17,9 +17,10 @@ import com.example.pp68_salestrackingapp.data.model.*
         ActivityResult::class,
         ProjectContact::class,
         AppointmentContact::class,
-        ActivityResultPhoto::class
+        ActivityResultPhoto::class,
+        SyncRejection::class
     ],
-    version = 52,
+    version = 53,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -34,6 +35,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun appointmentContactDao(): AppointmentContactDao
     abstract fun projectContactDao(): ProjectContactDao
     abstract fun activityResultPhotoDao(): ActivityResultPhotoDao
+    abstract fun syncRejectionDao(): SyncRejectionDao
 
     fun clearAllData() {
         this.clearAllTables()
@@ -391,6 +393,25 @@ abstract class AppDatabase : RoomDatabase() {
                 db.execSQL("ALTER TABLE project ADD COLUMN isProposalSent INTEGER")
                 db.execSQL("ALTER TABLE project ADD COLUMN proposalDate TEXT")
                 db.execSQL("ALTER TABLE project ADD COLUMN competitorCount INTEGER")
+            }
+        }
+
+        // แยก "ยังส่งไม่สำเร็จเพราะเน็ต" ออกจาก "เซิร์ฟเวอร์ปฏิเสธถาวร" — เดิมรวมอยู่ใน is_synced = 0
+        // เหมือนกันหมด ด่าน logout จึงบล็อกทั้งที่แถวบางส่วนไม่มีวันส่งผ่านไม่ว่าเน็ตจะดีแค่ไหน
+        val MIGRATION_52_53 = object : Migration(52, 53) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS sync_rejection (
+                        entity_type TEXT NOT NULL,
+                        entity_id   TEXT NOT NULL,
+                        http_code   INTEGER NOT NULL,
+                        reason      TEXT,
+                        rejected_at TEXT NOT NULL,
+                        PRIMARY KEY(entity_type, entity_id)
+                    )
+                    """.trimIndent()
+                )
             }
         }
     }

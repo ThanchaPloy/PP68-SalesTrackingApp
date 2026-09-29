@@ -16,7 +16,9 @@ data class SettingsUiState(
     val user: AuthUser? = null,
     val isLoggingOut: Boolean = false,
     val isLoggedOut: Boolean = false,
-    val logoutError: String? = null
+    val logoutError: String? = null,
+    // ต่างจาก logoutError: ออกจากระบบได้ แต่จะเสียข้อมูลที่เซิร์ฟเวอร์ไม่รับ ต้องให้ยืนยันก่อน
+    val logoutWarning: String? = null
 )
 
 @HiltViewModel
@@ -40,17 +42,25 @@ class SettingsViewModel @Inject constructor(
         loadUser()
     }
 
-    fun logout() {
+    fun logout(force: Boolean = false) {
         viewModelScope.launch {
-            _uiState.update { it.copy(isLoggingOut = true, logoutError = null) }
-            authRepo.logout().fold(
+            _uiState.update { it.copy(isLoggingOut = true, logoutError = null, logoutWarning = null) }
+            authRepo.logout(force).fold(
                 onSuccess = { _uiState.update { it.copy(isLoggingOut = false, isLoggedOut = true) } },
-                onFailure = { e -> _uiState.update { it.copy(isLoggingOut = false, logoutError = e.message) } }
+                onFailure = { e ->
+                    _uiState.update {
+                        if (e is AuthRepository.PendingRejectionException) {
+                            it.copy(isLoggingOut = false, logoutWarning = e.message)
+                        } else {
+                            it.copy(isLoggingOut = false, logoutError = e.message)
+                        }
+                    }
+                }
             )
         }
     }
 
     fun dismissLogoutError() {
-        _uiState.update { it.copy(logoutError = null) }
+        _uiState.update { it.copy(logoutError = null, logoutWarning = null) }
     }
 }

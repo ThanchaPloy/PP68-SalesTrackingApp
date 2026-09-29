@@ -14,6 +14,7 @@ import com.example.pp68_salestrackingapp.worker.SyncWorker
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.Collections
@@ -34,22 +35,76 @@ class SyncManager @Inject constructor(
     private val photoDao: ActivityResultPhotoDao,
     private val appointmentContactDao: AppointmentContactDao,
     private val planItemDao: ActivityPlanItemDao,
-    private val projectContactDao: ProjectContactDao
+    private val projectContactDao: ProjectContactDao,
+    private val syncRejectionDao: SyncRejectionDao
 ) {
-    // ── 403 ที่ server ปฏิเสธถาวร (ไม่ใช่ออฟไลน์) ────────────────────
-    // เก็บใน memory อย่างเดียว ไม่ persist ลง Room โดยตั้งใจ — รีสตาร์ทแอปแล้วลองใหม่ได้เอง
-    // ถ้ายังไม่มีสิทธิ์จริงก็จะโดน mark ซ้ำอีกรอบ แถวที่ถูก mark จะไม่ถูก retry ซ้ำเงียบ ๆ
-    // ทุกรอบ sync (ทุก resume แอป) ไปตลอดกาลเหมือนก่อนแก้ — แลกกับที่ถ้าแอปถูกฆ่าแล้วเปิดใหม่
-    // จะลองอีกครั้งหนึ่งก่อนถูก block ซ้ำ ถือว่ายอมรับได้เพราะไม่ได้โกหกผู้ใช้แล้ว (ดู repository
-    // ที่เรียก markBlocked — ทุกจุดคืน Result.failure ให้ผู้ใช้เห็น error จริงตั้งแต่ครั้งแรกอยู่แล้ว)
+    // ── แถวที่ server ปฏิเสธถาวร (ไม่ใช่ออฟไลน์) ────────────────────
+    // แคชในหน่วยความจำของสิ่งที่อยู่ในตาราง sync_rejection อยู่แล้ว — กันไม่ให้ต้องถาม DB
+    // ทุกครั้งที่ repository เรียก markBlocked แบบ fire-and-forget ตัวจริงที่ถืออยู่คือ Room
     private val blockedRows = Collections.synchronizedSet(mutableSetOf<String>())
+
+    // แถวที่เคยถูกปฏิเสธถาวร จะถูกลองใหม่ "ครั้งเดียวต่อการเปิดแอปหนึ่งรอบ" — ไม่ใช่ทุกรอบ sync
+    // (เปลืองและรังแกเซิร์ฟเวอร์) และไม่ใช่ไม่ลองเลย (ถ้าต้นเหตุถูกแก้ เช่น แอดมินให้สิทธิ์เพิ่ม
+    // ข้อมูลจะค้างในเครื่องตลอดกาลแบบเงียบ ๆ) เก็บใน memory พอ เพราะความหมายคือ "รอบนี้ลองหรือยัง"
+    private val retriedThisSession = Collections.synchronizedSet(mutableSetOf<String>())
 
     fun markBlocked(entityType: String, id: String) {
         blockedRows.add("$entityType:$id")
+        rejectionScope.launch { recordRejection(entityType, id, 403, "ไม่มีสิทธิ์แก้ไขรายการนี้") }
     }
 
-    private fun isBlocked(entityType: String, id: String): Boolean =
-        "$entityType:$id" in blockedRows
+    // เรียกจาก repository ได้แบบ fire-and-forget (markBlocked) และจาก doSync แบบ suspend ตรง ๆ
+    private val rejectionScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    internal suspend fun recordRejection(entityType: String, id: String, httpCode: Int, reason: String?) {
+        runCatching {
+            syncRejectionDao.upsert(
+                com.example.pp68_salestrackingapp.data.model.SyncRejection(
+                    entityType = entityType,
+                    entityId   = id,
+                    httpCode   = httpCode,
+                    reason     = reason,
+                    rejectedAt = java.time.Instant.now().toString()
+                )
+            )
+        }
+    }
+
+    private suspend fun clearRejection(entityType: String, id: String) {
+        blockedRows.remove("$entityType:$id")
+        runCatching { syncRejectionDao.clear(entityType, id) }
+    }
+
+    // 400/403/404/409 = เซิร์ฟเวอร์ตัดสินแล้วว่ารับไม่ได้ ลองใหม่กี่รอบก็เหมือนเดิม
+    // ส่วน 5xx/timeout/ไม่มีเน็ต = ปัญหาชั่วคราว ต้องลองใหม่ ห้ามบันทึกเป็นการปฏิเสธถาวร
+    private fun isPermanentRejection(code: Int): Boolean = code in setOf(400, 403, 404, 409, 422)
+
+    private suspend fun recordIfPermanent(entityType: String, id: String, code: Int) {
+        if (!isPermanentRejection(code)) return
+        val reason = when (code) {
+            403 -> "ไม่มีสิทธิ์แก้ไขรายการนี้"
+            404 -> "ไม่พบรายการนี้บนเซิร์ฟเวอร์ (อาจถูกลบไปแล้ว)"
+            409 -> "ข้อมูลชนกับรายการที่มีอยู่แล้ว"
+            else -> "เซิร์ฟเวอร์ปฏิเสธข้อมูลนี้ (HTTP $code)"
+        }
+        Log.w("SyncManager", "$entityType:$id ถูกปฏิเสธถาวร — $reason")
+        recordRejection(entityType, id, code, reason)
+    }
+
+    // เรียกทุกครั้งที่ได้คำตอบจาก server: สำเร็จ = ล้างประวัติการถูกปฏิเสธทิ้ง (ต้นเหตุถูกแก้แล้ว)
+    // ไม่สำเร็จ = บันทึกไว้ถ้าเป็นการปฏิเสธถาวร ส่วน 5xx/ขาดเน็ตปล่อยผ่านให้ลองรอบหน้า
+    private suspend fun noteOutcome(entityType: String, id: String, success: Boolean, code: Int) {
+        if (success) clearRejection(entityType, id) else recordIfPermanent(entityType, id, code)
+    }
+
+    // ข้ามเฉพาะแถวที่เคยถูกปฏิเสธถาวร "และลองซ้ำไปแล้วในรอบเปิดแอปนี้"
+    private suspend fun shouldSkip(entityType: String, id: String): Boolean {
+        val key = "$entityType:$id"
+        val known = key in blockedRows || id in syncRejectionDao.idsOfType(entityType)
+        if (!known) return false
+        if (retriedThisSession.add(key)) return false // ให้โอกาสลองใหม่หนึ่งครั้ง
+        return true
+    }
 
     fun scheduleSync() {
         val constraints = Constraints.Builder()
@@ -88,16 +143,33 @@ class SyncManager @Inject constructor(
     // สรุปว่ายังค้างอะไรอยู่บ้าง — เดิม hasPendingChanges คืนแค่ true/false ทำให้ตอน logout ไม่ผ่าน
     // ผู้ใช้เห็นแค่ "ยังไม่ได้ซิงค์ กรุณาเชื่อมต่ออินเทอร์เน็ต" ซึ่งชี้ทางผิดเมื่อเน็ตดีอยู่แล้ว และไม่มี
     // ใครรู้ว่าแถวไหนค้าง ต้องมานั่งเดา — คืนรายการชนิด+จำนวน เอาไปทั้งแสดงและ log
+    // นับเฉพาะงานที่ "ยังมีโอกาสส่งสำเร็จ" — แถวที่เซิร์ฟเวอร์ปฏิเสธถาวรไม่นับ เพราะบล็อก logout
+    // ด้วยของพวกนั้นไม่ช่วยอะไร ต่อให้รอจนเน็ตดีแค่ไหนมันก็ไม่ผ่าน (ดู rejectedSummary)
     suspend fun pendingSummary(): List<Pair<String, Int>> = withContext(Dispatchers.IO) {
+        // ดึงรายการที่ถูกปฏิเสธมาก่อนทีเดียวต่อชนิด แล้วค่อยกรอง — ถูกกว่าถาม DB รายแถว
+        suspend fun rejectedIds(type: String): Set<String> =
+            runCatching { syncRejectionDao.idsOfType(type).toSet() }.getOrDefault(emptySet())
+
+        val rejectedCustomers = rejectedIds("customer")
+        val rejectedContacts  = rejectedIds("contact")
+        val rejectedProjects  = rejectedIds("project")
+        val rejectedActivities = rejectedIds("activity")
+        val rejectedResults   = rejectedIds("result")
+        val rejectedChecklist = rejectedIds("checklist")
+
         listOf(
-            "ลูกค้า" to customerDao.getUnsyncedCustomers().size,
-            "ผู้ติดต่อ" to contactDao.getUnsyncedContacts().size,
-            "โครงการ" to projectDao.getUnsyncedProjects().size,
-            "นัดหมาย" to activityDao.getUnsyncedActivities().size,
-            "บันทึกผล" to resultDao.getUnsyncedResults().size,
-            "เช็คลิสต์" to planItemDao.getUnsyncedAppointmentIds().size
+            "ลูกค้า" to customerDao.getUnsyncedCustomers().count { it.custId !in rejectedCustomers },
+            "ผู้ติดต่อ" to contactDao.getUnsyncedContacts().count { it.contactId !in rejectedContacts },
+            "โครงการ" to projectDao.getUnsyncedProjects().count { it.projectId !in rejectedProjects },
+            "นัดหมาย" to activityDao.getUnsyncedActivities().count { it.activityId !in rejectedActivities },
+            "บันทึกผล" to resultDao.getUnsyncedResults().count { it.resultId !in rejectedResults },
+            "เช็คลิสต์" to planItemDao.getUnsyncedAppointmentIds().count { it !in rejectedChecklist }
         ).filter { it.second > 0 }
     }
+
+    // รายการที่เซิร์ฟเวอร์ปฏิเสธถาวร พร้อมเหตุผล — ใช้บอกผู้ใช้ตอน logout ว่าจะทิ้งอะไรไว้บ้าง
+    suspend fun rejectedSummary(): List<com.example.pp68_salestrackingapp.data.model.SyncRejection> =
+        withContext(Dispatchers.IO) { runCatching { syncRejectionDao.getAll() }.getOrDefault(emptyList()) }
 
     internal suspend fun doSync() {
         Log.d("SyncManager", "Starting sync...")
@@ -107,7 +179,7 @@ class SyncManager @Inject constructor(
 
         val unsyncedCustomers = customerDao.getUnsyncedCustomers()
         for (customer in unsyncedCustomers) {
-            if (isBlocked("customer", customer.custId)) continue
+            if (shouldSkip("customer", customer.custId)) continue
             try {
                 val body = mutableMapOf<String, Any?>(
                     "customer_name"         to customer.companyName,
@@ -127,6 +199,7 @@ class SyncManager @Inject constructor(
 
                 if (customer.custId.startsWith("TEMP-")) {
                     val response = apiService.addCustomer(body)
+                    noteOutcome("customer", customer.custId, response.isSuccessful, response.code())
                     if (response.isSuccessful) {
                         val realCustId = response.body()?.firstOrNull()?.custId
                         if (realCustId != null && realCustId != customer.custId) {
@@ -147,6 +220,7 @@ class SyncManager @Inject constructor(
                     } else {
                         apiService.updateCustomer("eq.${customer.custId}", body)
                     }
+                    noteOutcome("customer", customer.custId, response.isSuccessful, response.code())
                     if (response.isSuccessful && response.body()?.isNotEmpty() == true) {
                         customerDao.updateSyncStatus(customer.custId, true)
                     }
@@ -158,7 +232,7 @@ class SyncManager @Inject constructor(
 
         val unsyncedContacts = contactDao.getUnsyncedContacts()
         for (contact in unsyncedContacts) {
-            if (isBlocked("contact", contact.contactId)) continue
+            if (shouldSkip("contact", contact.contactId)) continue
             try {
                 val fields = buildMap<String, Any?> {
                     put("customer_code", contact.custId)
@@ -176,7 +250,8 @@ class SyncManager @Inject constructor(
                 } else {
                     apiService.updateContact("eq.${contact.contactId}", fields)
                 }
-                
+                noteOutcome("contact", contact.contactId, response.isSuccessful, response.code())
+
                 if (response.isSuccessful) {
                     val serverContact = response.body()?.firstOrNull()
                     if (serverContact != null && serverContact.contactId != contact.contactId) {
@@ -193,7 +268,7 @@ class SyncManager @Inject constructor(
 
         val unsyncedProjects = projectDao.getUnsyncedProjects()
         for (project in unsyncedProjects) {
-            if (isBlocked("project", project.projectId)) continue
+            if (shouldSkip("project", project.projectId)) continue
             try {
                 val isUpdate = !project.projectId.startsWith("TEMP-")
                 val body = mutableMapOf<String, Any?>(
@@ -230,7 +305,9 @@ class SyncManager @Inject constructor(
                 if (!response.isSuccessful) {
                     Log.e("SyncManager", "Project sync failed ${response.code()}: custId=${project.custId} err=${response.errorBody()?.string()}")
                 }
-                
+                noteOutcome("project", project.projectId, response.isSuccessful, response.code())
+
+
                 if (response.isSuccessful) {
                     val finalId = if (isUpdate) {
                         projectDao.updateSyncStatus(project.projectId, true)
@@ -271,7 +348,7 @@ class SyncManager @Inject constructor(
 
         val unsyncedActivities = activityDao.getUnsyncedActivities()
         for (activity in unsyncedActivities) {
-            if (isBlocked("activity", activity.activityId)) continue
+            if (shouldSkip("activity", activity.activityId)) continue
             try {
                 if (activity.activityId.startsWith("TEMP-")) {
                     val custCode = if (activity.customerId == "CST-UNKNOWN") null else activity.customerId
@@ -291,6 +368,7 @@ class SyncManager @Inject constructor(
                         "created_at"       to activity.createdAt
                     ).filterValues { it != null }
                     val response = apiService.addActivityMap(body)
+                    noteOutcome("activity", activity.activityId, response.isSuccessful, response.code())
                     if (response.isSuccessful) {
                         val realId = response.body()?.firstOrNull()?.activityId
                         val finalId = realId ?: activity.activityId
@@ -335,6 +413,7 @@ class SyncManager @Inject constructor(
                         activity.distanceDeviation?.let { put("distance_deviation", it) }
                     }
                     val response = apiService.updateActivity("eq.${activity.activityId}", patchBody)
+                    noteOutcome("activity", activity.activityId, response.isSuccessful, response.code())
                     if (response.isSuccessful && response.body()?.isNotEmpty() == true) {
                         activityDao.updateSyncStatus(activity.activityId, true)
                     }
@@ -346,13 +425,14 @@ class SyncManager @Inject constructor(
 
         val unsyncedResults = resultDao.getUnsyncedResults()
         for (res in unsyncedResults) {
-            if (isBlocked("result", res.resultId)) continue
+            if (shouldSkip("result", res.resultId)) continue
             try {
                 if (res.resultId.startsWith("TEMP-")) {
                     // ✅ ถ้ายังไม่เคยมี version ก่อนหน้า group id จะผูกกับ tempId ของตัวเองไปก่อน ต้องแก้เป็น realId ทีหลัง
                     val wasSelfGroup = res.resultGroupId == res.resultId
                     val body = buildResultBody(res).filterKeys { it != "result_id" }
                     val response = apiService.insertActivityResultMap(body)
+                    noteOutcome("result", res.resultId, response.isSuccessful, response.code())
                     if (response.isSuccessful) {
                         val realId = response.body()?.firstOrNull()?.resultId
                         if (realId != null && realId != res.resultId) {
@@ -381,6 +461,7 @@ class SyncManager @Inject constructor(
                 } else {
                     val body = buildResultBody(res)
                     val response = apiService.upsertActivityResult(body)
+                    noteOutcome("result", res.resultId, response.isSuccessful, response.code())
                     if (response.isSuccessful && response.body()?.isNotEmpty() == true) resultDao.updateSyncStatus(res.resultId, true)
                 }
             } catch (e: Exception) {
@@ -404,7 +485,9 @@ class SyncManager @Inject constructor(
             if (appointmentId.startsWith("TEMP-")) continue
             try {
                 val items = planItemDao.getPlanItemsByAppointmentId(appointmentId)
-                if (activityRepositoryPush(appointmentId, items)) {
+                val code = activityRepositoryPush(appointmentId, items)
+                noteOutcome("checklist", appointmentId, code == 200, code)
+                if (code == 200) {
                     planItemDao.updateSyncStatusByAppointment(appointmentId, true)
                 }
             } catch (e: Exception) {
@@ -418,18 +501,22 @@ class SyncManager @Inject constructor(
     /**
      * ส่ง checklist ทั้งชุดของนัดหมายหนึ่ง — ลบของเก่าบน server แล้วใส่ชุดใหม่
      * ฝั่ง backend ทำ upsert ให้แล้ว การส่งซ้ำจึงไม่ชน primary key
+     *
+     * คืน HTTP code เพื่อให้ผู้เรียกแยกออกว่าล้มเหลวเพราะถูกปฏิเสธถาวร (4xx) หรือแค่เน็ตไม่ดี
+     * 200 = สำเร็จทั้งชุด, 0 = ยิงไม่ถึง server (exception) ซึ่งต้องลองใหม่เสมอ
      */
-    private suspend fun activityRepositoryPush(appointmentId: String, items: List<ActivityPlanItem>): Boolean {
+    private suspend fun activityRepositoryPush(appointmentId: String, items: List<ActivityPlanItem>): Int {
         return try {
             val deleted = apiService.deleteChecklistByAppointment("eq.$appointmentId")
-            if (!deleted.isSuccessful) return false
-            if (items.isEmpty()) return true
+            if (!deleted.isSuccessful) return deleted.code()
+            if (items.isEmpty()) return 200
             val dtos = items.map {
                 ChecklistInsertDto(appointmentId = appointmentId, masterId = it.masterId, isDone = it.isDone, actName = it.actName)
             }
-            apiService.insertChecklist(dtos).isSuccessful
+            val inserted = apiService.insertChecklist(dtos)
+            if (inserted.isSuccessful) 200 else inserted.code()
         } catch (e: Exception) {
-            false
+            0
         }
     }
 

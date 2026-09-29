@@ -9,6 +9,7 @@ import com.example.pp68_salestrackingapp.di.TokenManager
 import io.mockk.*
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.runTest
+import okhttp3.ResponseBody.Companion.toResponseBody
 import org.junit.Before
 import org.junit.Test
 import retrofit2.Response
@@ -28,6 +29,7 @@ class SyncManagerTest {
     private val appointmentContactDao: AppointmentContactDao = mockk(relaxed = true)
     private val planItemDao: ActivityPlanItemDao = mockk(relaxed = true)
     private val projectContactDao: ProjectContactDao = mockk(relaxed = true)
+    private val syncRejectionDao: SyncRejectionDao = mockk(relaxed = true)
 
     private lateinit var sync: SyncManager
 
@@ -35,7 +37,8 @@ class SyncManagerTest {
     fun setUp() {
         sync = SyncManager(
             context, apiService, tokenManager, customerDao, projectDao, contactDao,
-            activityDao, resultDao, photoDao, appointmentContactDao, planItemDao, projectContactDao
+            activityDao, resultDao, photoDao, appointmentContactDao, planItemDao, projectContactDao,
+            syncRejectionDao
         )
         coEvery { customerDao.getUnsyncedCustomers() } returns emptyList()
         coEvery { contactDao.getUnsyncedContacts() } returns emptyList()
@@ -89,5 +92,35 @@ class SyncManagerTest {
             apiService.deleteProjectContacts("eq.PRJ-1")
             apiService.addProjectContacts(match { it.size == 2 })
         }
+    }
+
+    // หัวใจของการแยก "ปฏิเสธถาวร" ออกจาก "เน็ตไม่ดี" — ถ้าแยกผิดทางใดทางหนึ่งจะพังคนละแบบ:
+    // นับ 5xx เป็นถาวร = ข้อมูลผู้ใช้ถูกทิ้งเงียบ ๆ, ไม่นับ 4xx = logout ค้างตลอดกาลเหมือนเดิม
+    @Test
+    fun `a 403 is recorded as permanent while a 500 is left to retry`() = runTest {
+        val rejected = Customer(custId = "C-403", companyName = "ห้ามแก้", isSynced = false)
+        val flaky    = Customer(custId = "C-500", companyName = "เซิร์ฟเวอร์ล่ม", isSynced = false)
+        coEvery { customerDao.getUnsyncedCustomers() } returns listOf(rejected, flaky)
+        coEvery { apiService.updateCustomer("eq.C-403", any()) } returns
+            Response.error(403, "".toResponseBody(null))
+        coEvery { apiService.updateCustomer("eq.C-500", any()) } returns
+            Response.error(500, "".toResponseBody(null))
+
+        sync.doSync()
+
+        coVerify(exactly = 1) { syncRejectionDao.upsert(match { it.entityId == "C-403" && it.httpCode == 403 }) }
+        coVerify(exactly = 0) { syncRejectionDao.upsert(match { it.entityId == "C-500" }) }
+    }
+
+    // ต้นเหตุถูกแก้แล้ว (แอดมินให้สิทธิ์เพิ่ม) แถวต้องหลุดจากรายการที่จะเตือนตอน logout
+    @Test
+    fun `a successful sync clears an earlier rejection`() = runTest {
+        val customer = Customer(custId = "C-1", companyName = "ลูกค้า", isSynced = false)
+        coEvery { customerDao.getUnsyncedCustomers() } returns listOf(customer)
+        coEvery { apiService.updateCustomer("eq.C-1", any()) } returns Response.success(listOf(customer))
+
+        sync.doSync()
+
+        coVerify(exactly = 1) { syncRejectionDao.clear("customer", "C-1") }
     }
 }

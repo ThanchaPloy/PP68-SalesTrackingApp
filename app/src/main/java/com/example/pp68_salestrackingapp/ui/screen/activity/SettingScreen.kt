@@ -53,6 +53,7 @@ fun SettingScreen(
         uiState = uiState,
         onBack = onBack,
         onLogout = { viewModel.logout() },
+        onForceLogout = { viewModel.logout(force = true) },
         onRefreshUser = { viewModel.refreshUser() },
         onDismissLogoutError = { viewModel.dismissLogoutError() }
     )
@@ -64,6 +65,7 @@ fun SettingScreenContent(
     uiState: SettingsUiState,
     onBack: () -> Unit,
     onLogout: () -> Unit,
+    onForceLogout: () -> Unit = {},
     onRefreshUser: () -> Unit = {},
     onDismissLogoutError: () -> Unit = {}
 ) {
@@ -78,6 +80,20 @@ fun SettingScreenContent(
             text = { Text(uiState.logoutError) },
             confirmButton = {
                 TextButton(onClick = onDismissLogoutError) { Text("ตกลง") }
+            }
+        )
+    }
+
+    if (uiState.logoutWarning != null) {
+        AlertDialog(
+            onDismissRequest = onDismissLogoutError,
+            title = { Text("ออกจากระบบแล้วข้อมูลบางส่วนจะหาย") },
+            text = { Text(uiState.logoutWarning) },
+            confirmButton = {
+                TextButton(onClick = onForceLogout) { Text("ออกจากระบบ") }
+            },
+            dismissButton = {
+                TextButton(onClick = onDismissLogoutError) { Text("ยกเลิก") }
             }
         )
     }

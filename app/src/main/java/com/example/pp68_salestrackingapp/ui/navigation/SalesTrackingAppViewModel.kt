@@ -24,7 +24,12 @@ class SalesTrackingAppViewModel @Inject constructor(
         viewModelScope.launch {
             authRepo.logout().fold(
                 onSuccess = { onSuccess() },
-                onFailure = { onFailure(it.message ?: "ออกจากระบบไม่สำเร็จ") }
+                onFailure = { e ->
+                    // ทางนี้แสดงผลด้วย Toast จึงกดยืนยันไม่ได้ — ส่งไปยืนยันที่หน้าตั้งค่าแทน
+                    val hint = if (e is AuthRepository.PendingRejectionException)
+                        "\nไปที่หน้าตั้งค่าเพื่อออกจากระบบและยืนยันการทิ้งข้อมูลนี้" else ""
+                    onFailure((e.message ?: "ออกจากระบบไม่สำเร็จ") + hint)
+                }
             )
         }
     }

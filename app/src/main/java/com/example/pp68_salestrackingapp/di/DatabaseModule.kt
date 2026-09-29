@@ -13,6 +13,7 @@ import com.example.pp68_salestrackingapp.data.local.BranchDao
 import com.example.pp68_salestrackingapp.data.local.CustomerDao
 import com.example.pp68_salestrackingapp.data.local.ProjectDao
 import com.example.pp68_salestrackingapp.data.local.ContactDao
+import com.example.pp68_salestrackingapp.data.local.SyncRejectionDao
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -57,7 +58,8 @@ object DatabaseModule {
                 AppDatabase.MIGRATION_48_49,
                 AppDatabase.MIGRATION_49_50,
                 AppDatabase.MIGRATION_50_51,
-                AppDatabase.MIGRATION_51_52
+                AppDatabase.MIGRATION_51_52,
+                AppDatabase.MIGRATION_52_53
             )
             .build()
     }
@@ -113,4 +115,8 @@ object DatabaseModule {
     @Provides
     @Singleton
     fun provideActivityResultPhotoDao(db: AppDatabase): ActivityResultPhotoDao = db.activityResultPhotoDao()
+
+    @Provides
+    @Singleton
+    fun provideSyncRejectionDao(db: AppDatabase): SyncRejectionDao = db.syncRejectionDao()
 }

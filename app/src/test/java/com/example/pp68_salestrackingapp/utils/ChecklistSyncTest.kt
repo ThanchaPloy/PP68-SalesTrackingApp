@@ -30,6 +30,7 @@ class ChecklistSyncTest {
     private val appointmentContactDao: AppointmentContactDao = mockk(relaxed = true)
     private val planItemDao: ActivityPlanItemDao = mockk(relaxed = true)
     private val projectContactDao: ProjectContactDao = mockk(relaxed = true)
+    private val syncRejectionDao: SyncRejectionDao = mockk(relaxed = true)
 
     private lateinit var sync: SyncManager
 
@@ -41,7 +42,8 @@ class ChecklistSyncTest {
     fun setUp() {
         sync = SyncManager(
             context, apiService, tokenManager, customerDao, projectDao, contactDao,
-            activityDao, resultDao, photoDao, appointmentContactDao, planItemDao, projectContactDao
+            activityDao, resultDao, photoDao, appointmentContactDao, planItemDao, projectContactDao,
+            syncRejectionDao
         )
         coEvery { customerDao.getUnsyncedCustomers() } returns emptyList()
         coEvery { contactDao.getUnsyncedContacts() } returns emptyList()
