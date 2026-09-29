@@ -1168,6 +1168,71 @@ class SalesResultViewModelTest {
         competitorCount = competitorCount
     )
 
+    // สร้างโครงการด่วนจากบันทึกผล ต้องผูกลูกค้าของนัดหมายนั้นให้ ไม่ใช่ได้โครงการลอยไม่มีลูกค้า
+    @Test
+    fun `quick add project links the appointment's customer`() = runTest {
+        coEvery { authRepo.currentUser() } returns AuthUser(userId = "U1", email = "u@e.com", role = "sale", teamId = "BR-1")
+        coEvery { activityRepo.getActivityById("A1") } returns Result.success(
+            listOf(
+                SalesActivity(
+                    activityId = "A1", userId = "U1", customerId = "C1", projectId = null,
+                    activityType = "onsite", activityDate = "2026-04-01", status = "planned"
+                )
+            )
+        )
+        val projectSlot = slot<Project>()
+        coEvery { projectRepo.createProject(capture(projectSlot), any()) } returns Result.success(
+            Project(projectId = "PRJ-NEW", custId = "C1", projectName = "New Site", projectStatus = "Lead")
+        )
+        coEvery { projectRepo.getProjectById("PRJ-NEW") } returns Result.success(
+            Project(projectId = "PRJ-NEW", custId = "C1", projectName = "New Site", projectStatus = "Lead")
+        )
+
+        val vm = SalesResultViewModel(
+            SavedStateHandle(mapOf("activityId" to "A1")), projectRepo, activityRepo, authRepo, draftStore
+        )
+        advanceUntilIdle()
+        vm.onQuickAddProjectNameChanged("New Site")
+        vm.onQuickAddProjectStatusChanged("Lead")
+        vm.saveQuickProject()
+        advanceUntilIdle()
+
+        assertEquals("C1", projectSlot.captured.custId)
+        assertEquals("PRJ-NEW", vm.uiState.value.projectId)
+    }
+
+    // นัดที่ไม่ระบุลูกค้าใช้ค่า sentinel CST-UNKNOWN ห้ามเอาไปใส่เป็นรหัสลูกค้าจริงของโครงการ
+    @Test
+    fun `quick add project treats CST-UNKNOWN as no customer`() = runTest {
+        coEvery { authRepo.currentUser() } returns AuthUser(userId = "U1", email = "u@e.com", role = "sale", teamId = "BR-1")
+        coEvery { activityRepo.getActivityById("A1") } returns Result.success(
+            listOf(
+                SalesActivity(
+                    activityId = "A1", userId = "U1", customerId = "CST-UNKNOWN", projectId = null,
+                    activityType = "onsite", activityDate = "2026-04-01", status = "planned"
+                )
+            )
+        )
+        val projectSlot = slot<Project>()
+        coEvery { projectRepo.createProject(capture(projectSlot), any()) } returns Result.success(
+            Project(projectId = "PRJ-NEW", projectName = "New Site", projectStatus = "Lead")
+        )
+        coEvery { projectRepo.getProjectById("PRJ-NEW") } returns Result.success(
+            Project(projectId = "PRJ-NEW", projectName = "New Site", projectStatus = "Lead")
+        )
+
+        val vm = SalesResultViewModel(
+            SavedStateHandle(mapOf("activityId" to "A1")), projectRepo, activityRepo, authRepo, draftStore
+        )
+        advanceUntilIdle()
+        vm.onQuickAddProjectNameChanged("New Site")
+        vm.onQuickAddProjectStatusChanged("Lead")
+        vm.saveQuickProject()
+        advanceUntilIdle()
+
+        assertNull(projectSlot.captured.custId)
+    }
+
     // ผู้ใช้กรอกสรุปค้างไว้ แล้วกดปุ่มไปแก้ปัจจัย กลับมาต้องเห็นค่าปัจจัยใหม่ แต่สิ่งที่กรอกต้องไม่หาย
     @Test
     fun `returning from the factors screen refreshes the factors but keeps what was typed`() = runTest {

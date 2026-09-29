@@ -229,6 +229,10 @@ class SalesResultViewModel @Inject constructor(
                     mode = ResultMode.FROM_APPOINTMENT,
                     reportDate = activity.activityDate
                 ) }
+                // จำลูกค้าของนัดหมายไว้ เพื่อให้ "สร้างโครงการด่วน" ผูกลูกค้าได้ถูกคนตั้งแต่แรก
+                // ถ้ามีโครงการอยู่ loadProjectData จะทับด้วยลูกค้าของโครงการซึ่งถือเป็นแหล่งที่แม่นกว่า
+                // CST-UNKNOWN เป็นค่า sentinel ของนัดที่ไม่ระบุลูกค้า ไม่ใช่รหัสลูกค้าจริง
+                custId = activity.customerId?.takeIf { c -> c != "CST-UNKNOWN" }
                 activity.projectId?.let { loadProjectData(it) }
                 // ดึงผลลัพธ์ล่าสุดที่ผูกกับ Appointment นี้ (ถ้ามี)
                 activityRepo.getActivityResult(id)?.let { applyResultToState(it); loadPhotosForResult(it) }
@@ -315,6 +319,9 @@ class SalesResultViewModel @Inject constructor(
                 projectName = s.quickAddProjectName.trim(),
                 projectStatus = s.quickAddProjectStatus,
                 branchId = authRepo.currentUser()?.teamId,
+                // ผูกลูกค้าของนัดหมายนี้ให้ตั้งแต่สร้าง — เดิมไม่ส่งเลยแม้จะรู้อยู่ ทำให้ได้โครงการ
+                // ที่ไม่มีลูกค้าทุกครั้ง ทั้งที่บันทึกผลนี้มาจากนัดที่ระบุลูกค้าไว้แล้ว
+                custId = custId,
                 createBy = userId
             )
             projectRepo.createProject(newProject, userId ?: "").fold(
