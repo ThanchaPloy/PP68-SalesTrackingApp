@@ -443,12 +443,13 @@ class ActivityRepository @Inject constructor(
                 if (existing != null &&
                     status.isDeleteLocked(existing.status, existing.activityDate, existing.activityType)
                 ) {
-                    val reason = if (status.isEditLocked(existing.status, existing.activityDate)) {
-                        "เหลือเวลาไม่ถึง 7 วันก่อนถึงวันนัดหมาย"
+                    val message = if (status.isEditLocked(existing.status, existing.activityDate)) {
+                        "ใกล้ถึงวันนัดแล้ว (เหลือไม่ถึง 7 วัน) จึงยกเลิกหรือลบแผนนี้ไม่ได้"
                     } else {
-                        "นัดหมายนี้ขาดนัดไปแล้ว — ให้บันทึกผลย้อนหลังแทนการลบ"
+                        "เลยวันนัดแล้วแต่ไม่ได้เช็คอิน จึงถือว่าขาดนัด และลบทิ้งไม่ได้ " +
+                            "ให้บันทึกผลย้อนหลังไว้ว่าเกิดอะไรขึ้นแทน"
                     }
-                    return@withContext kotlin.Result.failure(Exception("ลบนัดหมายนี้ไม่ได้: $reason"))
+                    return@withContext kotlin.Result.failure(Exception(message))
                 }
                 if (activityId.startsWith("TEMP-")) {
                     activityDao.deleteActivityById(activityId)

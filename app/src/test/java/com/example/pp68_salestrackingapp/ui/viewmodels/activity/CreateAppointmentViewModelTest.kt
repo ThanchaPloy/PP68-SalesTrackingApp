@@ -573,7 +573,7 @@ class CreateAppointmentViewModelTest {
         vm.onEvent(CreateAppointmentEvent.Save)
         advanceUntilIdle()
 
-        assertEquals("ไม่สามารถแก้ไขแผนนี้ได้ เนื่องจากเหลือเวลาไม่ถึง 7 วันก่อนวันนัดหมาย", vm.uiState.value.saveError)
+        assertEquals("ใกล้ถึงวันนัดแล้ว (เหลือไม่ถึง 7 วัน) จึงแก้ไขแผนนี้ไม่ได้", vm.uiState.value.saveError)
         assertFalse(vm.uiState.value.isSaved)
         coVerify(exactly = 0) { activityRepo.updateActivity(any(), any()) }
     }
@@ -614,5 +614,148 @@ class CreateAppointmentViewModelTest {
 
         assertTrue(vm.uiState.value.isSaved)
         coVerify(exactly = 1) { activityRepo.updateActivity("A-FAR", any()) }
+    }
+
+    // เลือกบริษัทแล้วต้องได้รายชื่อผู้ติดต่อของบริษัทนั้นมาเลย ไม่ต้องพิมพ์ค้นหาก่อน
+    @Test
+    fun `selecting a company loads that company's contacts right away`() = runTest {
+        coEvery { customerRepo.getContactPersons("C1", null) } returns Result.success(
+            listOf(
+                ContactPerson(contactId = "CT-1", custId = "C1", fullName = "John", isActive = true),
+                ContactPerson(contactId = "CT-2", custId = "C1", fullName = "Jane", isActive = true)
+            )
+        )
+
+        val vm = CreateAppointmentViewModel(context, activityRepo, projectRepo, customerRepo, authRepo, draftStore)
+        advanceUntilIdle()
+        vm.onEvent(CreateAppointmentEvent.CompanySelected("C1", "Company A"))
+        advanceUntilIdle()
+
+        assertEquals(listOf("John", "Jane"), vm.uiState.value.contactOptions.map { it.name })
+        assertFalse(vm.uiState.value.isLoadingContacts)
+    }
+
+    // ผู้ติดต่อที่ปิดใช้งานแล้วไม่ควรโผล่มาให้เลือก
+    @Test
+    fun `inactive contacts are left out when loading a company`() = runTest {
+        coEvery { customerRepo.getContactPersons("C1", null) } returns Result.success(
+            listOf(
+                ContactPerson(contactId = "CT-1", custId = "C1", fullName = "Active", isActive = true),
+                ContactPerson(contactId = "CT-2", custId = "C1", fullName = "Resigned", isActive = false)
+            )
+        )
+
+        val vm = CreateAppointmentViewModel(context, activityRepo, projectRepo, customerRepo, authRepo, draftStore)
+        advanceUntilIdle()
+        vm.onEvent(CreateAppointmentEvent.CompanySelected("C1", "Company A"))
+        advanceUntilIdle()
+
+        assertEquals(listOf("Active"), vm.uiState.value.contactOptions.map { it.name })
+    }
+
+    // เปลี่ยนบริษัทแล้วผู้ติดต่อที่เลือกไว้ของบริษัทเดิมต้องถูกล้าง ไม่งั้นนัดจะผูกคนของบริษัทอื่นไป
+    @Test
+    fun `changing company clears contacts picked for the previous one`() = runTest {
+        coEvery { customerRepo.getContactPersons("C1", null) } returns Result.success(
+            listOf(ContactPerson(contactId = "CT-1", custId = "C1", fullName = "John", isActive = true))
+        )
+        coEvery { customerRepo.getContactPersons("C2", null) } returns Result.success(emptyList())
+
+        val vm = CreateAppointmentViewModel(context, activityRepo, projectRepo, customerRepo, authRepo, draftStore)
+        advanceUntilIdle()
+        vm.onEvent(CreateAppointmentEvent.CompanySelected("C1", "Company A"))
+        advanceUntilIdle()
+        vm.onEvent(CreateAppointmentEvent.ContactToggled("CT-1"))
+        assertTrue(vm.uiState.value.selectedContactIds.contains("CT-1"))
+
+        vm.onEvent(CreateAppointmentEvent.CompanySelected("C2", "Company B"))
+        advanceUntilIdle()
+
+        assertTrue(vm.uiState.value.selectedContactIds.isEmpty())
+        assertEquals("C2", vm.uiState.value.selectedCustomerId)
+    }
+
+    @Test
+    fun `quick add customer creates a lead and selects it`() = runTest {
+        coEvery { authRepo.currentUser() } returns AuthUser(userId = "U1", email = "u@e.com", role = "sale", teamId = "BR-1")
+        val custSlot = slot<Customer>()
+        coEvery { customerRepo.addCustomer(capture(custSlot)) } returns Result.success("C-NEW")
+
+        val vm = CreateAppointmentViewModel(context, activityRepo, projectRepo, customerRepo, authRepo, draftStore)
+        advanceUntilIdle()
+        vm.onEvent(CreateAppointmentEvent.ToggleQuickAddCustomer(true))
+        vm.onEvent(CreateAppointmentEvent.QuickAddCustomerChanged("Acme", "Owner"))
+        vm.onEvent(CreateAppointmentEvent.SaveQuickAddCustomer)
+        advanceUntilIdle()
+
+        // ต้องถูกสร้างเป็น Lead ไม่ใช่ลูกค้าเต็มตัว
+        assertTrue(custSlot.captured.isLead)
+        assertEquals("Acme", custSlot.captured.companyName)
+        assertEquals("Owner", custSlot.captured.custType)
+
+        val st = vm.uiState.value
+        assertEquals("C-NEW", st.selectedCustomerId)
+        assertEquals("Acme", st.selectedCompanyName)
+        assertFalse(st.isQuickAddCustomerOpen)
+        assertTrue(st.companyOptions.any { it.first == "C-NEW" })
+    }
+
+    @Test
+    fun `quick add customer with missing fields does not hit the repository`() = runTest {
+        val vm = CreateAppointmentViewModel(context, activityRepo, projectRepo, customerRepo, authRepo, draftStore)
+        advanceUntilIdle()
+        vm.onEvent(CreateAppointmentEvent.ToggleQuickAddCustomer(true))
+        vm.onEvent(CreateAppointmentEvent.QuickAddCustomerChanged("Acme", ""))
+        vm.onEvent(CreateAppointmentEvent.SaveQuickAddCustomer)
+        advanceUntilIdle()
+
+        assertEquals("กรุณาระบุชื่อบริษัทและประเภทลูกค้าให้ครบ", vm.uiState.value.quickAddCustomerError)
+        assertTrue(vm.uiState.value.isQuickAddCustomerOpen)
+        coVerify(exactly = 0) { customerRepo.addCustomer(any()) }
+    }
+
+    // โครงการด่วนต้องผูกกับบริษัทที่เลือกไว้แล้ว ไม่งั้นได้โครงการลอยที่ไม่มีลูกค้า
+    @Test
+    fun `quick add project links to the already selected company and is selected`() = runTest {
+        coEvery { authRepo.currentUser() } returns AuthUser(userId = "U1", email = "u@e.com", role = "sale", teamId = "BR-1")
+        coEvery { customerRepo.getContactPersons("C1", null) } returns Result.success(emptyList())
+        val projectSlot = slot<Project>()
+        coEvery { projectRepo.createProject(capture(projectSlot), any()) } returns Result.success(
+            Project(projectId = "PRJ-NEW", custId = "C1", projectName = "New Site", projectStatus = "Lead")
+        )
+        coEvery { projectRepo.getProjectById("PRJ-NEW") } returns Result.success(
+            Project(projectId = "PRJ-NEW", custId = "C1", projectName = "New Site", projectStatus = "Lead")
+        )
+
+        val vm = CreateAppointmentViewModel(context, activityRepo, projectRepo, customerRepo, authRepo, draftStore)
+        advanceUntilIdle()
+        vm.onEvent(CreateAppointmentEvent.CompanySelected("C1", "Company A"))
+        advanceUntilIdle()
+        vm.onEvent(CreateAppointmentEvent.ToggleQuickAddProject(true))
+        vm.onEvent(CreateAppointmentEvent.QuickAddProjectNameChanged("New Site"))
+        vm.onEvent(CreateAppointmentEvent.QuickAddProjectStatusChanged("Lead"))
+        vm.onEvent(CreateAppointmentEvent.SaveQuickAddProject)
+        advanceUntilIdle()
+
+        assertEquals("C1", projectSlot.captured.custId)
+        assertEquals("New Site", projectSlot.captured.projectName)
+
+        val st = vm.uiState.value
+        assertEquals("PRJ-NEW", st.selectedProjectId)
+        assertEquals("New Site", st.selectedProjectName)
+        assertFalse(st.isQuickAddProjectOpen)
+    }
+
+    @Test
+    fun `quick add project with missing fields does not hit the repository`() = runTest {
+        val vm = CreateAppointmentViewModel(context, activityRepo, projectRepo, customerRepo, authRepo, draftStore)
+        advanceUntilIdle()
+        vm.onEvent(CreateAppointmentEvent.ToggleQuickAddProject(true))
+        vm.onEvent(CreateAppointmentEvent.QuickAddProjectNameChanged("New Site"))
+        vm.onEvent(CreateAppointmentEvent.SaveQuickAddProject)
+        advanceUntilIdle()
+
+        assertEquals("กรุณาระบุชื่อโครงการและสถานะให้ครบ", vm.uiState.value.quickAddProjectError)
+        coVerify(exactly = 0) { projectRepo.createProject(any(), any()) }
     }
 }

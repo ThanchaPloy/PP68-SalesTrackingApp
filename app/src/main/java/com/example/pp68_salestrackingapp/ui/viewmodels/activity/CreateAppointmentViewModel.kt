@@ -66,7 +66,21 @@ data class CreateAppointmentUiState(
     val showStartTimePicker: Boolean = false,
     val showEndTimePicker:   Boolean = false,
 
-    val draftAvailable: Boolean = false
+    val draftAvailable: Boolean = false,
+
+    // สร้างบริษัทลูกค้า (Lead) ด่วน — กรอกแค่ชื่อ+ประเภท ฟิลด์อื่นเติมทีหลังที่หน้าลูกค้าได้
+    val isQuickAddCustomerOpen: Boolean = false,
+    val quickAddCompanyName: String = "",
+    val quickAddCustType: String = "",
+    val isSavingQuickCust: Boolean = false,
+    val quickAddCustomerError: String? = null,
+
+    // สร้างโครงการด่วน — กรอกแค่ชื่อ+สถานะ (เหมือนหน้าบันทึกผล)
+    val isQuickAddProjectOpen: Boolean = false,
+    val quickAddProjectName: String = "",
+    val quickAddProjectStatus: String = "",
+    val isSavingQuickProject: Boolean = false,
+    val quickAddProjectError: String? = null
 )
 
 data class ProjectOption(val id: String, val name: String, val status: String)
@@ -96,6 +110,13 @@ sealed class CreateAppointmentEvent {
     object DismissDraftPrompt : CreateAppointmentEvent()
     data class ProjectSelected(val id: String?, val name: String?, val status: String?) : CreateAppointmentEvent()
     data class CompanySelected(val id: String, val name: String) : CreateAppointmentEvent()
+    data class ToggleQuickAddCustomer(val isOpen: Boolean)   : CreateAppointmentEvent()
+    data class QuickAddCustomerChanged(val name: String, val type: String) : CreateAppointmentEvent()
+    object SaveQuickAddCustomer                             : CreateAppointmentEvent()
+    data class ToggleQuickAddProject(val isOpen: Boolean)   : CreateAppointmentEvent()
+    data class QuickAddProjectNameChanged(val value: String)   : CreateAppointmentEvent()
+    data class QuickAddProjectStatusChanged(val value: String) : CreateAppointmentEvent()
+    object SaveQuickAddProject                              : CreateAppointmentEvent()
     data class TitleChanged(val value: String)              : CreateAppointmentEvent()
     data class TypeChanged(val value: String)               : CreateAppointmentEvent()
     data class ContactToggled(val id: String)               : CreateAppointmentEvent()
@@ -300,6 +321,118 @@ class CreateAppointmentViewModel @Inject constructor(
         }
     }
 
+    // สร้างบริษัทลูกค้าแบบ Lead ด่วน — กรอกแค่ชื่อกับประเภท แล้วเลือกให้ทันที (เหมือน saveQuickCustomer
+    // ใน AddProjectViewModel) isLead = true เสมอ เพราะยังไม่ผ่านการคัดกรองเป็นลูกค้าจริง
+    private fun saveQuickCustomer() {
+        val s = _uiState.value
+        if (s.quickAddCompanyName.isBlank() || s.quickAddCustType.isBlank()) {
+            _uiState.update { it.copy(quickAddCustomerError = "กรุณาระบุชื่อบริษัทและประเภทลูกค้าให้ครบ") }
+            return
+        }
+        viewModelScope.launch {
+            _uiState.update { it.copy(isSavingQuickCust = true, quickAddCustomerError = null) }
+            val user = authRepo.currentUser()
+            val newCust = com.example.pp68_salestrackingapp.data.model.Customer(
+                custId = java.util.UUID.randomUUID().toString(),
+                companyName = s.quickAddCompanyName.trim(),
+                custType = s.quickAddCustType,
+                createdBy = user?.userId,
+                branchId = user?.teamId,
+                isLead = true
+            )
+            customerRepo.addCustomer(newCust).fold(
+                onSuccess = { realCustId ->
+                    _uiState.update {
+                        it.copy(
+                            companyOptions = it.companyOptions + (realCustId to newCust.companyName),
+                            selectedCustomerId = realCustId,
+                            selectedCompanyName = newCust.companyName,
+                            // บริษัทใหม่ยังไม่มีผู้ติดต่อ ล้างของบริษัทเดิมทิ้งไม่ให้ค้าง
+                            selectedContactIds = emptySet(),
+                            contactOptions = emptyList(),
+                            isQuickAddCustomerOpen = false,
+                            isSavingQuickCust = false,
+                            quickAddCompanyName = "",
+                            quickAddCustType = ""
+                        )
+                    }
+                },
+                onFailure = { e ->
+                    _uiState.update { it.copy(isSavingQuickCust = false, quickAddCustomerError = e.message ?: "สร้างบริษัทไม่สำเร็จ") }
+                }
+            )
+        }
+    }
+
+    // สร้างโครงการด่วน — กรอกแค่ชื่อกับสถานะ แล้วผูกกับนัดหมายนี้ทันที (เหมือน saveQuickProject
+    // ใน SalesResultViewModel) ผู้ติดต่อจะถูกโหลดใหม่ตามลูกค้าของโครงการที่สร้าง
+    private fun saveQuickProject() {
+        val s = _uiState.value
+        if (s.quickAddProjectName.isBlank() || s.quickAddProjectStatus.isBlank()) {
+            _uiState.update { it.copy(quickAddProjectError = "กรุณาระบุชื่อโครงการและสถานะให้ครบ") }
+            return
+        }
+        viewModelScope.launch {
+            _uiState.update { it.copy(isSavingQuickProject = true, quickAddProjectError = null) }
+            val user = authRepo.currentUser()
+            val newProject = com.example.pp68_salestrackingapp.data.model.Project(
+                projectId = "",
+                projectName = s.quickAddProjectName.trim(),
+                projectStatus = s.quickAddProjectStatus,
+                branchId = user?.teamId,
+                // ผูกกับบริษัทที่เลือกไว้แล้ว (ถ้ามี) ไม่งั้นโครงการจะลอยไม่มีลูกค้า
+                custId = s.selectedCustomerId,
+                createBy = user?.userId
+            )
+            projectRepo.createProject(newProject, user?.userId ?: "").fold(
+                onSuccess = { created ->
+                    _uiState.update {
+                        it.copy(
+                            projectOptions = it.projectOptions +
+                                ProjectOption(created.projectId, created.projectName, created.projectStatus ?: ""),
+                            selectedProjectId = created.projectId,
+                            selectedProjectName = created.projectName,
+                            projectError = null,
+                            selectedContactIds = emptySet(),
+                            isQuickAddProjectOpen = false,
+                            isSavingQuickProject = false,
+                            quickAddProjectName = "",
+                            quickAddProjectStatus = ""
+                        )
+                    }
+                    // โหลดผู้ติดต่อ/วัตถุประสงค์ตามโครงการใหม่ เหมือนตอนเลือกโครงการจาก dropdown
+                    loadContactsForProject(created.projectId)
+                    filterMastersByProjectStatus(created.projectStatus ?: "")
+                },
+                onFailure = { e ->
+                    _uiState.update { it.copy(isSavingQuickProject = false, quickAddProjectError = e.message ?: "สร้างโครงการไม่สำเร็จ") }
+                }
+            )
+        }
+    }
+
+    // เลือกบริษัทแล้วต้องเห็นผู้ติดต่อของบริษัทนั้นทันที ไม่ต้องพิมพ์ค้นหา — เดิมเลือกบริษัทแล้ว
+    // ไม่มีอะไรเกิดขึ้นเลย ช่องผู้ติดต่อจึงตกไปใช้โหมดค้นหาทั้งฐานข้อมูล (ต้องพิมพ์ก่อนถึงจะขึ้น)
+    // ใช้ตอนไม่ได้เลือกโครงการ ถ้าเลือกโครงการอยู่แล้ว loadContactsForProject จัดการให้แล้ว
+    private fun loadContactsForCustomer(custId: String) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoadingContacts = true, contactOptions = emptyList()) }
+            customerRepo.getContactPersons(custId, null).fold(
+                onSuccess = { contacts ->
+                    _uiState.update { st ->
+                        st.copy(
+                            contactOptions = contacts
+                                .filter { c -> c.isActive != false }
+                                .map { c -> ContactOption(c.contactId, c.fullName ?: c.nickname ?: c.contactId) },
+                            isLoadingContacts = false
+                        )
+                    }
+                },
+                onFailure = { _uiState.update { it.copy(isLoadingContacts = false) } }
+            )
+        }
+    }
+
     private fun loadContactsForProject(projectId: String, selectedContactIds: Set<String> = emptySet()) {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoadingContacts = true, contactOptions = emptyList()) }
@@ -467,13 +600,48 @@ class CreateAppointmentViewModel @Inject constructor(
             }
 
             is CreateAppointmentEvent.CompanySelected -> {
+                val custId = event.id.ifBlank { null }
                 _uiState.update {
                     it.copy(
-                        selectedCustomerId  = event.id.ifBlank { null },
-                        selectedCompanyName = event.name.ifBlank { null }
+                        selectedCustomerId  = custId,
+                        selectedCompanyName = event.name.ifBlank { null },
+                        // เปลี่ยนบริษัท = ผู้ติดต่อที่เลือกไว้ของบริษัทเดิมใช้ไม่ได้แล้ว ต้องล้างทิ้ง
+                        // ไม่งั้นจะบันทึกนัดที่ผูกผู้ติดต่อของบริษัทอื่นไปแบบไม่มีใครเห็น
+                        selectedContactIds  = emptySet(),
+                        contactOptions      = emptyList()
                     )
                 }
+                // ถ้าเลือกโครงการอยู่ ผู้ติดต่อมาจากโครงการนั้นแล้ว ไม่ต้องโหลดทับ
+                if (custId != null && _uiState.value.selectedProjectId == null) {
+                    loadContactsForCustomer(custId)
+                }
             }
+
+            is CreateAppointmentEvent.ToggleQuickAddCustomer ->
+                _uiState.update {
+                    it.copy(
+                        isQuickAddCustomerOpen = event.isOpen,
+                        quickAddCompanyName = "", quickAddCustType = "", quickAddCustomerError = null
+                    )
+                }
+            is CreateAppointmentEvent.QuickAddCustomerChanged ->
+                _uiState.update {
+                    it.copy(quickAddCompanyName = event.name, quickAddCustType = event.type, quickAddCustomerError = null)
+                }
+            CreateAppointmentEvent.SaveQuickAddCustomer -> saveQuickCustomer()
+
+            is CreateAppointmentEvent.ToggleQuickAddProject ->
+                _uiState.update {
+                    it.copy(
+                        isQuickAddProjectOpen = event.isOpen,
+                        quickAddProjectName = "", quickAddProjectStatus = "", quickAddProjectError = null
+                    )
+                }
+            is CreateAppointmentEvent.QuickAddProjectNameChanged ->
+                _uiState.update { it.copy(quickAddProjectName = event.value, quickAddProjectError = null) }
+            is CreateAppointmentEvent.QuickAddProjectStatusChanged ->
+                _uiState.update { it.copy(quickAddProjectStatus = event.value, quickAddProjectError = null) }
+            CreateAppointmentEvent.SaveQuickAddProject -> saveQuickProject()
 
             is CreateAppointmentEvent.TitleChanged ->
                 _uiState.update { it.copy(titleTopic = event.value) }
@@ -587,7 +755,7 @@ class CreateAppointmentViewModel @Inject constructor(
             // W6: ห้ามแก้ไขแผนที่ยังไม่เสร็จ (planned) เมื่อเหลือเวลา <= 7 วันก่อนวันนัดเดิม — เช็คจาก
             // ค่าดั้งเดิมตอนโหลดมา ไม่ใช่วันที่ที่กำลังพิมพ์แก้อยู่ในฟอร์ม
             s.activityId != null && com.example.pp68_salestrackingapp.utils.AppointmentStatus.isEditLocked(s.originalStatus, s.originalPlannedDate) -> {
-                _uiState.update { it.copy(saveError = "ไม่สามารถแก้ไขแผนนี้ได้ เนื่องจากเหลือเวลาไม่ถึง 7 วันก่อนวันนัดหมาย") }
+                _uiState.update { it.copy(saveError = "ใกล้ถึงวันนัดแล้ว (เหลือไม่ถึง 7 วัน) จึงแก้ไขแผนนี้ไม่ได้") }
                 false
             }
             s.activityType == "onsite" && (s.lat == null || s.lng == null) -> {

@@ -193,6 +193,12 @@ fun CreateAppointmentScreen(
                         }
                     }
                 )
+                // โครงการใหม่ที่ยังไม่มีในระบบ — สร้างด่วนตรงนี้ได้ (กรอกแค่ชื่อกับสถานะ)
+                TextButton(onClick = { onEvent(CreateAppointmentEvent.ToggleQuickAddProject(true)) }) {
+                    Icon(Icons.Default.Add, null, tint = RedPrimary, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text("สร้างโครงการใหม่", color = RedPrimary, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                }
             }
 
             FormField(label = "บริษัท") {
@@ -218,11 +224,19 @@ fun CreateAppointmentScreen(
                         },
                         onClear     = { onEvent(CreateAppointmentEvent.CompanySelected("", "")) }
                     )
+                    // ลูกค้ารายใหม่ที่ยังไม่มีในระบบ — สร้างเป็น Lead ตรงนี้ได้เลยไม่ต้องออกไปหน้าอื่น
+                    TextButton(onClick = { onEvent(CreateAppointmentEvent.ToggleQuickAddCustomer(true)) }) {
+                        Icon(Icons.Default.Add, null, tint = RedPrimary, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text("สร้างบริษัทลูกค้า (Lead) ใหม่", color = RedPrimary, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                    }
                 }
             }
 
             FormField(label = "ผู้ติดต่อ") {
-                if (state.selectedProjectId == null) {
+                // เลือกโครงการหรือบริษัทแล้ว = รู้แล้วว่าผู้ติดต่อควรมาจากที่ไหน โชว์เป็นชิปให้เลือกเลย
+                // ช่องค้นหาทั้งฐานข้อมูลเหลือไว้เฉพาะตอนยังไม่ระบุทั้งโครงการและบริษัท
+                if (state.selectedProjectId == null && state.selectedCustomerId == null) {
                     // ✅ กรณีไม่เลือกโครงการ: แสดงช่องค้นหาและ Dropdown รวม
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         FormTextField(
@@ -265,7 +279,11 @@ fun CreateAppointmentScreen(
                 } else if (state.isLoadingContacts) {
                     CircularProgressIndicator(color = RedPrimary, modifier = Modifier.size(24.dp))
                 } else if (state.contactOptions.isEmpty()) {
-                    Text("ไม่มีรายชื่อผู้ติดต่อในโครงการนี้", color = TextGray, fontSize = 13.sp)
+                    Text(
+                        if (state.selectedProjectId != null) "ไม่มีรายชื่อผู้ติดต่อในโครงการนี้"
+                        else "ไม่มีรายชื่อผู้ติดต่อของบริษัทนี้",
+                        color = TextGray, fontSize = 13.sp
+                    )
                 } else {
                     FlowRow(
                         modifier = Modifier.fillMaxWidth(),
@@ -506,6 +524,108 @@ fun CreateAppointmentScreen(
                 }
             }
             Spacer(Modifier.height(32.dp))
+        }
+    }
+
+    // สร้างบริษัทลูกค้า (Lead) ด่วน — ไม่ต้องออกจากหน้านี้ไปสร้างที่หน้าลูกค้าแล้วกลับมา
+    if (state.isQuickAddCustomerOpen) {
+        ModalBottomSheet(
+            onDismissRequest = { onEvent(CreateAppointmentEvent.ToggleQuickAddCustomer(false)) },
+            containerColor = White
+        ) {
+            Column(
+                modifier = Modifier.fillMaxWidth().padding(24.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                Text("สร้างบริษัทลูกค้า (Lead) ใหม่", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = RedPrimary)
+                FormField(label = "ชื่อบริษัท/ชื่อลูกค้า", required = true) {
+                    FormTextField(
+                        value = state.quickAddCompanyName,
+                        onValueChange = { onEvent(CreateAppointmentEvent.QuickAddCustomerChanged(it, state.quickAddCustType)) },
+                        placeholder = "ระบุชื่อบริษัท หรือชื่อลูกค้า"
+                    )
+                }
+                FormField(label = "ประเภทลูกค้า", required = true) {
+                    // ชุดประเภทเดียวกับหน้าสร้างโครงการ (AddProjectScreen) เพื่อให้ค่าที่บันทึกตรงกัน
+                    val types = listOf(
+                        "Owner", "Developer", "Main Contractor", "Sub Contractor", "Installer",
+                        "Architect", "Interior Designer", "Consultant", "Industrial", "Wholesale", "Factory"
+                    )
+                    DropdownField(
+                        value = state.quickAddCustType,
+                        placeholder = "เลือกประเภท",
+                        options = types,
+                        onSelect = { idx ->
+                            onEvent(CreateAppointmentEvent.QuickAddCustomerChanged(state.quickAddCompanyName, types[idx]))
+                        }
+                    )
+                }
+                state.quickAddCustomerError?.let { Text(it, color = ErrorRed, fontSize = 13.sp) }
+                Button(
+                    onClick = { onEvent(CreateAppointmentEvent.SaveQuickAddCustomer) },
+                    modifier = Modifier.fillMaxWidth().height(48.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = RedPrimary),
+                    shape = RoundedCornerShape(10.dp),
+                    enabled = !state.isSavingQuickCust
+                ) {
+                    if (state.isSavingQuickCust) {
+                        CircularProgressIndicator(color = White, modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                    } else {
+                        Text("บันทึก Lead ใหม่", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = White)
+                    }
+                }
+                Spacer(Modifier.height(24.dp))
+            }
+        }
+    }
+
+    // สร้างโครงการด่วน — กรอกแค่ชื่อกับสถานะ รายละเอียดอื่นเติมทีหลังที่หน้าโครงการได้
+    if (state.isQuickAddProjectOpen) {
+        ModalBottomSheet(
+            onDismissRequest = { onEvent(CreateAppointmentEvent.ToggleQuickAddProject(false)) },
+            containerColor = White
+        ) {
+            Column(
+                modifier = Modifier.fillMaxWidth().padding(24.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                Text("สร้างโครงการใหม่", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = RedPrimary)
+                state.selectedCompanyName?.let {
+                    Text("จะผูกกับบริษัท: $it", fontSize = 13.sp, color = TextGray)
+                }
+                FormField(label = "ชื่อโครงการ", required = true) {
+                    FormTextField(
+                        value = state.quickAddProjectName,
+                        onValueChange = { onEvent(CreateAppointmentEvent.QuickAddProjectNameChanged(it)) },
+                        placeholder = "ระบุชื่อโครงการ"
+                    )
+                }
+                FormField(label = "สถานะโครงการ", required = true) {
+                    val statusList = com.example.pp68_salestrackingapp.utils.ProjectStages.SELECTABLE
+                    DropdownField(
+                        value = state.quickAddProjectStatus,
+                        placeholder = "เลือกสถานะ",
+                        options = statusList,
+                        onSelect = { idx -> onEvent(CreateAppointmentEvent.QuickAddProjectStatusChanged(statusList[idx])) },
+                        displayLabel = { com.example.pp68_salestrackingapp.utils.ProjectStages.labelFor(it) }
+                    )
+                }
+                state.quickAddProjectError?.let { Text(it, color = ErrorRed, fontSize = 13.sp) }
+                Button(
+                    onClick = { onEvent(CreateAppointmentEvent.SaveQuickAddProject) },
+                    modifier = Modifier.fillMaxWidth().height(48.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = RedPrimary),
+                    shape = RoundedCornerShape(10.dp),
+                    enabled = !state.isSavingQuickProject
+                ) {
+                    if (state.isSavingQuickProject) {
+                        CircularProgressIndicator(color = White, modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                    } else {
+                        Text("บันทึกโครงการใหม่", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = White)
+                    }
+                }
+                Spacer(Modifier.height(24.dp))
+            }
         }
     }
 
