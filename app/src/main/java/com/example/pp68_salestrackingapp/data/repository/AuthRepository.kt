@@ -125,9 +125,11 @@ class AuthRepository @Inject constructor(
 
                     kotlin.Result.success(loginResp)
                 } else {
+                    // ✅ เหมือน changePassword() — backend ตอบ { "error": code, "message": ข้อความจริง }
+                    // ต้องอ่าน "message" ไม่งั้นโชว์ code สั้นๆ เช่น "CONFLICT" แทนเหตุผลจริงให้ผู้ใช้เห็น
                     val errBody = response.errorBody()?.string() ?: ""
                     val errMsg  = try {
-                        org.json.JSONObject(errBody).getString("error")
+                        org.json.JSONObject(errBody).getString("message")
                     } catch (e: Exception) { "ลงทะเบียนไม่สำเร็จ" }
                     kotlin.Result.failure(Exception(errMsg))
                 }
@@ -214,9 +216,12 @@ class AuthRepository @Inject constructor(
                 if (response.isSuccessful && response.body() != null) {
                     kotlin.Result.success(response.body()!!.message)
                 } else {
+                    // ✅ backend (StatusPages.kt) ตอบ { "error": "UNAUTHORIZED", "message": "Wrong current
+                    // password" } — "error" เป็นแค่ code สั้นๆ ไม่ใช่ข้อความสำหรับผู้ใช้ ต้องอ่าน "message"
+                    // ไม่งั้นรหัสผ่านเก่าผิดจะโชว์คำว่า "UNAUTHORIZED" ตรงๆ ให้ผู้ใช้เห็นแทนเหตุผลจริง
                     val errBody = response.errorBody()?.string() ?: ""
                     val errMsg  = try {
-                        org.json.JSONObject(errBody).getString("error")
+                        org.json.JSONObject(errBody).getString("message")
                     } catch (e: Exception) { "เปลี่ยนรหัสผ่านไม่สำเร็จ" }
                     kotlin.Result.failure(Exception(errMsg))
                 }
