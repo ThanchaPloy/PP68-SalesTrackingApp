@@ -31,6 +31,7 @@ class ActivityRepositoryCheckInTest {
     private val appointmentContactDao: AppointmentContactDao = mockk(relaxed = true)
     private val projectRepo: ProjectRepository = mockk(relaxed = true)
     private val syncManager: SyncManager = mockk(relaxed = true)
+    private val networkMonitor: com.example.pp68_salestrackingapp.utils.NetworkMonitor = mockk(relaxed = true)
     private val context: android.content.Context = mockk(relaxed = true)
 
     private lateinit var repo: ActivityRepository
@@ -49,11 +50,14 @@ class ActivityRepositoryCheckInTest {
     fun setUp() {
         repo = ActivityRepository(
             apiService, uploadApiService, activityDao, projectDao, customerDao, contactDao,
-            planItemDao, resultDao, photoDao, appointmentContactDao, projectRepo, syncManager, context
+            planItemDao, resultDao, photoDao, appointmentContactDao, projectRepo, syncManager,
+            networkMonitor, context
         )
         coEvery { activityDao.getActivityById("A1") } returns activity
     }
 
+    // เขียนลงเครื่องเป็น is_synced = false ก่อนเสมอ แล้วค่อยให้ผลจาก server มาปลดเป็น true
+    // (เดิมเขียนทีเดียวหลังยิง API — ถ้าเขียนพังตรงนั้นจะไม่เหลืออะไรในเครื่องเลย)
     @Test
     fun `a check-in the server accepted is stored as synced`() = runTest {
         coEvery { apiService.updateActivity(any(), any()) } returns
@@ -63,22 +67,89 @@ class ActivityRepositoryCheckInTest {
 
         val saved = slot<SalesActivity>()
         coVerify { activityDao.insertActivity(capture(saved)) }
-        assertTrue(saved.captured.isSynced)
+        assertFalse(saved.captured.isSynced)
+        coVerify(exactly = 1) { activityDao.updateSyncStatus("A1", true) }
     }
 
-    // เคสที่เคยพัง: server ปฏิเสธ แต่โค้ดเดิมไม่ดูผลลัพธ์แล้วปัก synced ทิ้งไว้
-    // แถวนั้นจะไม่เข้าคิว outbox อีกเลย การเช็คอินจึงหายจาก server ถาวร
+    // ── การโกหกว่าสำเร็จ: catch ครอบทั้งฟังก์ชันแล้วคืน success ทั้งที่ยังไม่ได้เขียนอะไรลงเครื่อง ──
+    // เป็นบั๊กที่ร้ายที่สุดในกลุ่มนี้ เพราะผู้ใช้เห็นว่าบันทึกแล้ว แต่ไม่มีทั้งในเครื่องและบน server
+    // และ outbox ก็ไม่มีแถวอะไรให้ตามส่ง = หายถาวรโดยไม่มีใครรู้
+
     @Test
-    fun `a check-in the server rejected stays queued for retry`() = runTest {
+    fun `a check-in that cannot be written locally is reported as failure`() = runTest {
+        coEvery { activityDao.insertActivity(any()) } throws RuntimeException("disk full")
+
+        val result = repo.checkIn("A1", 13.7563, 100.5018, isVerified = true, distanceDeviation = 12.0)
+
+        assertTrue(result.isFailure)
+        // ยังไม่ทันเขียนลงเครื่อง ห้ามยิงขึ้น server ให้ข้อมูลสองฝั่งต่างกัน
+        coVerify(exactly = 0) { apiService.updateActivity(any(), any()) }
+    }
+
+    // `updates["plan_status"] as String` ไม่มีอะไรการันตีชนิด — ส่ง Int มาคือ ClassCastException
+    @Test
+    fun `an update carrying a wrongly typed value is reported as failure`() = runTest {
+        val result = repo.updateActivity("A1", mapOf("plan_status" to 42))
+
+        assertTrue(result.isFailure)
+        coVerify(exactly = 0) { apiService.updateActivity(any(), any()) }
+    }
+
+    @Test
+    fun `finishing an appointment whose checklist write fails is reported as failure`() = runTest {
+        coEvery { planItemDao.insertPlanItems(any()) } throws RuntimeException("db locked")
+
+        val result = repo.finishActivity("A1", listOf(1, 2), "สรุปการเข้าพบ")
+
+        assertTrue(result.isFailure)
+        // เดิม catch จะเขียนสถานะ completed ทับให้ทั้งที่ติ๊ก checklist หายไปแล้ว แล้วคืน success
+        coVerify(exactly = 0) { activityDao.insertActivity(any()) }
+        coVerify(exactly = 0) { apiService.updateActivity(any(), any()) }
+    }
+
+    // ── "กดเซฟแล้วต้องแน่ใจว่าขึ้น server จริง" ────────────────────────────────────────────
+    // HTTP 500 ตัวเดียวกัน แต่ผลต่างกันตามว่ามีเน็ตหรือไม่ นี่คือสิ่งที่แยกสองเคสที่เคยถูกกลบรวมกัน:
+    // "ออฟไลน์ ค่อยส่งทีหลัง" (ถูกต้อง) กับ "เน็ตดีแต่ส่งไม่ขึ้น" (ต้องบอก ไม่ใช่เงียบ)
+
+    @Test
+    fun `a check-in the server rejected while offline stays queued for retry`() = runTest {
+        every { networkMonitor.isOnline() } returns false
         coEvery { apiService.updateActivity(any(), any()) } returns
             Response.error(500, "boom".toResponseBody("text/plain".toMediaType()))
 
-        repo.checkIn("A1", 13.7563, 100.5018, isVerified = true, distanceDeviation = 12.0)
+        val result = repo.checkIn("A1", 13.7563, 100.5018, isVerified = true, distanceDeviation = 12.0)
 
+        assertTrue(result.isSuccess)
         val saved = slot<SalesActivity>()
         coVerify { activityDao.insertActivity(capture(saved)) }
         assertFalse(saved.captured.isSynced)
         verify { syncManager.scheduleSync() }
+    }
+
+    @Test
+    fun `a check-in the server rejected while online is reported as failure`() = runTest {
+        every { networkMonitor.isOnline() } returns true
+        coEvery { apiService.updateActivity(any(), any()) } returns
+            Response.error(500, "boom".toResponseBody("text/plain".toMediaType()))
+
+        val result = repo.checkIn("A1", 13.7563, 100.5018, isVerified = true, distanceDeviation = 12.0)
+
+        assertTrue(result.isFailure)
+        // ยังต้องเก็บไว้ในเครื่องแบบ unsynced เหมือนเดิม ผู้ใช้จะได้ไม่เสียข้อมูลที่กรอกไป
+        val saved = slot<SalesActivity>()
+        coVerify { activityDao.insertActivity(capture(saved)) }
+        assertFalse(saved.captured.isSynced)
+    }
+
+    // เน็ตหลุดกลางทาง (IOException) ตอนที่ระบบยังเห็นว่าออนไลน์ ก็ต้องถือว่าเซฟไม่สำเร็จ
+    @Test
+    fun `a dropped connection while online is reported as failure`() = runTest {
+        every { networkMonitor.isOnline() } returns true
+        coEvery { apiService.updateActivity(any(), any()) } throws java.io.IOException("timeout")
+
+        val result = repo.checkIn("A1", 13.7563, 100.5018, isVerified = true, distanceDeviation = 12.0)
+
+        assertTrue(result.isFailure)
     }
 
     // PATCH ที่ไม่แมตช์แถวไหนเลยตอบ 200 พร้อม array ว่าง — ต้องไม่นับว่าสำเร็จ

@@ -20,6 +20,8 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import javax.inject.Inject
 import javax.inject.Singleton
 import java.io.IOException
+import com.example.pp68_salestrackingapp.utils.queuedOrFailed
+import com.example.pp68_salestrackingapp.utils.retrySend
 
 @Singleton
 class ActivityRepository @Inject constructor(
@@ -35,6 +37,7 @@ class ActivityRepository @Inject constructor(
     private val appointmentContactDao: AppointmentContactDao,
     private val projectRepo: ProjectRepository,
     private val syncManager: SyncManager,
+    private val networkMonitor: com.example.pp68_salestrackingapp.utils.NetworkMonitor,
     @ApplicationContext private val context: android.content.Context
 ) {
     fun getAllActivitiesFlow(): Flow<List<SalesActivity>> = activityDao.getAllActivities()
@@ -123,7 +126,12 @@ class ActivityRepository @Inject constructor(
             val tempId = "TEMP-${java.util.UUID.randomUUID().toString().take(8).uppercase()}"
             val now = java.time.Instant.now().toString()
             val localActivity = activity.copy(activityId = tempId, isSynced = false, createdAt = activity.createdAt ?: now)
-            activityDao.insertActivity(localActivity)
+            try {
+                activityDao.insertActivity(localActivity)
+            } catch (e: Exception) {
+                Log.e("ActivityRepository", "addActivity: เขียนลงเครื่องไม่สำเร็จ", e)
+                return@withContext kotlin.Result.failure(Exception("สร้างนัดหมายไม่สำเร็จ: ${e.message}"))
+            }
             try {
                 val custCode = if (activity.customerId == "CST-UNKNOWN") null else activity.customerId
                 val body = mutableMapOf<String, Any?>(
@@ -141,7 +149,7 @@ class ActivityRepository @Inject constructor(
                     "plan_status"      to activity.status,
                     "created_at"       to localActivity.createdAt
                 ).filterValues { it != null }
-                val response = apiService.addActivityMap(body)
+                val response = retrySend(idempotent = false, tag = "addActivity") { apiService.addActivityMap(body) }
                 if (response.isSuccessful) {
                     val realId = response.body()?.firstOrNull()?.activityId
                     if (realId != null && realId != tempId) {
@@ -152,18 +160,18 @@ class ActivityRepository @Inject constructor(
                         // ✅ ห้าม mark synced ถ้าไม่ได้ realId กลับมา (server ไม่คืนแถวที่สร้าง เช่น RLS บล็อก)
                         // ไม่งั้นแถวนี้จะค้างเป็น TEMP- ตลอดไปแต่ถูกมองว่า sync แล้ว ทำให้บันทึกที่ผูกกับนัดหมายนี้ insert ไม่ได้ (FK violation)
                         syncManager.scheduleSync()
-                        kotlin.Result.success(tempId)
+                        networkMonitor.queuedOrFailed(tempId, "เซิร์ฟเวอร์ไม่คืนรหัสนัดหมาย")
                     }
                 } else if (response.code() == 403) {
                     syncManager.markBlocked("activity", tempId)
                     kotlin.Result.failure(Exception("สร้างนัดหมายไม่สำเร็จ: ไม่มีสิทธิ์ทำรายการนี้"))
                 } else {
                     syncManager.scheduleSync()
-                    kotlin.Result.success(tempId)
+                    networkMonitor.queuedOrFailed(tempId, "เซิร์ฟเวอร์ตอบ ${response.code()}")
                 }
             } catch (e: IOException) {
                 syncManager.scheduleSync()
-                kotlin.Result.success(tempId)
+                networkMonitor.queuedOrFailed(tempId, e.message)
             } catch (e: Exception) {
                 kotlin.Result.failure(e)
             }
@@ -172,6 +180,10 @@ class ActivityRepository @Inject constructor(
 
     suspend fun updateActivity(activityId: String, updates: Map<String, Any>): kotlin.Result<Unit> {
         return withContext(Dispatchers.IO) {
+            // ── ชั้นในเครื่อง: ต้องสำเร็จก่อน ถ้าพังต้องคืน failure ─────────────────────────
+            // เดิม catch ครอบทั้งฟังก์ชันแล้วคืน success(Unit) เสมอ ทำให้ cast พลาด (as String
+            // ด้านล่างไม่มีอะไรการันตีชนิด) หรือ Room พังตรงนี้ กลายเป็น "บันทึกสำเร็จ" ทั้งที่
+            // ไม่มีอะไรถูกเขียนลงเครื่องเลย และ outbox ก็ไม่มีแถวอะไรให้ตามส่ง = หายถาวรแบบเงียบ
             try {
                 activityDao.getActivityById(activityId)?.let { local ->
                     var updated = local.copy(isSynced = false)
@@ -189,25 +201,40 @@ class ActivityRepository @Inject constructor(
                     if (updates.containsKey("cust_code"))     updated = updated.copy(customerId = (updates["cust_code"] as? String) ?: updated.customerId)
                     activityDao.insertActivity(updated)
                 }
+            } catch (e: Exception) {
+                Log.e("ActivityRepository", "updateActivity: เขียนลงเครื่องไม่สำเร็จ $activityId", e)
+                return@withContext kotlin.Result.failure(
+                    Exception("บันทึกการแก้ไขนัดหมายไม่สำเร็จ: ${e.message}")
+                )
+            }
 
-                if (activityId.startsWith("TEMP-")) {
-                    syncManager.scheduleSync()
-                    return@withContext kotlin.Result.success(Unit)
-                }
-                val response = apiService.updateActivity("eq.$activityId", updates)
-                if (response.isSuccessful && response.body()?.isNotEmpty() == true) {
-                    activityDao.updateSyncStatus(activityId, true)
-                    kotlin.Result.success(Unit)
-                } else if (response.code() == 403) {
-                    syncManager.markBlocked("activity", activityId)
-                    kotlin.Result.failure(Exception("แก้ไขนัดหมายไม่สำเร็จ: ไม่มีสิทธิ์ทำรายการนี้"))
-                } else {
-                    syncManager.scheduleSync()
-                    kotlin.Result.success(Unit)
+            if (activityId.startsWith("TEMP-")) {
+                syncManager.scheduleSync()
+                return@withContext kotlin.Result.success(Unit)
+            }
+
+            // ── ชั้น server: จากจุดนี้ข้อมูลอยู่ในเครื่องแล้วและ is_synced = false ──────────
+            // ส่งไม่ขึ้นจึงไม่ใช่การสูญหาย outbox ตามส่งให้เอง ยกเว้น 403 ที่ปฏิเสธถาวร
+            try {
+                val response = retrySend(idempotent = true, tag = "updateActivity") { apiService.updateActivity("eq.$activityId", updates) }
+                when {
+                    response.isSuccessful && response.body()?.isNotEmpty() == true -> {
+                        activityDao.updateSyncStatus(activityId, true)
+                        kotlin.Result.success(Unit)
+                    }
+                    response.code() == 403 -> {
+                        syncManager.markBlocked("activity", activityId)
+                        kotlin.Result.failure(Exception("แก้ไขนัดหมายไม่สำเร็จ: ไม่มีสิทธิ์ทำรายการนี้"))
+                    }
+                    else -> {
+                        syncManager.scheduleSync()
+                        networkMonitor.queuedOrFailed(Unit, "เซิร์ฟเวอร์ตอบ ${response.code()}")
+                    }
                 }
             } catch (e: Exception) {
+                Log.w("ActivityRepository", "updateActivity: ส่งขึ้น server ไม่สำเร็จ $activityId — ${e.message}")
                 syncManager.scheduleSync()
-                kotlin.Result.success(Unit)
+                networkMonitor.queuedOrFailed(Unit, e.message)
             }
         }
     }
@@ -320,78 +347,100 @@ class ActivityRepository @Inject constructor(
 
     suspend fun checkIn(activityId: String, lat: Double, lng: Double, isVerified: Boolean, distanceDeviation: Double? = null): kotlin.Result<Unit> {
         return withContext(Dispatchers.IO) {
+            val nowStr = java.time.Instant.now().toString()
+            val updates = mutableMapOf<String, Any>("check_in_lat" to lat, "check_in_long" to lng, "check_in_time" to nowStr, "plan_status" to "checked_in", "is_location_verified" to isVerified)
+            distanceDeviation?.let { updates["distance_deviation"] = it }
+
+            // ── ชั้นในเครื่อง: เขียนก่อนยิง API เสมอ ด้วย is_synced = false ─────────────────
+            // เดิมเขียนหลังยิง API แล้วเขียนซ้ำอีกชุดใน catch ทำให้ถ้าเขียนพัง (หรือแถวหาย) จะคืน
+            // success(Unit) ทั้งที่การเช็คอินไม่ได้ถูกบันทึกที่ไหนเลย ผู้ใช้เห็นว่าเช็คอินแล้วแต่ไม่มีข้อมูล
             try {
                 // ✅ W6 เดิมเช็คแค่ชั้น UI (CheckInScreen's navigation guard) — entry point อื่นที่
                 // เรียก repository ตรงๆ เช็คอินซ้ำ/เช็คอินนัดที่ขาดนัดไปแล้วได้เลย ย้ายมาเช็คที่นี่แทน
                 val existing = activityDao.getActivityById(activityId)
-                if (existing != null &&
-                    com.example.pp68_salestrackingapp.utils.AppointmentStatus.effective(existing.status, existing.activityDate, existing.activityType) != "planned"
-                ) {
+                    ?: return@withContext kotlin.Result.failure(Exception("ไม่พบนัดหมายนี้ในเครื่อง"))
+                if (com.example.pp68_salestrackingapp.utils.AppointmentStatus.effective(existing.status, existing.activityDate, existing.activityType) != "planned") {
                     return@withContext kotlin.Result.failure(Exception("นัดหมายนี้เช็คอินไม่ได้แล้ว (เช็คอินไปแล้ว/ขาดนัด/เสร็จสิ้นแล้ว)"))
                 }
-                val nowStr = java.time.Instant.now().toString()
-                val updates = mutableMapOf<String, Any>("check_in_lat" to lat, "check_in_long" to lng, "check_in_time" to nowStr, "plan_status" to "checked_in", "is_location_verified" to isVerified)
-                distanceDeviation?.let { updates["distance_deviation"] = it }
-                // HTTP error ไม่โยน exception — ถ้าไม่ตรวจผลแล้วปัก is_synced = true ไว้เลย
-                // outbox จะข้ามแถวนี้ตลอดไป แล้วการเช็คอินจะหายจาก server อย่างถาวร
-                val response = apiService.updateActivity("eq.$activityId", updates)
-                val isActuallyUpdated = response.isSuccessful && response.body()?.isNotEmpty() == true
-                activityDao.getActivityById(activityId)?.let {
-                    activityDao.insertActivity(it.copy(status = "checked_in", checkInLat = lat, checkInLong = lng, checkInTime = nowStr, isLocationVerified = isVerified, distanceDeviation = distanceDeviation, isSynced = isActuallyUpdated))
-                }
-                if (!isActuallyUpdated && response.code() == 403) {
-                    // ❌ server ปฏิเสธถาวร (ไม่ใช่เคส "ไม่ตรวจผล" ที่คอมเมนต์ข้างบนพูดถึง — ตรงนั้นคือ
-                    // ตอบ 2xx แต่ body ว่าง) ต้องบอกผู้ใช้ตรง ๆ ว่าเช็คอินไม่สำเร็จ ไม่ใช่เงียบไว้แล้วลองซ้ำ
-                    syncManager.markBlocked("activity", activityId)
-                    // ✅ ViewModel เติม "เช็คอินไม่สำเร็จ: " นำหน้าเองแล้ว (ActivityDetailViewModel.confirmCheckin)
-                    // ข้อความตรงนี้จึงมีแค่เหตุผล ไม่งั้นจะซ้ำเป็น "เช็คอินไม่สำเร็จ: เช็คอินไม่สำเร็จ: ..."
-                    kotlin.Result.failure(Exception("ไม่มีสิทธิ์ทำรายการนี้"))
-                } else {
-                    if (!isActuallyUpdated) syncManager.scheduleSync()
-                    kotlin.Result.success(Unit)
+                activityDao.insertActivity(existing.copy(status = "checked_in", checkInLat = lat, checkInLong = lng, checkInTime = nowStr, isLocationVerified = isVerified, distanceDeviation = distanceDeviation, isSynced = false))
+            } catch (e: Exception) {
+                Log.e("ActivityRepository", "checkIn: เขียนลงเครื่องไม่สำเร็จ $activityId", e)
+                return@withContext kotlin.Result.failure(Exception("บันทึกเช็คอินไม่สำเร็จ: ${e.message}"))
+            }
+
+            // ── ชั้น server ──────────────────────────────────────────────────────────────
+            // HTTP error ไม่โยน exception — ถ้าไม่ตรวจผลแล้วปัก is_synced = true ไว้เลย
+            // outbox จะข้ามแถวนี้ตลอดไป แล้วการเช็คอินจะหายจาก server อย่างถาวร
+            try {
+                val response = retrySend(idempotent = true, tag = "updateActivity") { apiService.updateActivity("eq.$activityId", updates) }
+                when {
+                    response.isSuccessful && response.body()?.isNotEmpty() == true -> {
+                        activityDao.updateSyncStatus(activityId, true)
+                        kotlin.Result.success(Unit)
+                    }
+                    response.code() == 403 -> {
+                        // ❌ server ปฏิเสธถาวร (ไม่ใช่เคส "ไม่ตรวจผล" ที่คอมเมนต์ข้างบนพูดถึง — ตรงนั้นคือ
+                        // ตอบ 2xx แต่ body ว่าง) ต้องบอกผู้ใช้ตรง ๆ ว่าเช็คอินไม่สำเร็จ ไม่ใช่เงียบไว้แล้วลองซ้ำ
+                        syncManager.markBlocked("activity", activityId)
+                        // ✅ ViewModel เติม "เช็คอินไม่สำเร็จ: " นำหน้าเองแล้ว (ActivityDetailViewModel.confirmCheckin)
+                        // ข้อความตรงนี้จึงมีแค่เหตุผล ไม่งั้นจะซ้ำเป็น "เช็คอินไม่สำเร็จ: เช็คอินไม่สำเร็จ: ..."
+                        kotlin.Result.failure(Exception("ไม่มีสิทธิ์ทำรายการนี้"))
+                    }
+                    else -> {
+                        syncManager.scheduleSync()
+                        networkMonitor.queuedOrFailed(Unit, "เซิร์ฟเวอร์ตอบ ${response.code()}")
+                    }
                 }
             } catch (e: Exception) {
-                val nowStr = java.time.Instant.now().toString()
-                activityDao.getActivityById(activityId)?.let {
-                    activityDao.insertActivity(it.copy(status = "checked_in", checkInLat = lat, checkInLong = lng, checkInTime = nowStr, isLocationVerified = isVerified, distanceDeviation = distanceDeviation, isSynced = false))
-                    syncManager.scheduleSync()
-                }
-                kotlin.Result.success(Unit)
+                Log.w("ActivityRepository", "checkIn: ส่งขึ้น server ไม่สำเร็จ $activityId — ${e.message}")
+                syncManager.scheduleSync()
+                networkMonitor.queuedOrFailed(Unit, e.message)
             }
         }
     }
 
     suspend fun finishActivity(activityId: String, doneMasterIds: List<Int>, note: String?): kotlin.Result<Unit> {
         return withContext(Dispatchers.IO) {
+            // ── ชั้นในเครื่อง: ต้องเขียนทั้ง checklist และสถานะให้ครบก่อน ────────────────────
+            // เดิมถ้า planItemDao พังกลางทาง catch จะเขียนแค่สถานะ (และเขียน weeklyNote แต่ลืม note)
+            // แล้วคืน success(Unit) — ติ๊ก checklist หายเงียบ ๆ ทั้งที่ผู้ใช้เห็นว่าบันทึกสำเร็จ
             try {
                 val currentItems = planItemDao.getPlanItemsByAppointmentId(activityId)
-                val updatedItems = currentItems.map { it.copy(isDone = it.masterId in doneMasterIds) }
-                planItemDao.insertPlanItems(updatedItems)
-                val updates = mutableMapOf<String, Any>("plan_status" to "completed")
-                note?.let { updates["note"] = it }
-                val response = apiService.updateActivity("eq.$activityId", updates)
-                val isActuallyUpdated = response.isSuccessful && response.body()?.isNotEmpty() == true
-                activityDao.getActivityById(activityId)?.let {
-                    activityDao.insertActivity(it.copy(status = "completed", note = note, weeklyNote = note, isSynced = isActuallyUpdated))
-                    if (!isActuallyUpdated) {
-                        // ✅ ผู้เรียกปัจจุบัน (SalesResultViewModel.save()) ไม่ได้เช็ค Result ตัวนี้อยู่แล้ว
-                        // (fire-and-forget ต่อท้ายหลังบันทึกผลสำเร็จ) แต่ยังต้อง markBlocked ไว้กัน
-                        // outbox ลองส่งซ้ำเงียบ ๆ ตลอดไปเหมือนจุดอื่น — คืน failure ไว้เผื่อผู้เรียกในอนาคตเช็ค
-                        if (response.code() == 403) syncManager.markBlocked("activity", activityId)
-                        else syncManager.scheduleSync()
+                planItemDao.insertPlanItems(currentItems.map { it.copy(isDone = it.masterId in doneMasterIds) })
+                val local = activityDao.getActivityById(activityId)
+                    ?: return@withContext kotlin.Result.failure(Exception("ไม่พบนัดหมายนี้ในเครื่อง"))
+                activityDao.insertActivity(local.copy(status = "completed", note = note, weeklyNote = note, isSynced = false))
+            } catch (e: Exception) {
+                Log.e("ActivityRepository", "finishActivity: เขียนลงเครื่องไม่สำเร็จ $activityId", e)
+                return@withContext kotlin.Result.failure(Exception("บันทึกสถานะเสร็จสิ้นไม่สำเร็จ: ${e.message}"))
+            }
+
+            // ── ชั้น server ──────────────────────────────────────────────────────────────
+            // ✅ ผู้เรียกปัจจุบัน (SalesResultViewModel.save()) ไม่ได้เช็ค Result ตัวนี้อยู่แล้ว
+            // (fire-and-forget ต่อท้ายหลังบันทึกผลสำเร็จ) แต่ยังต้อง markBlocked ไว้กัน outbox
+            // ลองส่งซ้ำเงียบ ๆ ตลอดไปเหมือนจุดอื่น — คืน failure ไว้เผื่อผู้เรียกในอนาคตเช็ค
+            val updates = mutableMapOf<String, Any>("plan_status" to "completed")
+            note?.let { updates["note"] = it }
+            try {
+                val response = retrySend(idempotent = true, tag = "updateActivity") { apiService.updateActivity("eq.$activityId", updates) }
+                when {
+                    response.isSuccessful && response.body()?.isNotEmpty() == true -> {
+                        activityDao.updateSyncStatus(activityId, true)
+                        kotlin.Result.success(Unit)
+                    }
+                    response.code() == 403 -> {
+                        syncManager.markBlocked("activity", activityId)
+                        kotlin.Result.failure(Exception("บันทึกสถานะเสร็จสิ้นไม่สำเร็จ: ไม่มีสิทธิ์ทำรายการนี้"))
+                    }
+                    else -> {
+                        syncManager.scheduleSync()
+                        networkMonitor.queuedOrFailed(Unit, "เซิร์ฟเวอร์ตอบ ${response.code()}")
                     }
                 }
-                if (!isActuallyUpdated && response.code() == 403) {
-                    kotlin.Result.failure(Exception("บันทึกสถานะเสร็จสิ้นไม่สำเร็จ: ไม่มีสิทธิ์ทำรายการนี้"))
-                } else {
-                    kotlin.Result.success(Unit)
-                }
             } catch (e: Exception) {
-                activityDao.getActivityById(activityId)?.let {
-                    activityDao.insertActivity(it.copy(status = "completed", weeklyNote = note, isSynced = false))
-                    syncManager.scheduleSync()
-                }
-                kotlin.Result.success(Unit)
+                Log.w("ActivityRepository", "finishActivity: ส่งขึ้น server ไม่สำเร็จ $activityId — ${e.message}")
+                syncManager.scheduleSync()
+                networkMonitor.queuedOrFailed(Unit, e.message)
             }
         }
     }
@@ -558,13 +607,20 @@ class ActivityRepository @Inject constructor(
             isLatest      = true,
             resultGroupId = groupId
         )
-        previous?.let { resultDao.markNotLatest(it.resultId) }
-        resultDao.insertResult(localResult)
-        savePhotosForResult(tempId, photoUrls)
+        // เขียนลงเครื่องให้ครบก่อน — เดิม 3 บรรทัดนี้อยู่นอก try ทั้งหมด ถ้า Room พังตรงนี้
+        // exception จะหลุดออกไปถึง ViewModel เป็น crash แทนที่จะเป็น failure ที่แสดงให้ผู้ใช้เห็นได้
+        try {
+            previous?.let { resultDao.markNotLatest(it.resultId) }
+            resultDao.insertResult(localResult)
+            savePhotosForResult(tempId, photoUrls)
+        } catch (e: Exception) {
+            Log.e("ActivityRepository", "saveResultAsNewVersion: เขียนลงเครื่องไม่สำเร็จ", e)
+            return kotlin.Result.failure(Exception("บันทึกผลการขายไม่สำเร็จ: ${e.message}"))
+        }
         return try {
             val body = buildResultBody(localResult)
             body.remove("result_id") // แต่ละ version คือแถวใหม่เสมอ ให้ server สร้าง id ให้
-            val apiResp = apiService.insertActivityResultMap(body)
+            val apiResp = retrySend(idempotent = false, tag = "saveResult") { apiService.insertActivityResultMap(body) }
             if (apiResp.isSuccessful) {
                 val realId = apiResp.body()?.firstOrNull()?.resultId
                 if (realId != null && realId != tempId) {
@@ -613,11 +669,14 @@ class ActivityRepository @Inject constructor(
                 kotlin.Result.failure(Exception("บันทึกผลการขายไม่สำเร็จ: ไม่มีสิทธิ์ทำรายการนี้"))
             } else {
                 syncManager.scheduleSync()
-                kotlin.Result.success(Unit)
+                networkMonitor.queuedOrFailed(Unit, "เซิร์ฟเวอร์ตอบ ${apiResp.code()}")
             }
         } catch (e: Exception) {
+            // ของอยู่ในเครื่องแล้วและ is_synced = false — ถ้าไม่มีเน็ต outbox ตามส่งให้ ไม่ใช่การสูญหาย
+            // แต่ถ้าเน็ตดีอยู่แล้วยังส่งไม่ขึ้น ต้องบอกผู้ใช้ ไม่ใช่ปล่อยให้เข้าใจว่าบันทึกครบแล้ว
+            Log.w("ActivityRepository", "saveResultAsNewVersion: ส่งขึ้น server ไม่สำเร็จ — ${e.message}")
             syncManager.scheduleSync()
-            kotlin.Result.success(Unit)
+            networkMonitor.queuedOrFailed(Unit, e.message)
         }
     }
 

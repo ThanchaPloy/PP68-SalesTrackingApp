@@ -17,6 +17,8 @@ import kotlinx.coroutines.withContext
 import android.util.Log
 import javax.inject.Inject
 import java.io.IOException
+import com.example.pp68_salestrackingapp.utils.queuedOrFailed
+import com.example.pp68_salestrackingapp.utils.retrySend
 
 class CustomerRepository @Inject constructor(
     private val apiService: ApiService,
@@ -26,7 +28,8 @@ class CustomerRepository @Inject constructor(
     private val projectDao: ProjectDao,
     private val activityDao: ActivityDao,
     private val tokenManager: TokenManager,
-    private val syncManager: SyncManager
+    private val syncManager: SyncManager,
+    private val networkMonitor: com.example.pp68_salestrackingapp.utils.NetworkMonitor
 ) {
     fun getAllCustomersFlow(): Flow<List<Customer>> = customerDao.getAllCustomers()
     fun searchCustomersFlow(query: String): Flow<List<Customer>> = customerDao.searchCustomers("%$query%")
@@ -142,7 +145,7 @@ class CustomerRepository @Inject constructor(
                     "grade"                 to localCustomer.grade,
                     "vat_registration_no"   to localCustomer.vatRegistrationNo
                 ).filterValues { it != null }
-                val response = apiService.addCustomer(body)
+                val response = retrySend(idempotent = false, tag = "addCustomer") { apiService.addCustomer(body) }
                 Log.d("CustomerRepo", "POST customer → HTTP ${response.code()}")
                 if (response.isSuccessful) {
                     val realCustId = response.body()?.firstOrNull()?.custId
@@ -171,16 +174,14 @@ class CustomerRepository @Inject constructor(
                         kotlin.Result.failure(Exception("บันทึกลูกค้าไม่สำเร็จ: ไม่มีสิทธิ์ทำรายการนี้"))
                     } else {
                         syncManager.scheduleSync()
-                        // ลูกค้าถูกบันทึกลงเครื่องเรียบร้อยแล้วและ outbox จะลองส่งใหม่ให้ จึงไม่ใช่
-                        // ความล้มเหลวที่ผู้ใช้ต้องแก้ — คืน tempId เหมือนกรณีออฟไลน์ ผู้เรียกดูได้จาก
-                        // คำนำหน้า TEMP- ว่ายังไม่ถึง server แล้วค่อยบอกผู้ใช้ตามจริง
-                        // รายละเอียด HTTP เก็บไว้ใน log ข้างบน ไม่ต้องยัดใส่หน้าจอ
-                        kotlin.Result.success(tempId)
+                        // ลูกค้าถูกบันทึกลงเครื่องแล้วและ outbox จะลองส่งใหม่ให้ — ถ้าไม่มีเน็ตจึงไม่ใช่
+                        // ความล้มเหลวที่ผู้ใช้ต้องแก้ แต่ถ้าเน็ตดีอยู่แล้วยังส่งไม่ขึ้น ต้องบอกตามตรง
+                        networkMonitor.queuedOrFailed(tempId, "เซิร์ฟเวอร์ตอบ ${response.code()}")
                     }
                 }
             } catch (e: IOException) {
                 syncManager.scheduleSync()
-                kotlin.Result.success(tempId)
+                networkMonitor.queuedOrFailed(tempId, e.message)
             } catch (e: Exception) {
                 kotlin.Result.failure(e)
             }
@@ -207,10 +208,9 @@ class CustomerRepository @Inject constructor(
                     put("grade", customer.grade)
                     put("vat_registration_no", customer.vatRegistrationNo)
                 }.filterValues { it != null }
-                val response = if (customer.isLead) {
-                    apiService.updateLeadCustomer("eq.$custId", updates)
-                } else {
-                    apiService.updateCustomer("eq.$custId", updates)
+                val response = retrySend(idempotent = true, tag = "updateCustomer") {
+                    if (customer.isLead) apiService.updateLeadCustomer("eq.$custId", updates)
+                    else apiService.updateCustomer("eq.$custId", updates)
                 }
                 if (response.isSuccessful && response.body()?.isNotEmpty() == true) {
                     customerDao.updateSyncStatus(custId, true)
@@ -220,11 +220,11 @@ class CustomerRepository @Inject constructor(
                     kotlin.Result.failure(Exception("แก้ไขลูกค้าไม่สำเร็จ: ไม่มีสิทธิ์ทำรายการนี้"))
                 } else {
                     syncManager.scheduleSync()
-                    kotlin.Result.success(Unit)
+                    networkMonitor.queuedOrFailed(Unit, "เซิร์ฟเวอร์ตอบ ${response.code()}")
                 }
             } catch (e: IOException) {
                 syncManager.scheduleSync()
-                kotlin.Result.success(Unit)
+                networkMonitor.queuedOrFailed(Unit, e.message)
             } catch (e: Exception) {
                 kotlin.Result.failure(e)
             }

@@ -25,6 +25,7 @@ class ContactRefreshTest {
     private val customerDao: CustomerDao = mockk(relaxed = true)
     private val tokenManager: TokenManager = mockk(relaxed = true)
     private val syncManager: SyncManager = mockk(relaxed = true)
+    private val networkMonitor: com.example.pp68_salestrackingapp.utils.NetworkMonitor = mockk(relaxed = true)
 
     private lateinit var repo: ContactRepository
 
@@ -35,7 +36,7 @@ class ContactRefreshTest {
 
     @Before
     fun setUp() {
-        repo = ContactRepository(apiService, contactDao, customerDao, tokenManager, syncManager)
+        repo = ContactRepository(apiService, contactDao, customerDao, tokenManager, syncManager, networkMonitor)
         every { tokenManager.getUserData() } returns AuthUser("U1", "u@test.com", "sale")
         coEvery { customerDao.getCustomerIdsByUserId("U1") } returns customerIds
     }

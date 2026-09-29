@@ -12,13 +12,16 @@ import kotlinx.coroutines.withContext
 import android.util.Log
 import javax.inject.Inject
 import java.io.IOException
+import com.example.pp68_salestrackingapp.utils.queuedOrFailed
+import com.example.pp68_salestrackingapp.utils.retrySend
 
 class ContactRepository @Inject constructor(
     private val apiService: ApiService,
     private val contactDao: ContactDao,
     private val customerDao: CustomerDao,
     private val tokenManager: TokenManager,
-    private val syncManager: SyncManager
+    private val syncManager: SyncManager,
+    private val networkMonitor: com.example.pp68_salestrackingapp.utils.NetworkMonitor
 ) {
     fun getAllContactsFlow(): Flow<List<ContactPerson>> = contactDao.getAllContacts()
     fun searchContactsFlow(query: String): Flow<List<ContactPerson>> = contactDao.searchContactsWithCompany("%$query%")
@@ -87,7 +90,7 @@ class ContactRepository @Inject constructor(
                     put("is_active", localContact.isActive)
                     put("is_dm_confirmed", localContact.isDmConfirmed)
                 }
-                val response = apiService.addContact(fields)
+                val response = retrySend(idempotent = false, tag = "addContact") { apiService.addContact(fields) }
                 Log.d("ContactRepo", "POST contact → HTTP ${response.code()}, custId=${localContact.custId}")
                 if (response.isSuccessful) {
                     val serverContact = response.body()?.firstOrNull()
@@ -107,11 +110,11 @@ class ContactRepository @Inject constructor(
                     val errBody = response.errorBody()?.string()
                     Log.e("ContactRepo", "POST failed ${response.code()}: $errBody")
                     syncManager.scheduleSync()
-                    kotlin.Result.success(Unit)
+                    networkMonitor.queuedOrFailed(Unit, "เซิร์ฟเวอร์ตอบ ${response.code()}")
                 }
             } catch (e: IOException) {
                 syncManager.scheduleSync()
-                kotlin.Result.success(Unit)
+                networkMonitor.queuedOrFailed(Unit, e.message)
             } catch (e: Exception) {
                 kotlin.Result.failure(e)
             }
@@ -133,7 +136,7 @@ class ContactRepository @Inject constructor(
                     put("is_active", contact.isActive)
                     put("is_dm_confirmed", contact.isDmConfirmed)
                 }.filterValues { it != null }
-                val response = apiService.updateContact("eq.$contactId", updates)
+                val response = retrySend(idempotent = true, tag = "updateContact") { apiService.updateContact("eq.$contactId", updates) }
                 if (response.isSuccessful && response.body()?.isNotEmpty() == true) {
                     contactDao.updateSyncStatus(contactId, true)
                     kotlin.Result.success(Unit)
@@ -142,11 +145,11 @@ class ContactRepository @Inject constructor(
                     kotlin.Result.failure(Exception("แก้ไขผู้ติดต่อไม่สำเร็จ: ไม่มีสิทธิ์ทำรายการนี้"))
                 } else {
                     syncManager.scheduleSync()
-                    kotlin.Result.success(Unit)
+                    networkMonitor.queuedOrFailed(Unit, "เซิร์ฟเวอร์ตอบ ${response.code()}")
                 }
             } catch (e: IOException) {
                 syncManager.scheduleSync()
-                kotlin.Result.success(Unit)
+                networkMonitor.queuedOrFailed(Unit, e.message)
             } catch (e: Exception) {
                 kotlin.Result.failure(e)
             }

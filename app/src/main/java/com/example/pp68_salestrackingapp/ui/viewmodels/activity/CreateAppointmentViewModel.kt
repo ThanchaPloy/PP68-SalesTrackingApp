@@ -834,7 +834,15 @@ class CreateAppointmentViewModel @Inject constructor(
                 s.lng?.let       { updates["planned_long"]     = it }
                 s.selectedProjectId?.let  { updates["project_code"] = it }
                 s.selectedCustomerId?.let { updates["cust_code"]    = it }
-                activityRepo.updateActivity(appointmentId, updates)
+                // เดิมทิ้ง Result ทิ้งไปเฉย ๆ ต่างจากทางสร้างใหม่ที่อยู่ถัดลงไปซึ่งเช็ค isFailure
+                // แก้ไขที่บันทึกไม่ลงจึงเด้งกลับหน้ารายการเหมือนสำเร็จ ทั้งที่ไม่มีอะไรเปลี่ยน
+                val updateResult = activityRepo.updateActivity(appointmentId, updates)
+                if (updateResult.isFailure) {
+                    _uiState.update {
+                        it.copy(isLoading = false, saveError = updateResult.exceptionOrNull()?.message ?: "บันทึกไม่สำเร็จ")
+                    }
+                    return@launch
+                }
                 finalId = appointmentId
             } else {
                 val addResult = activityRepo.addActivity(activity)

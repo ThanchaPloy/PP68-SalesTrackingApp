@@ -17,13 +17,16 @@ import kotlinx.coroutines.withContext
 import java.io.IOException
 import java.time.LocalDate
 import javax.inject.Inject
+import com.example.pp68_salestrackingapp.utils.queuedOrFailed
+import com.example.pp68_salestrackingapp.utils.retrySend
 
 class ProjectRepository @Inject constructor(
     private val apiService: ApiService,
     private val projectDao: ProjectDao,
     private val projectContactDao: ProjectContactDao,
     private val contactDao: ContactDao,
-    private val syncManager: SyncManager
+    private val syncManager: SyncManager,
+    private val networkMonitor: com.example.pp68_salestrackingapp.utils.NetworkMonitor
 ) {
     fun getAllProjectsFlow(): Flow<List<Project>> = projectDao.getAllProjects()
     fun searchProjectsFlow(query: String): Flow<List<Project>> =
@@ -79,7 +82,7 @@ class ProjectRepository @Inject constructor(
                     "created_at"              to (project.createdAt ?: today)
                 ).filterValues { it != null }
                 Log.d("ProjectRepo", "POST body: $body")
-                val response = apiService.addProject(body)
+                val response = retrySend(idempotent = false, tag = "createProject") { apiService.addProject(body) }
                 Log.d("ProjectRepo", "POST project → HTTP ${response.code()}")
                 if (response.isSuccessful) {
                     val realId = response.body()?.firstOrNull()?.projectId
@@ -115,9 +118,10 @@ class ProjectRepository @Inject constructor(
                     Result.failure(Exception("บันทึกโครงการไม่สำเร็จ: HTTP ${response.code()} $err"))
                 }
             } catch (e: IOException) {
-                // offline — เก็บไว้ใน Room แล้วรอ retry ตอนมีเน็ต ถือเป็น success ตาม offline-first pattern
+                // ไม่มีเน็ต — เก็บไว้ใน Room รอ retry ตาม offline-first แต่ถ้าเน็ตดีอยู่แล้ว
+                // ยังส่งไม่ขึ้น ต้องบอกผู้ใช้ ไม่ใช่ปล่อยให้เข้าใจว่าโครงการถูกสร้างบน server แล้ว
                 syncManager.scheduleSync()
-                Result.success(tempProject)
+                networkMonitor.queuedOrFailed(tempProject, e.message)
             } catch (e: Exception) { Result.failure(e) }
         }
     }
@@ -157,7 +161,7 @@ class ProjectRepository @Inject constructor(
                 project.projectLong?.let { updates["project_long"] = it }
                 resultAppointmentId?.let { updates["stage_appointment_id"] = it }
 
-                val response = apiService.updateProject("eq.${project.projectId}", updates)
+                val response = retrySend(idempotent = true, tag = "updateProject") { apiService.updateProject("eq.${project.projectId}", updates) }
                 if (response.isSuccessful && response.body()?.isNotEmpty() == true) {
                     val returnedProject = response.body()!!.first().copy(isSynced = true)
                     projectDao.insertProject(returnedProject)
@@ -167,11 +171,12 @@ class ProjectRepository @Inject constructor(
                     kotlin.Result.failure(Exception("แก้ไขโครงการไม่สำเร็จ: ไม่มีสิทธิ์ทำรายการนี้"))
                 } else {
                     syncManager.scheduleSync()
-                    kotlin.Result.success(Unit)
+                    networkMonitor.queuedOrFailed(Unit, "เซิร์ฟเวอร์ตอบ ${response.code()}")
                 }
             } catch (e: Exception) {
                 syncManager.scheduleSync()
-                if (e is IOException) kotlin.Result.success(Unit) else kotlin.Result.failure(e)
+                if (e is IOException) networkMonitor.queuedOrFailed(Unit, e.message)
+                else kotlin.Result.failure(e)
             }
         }
     }
@@ -230,7 +235,7 @@ class ProjectRepository @Inject constructor(
                 // ตรงนี้ การแก้ผู้ติดต่อตอนออฟไลน์จะไม่มีวันถูกอัปขึ้น server เลย
                 projectDao.updateSyncStatus(projectId, false)
                 syncManager.scheduleSync()
-                Result.success(Unit) // Offline fallback
+                networkMonitor.queuedOrFailed(Unit, e.message)
             } catch (e: Exception) {
                 Log.e("ProjectRepo", "saveProjectContacts failed: ${e.message}", e)
                 Result.failure(e)
@@ -293,7 +298,7 @@ class ProjectRepository @Inject constructor(
 
     suspend fun updateProjectFields(projectId: String, fields: Map<String, Any?>): Result<Unit> {
         return try {
-            val response = apiService.updateProject("eq.$projectId", fields)
+            val response = retrySend(idempotent = true, tag = "updateProjectFields") { apiService.updateProject("eq.$projectId", fields) }
             if (response.isSuccessful && response.body()?.isNotEmpty() == true) {
                 val returnedProject = response.body()!!.first().copy(isSynced = true)
                 projectDao.insertProject(returnedProject)
