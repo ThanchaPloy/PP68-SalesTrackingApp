@@ -172,8 +172,12 @@ class ProximityMonitorService : Service() {
         ).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
         }
+        // ✅ ใส่ prefix กันชนกับ notification/PendingIntent ของ AppointmentAlarmReceiver ที่ใช้
+        // activityId.hashCode() เปล่าๆ เหมือนกัน — ไม่งั้นถ้านัดหมายเดียวกันโดนแจ้งทั้งสองแบบ
+        // ใกล้ๆ กัน อันที่มาทีหลังจะทับอันแรกในแถบแจ้งเตือนทันทีโดยไม่มีการเตือนเลย
+        val notifId = "proximity:$activityId".hashCode()
         val pendingIntent = PendingIntent.getActivity(
-            this, activityId.hashCode(), mainIntent,
+            this, notifId, mainIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
         val notification = NotificationCompat.Builder(this, NotificationChannels.LOCATION_ALERT_CHANNEL_ID)
@@ -187,7 +191,7 @@ class ProximityMonitorService : Service() {
             .setContentIntent(pendingIntent)
             .build()
         (getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager)
-            .notify(activityId.hashCode(), notification)
+            .notify(notifId, notification)
     }
 
     companion object {

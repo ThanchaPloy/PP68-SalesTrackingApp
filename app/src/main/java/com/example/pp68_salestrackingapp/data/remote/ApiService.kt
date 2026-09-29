@@ -231,7 +231,7 @@ interface ApiService {
 
     @PATCH("appointment")
     @Headers("Prefer: return=representation", "Content-Profile: public")
-    suspend fun updateActivity(@Query("appointment_id") appointmentId: String, @Body updates: @JvmSuppressWildcards Map<String, Any>): Response<List<SalesActivity>>
+    suspend fun updateActivity(@Query("appointment_id") appointmentId: String, @Body updates: @JvmSuppressWildcards Map<String, Any?>): Response<List<SalesActivity>>
 
     @DELETE("appointment")
     suspend fun deleteActivity(@Query("appointment_id") appointmentId: String): Response<Unit>
@@ -329,7 +329,7 @@ interface ApiService {
     suspend fun updateChecklist(
         @Query("appointment_id") appointmentId: String,
         @Query("master_id") masterId: String,
-        @Body updates: @JvmSuppressWildcards Map<String, Any>
+        @Body updates: @JvmSuppressWildcards Map<String, Any?>
     ): Response<List<ChecklistInsertDto>>
 
     @DELETE("appointment_checklist")

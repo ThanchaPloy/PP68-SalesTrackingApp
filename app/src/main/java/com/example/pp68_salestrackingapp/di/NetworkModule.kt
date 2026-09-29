@@ -2,8 +2,11 @@ package com.example.pp68_salestrackingapp.di
 
 import com.google.gson.ExclusionStrategy
 import com.google.gson.FieldAttributes
+import com.google.gson.Gson
 import com.google.gson.GsonBuilder
+import com.google.gson.JsonDeserializer
 import com.google.gson.annotations.SerializedName
+import com.example.pp68_salestrackingapp.data.model.SalesActivity
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -42,6 +45,21 @@ object NetworkModule {
     private val BASE_AUTH_URL = BuildConfig.BASE_AUTH_URL
     private val UPLOAD_URL    = BuildConfig.UPLOAD_URL
 
+    // Gson สร้าง object ผ่าน reflection ตรงๆ ไม่ผ่าน constructor ของ Kotlin เลย ทำให้ทะลุ
+    // null-safety ได้ปกติ — ถ้า response มี "planned_date"/"plan_status" เป็น null จริงๆ
+    // SalesActivity.activityDate/status (ประกาศเป็น non-null String) จะกลายเป็น null ได้เฉยๆ
+    // แล้วไปพังตรงจุดที่เรียก .status.lowercase() ฯลฯ ตรงๆ (มีหลายที่ในแอป) แบบไม่มี compile
+    // error เตือนเลยเพราะ compiler เชื่อว่ามันเป็น non-null อยู่แล้ว — กันไว้จุดเดียวตรงนี้แทน
+    // การไล่แก้ทุก call site ทั่วแอป ใช้ delegate ธรรมดา (ไม่มี custom adapter) กัน infinite recursion
+    private val plainGson = Gson()
+    private val salesActivityDeserializer = JsonDeserializer<SalesActivity> { json, _, _ ->
+        val obj = json.asJsonObject
+        listOf("type", "planned_date", "plan_status").forEach { key ->
+            if (!obj.has(key) || obj.get(key).isJsonNull) obj.addProperty(key, "")
+        }
+        plainGson.fromJson(obj, SalesActivity::class.java)
+    }
+
     // Only serialize fields that have @SerializedName — local-only Room fields (isSynced,
     // projectName, companyName, etc.) have no @SerializedName and must not reach PostgREST.
     private val gson = GsonBuilder()
@@ -50,6 +68,7 @@ object NetworkModule {
                 f.getAnnotation(SerializedName::class.java) == null
             override fun shouldSkipClass(clazz: Class<*>) = false
         })
+        .registerTypeAdapter(SalesActivity::class.java, salesActivityDeserializer)
         .create()
 
     @Provides
