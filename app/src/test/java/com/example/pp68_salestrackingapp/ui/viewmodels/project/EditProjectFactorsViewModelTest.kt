@@ -2,6 +2,8 @@ package com.example.pp68_salestrackingapp.ui.viewmodels.project
 
 import androidx.arch.core.executor.testing.InstantTaskExecutorRule
 import com.example.pp68_salestrackingapp.data.model.Project
+import com.example.pp68_salestrackingapp.data.model.ProjectFactorLog
+import com.example.pp68_salestrackingapp.data.model.ProjectFactorSnapshot
 import com.example.pp68_salestrackingapp.data.repository.ProjectRepository
 import com.example.pp68_salestrackingapp.utils.DealFactors
 import io.mockk.coEvery
@@ -152,6 +154,70 @@ class EditProjectFactorsViewModelTest {
         viewModel.onCompetitorCountChange("1a2b9")
 
         assertEquals("12", viewModel.uiState.value.competitorCount)
+    }
+
+    // snapshot เรียงใหม่สุดก่อน แถวเก่าสุดไม่มีอะไรให้เทียบ = ค่าตั้งต้น (old เป็น null)
+    @Test
+    fun `history diffs consecutive snapshots into per-edit change lists`() = runTest(testDispatcher) {
+        val older = ProjectFactorLog(
+            logId = 1, projectCode = "P01", changedAt = "2026-04-01T10:00:00Z", changedBy = "EMP-1",
+            factors = ProjectFactorSnapshot(
+                dealPosition = "incumbent", previousSolution = "no_solution",
+                counterpartyType = "direct_main_contractor", responseSpeed = "fast",
+                isProposalSent = false, proposalDate = null, competitorCount = 1
+            )
+        )
+        // ครั้งหลังแก้ 2 ฟิลด์: dealPosition กับ competitorCount
+        val newer = older.copy(
+            logId = 2, changedAt = "2026-04-05T10:00:00Z", changedBy = "EMP-2",
+            factors = older.factors.copy(dealPosition = "invited_to_compare", competitorCount = 4)
+        )
+
+        val entries = viewModel.buildHistoryEntries(listOf(newer, older))
+
+        assertEquals(2, entries.size)
+        // รายการแรก (ใหม่สุด) ต้องมีเฉพาะ 2 ฟิลด์ที่เปลี่ยนจริง ไม่ใช่ทั้ง 7
+        val latest = entries.first()
+        assertEquals("EMP-2", latest.changedBy)
+        assertEquals(setOf("deal_position", "competitor_count"), latest.changes.map { it.fieldKey }.toSet())
+        val dealChange = latest.changes.first { it.fieldKey == "deal_position" }
+        assertEquals("incumbent", dealChange.oldValue)
+        assertEquals("invited_to_compare", dealChange.newValue)
+
+        // รายการเก่าสุด = ค่าตั้งต้น old ต้องเป็น null ทุกฟิลด์ที่มีค่า
+        val initial = entries.last()
+        assertTrue(initial.changes.all { it.oldValue == null })
+        assertEquals("fast", initial.changes.first { it.fieldKey == "response_speed" }.newValue)
+    }
+
+    // false กับ 0 คือคำตอบที่ถูกต้อง ไม่ใช่ "ไม่มีค่า" — diff ต้องจับการเปลี่ยนเป็น/จากค่าพวกนี้ได้
+    @Test
+    fun `history diff treats false and zero as real values, not as missing`() = runTest(testDispatcher) {
+        val older = ProjectFactorLog(
+            logId = 1, projectCode = "P01", changedAt = "2026-04-01T10:00:00Z",
+            factors = ProjectFactorSnapshot(isProposalSent = true, competitorCount = 5)
+        )
+        val newer = older.copy(
+            logId = 2, changedAt = "2026-04-02T10:00:00Z",
+            factors = ProjectFactorSnapshot(isProposalSent = false, competitorCount = 0)
+        )
+
+        val changes = viewModel.buildHistoryEntries(listOf(newer, older)).first().changes
+
+        assertEquals("false", changes.first { it.fieldKey == "is_proposal_sent" }.newValue)
+        assertEquals("0", changes.first { it.fieldKey == "competitor_count" }.newValue)
+    }
+
+    // trigger กันแถวซ้ำอยู่แล้ว แต่ถ้ามีหลุดมา ต้องไม่โชว์เป็นรายการเปล่า
+    @Test
+    fun `history skips entries where nothing actually differs`() = runTest(testDispatcher) {
+        val snap = ProjectFactorSnapshot(dealPosition = "incumbent", competitorCount = 2)
+        val older = ProjectFactorLog(logId = 1, projectCode = "P01", changedAt = "2026-04-01T10:00:00Z", factors = snap)
+        val duplicate = older.copy(logId = 2, changedAt = "2026-04-02T10:00:00Z", factors = snap)
+
+        val entries = viewModel.buildHistoryEntries(listOf(duplicate, older))
+
+        assertEquals(1, entries.size)
     }
 
     // ประวัติอ่านจาก server เท่านั้น ออฟไลน์ต้องยังแก้ค่าปัจจุบันได้ ไม่ใช่ทั้งหน้าพัง

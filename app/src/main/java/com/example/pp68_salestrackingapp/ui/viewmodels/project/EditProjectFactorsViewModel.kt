@@ -2,7 +2,7 @@ package com.example.pp68_salestrackingapp.ui.viewmodels.project
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.example.pp68_salestrackingapp.data.model.ProjectFactorLog
+import com.example.pp68_salestrackingapp.data.model.ProjectFactorSnapshot
 import com.example.pp68_salestrackingapp.data.repository.ProjectRepository
 import com.example.pp68_salestrackingapp.utils.DealFactors
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -11,6 +11,22 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+
+// ฟิลด์หนึ่งที่เปลี่ยนในการแก้ครั้งหนึ่ง — ได้จากการ diff snapshot สองแถวที่ติดกัน
+// fieldKey ใช้ชื่อคอลัมน์ฝั่ง DB เพื่อให้ชั้น UI แปลงเป็นหัวข้อ/ค่าที่อ่านรู้เรื่องได้ที่เดียว
+data class FactorChange(
+    val fieldKey: String,
+    val oldValue: String?,
+    val newValue: String?
+)
+
+// การแก้ 1 ครั้ง (1 snapshot) พร้อมรายการฟิลด์ที่เปลี่ยนในครั้งนั้น — แก้ 3 ข้อพร้อมกันจะเป็น
+// รายการเดียวที่มี 3 บรรทัด ไม่ใช่ 3 รายการแยกกันเหมือนตอนเก็บ log ทีละฟิลด์
+data class FactorHistoryEntry(
+    val changedAt: String,
+    val changedBy: String?,
+    val changes: List<FactorChange>
+)
 
 data class EditProjectFactorsUiState(
     val projectId: String = "",
@@ -28,7 +44,7 @@ data class EditProjectFactorsUiState(
     val isSaving: Boolean = false,
     val isSaved: Boolean = false,
     val error: String? = null,
-    val history: List<ProjectFactorLog> = emptyList(),
+    val history: List<FactorHistoryEntry> = emptyList(),
     val historyError: String? = null
 )
 
@@ -76,10 +92,43 @@ class EditProjectFactorsViewModel @Inject constructor(
 
     private suspend fun loadHistory(projectId: String) {
         projectRepo.getFactorHistory(projectId).fold(
-            onSuccess = { logs -> _uiState.update { it.copy(history = logs, historyError = null) } },
+            onSuccess = { logs ->
+                _uiState.update { it.copy(history = buildHistoryEntries(logs), historyError = null) }
+            },
             // ประวัติอ่านจาก server เท่านั้น ออฟไลน์อยู่ก็ยังแก้ค่าปัจจุบันได้ปกติ แค่ไม่เห็นประวัติ
             onFailure = { _uiState.update { it.copy(history = emptyList(), historyError = "ดูประวัติได้เมื่อออนไลน์เท่านั้น") } }
         )
+    }
+
+    // แปลง snapshot เป็นรายการ "อะไรเปลี่ยน" — backend ส่งมาเรียงใหม่สุดก่อน (changed_at DESC)
+    // แถวที่ i จึงเทียบกับแถวที่ i+1 ซึ่งเก่ากว่าหนึ่งขั้น ส่วนแถวเก่าสุดไม่มีอะไรให้เทียบ
+    // ถือเป็นค่าตั้งต้น (old = null ทุกฟิลด์ที่มีค่า)
+    //
+    // ถ้า diff แล้วไม่มีฟิลด์ไหนต่างเลยจะไม่แสดงรายการนั้น — ปกติ trigger กันไว้แล้วไม่ให้เกิด
+    // snapshot ซ้ำ แต่กันไว้อีกชั้นกันแถวแปลกๆ จากข้อมูลเก่าโชว์เป็นรายการเปล่า
+    internal fun buildHistoryEntries(logs: List<com.example.pp68_salestrackingapp.data.model.ProjectFactorLog>): List<FactorHistoryEntry> =
+        logs.mapIndexedNotNull { index, log ->
+            val previous = logs.getOrNull(index + 1)?.factors
+            val changes = diffSnapshots(previous, log.factors)
+            if (changes.isEmpty()) null
+            else FactorHistoryEntry(changedAt = log.changedAt, changedBy = log.changedBy, changes = changes)
+        }
+
+    private fun diffSnapshots(old: ProjectFactorSnapshot?, new: ProjectFactorSnapshot): List<FactorChange> {
+        val changes = mutableListOf<FactorChange>()
+        fun add(key: String, oldValue: Any?, newValue: Any?) {
+            if (oldValue?.toString() != newValue?.toString()) {
+                changes += FactorChange(key, oldValue?.toString(), newValue?.toString())
+            }
+        }
+        add("deal_position", old?.dealPosition, new.dealPosition)
+        add("current_solution", old?.previousSolution, new.previousSolution)
+        add("counterparty_type", old?.counterpartyType, new.counterpartyType)
+        add("response_speed", old?.responseSpeed, new.responseSpeed)
+        add("is_proposal_sent", old?.isProposalSent, new.isProposalSent)
+        add("proposal_date", old?.proposalDate, new.proposalDate)
+        add("competitor_count", old?.competitorCount, new.competitorCount)
+        return changes
     }
 
     fun onDealPositionChange(v: String)     = _uiState.update { it.copy(dealPosition = v, error = null) }

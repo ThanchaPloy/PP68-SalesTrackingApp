@@ -22,6 +22,7 @@ import com.example.pp68_salestrackingapp.ui.components.DropdownField
 import com.example.pp68_salestrackingapp.ui.components.FormField
 import com.example.pp68_salestrackingapp.ui.components.FormTextField
 import com.example.pp68_salestrackingapp.ui.viewmodels.project.EditProjectFactorsViewModel
+import com.example.pp68_salestrackingapp.ui.viewmodels.project.FactorHistoryEntry
 
 private val RedPrimary = Color(0xFFD32F2F)
 private val TextDark   = Color(0xFF212121)
@@ -184,15 +185,7 @@ fun EditProjectFactorsScreen(
                     Text(state.historyError!!, fontSize = 13.sp, color = TextGray)
                 state.history.isEmpty() ->
                     Text("ยังไม่มีประวัติการแก้ไข", fontSize = 13.sp, color = TextGray)
-                else -> state.history.forEach { log ->
-                    FactorLogRow(
-                        fieldLabel = factorFieldLabel(log.fieldKey),
-                        oldValue = factorDisplayValue(log.fieldKey, log.oldValue),
-                        newValue = factorDisplayValue(log.fieldKey, log.newValue),
-                        changedBy = log.changedBy,
-                        changedAt = log.changedAt
-                    )
-                }
+                else -> state.history.forEach { entry -> FactorLogCard(entry) }
             }
 
             Spacer(Modifier.height(24.dp))
@@ -200,28 +193,34 @@ fun EditProjectFactorsScreen(
     }
 }
 
+// การแก้ 1 ครั้ง = 1 การ์ด ข้างในมีทุกฟิลด์ที่เปลี่ยนในครั้งนั้น (แก้ 3 ข้อพร้อมกัน = การ์ดเดียว 3 บรรทัด)
 @Composable
-private fun FactorLogRow(
-    fieldLabel: String,
-    oldValue: String,
-    newValue: String,
-    changedBy: String?,
-    changedAt: String
-) {
+private fun FactorLogCard(entry: FactorHistoryEntry) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(10.dp),
         color = White,
         border = androidx.compose.foundation.BorderStroke(1.dp, BorderGray)
     ) {
-        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(fieldLabel, fontWeight = FontWeight.SemiBold, fontSize = 13.sp, color = TextDark)
-            Text("$oldValue  →  $newValue", fontSize = 13.sp, color = TextDark)
+        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text(
-                listOfNotNull(formatLogTime(changedAt), changedBy?.takeIf { it.isNotBlank() })
+                listOfNotNull(formatLogTime(entry.changedAt), entry.changedBy?.takeIf { it.isNotBlank() })
                     .joinToString(" • "),
                 fontSize = 11.sp, color = TextGray
             )
+            entry.changes.forEach { change ->
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text(
+                        factorFieldLabel(change.fieldKey),
+                        fontWeight = FontWeight.SemiBold, fontSize = 13.sp, color = TextDark
+                    )
+                    Text(
+                        factorDisplayValue(change.fieldKey, change.oldValue) +
+                            "  →  " + factorDisplayValue(change.fieldKey, change.newValue),
+                        fontSize = 13.sp, color = TextDark
+                    )
+                }
+            }
         }
     }
 }
