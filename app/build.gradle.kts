@@ -25,8 +25,14 @@ android {
         applicationId = "com.example.pp68_salestrackingapp"
         minSdk = 26
         targetSdk = 35
+        // ⚠️ อย่าขยับ versionCode โดยไม่ตั้งใจ — TokenManager.checkAppVersionAndForceRelogin()
+        // เทียบค่านี้กับที่เก็บไว้ ถ้าต่างกันจะ clearToken() บังคับ login ใหม่ทันทีที่เปิดแอป
+        // ซึ่ง "ไม่ผ่านด่าน logout" แล้ว AuthRepository.login() จะ clearAllTables() ทิ้งทั้งหมด
+        // งานที่ทำตอนออฟไลน์ (เช็คอิน/บันทึกผล) ที่ยังดันขึ้น server ไม่สำเร็จจึงหายถาวรโดยไม่เตือน
+        // จะขยับได้ก็ต่อเมื่ออุดรูตรงนั้นก่อน หรือเมื่อจำเป็นต้องบังคับ login ใหม่จริง ๆ (เช่นเปลี่ยน
+        // รูปแบบ token) — การออก build ใหม่เฉย ๆ ไม่ใช่เหตุผลที่ต้องบังคับ
         versionCode = 5
-        versionName = "1.0.4"
+        versionName = "1.0.5"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
