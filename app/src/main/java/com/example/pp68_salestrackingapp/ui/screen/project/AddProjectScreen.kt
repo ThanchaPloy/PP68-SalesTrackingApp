@@ -170,8 +170,56 @@ fun AddProjectContent(
                 )
             }
 
+            // ── Project Status * ──────────────────────────────
+            // อยู่ถัดจากชื่อโครงการเพราะเป็นอีกฟิลด์ที่บังคับกรอก — ให้สองฟิลด์ที่บังคับอยู่ติดกันบนสุด
+            val statusList = com.example.pp68_salestrackingapp.utils.ProjectStages.SELECTABLE
+            FormField("สถานะโครงการ", required = true) {
+                DropdownField(
+                    value       = uiState.projectStatus ?: "",
+                    placeholder = "เลือกสถานะ",
+                    options     = statusList,
+                    isError     = uiState.statusError != null,
+                    errorMsg    = uiState.statusError,
+                    onSelect    = { idx ->
+                        onEvent(AddProjectEvent.StatusChanged(statusList[idx]))
+                    },
+                    displayLabel = { com.example.pp68_salestrackingapp.utils.ProjectStages.labelFor(it) }
+                )
+            }
+
+            // ── Loss Reason (แสดงเมื่อเป็น Lost หรือ Failed) ──────────────────
+            // ต้องอยู่ติดกับฟิลด์สถานะเสมอ เพราะมันโผล่มาตามค่าที่เลือกในฟิลด์นั้น
+            AnimatedVisibility(visible = uiState.projectStatus == "Lost" || uiState.projectStatus == "Failed") {
+                Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                    FormField("เหตุผลที่ไม่ได้งาน", required = true) {
+                        DropdownField(
+                            value       = uiState.lossReason,
+                            placeholder = "เลือกเหตุผล",
+                            options     = lossReasonOptions,
+                            isError     = uiState.lossReasonError != null,
+                            errorMsg    = uiState.lossReasonError,
+                            onSelect    = { idx ->
+                                onEvent(AddProjectEvent.LossReasonChanged(lossReasonOptions[idx]))
+                            },
+                            displayLabel = { com.example.pp68_salestrackingapp.utils.LossReasons.labelFor(it) }
+                        )
+                    }
+
+                    if (uiState.lossReason == "อื่น ๆ") {
+                        FormField("ระบุเหตุผลอื่น ๆ", required = true) {
+                            FormTextField(
+                                value         = uiState.otherLossReason,
+                                onValueChange = { onEvent(AddProjectEvent.OtherLossReasonChanged(it)) },
+                                placeholder   = "กรอกเหตุผลที่ไม่ได้งาน",
+                                isError       = uiState.lossReasonError != null
+                            )
+                        }
+                    }
+                }
+            }
+
             // ── Customer/Company ────────────────────────────
-            // Customer/Company 
+            // Customer/Company
             FormField("ลูกค้า/บริษัท") {
                 if (uiState.isLoadingCustomers) LoadingFieldProject()
                 else Column {
@@ -302,54 +350,8 @@ fun AddProjectContent(
                 )
             }
 
-            // ── Project Status * ──────────────────────────────
-            val statusList = com.example.pp68_salestrackingapp.utils.ProjectStages.SELECTABLE
-            FormField("สถานะโครงการ", required = true) {
-                DropdownField(
-                    value       = uiState.projectStatus ?: "",
-                    placeholder = "เลือกสถานะ",
-                    options     = statusList,
-                    isError     = uiState.statusError != null,
-                    errorMsg    = uiState.statusError,
-                    onSelect    = { idx ->
-                        onEvent(AddProjectEvent.StatusChanged(statusList[idx]))
-                    },
-                    displayLabel = { com.example.pp68_salestrackingapp.utils.ProjectStages.labelFor(it) }
-                )
-            }
-
-            // ── Loss Reason (แสดงเมื่อเป็น Lost หรือ Failed) ──────────────────
-            AnimatedVisibility(visible = uiState.projectStatus == "Lost" || uiState.projectStatus == "Failed") {
-                Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                    FormField("เหตุผลที่ไม่ได้งาน", required = true) {
-                        DropdownField(
-                            value       = uiState.lossReason,
-                            placeholder = "เลือกเหตุผล",
-                            options     = lossReasonOptions,
-                            isError     = uiState.lossReasonError != null,
-                            errorMsg    = uiState.lossReasonError,
-                            onSelect    = { idx ->
-                                onEvent(AddProjectEvent.LossReasonChanged(lossReasonOptions[idx]))
-                            },
-                            displayLabel = { com.example.pp68_salestrackingapp.utils.LossReasons.labelFor(it) }
-                        )
-                    }
-
-                    if (uiState.lossReason == "อื่น ๆ") {
-                        FormField("ระบุเหตุผลอื่น ๆ", required = true) {
-                            FormTextField(
-                                value         = uiState.otherLossReason,
-                                onValueChange = { onEvent(AddProjectEvent.OtherLossReasonChanged(it)) },
-                                placeholder   = "กรอกเหตุผลที่ไม่ได้งาน",
-                                isError       = uiState.lossReasonError != null
-                            )
-                        }
-                    }
-                }
-            }
-
-            // ── ปัจจัยข้อ 4-7 (W6-2) — แก้ไขได้ที่นี่เท่านั้น หน้าบันทึกผลแค่ prefill มาโชว์ ──
-            FormField("4. ตำแหน่งของดีล") {
+            // ── ปัจจัยของดีล (W6-2) — แก้ไขได้ที่นี่เท่านั้น หน้าบันทึกผลแค่ prefill มาโชว์ ──
+            FormField("ตำแหน่งของดีล") {
                 DropdownField(
                     value       = uiState.dealPosition,
                     placeholder = "เลือกตำแหน่งของดีล",
@@ -357,7 +359,7 @@ fun AddProjectContent(
                     onSelect    = { idx -> onEvent(AddProjectEvent.DealPositionChanged(dealPositionOptions[idx])) }
                 )
             }
-            FormField("5. Solution เดิมของลูกค้า") {
+            FormField("Solution เดิมของลูกค้า") {
                 DropdownField(
                     value       = uiState.previousSolution,
                     placeholder = "เลือก Solution เดิม",
@@ -365,7 +367,7 @@ fun AddProjectContent(
                     onSelect    = { idx -> onEvent(AddProjectEvent.PreviousSolutionChanged(previousSolutionOptions[idx])) }
                 )
             }
-            FormField("6. ประเภทคู่สัญญา") {
+            FormField("ประเภทคู่สัญญา") {
                 DropdownField(
                     value       = uiState.counterpartyType,
                     placeholder = "เลือกประเภทคู่สัญญา",
@@ -373,7 +375,7 @@ fun AddProjectContent(
                     onSelect    = { idx -> onEvent(AddProjectEvent.CounterpartyTypeChanged(counterpartyTypeOptions[idx])) }
                 )
             }
-            FormField("7. ความรวดเร็วในการตอบรับ") {
+            FormField("ความรวดเร็วในการตอบรับ") {
                 DropdownField(
                     value       = uiState.responseSpeed,
                     placeholder = "เลือกความรวดเร็วในการตอบรับ",
