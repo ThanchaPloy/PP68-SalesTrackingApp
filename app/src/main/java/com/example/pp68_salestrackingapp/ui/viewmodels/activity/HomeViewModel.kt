@@ -133,7 +133,7 @@ class HomeViewModel @Inject constructor(
             }
             
             try {
-                val resp = apiService.getUserById("eq.")
+                val resp = apiService.getUserById("eq.$userId")
                 val userDto = resp.body()?.firstOrNull()
                 if (userDto != null && userDto.phoneNumber.isNullOrBlank()) {
                     _uiState.update { it.copy(showPhonePrompt = true) }
@@ -183,7 +183,7 @@ class HomeViewModel @Inject constructor(
             try {
                 val userId = authRepo.currentUser()?.userId ?: return@launch
                 val updates = mapOf("phone_number" to phone.trim())
-                val response = apiService.updateUserProfile("eq.", updates)
+                val response = apiService.updateUserProfile("eq.$userId", updates)
                 if (response.isSuccessful) {
                     _uiState.update { it.copy(showPhonePrompt = false) }
                 }

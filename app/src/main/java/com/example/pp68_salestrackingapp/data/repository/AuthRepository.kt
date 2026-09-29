@@ -25,25 +25,35 @@ class AuthRepository @Inject constructor(
                 if (response.isSuccessful && response.body() != null) {
                     val loginResp = response.body()!!
 
-                    // 1. บันทึก Token แล้วพยายามดันงานที่ยังค้างขึ้นเซิร์ฟเวอร์ก่อนล้างเครื่อง
-                    tokenManager.saveToken(loginResp.token)
-                    // session หมดอายุจะลบแค่ token ไม่ลบ Room — เช็คอิน/บันทึกผลที่ทำตอนออฟไลน์
-                    // จึงยังค้างอยู่ ถ้าล้างเลยโดยไม่ดันขึ้นก่อน งานนั้นหายถาวรเงียบ ๆ
-                    // (logout กันเรื่องนี้ไว้แล้ว แต่ทางเข้า login ไม่เคยกัน)
-                    // ตอนนี้มี token ใหม่ที่ใช้ได้แล้ว จึงมีโอกาสส่งสำเร็จ
-                    try {
-                        if (outboxSyncManager.hasPendingChanges()) outboxSyncManager.doSync()
-                    } catch (_: Exception) {
-                        // ยังออฟไลน์อยู่ก็ปล่อยผ่าน — ล้างต่อเพื่อไม่ให้ข้อมูลผู้ใช้เก่าค้างในเครื่อง
-                    }
-                    database.clearAllTables()
+                    // ต้องรู้ก่อนว่าผู้ login รอบนี้เป็นคนเดิมหรือคนละคนกับ session ก่อนหน้า ก่อนตัดสินใจ
+                    // ดันงานค้างขึ้น server — ทำก่อนเซฟ token ใหม่ เพราะ tokenManager.getUserData()
+                    // จะคืนข้อมูลของผู้ใช้เดิมได้ก็ต่อเมื่อยังไม่ถูกทับด้วยข้อมูลผู้ใช้ใหม่
+                    val previousUserId = tokenManager.getUserData()?.userId
 
-                    // 2. ดึงข้อมูลผู้ใช้ (รองรับทั้ง Ktor/PostgREST backend และ Node.js backend)
+                    // ดึงข้อมูลผู้ใช้ (รองรับทั้ง Ktor/PostgREST backend และ Node.js backend)
                     val finalUserId = loginResp.employee?.empCode ?: loginResp.userId ?: ""
                     val finalFullName = loginResp.employee?.empName ?: loginResp.fullName
                     val finalRole = loginResp.employee?.empPost ?: loginResp.role ?: ""
                     val finalBranchId = loginResp.employee?.empBrchCode ?: loginResp.branchId ?: ""
                     val finalEmpType = loginResp.employee?.empPost ?: loginResp.empType
+
+                    // 1. บันทึก Token แล้วพยายามดันงานที่ยังค้างขึ้นเซิร์ฟเวอร์ก่อนล้างเครื่อง
+                    tokenManager.saveToken(loginResp.token)
+                    // session หมดอายุจะลบแค่ token ไม่ลบ Room — เช็คอิน/บันทึกผลที่ทำตอนออฟไลน์
+                    // จึงยังค้างอยู่ ถ้าล้างเลยโดยไม่ดันขึ้นก่อน งานนั้นหายถาวรเงียบ ๆ
+                    // (logout กันเรื่องนี้ไว้แล้ว แต่ทางเข้า login ไม่เคยกัน)
+                    // ตอนนี้มี token ใหม่ที่ใช้ได้แล้ว จึงมีโอกาสส่งสำเร็จ — แต่ต้องเป็นงานค้างของ "คนเดิม"
+                    // ที่กำลัง login ซ้ำเท่านั้น ถ้าเป็นคนละคน (เครื่องเดียวกันส่งต่อให้เซลส์อีกคน) ห้ามดันขึ้น
+                    // เพราะ backend บังคับ owner จาก JWT เสมอ (ดู W1) จะกลายเป็นงานของคน A ไปติดชื่อคน B แทน
+                    val isSameUserReLogin = previousUserId.isNullOrBlank() || previousUserId == finalUserId
+                    if (isSameUserReLogin) {
+                        try {
+                            if (outboxSyncManager.hasPendingChanges()) outboxSyncManager.doSync()
+                        } catch (_: Exception) {
+                            // ยังออฟไลน์อยู่ก็ปล่อยผ่าน — ล้างต่อเพื่อไม่ให้ข้อมูลผู้ใช้เก่าค้างในเครื่อง
+                        }
+                    }
+                    database.clearAllTables()
 
                     val authUser = AuthUser(
                         userId     = finalUserId,

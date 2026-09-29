@@ -611,11 +611,16 @@ class AddProjectViewModel @Inject constructor(
                 // W6-2: แปลงป้าย -> รหัสก่อนส่ง เว้นว่างไว้เมื่อยังไม่เลือก (แก้ไขได้ที่นี่เท่านั้น)
                 val dealFactors = com.example.pp68_salestrackingapp.utils.DealFactors
 
+                // restoreDraft() ตั้ง selectedCustomerId ให้ทันที แต่ selectedCustomerName รอ resolve
+                // แบบ async ทีหลัง — ถ้ากด Save ไวก่อนมันเสร็จ ชื่อจะยังว่าง ต้องกันด้วยการหาชื่อสดตรงนี้
+                val resolvedCustomerName = s.selectedCustomerName
+                    ?: s.selectedCustomerId?.let { customerRepo.getCustomerById(it).getOrNull()?.companyName }
+
                 // ✅ projectId จะถูกสร้างใน repository โดยใช้รูปแบบ project number
                 val projectToSave = Project(
                     projectId             = s.projectId ?: "",
                     custId                = if (s.selectedCustomerId.isNullOrBlank()) null else s.selectedCustomerId,
-                    customerName          = s.selectedCustomerName,
+                    customerName          = resolvedCustomerName,
                     branchId              = branchId,
                     billingBranchId       = s.selectedBillingBranchId,
                     projectName           = s.projectName,

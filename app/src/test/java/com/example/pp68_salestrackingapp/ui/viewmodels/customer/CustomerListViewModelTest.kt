@@ -58,6 +58,46 @@ class CustomerListViewModelTest {
         }
     }
 
+    // ปุ่มกรอง R/W/I/P (BizGroupBadge โชว์จาก customer.branchId) เคยรับค่ามาแต่ไม่เคยกรองจริง
+    @Test
+    fun `onBizGroupFilter narrows the list by customer branchId`() = runTest {
+        val retail = Customer("C1", "Retail Co", "R", null, null, null, null, null, null)
+        val wholesale = Customer("C2", "Wholesale Co", "W", null, null, null, null, null, null)
+        every { customerRepo.getAllCustomersFlow() } returns flowOf(listOf(retail, wholesale))
+
+        viewModel = CustomerListViewModel(customerRepo, authRepo)
+        advanceUntilIdle()
+
+        viewModel.customers.test {
+            awaitItem()
+            viewModel.onBizGroupFilter("R")
+            advanceUntilIdle()
+            assertEquals(listOf(retail), awaitItem())
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `onBizGroupFilter toggles off when the same group is tapped again`() = runTest {
+        val retail = Customer("C1", "Retail Co", "R", null, null, null, null, null, null)
+        val wholesale = Customer("C2", "Wholesale Co", "W", null, null, null, null, null, null)
+        every { customerRepo.getAllCustomersFlow() } returns flowOf(listOf(retail, wholesale))
+
+        viewModel = CustomerListViewModel(customerRepo, authRepo)
+        advanceUntilIdle()
+
+        viewModel.customers.test {
+            awaitItem()
+            viewModel.onBizGroupFilter("R")
+            advanceUntilIdle()
+            awaitItem()
+            viewModel.onBizGroupFilter("R")
+            advanceUntilIdle()
+            assertEquals(listOf(retail, wholesale), awaitItem())
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
     @Test
     fun `init should refresh by current user and clear loading`() = runTest {
         coEvery { customerRepo.refreshCustomers("T1") } returns Result.success(Unit)

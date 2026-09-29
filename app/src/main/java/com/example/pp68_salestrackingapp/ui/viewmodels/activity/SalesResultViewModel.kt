@@ -79,6 +79,10 @@ data class SalesResultUiState(
 // ไม่รวมรูป (photos) — Uri ท้องถิ่น/ไฟล์ที่อัปโหลดแล้วกู้คืนข้ามเซสชันไม่ได้อย่างปลอดภัย ผู้ใช้ต้อง
 // แนบรูปใหม่เองถ้ากู้คืนฉบับร่าง ส่วนอื่นที่เป็นแค่ข้อความ/ตัวเลข/ตัวเลือกกู้คืนได้ตามปกติ
 data class SalesResultDraft(
+    // ผูกโครงการเพิ่มตอนบันทึกผล (onProjectSelected/saveQuickProject) ต้องนับเป็นการแก้ไขด้วย —
+    // saveQuickProject() เขียนโครงการจริงลง server แล้ว ถ้าไม่ track ตรงนี้ ผู้ใช้กดย้อนกลับจะไม่มี
+    // คำเตือนใดๆ ทั้งที่เพิ่งสร้างโครงการทิ้งไว้ลอยๆ ไม่ได้ผูกกับอะไรเลย
+    val projectId: String? = null,
     val isStatusUpdateEnabled: Boolean = false,
     val newStatus: String = "",
     val opportunityScore: String? = null,
@@ -132,7 +136,7 @@ class SalesResultViewModel @Inject constructor(
     private var pendingDraft: SalesResultDraft? = null
 
     private fun SalesResultUiState.toDraft() = SalesResultDraft(
-        isStatusUpdateEnabled, newStatus, opportunityScore, dealPosition, previousSolution,
+        projectId, isStatusUpdateEnabled, newStatus, opportunityScore, dealPosition, previousSolution,
         counterpartyMultiplier, responseSpeed, isProposalSent, proposalDate, competitorCount,
         dmInvolved, visitSummary, lossReason, otherLossReason, selectedItemIds
     )
@@ -162,6 +166,7 @@ class SalesResultViewModel @Inject constructor(
         val d = pendingDraft ?: return
         _uiState.update {
             it.copy(
+                projectId = d.projectId ?: it.projectId,
                 isStatusUpdateEnabled = d.isStatusUpdateEnabled,
                 newStatus = d.newStatus,
                 opportunityScore = d.opportunityScore,
@@ -180,6 +185,9 @@ class SalesResultViewModel @Inject constructor(
                 draftAvailable = false
             )
         }
+        // draft ที่กู้มาอาจมีโครงการที่เพิ่งผูก/สร้างด่วนไว้ — ต้องโหลดข้อมูลโครงการนั้นกลับมาด้วย
+        // ไม่งั้น projectId ตั้งแล้วแต่ project/currentStatus ยังว่างอยู่เหมือนไม่ได้ผูกอะไรเลย
+        d.projectId?.let { viewModelScope.launch { loadProjectData(it) } }
         pendingDraft = null
     }
 

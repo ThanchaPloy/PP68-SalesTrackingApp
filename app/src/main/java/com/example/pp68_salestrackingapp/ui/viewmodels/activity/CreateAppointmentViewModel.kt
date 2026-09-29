@@ -129,6 +129,12 @@ class CreateAppointmentViewModel @Inject constructor(
     private var baseline: CreateAppointmentDraft = CreateAppointmentDraft()
     private var pendingDraft: CreateAppointmentDraft? = null
 
+    // นัดหมายใหม่แบบ onsite ตั้งพิกัดให้อัตโนมัติจาก GPS หลัง CheckDraft จับ baseline ไปแล้ว (เพราะ
+    // ต้องรอ permission/GPS fetch ที่เป็น async แยกอยู่ในหน้าจอ) ถ้าไม่กันไว้ ผู้ใช้เปิดหน้าจอเฉยๆ
+    // ไม่แตะอะไรเลยก็จะโดนถามว่า "มีข้อมูลยังไม่ได้บันทึก" ทันทีที่กดย้อนกลับ — เพราะ GPS auto-fill
+    // นับเป็นความต่างจาก baseline ไปแล้ว จึงต้องดูด lat/lng ที่ได้จาก auto-fill ครั้งแรกเข้า baseline ด้วย
+    private var awaitingInitialLocation = false
+
     private fun CreateAppointmentUiState.toDraft() = CreateAppointmentDraft(
         selectedProjectId, selectedCustomerId, titleTopic, activityType, plannedDate, startTime,
         endTime, lat, lng, selectedContactIds, selectedMasterIds, isOtherSelected, otherObjectiveText
@@ -137,6 +143,9 @@ class CreateAppointmentViewModel @Inject constructor(
     private fun draftKey() = "create_appointment:${_uiState.value.activityId ?: "new"}"
 
     fun checkForDraft() {
+        val s = _uiState.value
+        awaitingInitialLocation = s.activityId == null && s.activityType == "onsite" &&
+            s.lat == null && s.lng == null
         val draft = draftStore.load(draftKey(), CreateAppointmentDraft::class.java) ?: return
         pendingDraft = draft
         _uiState.update { it.copy(draftAvailable = true) }
@@ -529,8 +538,15 @@ class CreateAppointmentViewModel @Inject constructor(
             is CreateAppointmentEvent.EndTimeSelected ->
                 _uiState.update { it.copy(endTime = event.value, showEndTimePicker = false) }
 
-            is CreateAppointmentEvent.LocationPicked ->
+            is CreateAppointmentEvent.LocationPicked -> {
                 _uiState.update { it.copy(lat = event.lat, lng = event.lng) }
+                // ครั้งแรกหลัง CheckDraft ถือเป็น GPS auto-fill ไม่ใช่ผู้ใช้แก้ไข — ดูดเข้า baseline
+                // ไปด้วย ครั้งต่อไป (ผู้ใช้ปักหมุดเองจริงๆ) จะไม่โดนดูดซ้ำ นับเป็นการแก้ไขตามปกติ
+                if (awaitingInitialLocation) {
+                    awaitingInitialLocation = false
+                    baseline = baseline.copy(lat = event.lat, lng = event.lng)
+                }
+            }
 
             CreateAppointmentEvent.ShowStartTimePicker ->
                 _uiState.update { it.copy(showStartTimePicker = true) }
@@ -651,11 +667,14 @@ class CreateAppointmentViewModel @Inject constructor(
             val finalId: String
             if (isEditMode) {
                 val appointmentId = s.activityId!!
+                // ✅ ตอนสร้างใหม่ตั้ง isAppointment=true เสมอ (ไม่ขึ้นกับว่าเลือกผู้ติดต่อหรือยัง)
+                // ตอนแก้ไขก็ต้องเหมือนกัน ไม่งั้นถอดผู้ติดต่อออกหมดแล้วบันทึก จะเผลอเปลี่ยนนัดหมายที่มีอยู่
+                // ให้กลายเป็น "ไม่ใช่นัดหมาย" ทั้งที่ไม่ได้ตั้งใจ
                 val updates = mutableMapOf<String, Any>(
                     "type"           to s.activityType,
                     "planned_date"   to isoDate,
                     "topic"          to s.titleTopic,
-                    "is_appointment" to s.selectedContactIds.isNotEmpty()
+                    "is_appointment" to true
                 )
                 s.startTime?.let { updates["planned_time"]     = formatTimeToDb(it) ?: it }
                 s.endTime?.let   { updates["planned_end_time"] = formatTimeToDb(it) ?: it }

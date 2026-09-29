@@ -1047,6 +1047,40 @@ class SalesResultViewModelTest {
         assertEquals("PRJ-NEW", vm.uiState.value.projectId)
         assertFalse(vm.uiState.value.isQuickAddProjectOpen)
         coVerify(exactly = 1) { projectRepo.createProject(match { it.projectName == "New Project" && it.projectStatus == "Lead" }, "U1") }
+        // saveQuickProject() เพิ่งสร้างโครงการจริงลง server — กดย้อนกลับตอนนี้ต้องโดนเตือนว่ามีการ
+        // เปลี่ยนแปลงที่ยังไม่ได้บันทึกไว้ ไม่งั้นโครงการที่สร้างไว้จะลอยไม่ผูกกับอะไรเลยแบบไม่มีคำเตือน
+        assertTrue(vm.isDirty())
+    }
+
+    @Test
+    fun `restoring a draft that had a linked project reloads that project's data`() = runTest {
+        coEvery { activityRepo.getActivityById("A1") } returns Result.success(
+            listOf(
+                SalesActivity(
+                    activityId = "A1", userId = "U1", customerId = null, projectId = null,
+                    activityType = "Visit", activityDate = "2026-04-01", status = "checked_in"
+                )
+            )
+        )
+        coEvery { projectRepo.getProjectById("PRJ-1") } returns Result.success(
+            Project(projectId = "PRJ-1", custId = "C1", projectName = "Project A", projectStatus = "Lead")
+        )
+        every { draftStore.load("sales_result:A1", SalesResultDraft::class.java) } returns SalesResultDraft(
+            projectId = "PRJ-1", visitSummary = "draft summary"
+        )
+
+        val vm = SalesResultViewModel(
+            SavedStateHandle(mapOf("activityId" to "A1")), projectRepo, activityRepo, authRepo, draftStore
+        )
+        advanceUntilIdle()
+
+        assertTrue(vm.uiState.value.draftAvailable)
+        vm.restoreDraft()
+        advanceUntilIdle()
+
+        assertEquals("PRJ-1", vm.uiState.value.projectId)
+        assertEquals("Project A", vm.uiState.value.project?.projectName)
+        assertFalse(vm.uiState.value.draftAvailable)
     }
 
     @Test

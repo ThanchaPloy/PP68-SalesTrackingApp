@@ -51,6 +51,9 @@ class CustomerListViewModel @Inject constructor(
         _selectedTab
     ) { list, bizGroup, custType, tab ->
         list
+            // ✅ bizGroup (R/W/I/P) โชว์ผ่าน BizGroupBadge(customer.branchId) อยู่แล้วในหน้าลิสต์ —
+            // เดิมรับค่ามาแต่ไม่เคยใช้กรองจริง ชิปกรองกดแล้วดูเหมือน active แต่ผลลัพธ์ไม่เปลี่ยนเลย
+            .let { if (bizGroup != null) it.filter { c -> c.branchId.equals(bizGroup, ignoreCase = true) } else it }
             // Removed branch filter because Ktor already filters them and Room DB only contains relevant customers
             .let { if (custType != null) it.filter { c -> c.custType == custType } else it }
             .let { 

@@ -114,6 +114,42 @@ class CreateAppointmentViewModelTest {
         assertFalse(vm.uiState.value.isLoadingMasters)
     }
 
+    // นัดหมายใหม่แบบ onsite (ค่าเริ่มต้น) ตั้งพิกัดให้อัตโนมัติจาก GPS หลังเปิดหน้าจอ — การ auto-fill
+    // นี้ไม่ควรทำให้ isDirty() เป็น true ทั้งที่ผู้ใช้ยังไม่ได้แตะอะไรเลย (ไม่งั้นกดย้อนกลับจะโดนถาม
+    // "มีข้อมูลยังไม่ได้บันทึก" ทุกครั้งที่เปิดนัดหมายใหม่)
+    @Test
+    fun `GPS auto-fill on a fresh onsite appointment does not mark the form dirty`() = runTest {
+        configureBaseData()
+        coEvery { activityRepo.getMasterActivities() } returns emptyList()
+
+        val vm = CreateAppointmentViewModel(context, activityRepo, projectRepo, customerRepo, authRepo, draftStore)
+        advanceUntilIdle()
+        vm.onEvent(CreateAppointmentEvent.CheckDraft)
+        advanceUntilIdle()
+
+        // จำลองการที่หน้าจอดึง GPS มาได้แล้วยิง event เดียวกับที่ผู้ใช้ปักหมุดเองใช้
+        vm.onEvent(CreateAppointmentEvent.LocationPicked(13.7563, 100.5018))
+
+        assertFalse(vm.isDirty())
+    }
+
+    // แต่ถ้าปักหมุดซ้ำอีกครั้ง (ผู้ใช้แก้ตำแหน่งเองจริงๆ) ต้องนับเป็นแก้ไขตามปกติ
+    @Test
+    fun `manually re-picking the location after the GPS auto-fill still marks the form dirty`() = runTest {
+        configureBaseData()
+        coEvery { activityRepo.getMasterActivities() } returns emptyList()
+
+        val vm = CreateAppointmentViewModel(context, activityRepo, projectRepo, customerRepo, authRepo, draftStore)
+        advanceUntilIdle()
+        vm.onEvent(CreateAppointmentEvent.CheckDraft)
+        advanceUntilIdle()
+
+        vm.onEvent(CreateAppointmentEvent.LocationPicked(13.7563, 100.5018)) // absorbed into baseline
+        vm.onEvent(CreateAppointmentEvent.LocationPicked(14.0, 101.0))       // a real manual change
+
+        assertTrue(vm.isDirty())
+    }
+
     @Test
     fun `master load failure should fallback to default masters`() = runTest {
         configureBaseData()
@@ -469,6 +505,38 @@ class CreateAppointmentViewModelTest {
         coVerify(exactly = 1) { activityRepo.updateActivity("A-EDIT", any()) }
         coVerify(exactly = 0) { activityRepo.addActivity(any()) }
         coVerify(exactly = 0) { activityRepo.savePlanItems(any(), any()) }
+    }
+
+    // แก้ไขนัดหมายแล้วไม่มีผู้ติดต่อเลย (ถอดออกหมด หรือไม่เคยมี) ต้องไม่ทำให้นัดหมายกลายเป็น
+    // "ไม่ใช่นัดหมาย" — is_appointment ต้องเป็น true เสมอเหมือนตอนสร้างใหม่ ไม่ขึ้นกับผู้ติดต่อที่เลือก
+    @Test
+    fun `save edit mode always sends is_appointment true even with no contacts selected`() = runTest {
+        configureBaseData()
+        coEvery { activityRepo.getMasterActivities() } returns emptyList()
+        every { authRepo.currentUser() } returns AuthUser("U1", "u@test.com", "sale")
+        val updatesSlot = slot<Map<String, Any>>()
+        coEvery { activityRepo.updateActivity("A-EDIT", capture(updatesSlot)) } returns Result.success(Unit)
+        coEvery { activityRepo.getActivityById("A-EDIT") } returns Result.success(
+            listOf(
+                SalesActivity(
+                    activityId = "A-EDIT", userId = "U1", customerId = "C1", projectId = "PRJ-1",
+                    activityType = "onsite", detail = "old", activityDate = "2026-04-06",
+                    plannedTime = "10:00 AM", status = "planned"
+                )
+            )
+        )
+        coEvery { activityRepo.getPlanItems("A-EDIT") } returns Result.success(emptyList())
+        coEvery { activityRepo.getAppointmentContacts("A-EDIT") } returns emptyList()
+
+        val vm = CreateAppointmentViewModel(context, activityRepo, projectRepo, customerRepo, authRepo, draftStore)
+        advanceUntilIdle()
+        vm.onEvent(CreateAppointmentEvent.LoadActivity("A-EDIT"))
+        advanceUntilIdle()
+        vm.onEvent(CreateAppointmentEvent.LocationPicked(13.7563, 100.5018))
+        vm.onEvent(CreateAppointmentEvent.Save)
+        advanceUntilIdle()
+
+        assertEquals(true, updatesSlot.captured["is_appointment"])
     }
 
     // W6: ห้ามแก้ไขแผนที่ยังไม่เสร็จ (planned) เมื่อเหลือเวลา <= 7 วันก่อนวันนัดเดิม

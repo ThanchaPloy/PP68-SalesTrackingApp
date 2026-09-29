@@ -1,6 +1,7 @@
 package com.example.pp68_salestrackingapp.data.repository
 
 import com.example.pp68_salestrackingapp.data.local.AppDatabase
+import com.example.pp68_salestrackingapp.data.model.AuthUser
 import com.example.pp68_salestrackingapp.data.model.LoginResponse
 import com.example.pp68_salestrackingapp.data.remote.ApiService
 import com.example.pp68_salestrackingapp.data.remote.AuthService
@@ -68,5 +69,29 @@ class AuthRepositoryLoginTest {
 
         assert(result.isSuccess)
         coVerify(exactly = 1) { database.clearAllTables() }
+    }
+
+    // backend บังคับ owner จาก JWT เสมอ (W1) — ถ้าดันงานค้างของ user A ขึ้นด้วย token ของ user B
+    // ที่เพิ่ง login ต่อจากเครื่องเดียวกัน งานนั้นจะไปติดชื่อ B แทน ต้องข้ามการดันขึ้นในกรณีนี้
+    @Test
+    fun `a different user logging in on the same device skips flushing the previous user's pending work`() = runTest {
+        every { tokenManager.getUserData() } returns AuthUser(userId = "U-OLD", email = "old@test.com", role = "sale")
+        coEvery { outbox.hasPendingChanges() } returns true
+
+        repo.login("u@test.com", "pw") // resolves to userId "U1" per the stubbed login response
+
+        coVerify(exactly = 0) { outbox.doSync() }
+        coVerify(exactly = 1) { database.clearAllTables() }
+    }
+
+    // login ซ้ำโดยคนเดิม (เช่น session หมดอายุแล้ว login ใหม่) ต้องยังดันงานค้างขึ้นตามปกติ
+    @Test
+    fun `the same user re-logging in still flushes their own pending work`() = runTest {
+        every { tokenManager.getUserData() } returns AuthUser(userId = "U1", email = "u@test.com", role = "sale")
+        coEvery { outbox.hasPendingChanges() } returns true
+
+        repo.login("u@test.com", "pw")
+
+        coVerify(exactly = 1) { outbox.doSync() }
     }
 }

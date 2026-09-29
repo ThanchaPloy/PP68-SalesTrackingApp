@@ -329,6 +329,34 @@ class AddProjectViewModelTest {
     }
 
     @Test
+    fun `save right after restoring a draft still resolves the customer name`() = runTest {
+        // restoreDraft() ตั้ง selectedCustomerId ให้ทันทีแต่ resolve selectedCustomerName แบบ async
+        // ทีหลัง — ถ้ากด Save ไวจนแซงหน้า save() ต้อง fallback ไปหาชื่อสดเองแทนที่จะส่งชื่อว่าง
+        every { draftStore.load("add_project:new", AddProjectDraft::class.java) } returns AddProjectDraft(
+            projectName = "Draft Project",
+            projectStatus = "Lead",
+            selectedCustomerId = "C1"
+        )
+        coEvery { customerRepo.getCustomerById("C1") } returns Result.success(
+            Customer(custId = "C1", companyName = "Restored Customer Co")
+        )
+        val projectSlot = slot<Project>()
+        coEvery { projectRepo.createProject(capture(projectSlot), "USR-001") } returns Result.success(
+            Project(projectId = "PJ-NEW", custId = "C1", projectName = "Draft Project")
+        )
+
+        initViewModel()
+        advanceUntilIdle()
+        viewModel.onEvent(AddProjectEvent.CheckDraft)
+        viewModel.onEvent(AddProjectEvent.RestoreDraft)
+        viewModel.onEvent(AddProjectEvent.TeamSelected("TS-001", "North A"))
+        viewModel.onEvent(AddProjectEvent.Save)
+        advanceUntilIdle()
+
+        assertEquals("Restored Customer Co", projectSlot.captured.customerName)
+    }
+
+    @Test
     fun `save with fixed loss reason should send code with no note`() = runTest {
         val projectSlot = slot<Project>()
         coEvery { projectRepo.createProject(capture(projectSlot), "USR-001") } returns Result.success(
