@@ -82,12 +82,21 @@ class SyncManager @Inject constructor(
     }
 
     suspend fun hasPendingChanges(): Boolean = withContext(Dispatchers.IO) {
-        customerDao.getUnsyncedCustomers().isNotEmpty() ||
-            contactDao.getUnsyncedContacts().isNotEmpty() ||
-            projectDao.getUnsyncedProjects().isNotEmpty() ||
-            activityDao.getUnsyncedActivities().isNotEmpty() ||
-            resultDao.getUnsyncedResults().isNotEmpty() ||
-            planItemDao.getUnsyncedAppointmentIds().isNotEmpty()
+        pendingSummary().isNotEmpty()
+    }
+
+    // สรุปว่ายังค้างอะไรอยู่บ้าง — เดิม hasPendingChanges คืนแค่ true/false ทำให้ตอน logout ไม่ผ่าน
+    // ผู้ใช้เห็นแค่ "ยังไม่ได้ซิงค์ กรุณาเชื่อมต่ออินเทอร์เน็ต" ซึ่งชี้ทางผิดเมื่อเน็ตดีอยู่แล้ว และไม่มี
+    // ใครรู้ว่าแถวไหนค้าง ต้องมานั่งเดา — คืนรายการชนิด+จำนวน เอาไปทั้งแสดงและ log
+    suspend fun pendingSummary(): List<Pair<String, Int>> = withContext(Dispatchers.IO) {
+        listOf(
+            "ลูกค้า" to customerDao.getUnsyncedCustomers().size,
+            "ผู้ติดต่อ" to contactDao.getUnsyncedContacts().size,
+            "โครงการ" to projectDao.getUnsyncedProjects().size,
+            "นัดหมาย" to activityDao.getUnsyncedActivities().size,
+            "บันทึกผล" to resultDao.getUnsyncedResults().size,
+            "เช็คลิสต์" to planItemDao.getUnsyncedAppointmentIds().size
+        ).filter { it.second > 0 }
     }
 
     internal suspend fun doSync() {
@@ -382,6 +391,16 @@ class SyncManager @Inject constructor(
         // checklist ต้องมาหลังนัดหมาย เพราะรายการที่ผูกกับ TEMP- id ต้องรอให้นัดหมายได้ id จริงก่อน
         // (updateAppointmentId ด้านบนย้าย appointmentId ให้แล้ว) ไม่งั้นจะส่งขึ้นไปผูกกับ id ที่ไม่มีจริง
         for (appointmentId in planItemDao.getUnsyncedAppointmentIds()) {
+            // ✅ แถว checklist กำพร้า (นัดหมายแม่ถูกลบไปแล้ว) ต้องลบทิ้ง ไม่ใช่ปล่อยค้าง:
+            //   - id เป็น TEMP-: เดิม continue เฉยๆ ทุกรอบ = ไม่เคยพยายามส่ง และ is_synced ไม่เคยเป็น 1
+            //   - id จริง: ส่งขึ้นไปก็ได้ 404 เพราะ server ไม่มีนัดหมายนั้นแล้ว
+            // ทั้งสองกรณีทำให้ hasPendingChanges() เป็น true ตลอดกาล = logout ไม่ได้ทั้งที่เน็ตดี
+            if (activityDao.getActivityById(appointmentId) == null) {
+                Log.w("SyncManager", "ลบ checklist กำพร้าของนัดหมายที่ไม่มีอยู่แล้ว: $appointmentId")
+                planItemDao.deletePlanItemsByAppointmentId(appointmentId)
+                continue
+            }
+            // นัดหมายแม่ยังอยู่แต่ยังไม่ได้ id จริง — รอรอบหน้าหลังนัดหมายซิงค์สำเร็จ (ปกติ)
             if (appointmentId.startsWith("TEMP-")) continue
             try {
                 val items = planItemDao.getPlanItemsByAppointmentId(appointmentId)

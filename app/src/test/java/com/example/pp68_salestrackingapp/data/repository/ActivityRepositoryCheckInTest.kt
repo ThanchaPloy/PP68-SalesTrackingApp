@@ -111,4 +111,35 @@ class ActivityRepositoryCheckInTest {
         verify { syncManager.markBlocked("activity", "A1") }
         verify(exactly = 0) { syncManager.scheduleSync() }
     }
+
+    // activity_plan_item / appointment_contact ไม่มี FK CASCADE ฝั่ง Room — ถ้าไม่ลบตามเอง
+    // แถวลูกจะค้างเป็นขยะกำพร้า และ checklist ที่ยัง is_synced = 0 จะบล็อก logout ถาวรแม้เน็ตดี
+    @Test
+    fun `deleting an appointment also clears its checklist and attendee rows`() = runTest {
+        val future = java.time.LocalDate.now().plusDays(30).toString()
+        coEvery { activityDao.getActivityById("A2") } returns
+            activity.copy(activityId = "A2", activityDate = future)
+        coEvery { apiService.deleteActivity(any()) } returns Response.success(Unit)
+
+        val result = repo.deleteActivity("A2")
+
+        assertTrue(result.isSuccess)
+        coVerify(exactly = 1) { activityDao.deleteActivityById("A2") }
+        coVerify(exactly = 1) { planItemDao.deletePlanItemsByAppointmentId("A2") }
+        coVerify(exactly = 1) { appointmentContactDao.deleteContactsByAppointmentId("A2") }
+    }
+
+    // นัดที่สร้างตอนออฟไลน์ (TEMP-) ลบในเครื่องล้วน ต้องเก็บกวาดแถวลูกเหมือนกัน
+    @Test
+    fun `deleting a never-synced appointment clears its child rows too`() = runTest {
+        coEvery { activityDao.getActivityById("TEMP-X") } returns null
+
+        val result = repo.deleteActivity("TEMP-X")
+
+        assertTrue(result.isSuccess)
+        coVerify(exactly = 1) { planItemDao.deletePlanItemsByAppointmentId("TEMP-X") }
+        coVerify(exactly = 1) { appointmentContactDao.deleteContactsByAppointmentId("TEMP-X") }
+        // ห้ามยิง API ลบสำหรับ id ที่ server ไม่เคยรู้จัก
+        coVerify(exactly = 0) { apiService.deleteActivity(any()) }
+    }
 }

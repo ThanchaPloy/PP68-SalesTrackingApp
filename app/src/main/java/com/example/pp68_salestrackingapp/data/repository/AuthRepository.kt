@@ -1,5 +1,6 @@
 package com.example.pp68_salestrackingapp.data.repository
 
+import android.util.Log
 import com.example.pp68_salestrackingapp.data.local.AppDatabase
 import com.example.pp68_salestrackingapp.data.model.*
 import com.example.pp68_salestrackingapp.data.remote.ApiService
@@ -173,9 +174,18 @@ class AuthRepository @Inject constructor(
                 if (outboxSyncManager.hasPendingChanges()) {
                     outboxSyncManager.doSync()
                 }
-                if (outboxSyncManager.hasPendingChanges()) {
+                // บอกให้ชัดว่าค้างอะไรอยู่ — ข้อความเดิมโทษอินเทอร์เน็ตอย่างเดียว ซึ่งชี้ทางผิดทุกครั้ง
+                // ที่สาเหตุจริงคือแถวที่เซิร์ฟเวอร์ปฏิเสธ (เช่น 403 ไม่มีสิทธิ์ หรือ 404 ของหายไปแล้ว)
+                // ซึ่งจะไม่หายไปเองแม้เน็ตดี และผู้ใช้ก็ไม่มีทางรู้ว่าต้องไปดูอะไร
+                val pending = outboxSyncManager.pendingSummary()
+                if (pending.isNotEmpty()) {
+                    val detail = pending.joinToString(", ") { (name, count) -> "$name $count รายการ" }
+                    Log.w("AuthRepository", "logout ถูกบล็อกเพราะยังซิงค์ไม่สำเร็จ: $detail")
                     return@withContext kotlin.Result.failure(
-                        Exception("มีข้อมูลที่ยังไม่ได้ซิงค์กับเซิร์ฟเวอร์ กรุณาเชื่อมต่ออินเทอร์เน็ตแล้วลองอีกครั้ง")
+                        Exception(
+                            "ยังซิงค์ข้อมูลขึ้นเซิร์ฟเวอร์ไม่สำเร็จ ($detail) " +
+                                "ถ้าเชื่อมต่ออินเทอร์เน็ตอยู่แล้วแต่ยังขึ้นข้อความนี้ แจ้งผู้ดูแลระบบได้เลย"
+                        )
                     )
                 }
                 database.clearAllTables()

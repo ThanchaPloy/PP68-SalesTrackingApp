@@ -431,6 +431,17 @@ class ActivityRepository @Inject constructor(
         try { AppointmentAlarmScheduler(context).cancelAlarm(activityId) } catch (_: Exception) {}
     }
 
+    // ✅ activity_plan_item / appointment_contact ไม่มี FK CASCADE ฝั่ง Room (คนละแบบกับ
+    // activity_result_photo) ลบนัดหมายแล้วแถวลูกจึงค้างเป็นขยะกำพร้า และถ้าแถว checklist นั้นยัง
+    // is_synced = 0 อยู่ จะบล็อก logout ถาวรทั้งที่เน็ตดี เพราะ:
+    //   - ถ้า appointmentId ยังเป็น TEMP- : doSync ข้ามทุกรอบ ไม่เคยพยายามส่งเลย
+    //   - ถ้าเป็น id จริง : ส่งขึ้นไปแล้ว server ตอบ 404 (นัดหมายถูกลบไปแล้ว) ไม่สำเร็จตลอดกาล
+    // ต้องเก็บกวาดพร้อมกับการลบนัดหมายเสมอ
+    private suspend fun deleteChildRowsOf(activityId: String) {
+        try { planItemDao.deletePlanItemsByAppointmentId(activityId) } catch (_: Exception) {}
+        try { appointmentContactDao.deleteContactsByAppointmentId(activityId) } catch (_: Exception) {}
+    }
+
     suspend fun deleteActivity(activityId: String): kotlin.Result<Unit> {
         return withContext(Dispatchers.IO) {
             try {
@@ -453,12 +464,14 @@ class ActivityRepository @Inject constructor(
                 }
                 if (activityId.startsWith("TEMP-")) {
                     activityDao.deleteActivityById(activityId)
+                    deleteChildRowsOf(activityId)
                     cancelAlarmSafely(activityId)
                     return@withContext kotlin.Result.success(Unit)
                 }
                 val response = apiService.deleteActivity("eq.$activityId")
                 if (response.isSuccessful) {
                     activityDao.deleteActivityById(activityId)
+                    deleteChildRowsOf(activityId)
                     cancelAlarmSafely(activityId)
                     kotlin.Result.success(Unit)
                 } else {
@@ -467,6 +480,7 @@ class ActivityRepository @Inject constructor(
             } catch (e: Exception) {
                 if (activityId.startsWith("TEMP-")) {
                     activityDao.deleteActivityById(activityId)
+                    deleteChildRowsOf(activityId)
                     cancelAlarmSafely(activityId)
                     kotlin.Result.success(Unit)
                 } else {
