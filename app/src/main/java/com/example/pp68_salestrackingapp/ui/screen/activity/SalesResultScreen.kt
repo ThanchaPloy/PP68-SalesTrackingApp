@@ -79,6 +79,19 @@ fun SalesResultScreen(
         s.error?.let { snackbarHostState.showSnackbar(it) }
     }
 
+    // กลับมาจากหน้าแก้ไขปัจจัยแล้วต้องเห็นค่าที่เพิ่งแก้ ไม่ใช่ค่าเก่าค้างอยู่ — โหลดเฉพาะปัจจัย
+    // ข้อ 4-9 ของโครงการ ไม่แตะสิ่งที่ผู้ใช้กรอกค้างไว้ในฟอร์มนี้ (ดู refreshProjectFactors)
+    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
+                viewModel.refreshProjectFactors()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
     var showDiscardDialog by remember { mutableStateOf(false) }
     val attemptBack: () -> Unit = {
         if (viewModel.isDirty()) showDiscardDialog = true else onBack()

@@ -1140,4 +1140,93 @@ class SalesResultViewModelTest {
         assertTrue(vm.uiState.value.isSaved)
         coVerify(exactly = 0) { activityRepo.updateActivity(any(), any()) }
     }
+
+    // โครงการที่ตอบปัจจัยข้อ 4-9 ครบแล้ว (ล็อก) — ใช้ในกลุ่มเทสต์ "กลับมาจากหน้าแก้ไขปัจจัย" ด้านล่าง
+    private fun lockedProject(
+        dealPosition: String = "incumbent",
+        competitorCount: Int = 2
+    ) = Project(
+        projectId = "PRJ-1",
+        custId = "C1",
+        projectName = "Project A",
+        projectStatus = "Quotation",
+        dealPosition = dealPosition,
+        previousSolution = "no_solution",
+        counterpartyType = "direct_main_contractor",
+        responseSpeed = "fast",
+        isProposalSent = true,
+        proposalDate = "2026-04-06",
+        competitorCount = competitorCount
+    )
+
+    // ผู้ใช้กรอกสรุปค้างไว้ แล้วกดปุ่มไปแก้ปัจจัย กลับมาต้องเห็นค่าปัจจัยใหม่ แต่สิ่งที่กรอกต้องไม่หาย
+    @Test
+    fun `returning from the factors screen refreshes the factors but keeps what was typed`() = runTest {
+        coEvery { projectRepo.getProjectById("PRJ-1") } returns Result.success(lockedProject())
+
+        val vm = SalesResultViewModel(
+            SavedStateHandle(mapOf("projectId" to "PRJ-1")), projectRepo, activityRepo, authRepo, draftStore
+        )
+        advanceUntilIdle()
+        vm.onSummaryChanged("ลูกค้าสนใจมาก รอเทียบราคา")
+        vm.onDmToggle(true)
+
+        // ระหว่างที่อยู่หน้าแก้ไขปัจจัย ค่าฝั่งโครงการถูกแก้ไป
+        coEvery { projectRepo.getProjectById("PRJ-1") } returns
+            Result.success(lockedProject(dealPosition = "invited_to_compare", competitorCount = 7))
+
+        vm.refreshProjectFactors()
+        advanceUntilIdle()
+
+        val s = vm.uiState.value
+        // ค่าปัจจัยอัปเดตตามของใหม่
+        assertEquals(SalesResultViewModel.DEAL_POSITION_REVERSE["invited_to_compare"], s.dealPosition)
+        assertEquals(7, s.competitorCount)
+        // ของที่ผู้ใช้กรอกไว้ยังอยู่ครบ
+        assertEquals("ลูกค้าสนใจมาก รอเทียบราคา", s.visitSummary)
+        assertTrue(s.dmInvolved)
+    }
+
+    // ค่าที่ refresh มาเองต้องไม่ถูกนับว่า "ผู้ใช้แก้ไข" ไม่งั้นกดย้อนกลับจะเด้งถามบันทึกฉบับร่าง
+    // ทั้งที่ไม่ได้แตะอะไรเลย
+    @Test
+    fun `refreshing the factors does not by itself make the form dirty`() = runTest {
+        coEvery { projectRepo.getProjectById("PRJ-1") } returns Result.success(lockedProject())
+
+        val vm = SalesResultViewModel(
+            SavedStateHandle(mapOf("projectId" to "PRJ-1")), projectRepo, activityRepo, authRepo, draftStore
+        )
+        advanceUntilIdle()
+        assertFalse(vm.isDirty())
+
+        coEvery { projectRepo.getProjectById("PRJ-1") } returns
+            Result.success(lockedProject(dealPosition = "vendor_of_choice", competitorCount = 9))
+        vm.refreshProjectFactors()
+        advanceUntilIdle()
+
+        assertEquals(9, vm.uiState.value.competitorCount)
+        assertFalse(vm.isDirty())
+    }
+
+    // โครงการที่ยังตอบไม่ครบ = ผู้ใช้กำลังตอบในฟอร์มนี้เอง refresh ต้องห้ามทับคำตอบที่เพิ่งเลือก
+    @Test
+    fun `refreshing does not overwrite answers being typed for a project with no factors yet`() = runTest {
+        coEvery { projectRepo.getProjectById("PRJ-1") } returns Result.success(
+            Project(projectId = "PRJ-1", custId = "C1", projectName = "Project A", projectStatus = "Lead")
+        )
+
+        val vm = SalesResultViewModel(
+            SavedStateHandle(mapOf("projectId" to "PRJ-1")), projectRepo, activityRepo, authRepo, draftStore
+        )
+        advanceUntilIdle()
+        val chosen = SalesResultViewModel.DEAL_POSITION_MAP.keys.first()
+        vm.onDealPositionChanged(chosen)
+        vm.onCompetitorCountChanged(3)
+
+        vm.refreshProjectFactors()
+        advanceUntilIdle()
+
+        assertEquals(chosen, vm.uiState.value.dealPosition)
+        assertEquals(3, vm.uiState.value.competitorCount)
+    }
 }

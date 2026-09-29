@@ -466,11 +466,49 @@ class SalesResultViewModel @Inject constructor(
         )
     }
 
+    // เรียกตอนกลับเข้าหน้านี้ (ON_RESUME) — ผู้ใช้กดปุ่ม "แก้ไขปัจจัย" ออกไปแก้แล้วกลับมาได้
+    // ถ้าไม่โหลดใหม่ การ์ดอ่านอย่างเดียวจะยังโชว์ค่าเก่าทั้งที่ค่าจริงเปลี่ยนไปแล้ว (ตอนกดบันทึก
+    // save() อ่านค่าสดอยู่แล้วจึงไม่ผิด แต่ "ตาเห็น" ต้องตรงกันด้วย ไม่งั้นนึกว่าแก้ไม่ติด)
+    //
+    // จงใจแตะเฉพาะปัจจัยข้อ 4-9 กับ project เท่านั้น ไม่ยุ่งกับฟิลด์อื่นที่ผู้ใช้กรอกค้างไว้ และ
+    // อัปเดตเฉพาะตอนโครงการตอบครบแล้ว (ล็อก) — ถ้ายังไม่ครบแปลว่าผู้ใช้กำลังตอบในฟอร์มนี้อยู่ ห้ามทับ
+    fun refreshProjectFactors() {
+        val pid = _uiState.value.projectId ?: return
+        viewModelScope.launch {
+            projectRepo.getProjectById(pid).onSuccess { p ->
+                if (!projectHasAllDealFactors(p)) {
+                    _uiState.update { it.copy(project = p) }
+                    return@onSuccess
+                }
+                // ถ้าฟอร์มยังไม่ถูกแก้มาก่อน ต้องขยับ baseline ตามด้วย ไม่งั้นค่าที่เพิ่งโหลดมาเอง
+                // จะถูกนับเป็น "ผู้ใช้แก้ไข" แล้วเด้ง dialog ถามบันทึกฉบับร่างทั้งที่ไม่ได้แตะอะไรเลย
+                val wasDirty = isDirty()
+                _uiState.update {
+                    it.copy(
+                        project = p,
+                        dealPosition = DEAL_POSITION_REVERSE[p.dealPosition] ?: it.dealPosition,
+                        previousSolution = SOLUTION_REVERSE[p.previousSolution] ?: it.previousSolution,
+                        counterpartyMultiplier = COUNTERPARTY_REVERSE[p.counterpartyType] ?: it.counterpartyMultiplier,
+                        responseSpeed = RESPONSE_SPEED_REVERSE[p.responseSpeed] ?: it.responseSpeed,
+                        isProposalSent = p.isProposalSent ?: it.isProposalSent,
+                        proposalDate = p.proposalDate,
+                        competitorCount = p.competitorCount ?: it.competitorCount
+                    )
+                }
+                if (!wasDirty) baseline = _uiState.value.toDraft()
+            }
+        }
+    }
+
     // W6-2: โครงการนี้เคยมีคำตอบข้อ 4-7 ครบแล้วหรือยัง — ถ้าครบ หน้านี้ไม่ต้องถามซ้ำ (แก้ได้แค่หน้าโครงการ)
     // ถ้ายังไม่ครบ (โครงการใหม่/ยังไม่เคยตอบ) หน้านี้ยังต้องถามและบังคับตอบเหมือนเดิม
+    // ข้อ 8-9 ย้ายมาอยู่ชุดเดียวกับ 4-7 แล้ว จึงนับรวมในนิยาม "ตอบครบ" ด้วย ให้ตรงกับการ์ด
+    // อ่านอย่างเดียวใน SalesResultScreen (dealFactorsLocked) — สองที่ต้องนิยามเหมือนกันเสมอ
+    // isProposalSent/competitorCount ใช้ null เช็ค ไม่ใช่ false/0 เพราะ false/0 คือคำตอบที่ถูกต้อง
     private fun projectHasAllDealFactors(p: Project?): Boolean =
         p != null && !p.dealPosition.isNullOrBlank() && !p.previousSolution.isNullOrBlank() &&
-            !p.counterpartyType.isNullOrBlank() && !p.responseSpeed.isNullOrBlank()
+            !p.counterpartyType.isNullOrBlank() && !p.responseSpeed.isNullOrBlank() &&
+            p.isProposalSent != null && p.competitorCount != null
 
     companion object {
         const val MAX_PHOTOS = 5
