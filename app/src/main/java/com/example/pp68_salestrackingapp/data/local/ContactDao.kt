@@ -42,6 +42,9 @@ interface ContactDao {
     @Query("SELECT * FROM contact_person WHERE custId = :customerId")
     fun getContactsByCustomer(customerId: String): Flow<List<ContactPerson>>
 
+    @Query("DELETE FROM contact_person WHERE custId = :customerId")
+    suspend fun deleteContactsByCustomerId(customerId: String)
+
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertAllRaw(contacts: List<ContactPerson>): List<Long>
 

@@ -7,6 +7,7 @@ import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
 import coil.ImageLoader
 import coil.ImageLoaderFactory
+import com.example.pp68_salestrackingapp.di.TokenManager
 import com.example.pp68_salestrackingapp.service.ProximityMonitorService
 import com.example.pp68_salestrackingapp.utils.NotificationChannels
 import dagger.hilt.android.HiltAndroidApp
@@ -22,6 +23,9 @@ class SalesTrackingApplication : Application(), Configuration.Provider, ImageLoa
 
     @Inject
     lateinit var okHttpClient: OkHttpClient
+
+    @Inject
+    lateinit var tokenManager: TokenManager
 
     override val workManagerConfiguration: Configuration
         get() = Configuration.Builder()
@@ -43,7 +47,11 @@ class SalesTrackingApplication : Application(), Configuration.Provider, ImageLoa
         // และ OpenFreeMap ไม่ต้องใช้ API key หรือ User-Agent เฉพาะแบบ tile server ของ OSM
 
         // เผื่อมีนัดหมายวันนี้ค้างอยู่ตอนเปิดแอป — service เช็คเองแล้วหยุดถ้าไม่มีอะไรต้องติดตาม
-        if (ContextCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
+        // ✅ ต้องเช็ค toggle "แจ้งเตือนนัดหมาย" เหมือน AppointmentAlarmReceiver ไม่งั้นผู้ใช้ปิดสวิตช์
+        // ไปแล้วแต่ proximity alert (แจ้งเตือนตอนเข้าใกล้ 500m) ยังยิงอยู่เหมือนเดิม
+        if (tokenManager.isVisitReminderEnabled() &&
+            ContextCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+        ) {
             ProximityMonitorService.startIfNeeded(this)
         }
     }

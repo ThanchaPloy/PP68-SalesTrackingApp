@@ -62,9 +62,13 @@ class SyncManager @Inject constructor(
             .addTag("data_sync_tag")
             .build()
 
+        // ✅ scheduleSync() ถูกเรียกแทบทุกครั้งที่แก้ข้อมูลออฟไลน์ (20+ จุดทั่ว repository) — REPLACE
+        // จะยกเลิกงาน sync ที่กำลังรอ backoff อยู่แล้วรีเซ็ตนับใหม่ทุกครั้ง ถ้าผู้ใช้แก้ข้อมูลถี่ๆ
+        // sync จริงอาจไม่มีโอกาสรันจบเลย KEEP ปล่อยงานที่ค้างอยู่ให้ทำต่อ (ไม่ว่าจะรันอยู่หรือรอ
+        // backoff) ส่วนงานที่จบไปแล้ว (สำเร็จ/ล้มเหลวจนหมด retry) จะไม่ถูก KEEP บล็อก จะ enqueue ใหม่ปกติ
         WorkManager.getInstance(context).enqueueUniqueWork(
             "DataSyncWorkName",
-            ExistingWorkPolicy.REPLACE,
+            ExistingWorkPolicy.KEEP,
             syncRequest
         )
     }

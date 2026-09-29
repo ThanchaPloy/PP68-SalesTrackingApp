@@ -16,6 +16,7 @@ import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import com.example.pp68_salestrackingapp.R
 import com.example.pp68_salestrackingapp.data.local.AppDatabase
+import com.example.pp68_salestrackingapp.di.TokenManager
 import com.example.pp68_salestrackingapp.utils.NotificationChannels
 import com.example.pp68_salestrackingapp.utils.haversineMeters
 import dagger.hilt.android.AndroidEntryPoint
@@ -41,6 +42,7 @@ import com.example.pp68_salestrackingapp.data.model.SalesActivity
 class ProximityMonitorService : Service() {
 
     @Inject lateinit var db: AppDatabase
+    @Inject lateinit var tokenManager: TokenManager
 
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var locationManager: LocationManager? = null
@@ -64,6 +66,12 @@ class ProximityMonitorService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        // ✅ ผู้ใช้อาจปิดสวิตช์ "แจ้งเตือนนัดหมาย" ระหว่างที่ service ตัวนี้ยังทำงานค้างอยู่ตั้งแต่ก่อน
+        // เปิด Settings ไปปิด — ต้องหยุดทันทีไม่ใช่แค่กันตอนสตาร์ท (ดู SalesTrackingApplication)
+        if (!tokenManager.isVisitReminderEnabled()) {
+            stopSelf()
+            return
+        }
         startForeground(NOTIFICATION_ID, buildMonitoringNotification())
         startLocationUpdates()
 
@@ -71,7 +79,7 @@ class ProximityMonitorService : Service() {
         // ไม่ต้องรอ GPS fix) หรือสัญญาณ GPS อ่อน/ไม่มีเข้ามาเลยขณะที่นัดหมายที่เหลือถูกเช็คอินหมดแล้ว
         serviceScope.launch {
             while (isActive) {
-                if (getPendingAppointments().isEmpty()) {
+                if (!tokenManager.isVisitReminderEnabled() || getPendingAppointments().isEmpty()) {
                     stopSelf()
                     return@launch
                 }
@@ -116,6 +124,10 @@ class ProximityMonitorService : Service() {
     }
 
     private suspend fun checkProximity(location: Location) {
+        if (!tokenManager.isVisitReminderEnabled()) {
+            stopSelf()
+            return
+        }
         val pending = getPendingAppointments()
         if (pending.isEmpty()) {
             stopSelf()

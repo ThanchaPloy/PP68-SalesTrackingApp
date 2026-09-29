@@ -15,6 +15,9 @@ interface ProjectDao {
     @Query("SELECT * FROM project WHERE custId = :customerId")
     fun getProjectsByCustomer(customerId: String): Flow<List<Project>>
 
+    @Query("DELETE FROM project WHERE custId = :customerId")
+    suspend fun deleteProjectsByCustomerId(customerId: String)
+
     @Query("SELECT * FROM project WHERE projectId = :projectId LIMIT 1")
     fun getProjectByIdFlow(projectId: String): Flow<Project?>
 

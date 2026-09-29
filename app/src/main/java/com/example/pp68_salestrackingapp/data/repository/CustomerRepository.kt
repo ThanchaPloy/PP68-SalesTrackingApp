@@ -256,6 +256,11 @@ class CustomerRepository @Inject constructor(
                 val response = apiService.deleteCustomer("eq.$custId")
                 if (response.isSuccessful) {
                     customerDao.deleteCustomerById(custId)
+                    // ✅ Room ไม่มี FK CASCADE ให้ตารางพวกนี้ — ลบลูกค้าเสร็จแล้วต้องเก็บกวาดแถวกำพร้า
+                    // ในเครื่องเองด้วย ไม่งั้นโครงการ/นัดหมาย/ผู้ติดต่อของลูกค้าที่ลบไปแล้วยังค้างอยู่
+                    projectDao.deleteProjectsByCustomerId(custId)
+                    activityDao.deleteActivitiesByCustomerId(custId)
+                    contactDao.deleteContactsByCustomerId(custId)
                     kotlin.Result.success(Unit)
                 } else {
                     kotlin.Result.failure(Exception("HTTP ${response.code()}"))
