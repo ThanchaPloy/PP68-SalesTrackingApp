@@ -6,6 +6,7 @@ import com.example.pp68_salestrackingapp.data.local.ProjectDao
 import com.example.pp68_salestrackingapp.data.model.ContactPerson
 import com.example.pp68_salestrackingapp.data.model.Project
 import com.example.pp68_salestrackingapp.data.model.ProjectContact
+import com.example.pp68_salestrackingapp.data.model.ProjectFactorLog
 import com.example.pp68_salestrackingapp.data.remote.ApiService
 import com.example.pp68_salestrackingapp.utils.SyncManager
 import android.util.Log
@@ -144,6 +145,9 @@ class ProjectRepository @Inject constructor(
                     "current_solution" to project.previousSolution,
                     "counterparty_type" to project.counterpartyType,
                     "response_speed" to project.responseSpeed,
+                    "is_proposal_sent" to project.isProposalSent,
+                    "proposal_date" to project.proposalDate,
+                    "competitor_count" to project.competitorCount,
                     "start_date" to project.startDate,
                     "closing_date" to project.closingDate,
                     "progress_pct" to project.progressPct,
@@ -270,6 +274,20 @@ class ProjectRepository @Inject constructor(
                 val name = resp.body()?.firstOrNull()?.fullName?.trim()?.ifBlank { null }
                 name ?: userId
             } catch (e: Exception) { userId }
+        }
+    }
+
+    // ประวัติการแก้ไขปัจจัยข้อ 4-9 — online-only โดยตั้งใจ ไม่ cache ลง Room เพราะเป็นข้อมูล
+    // อ่านย้อนหลังเฉยๆ ออฟไลน์แล้วคืน list ว่างให้ UI โชว์สถานะ "ดูประวัติไม่ได้ตอนออฟไลน์"
+    suspend fun getFactorHistory(projectId: String): Result<List<ProjectFactorLog>> {
+        return withContext(Dispatchers.IO) {
+            try {
+                val response = apiService.getProjectFactorLog("eq.$projectId")
+                if (response.isSuccessful) Result.success(response.body() ?: emptyList())
+                else Result.failure(Exception("โหลดประวัติไม่สำเร็จ (HTTP ${response.code()})"))
+            } catch (e: Exception) {
+                Result.failure(e)
+            }
         }
     }
 

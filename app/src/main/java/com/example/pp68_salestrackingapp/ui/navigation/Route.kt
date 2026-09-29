@@ -23,6 +23,10 @@ sealed class Route(val path: String) {
     object EditProject : Route("edit_project/{projectId}") {
         fun createRoute(projectId: String) = "edit_project/$projectId"
     }
+    // แก้ไขปัจจัยข้อ 4-9 เท่านั้น ไม่มีฟิลด์อื่นของโครงการ (ต่างจาก EditProject ที่เป็นฟอร์มเต็ม)
+    object EditProjectFactors : Route("edit_project_factors/{projectId}") {
+        fun createRoute(projectId: String) = "edit_project_factors/$projectId"
+    }
     object AddProduct : Route("add_product/{projectId}") {
         fun createRoute(projectId: String) = "add_product/$projectId"
     }

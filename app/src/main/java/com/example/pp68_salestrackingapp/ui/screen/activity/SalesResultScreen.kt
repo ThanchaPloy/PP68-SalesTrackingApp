@@ -64,6 +64,7 @@ fun SalesResultScreen(
     onBack: () -> Unit,
     onSaved: () -> Unit,
     onViewHistory: (String) -> Unit = {},
+    onEditFactors: (String) -> Unit = {},
     viewModel: SalesResultViewModel = hiltViewModel()
 ) {
     val s by viewModel.uiState.collectAsState()
@@ -96,6 +97,7 @@ fun SalesResultScreen(
         s                               = s,
         snackbarHostState               = snackbarHostState,
         onBack                          = attemptBack,
+        onEditFactors                   = onEditFactors,
         onRestoreDraft                  = viewModel::restoreDraft,
         onDismissDraftPrompt            = viewModel::dismissDraftPrompt,
         onProjectSelected               = viewModel::onProjectSelected,
@@ -131,6 +133,7 @@ fun SalesResultScreen(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun SalesResultContent(
+    onEditFactors: (String) -> Unit = {},
     s: SalesResultUiState,
     snackbarHostState: SnackbarHostState,
     onBack: () -> Unit,
@@ -454,24 +457,43 @@ private fun SalesResultContent(
                 HorizontalDivider(color = BorderGray)
                 Text("วิเคราะห์ข้อมูลเพิ่มเติม", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = RedPrimary)
 
-                // W6-2: โครงการที่เคยตอบข้อ 4-7 ครบแล้ว ไม่ต้องถามซ้ำ — โชว์ค่าที่ตอบไว้แบบอ่านอย่างเดียว
-                // ให้เปลี่ยนที่หน้าโครงการแทน
+                // W6-2: โครงการที่เคยตอบข้อ 4-9 ครบแล้ว ไม่ต้องถามซ้ำ — โชว์ค่าที่ตอบไว้แบบอ่านอย่างเดียว
+                // ให้กดปุ่มไปแก้ที่หน้าแก้ไขปัจจัยแทน (ข้อ 8-9 ย้ายมาอยู่ชุดเดียวกับ 4-7 แล้ว)
                 val dealFactorsLocked = s.project?.let {
                     !it.dealPosition.isNullOrBlank() && !it.previousSolution.isNullOrBlank() &&
-                        !it.counterpartyType.isNullOrBlank() && !it.responseSpeed.isNullOrBlank()
+                        !it.counterpartyType.isNullOrBlank() && !it.responseSpeed.isNullOrBlank() &&
+                        it.isProposalSent != null && it.competitorCount != null
                 } == true
 
                 if (dealFactorsLocked) {
-                    SectionCard(title = "วิเคราะห์ข้อมูลเพิ่มเติม (ข้อ 4-7)", icon = Icons.Default.Lock) {
+                    SectionCard(title = "วิเคราะห์ข้อมูลเพิ่มเติม (ข้อ 4-9)", icon = Icons.Default.Lock) {
                         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                             Text("ตำแหน่งของดีล: ${s.dealPosition}", fontSize = 14.sp)
                             Text("Solution เดิมของลูกค้า: ${s.previousSolution}", fontSize = 14.sp)
                             Text("ประเภทคู่สัญญา: ${s.counterpartyMultiplier}", fontSize = 14.sp)
                             Text("ความรวดเร็วในการตอบรับ: ${s.responseSpeed}", fontSize = 14.sp)
                             Text(
-                                "ดึงค่าจากครั้งก่อนของโครงการนี้ — ต้องการเปลี่ยนให้ไปแก้ที่หน้าโครงการ",
+                                "การส่งใบเสนอราคา: " +
+                                    if (s.isProposalSent) "ส่งแล้ว${s.proposalDate?.let { d -> " ($d)" } ?: ""}" else "ยังไม่ส่ง",
+                                fontSize = 14.sp
+                            )
+                            Text("จำนวนคู่แข่ง: ${s.competitorCount} ราย", fontSize = 14.sp)
+                            Text(
+                                "ค่าเหล่านี้เป็นของโครงการ ไม่ใช่ของการเข้าพบครั้งนี้ — กดปุ่มด้านล่างเพื่อแก้",
                                 fontSize = 12.sp, color = TextGray
                             )
+                            s.projectId?.let { pid ->
+                                OutlinedButton(
+                                    onClick = { onEditFactors(pid) },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    shape = RoundedCornerShape(10.dp),
+                                    border = androidx.compose.foundation.BorderStroke(1.dp, RedPrimary)
+                                ) {
+                                    Icon(Icons.Default.Tune, null, tint = RedPrimary, modifier = Modifier.size(18.dp))
+                                    Spacer(Modifier.width(8.dp))
+                                    Text("แก้ไขปัจจัย (ข้อ 4-9)", color = RedPrimary, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                                }
+                            }
                         }
                     }
                 }
@@ -548,6 +570,9 @@ private fun SalesResultContent(
                     }
                 }
 
+                // ข้อ 8-9 ถูกล็อกพร้อมข้อ 4-7 เป็นชุดเดียวกัน — โครงการที่ตอบครบแล้วไม่ถามซ้ำ
+                // (โชว์เป็น read-only ในการ์ดด้านบนพร้อมปุ่มแก้ไขแทน)
+                if (!dealFactorsLocked) {
                 CollapsibleSection(
                     title = "Tab ใบเสนอราคา & คู่แข่ง",
                     icon = Icons.Default.Description,
@@ -597,6 +622,7 @@ private fun SalesResultContent(
                             }
                         }
                     }
+                }
                 }
 
                 Spacer(Modifier.height(16.dp))

@@ -160,6 +160,10 @@ interface ApiService {
     suspend fun deleteProjectsByCustomer(@Query("customer_code") custId: String): Response<Unit>
 
     // ── Project Contact ──────────────────────────────────────────
+    // ประวัติการแก้ไขปัจจัยข้อ 4-9 — อ่านอย่างเดียว แถวถูกเขียนโดย DB trigger ฝั่ง backend
+    @GET("project_factor_log")
+    suspend fun getProjectFactorLog(@Query("project_id") projectId: String): Response<List<com.example.pp68_salestrackingapp.data.model.ProjectFactorLog>>
+
     @GET("project_contact")
     suspend fun getProjectContacts(@Query("project_id") projectId: String, @Query("select") select: String = "contact_id"): Response<List<ProjectContactResponse>>
 

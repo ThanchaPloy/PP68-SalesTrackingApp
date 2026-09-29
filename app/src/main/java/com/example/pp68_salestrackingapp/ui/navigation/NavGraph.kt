@@ -171,7 +171,8 @@ fun SalesTrackingApp() {
             SalesResultScreen(
                 onBack = { navController.popBackStack() },
                 onSaved = { navController.popBackStack() },
-                onViewHistory = { groupId -> navController.navigate(Route.ResultHistory.createRoute(groupId)) }
+                onViewHistory = { groupId -> navController.navigate(Route.ResultHistory.createRoute(groupId)) },
+                onEditFactors = { pid -> navController.navigate(Route.EditProjectFactors.createRoute(pid)) }
             )
         }
 
@@ -267,6 +268,17 @@ fun SalesTrackingApp() {
         }
 
         composable(
+            route = Route.EditProjectFactors.path,
+            arguments = listOf(navArgument("projectId") { type = NavType.StringType })
+        ) { backStackEntry ->
+            val projectId = backStackEntry.arguments?.getString("projectId") ?: ""
+            com.example.pp68_salestrackingapp.ui.screen.project.EditProjectFactorsScreen(
+                projectId = projectId,
+                onBack = { navController.popBackStack() }
+            )
+        }
+
+        composable(
             route = Route.ProjectDetail.path,
             arguments = listOf(navArgument("projectId") { type = NavType.StringType })
         ) { backStackEntry ->
@@ -274,6 +286,7 @@ fun SalesTrackingApp() {
             ProjectDetailScreen(
                 onBack = { navController.popBackStack() },
                 onEditProject = { id -> navController.navigate(Route.EditProject.createRoute(id)) },
+                onEditFactors = { id -> navController.navigate(Route.EditProjectFactors.createRoute(id)) },
                 onCreateActivity = { id -> navController.navigate(Route.CreateActivityWithProject.createRoute(id)) },
                 onSalesResultClick = { navController.navigate(Route.StandaloneSalesResult.createRoute(it)) },
                 onRecordResult = { pId, activityId -> 
@@ -299,7 +312,8 @@ fun SalesTrackingApp() {
             SalesResultScreen(
                 onBack     = { navController.popBackStack() },
                 onSaved    = { navController.popBackStack() },
-                onViewHistory = { groupId -> navController.navigate(Route.ResultHistory.createRoute(groupId)) }
+                onViewHistory = { groupId -> navController.navigate(Route.ResultHistory.createRoute(groupId)) },
+                onEditFactors = { pid -> navController.navigate(Route.EditProjectFactors.createRoute(pid)) }
             )
         }
 

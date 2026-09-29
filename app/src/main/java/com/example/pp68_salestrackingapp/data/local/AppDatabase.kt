@@ -19,7 +19,7 @@ import com.example.pp68_salestrackingapp.data.model.*
         AppointmentContact::class,
         ActivityResultPhoto::class
     ],
-    version = 51,
+    version = 52,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -380,6 +380,17 @@ abstract class AppDatabase : RoomDatabase() {
                 db.execSQL("ALTER TABLE project ADD COLUMN previousSolution TEXT")
                 db.execSQL("ALTER TABLE project ADD COLUMN counterpartyType TEXT")
                 db.execSQL("ALTER TABLE project ADD COLUMN responseSpeed TEXT")
+            }
+        }
+
+        // ปัจจัยข้อ 8-9 ย้ายมาอยู่ระดับโครงการชุดเดียวกับข้อ 4-7 ใน MIGRATION_50_51 ด้านบน
+        // ต้อง nullable ทั้งสามคอลัมน์ (ไม่มี NOT NULL DEFAULT) เพราะ null = ยังไม่เคยตอบ
+        // ซึ่งต่างจาก 0/false ที่แปลว่าตอบแล้ว — ถ้าใส่ DEFAULT จะแยกสองกรณีนี้ไม่ออก
+        val MIGRATION_51_52 = object : Migration(51, 52) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE project ADD COLUMN isProposalSent INTEGER")
+                db.execSQL("ALTER TABLE project ADD COLUMN proposalDate TEXT")
+                db.execSQL("ALTER TABLE project ADD COLUMN competitorCount INTEGER")
             }
         }
     }

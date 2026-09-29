@@ -78,6 +78,7 @@ fun openMap(context: Context, lat: Double?, lng: Double?, label: String = "Locat
 fun ProjectDetailScreen(
     onBack:              () -> Unit,
     onEditProject:       (String) -> Unit = {},
+    onEditFactors:       (String) -> Unit = {},
     onCreateActivity:    (String) -> Unit = {},
     onSalesResultClick: (String) -> Unit,
         onRecordResult:      (projectId: String?, activityId: String?) -> Unit = { _, _ -> },
@@ -113,6 +114,7 @@ fun ProjectDetailScreen(
         s = s,
         onBack = onBack,
         onEditProject = onEditProject,
+        onEditFactors = onEditFactors,
         onCreateActivity = onCreateActivity,
                 onSalesResultClick = onSalesResultClick,
         onRecordResult = onRecordResult,
@@ -133,6 +135,7 @@ fun ProjectDetailContent(
     s: ProjectDetailUiState,
     onBack: () -> Unit,
     onEditProject: (String) -> Unit,
+    onEditFactors: (String) -> Unit = {},
     onCreateActivity: (String) -> Unit,
         onSalesResultClick: (String) -> Unit,
     onRecordResult: (String?, String?) -> Unit,
@@ -255,6 +258,24 @@ fun ProjectDetailContent(
                         onEdit      = { onEditProject(s.project.projectId) },
                         onDelete    = { showDeleteDialog = true }
                     )
+                    Spacer(Modifier.height(8.dp))
+                }
+
+                // ทางเข้าแก้ปัจจัยข้อ 4-9 โดยเฉพาะ — แยกจากปุ่มแก้ไขโครงการ (ดินสอบน header card)
+                // ที่เปิดฟอร์มเต็มทุกฟิลด์ ที่นี่เห็นแค่ปัจจัย 6 ข้อกับประวัติการแก้ไขของมัน
+                item {
+                    OutlinedButton(
+                        onClick = { onEditFactors(s.project.projectId) },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp),
+                        shape = RoundedCornerShape(10.dp),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, RedPrimary)
+                    ) {
+                        Icon(Icons.Default.Tune, null, tint = RedPrimary, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text("แก้ไขปัจจัยของดีล (ข้อ 4-9)", color = RedPrimary, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                    }
                     Spacer(Modifier.height(8.dp))
                 }
 

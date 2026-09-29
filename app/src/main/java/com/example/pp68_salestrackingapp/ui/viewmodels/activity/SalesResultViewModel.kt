@@ -370,7 +370,14 @@ class SalesResultViewModel @Inject constructor(
     private fun restoreChoice(stored: String?, reverse: Map<String, String>, fallback: String): String =
         if (stored.isNullOrBlank()) fallback else reverse[stored] ?: stored
 
+    // ปัจจัยข้อ 8-9 เป็น Boolean/Int ไม่มีค่า "ว่าง" ให้เช็คแบบข้อ 4-7 (ที่ใช้ ifBlank) จึงต้องจำ
+    // ไว้ตรงๆ ว่าเคย apply ค่าจาก result จริงไปแล้วหรือยัง — ใน loadInitialData() บาง path
+    // applyResultToState() รันก่อน loadProjectData() ถ้า prefill ทับแบบไม่เช็ค ค่าจริงของบันทึก
+    // ที่กำลังเปิดดู/แก้จะถูกค่าระดับโครงการทับหายไป
+    private var resultApplied = false
+
     private fun applyResultToState(result: ActivityResult) {
+        resultApplied = true
         // ✅ W4: อ่านตรงจากสองฟิลด์ที่แยกแล้ว (lossReason=รหัส, lossReasonNote=ข้อความอิสระ)
         // เดางวนต่อเฉพาะแถวเก่าที่ backend ยังไม่ได้ migrate
         val (reason, other) = when {
@@ -444,7 +451,12 @@ class SalesResultViewModel @Inject constructor(
                         dealPosition = it.dealPosition.ifBlank { DEAL_POSITION_REVERSE[p.dealPosition] ?: "" },
                         previousSolution = it.previousSolution.ifBlank { SOLUTION_REVERSE[p.previousSolution] ?: "" },
                         counterpartyMultiplier = it.counterpartyMultiplier.ifBlank { COUNTERPARTY_REVERSE[p.counterpartyType] ?: "" },
-                        responseSpeed = it.responseSpeed.ifBlank { RESPONSE_SPEED_REVERSE[p.responseSpeed] ?: "" }
+                        responseSpeed = it.responseSpeed.ifBlank { RESPONSE_SPEED_REVERSE[p.responseSpeed] ?: "" },
+                        // ปัจจัยข้อ 8-9 ย้ายมาอยู่ระดับโครงการแล้ว prefill เหมือนข้อ 4-7 — แต่ห้ามทับ
+                        // ค่าที่มาจาก result จริง (ดู resultApplied) และห้ามทับถ้าโครงการยังไม่เคยตอบ (null)
+                        isProposalSent = if (!resultApplied && p.isProposalSent != null) p.isProposalSent else it.isProposalSent,
+                        proposalDate = if (!resultApplied && p.isProposalSent != null) p.proposalDate else it.proposalDate,
+                        competitorCount = if (!resultApplied && p.competitorCount != null) p.competitorCount else it.competitorCount
                     )
                 }
             },
@@ -718,6 +730,13 @@ class SalesResultViewModel @Inject constructor(
                 val photoUrls = s.photos.mapNotNull { it.url }
                 val cover = s.photos.firstOrNull()
 
+                // ✅ ปัจจัยข้อ 4-9 ของจริงอยู่ที่ project — อ่านสดตรงนี้ก่อนประกอบแถวผลลัพธ์ ไม่ใช้ค่า
+                // ใน state ที่อาจค้างตั้งแต่ตอนเปิดหน้า เพราะผู้ใช้กดปุ่ม "แก้ไขปัจจัย" ออกไปแก้แล้ว
+                // กลับมาหน้านี้ได้ (state ไม่ได้โหลดใหม่) ถ้าเขียนค่าเก่าลง activity_result แล้ว
+                // trigger sync ฝั่ง DB จะดันค่าเก่ากลับขึ้น project = การแก้ของผู้ใช้ถูก revert เงียบๆ
+                // ค่าในโครงการเป็น "รหัส" อยู่แล้ว ส่วนค่าใน state เป็น "ป้าย" ต้องแปลงก่อน
+                val freshProject = s.projectId?.let { projectRepo.getProjectById(it).getOrNull() }
+
                 val resultToSave = ActivityResult(
                     resultId               = finalResultId,
                     activityId             = if (s.mode == ResultMode.FROM_APPOINTMENT) s.activityId else null,
@@ -726,13 +745,18 @@ class SalesResultViewModel @Inject constructor(
                     reportDate             = s.reportDate,
                     newStatus              = if (s.isStatusUpdateEnabled) STATUS_MAP[s.newStatus] else null,
                     opportunityScore       = OPPORTUNITY_MAP[s.opportunityScore] ?: s.opportunityScore,
-                    dealPosition           = DEAL_POSITION_MAP[s.dealPosition] ?: s.dealPosition.ifBlank { null },
-                    previousSolution       = SOLUTION_MAP[s.previousSolution] ?: s.previousSolution.ifBlank { null },
-                    counterpartyMultiplier = COUNTERPARTY_MAP[s.counterpartyMultiplier] ?: s.counterpartyMultiplier.ifBlank { null },
-                    responseSpeed          = RESPONSE_SPEED_MAP[s.responseSpeed] ?: s.responseSpeed.ifBlank { null },
-                    isProposalSent         = s.isProposalSent,
-                    proposalDate           = s.proposalDate,
-                    competitorCount        = s.competitorCount,
+                    dealPosition           = freshProject?.dealPosition
+                        ?: DEAL_POSITION_MAP[s.dealPosition] ?: s.dealPosition.ifBlank { null },
+                    previousSolution       = freshProject?.previousSolution
+                        ?: SOLUTION_MAP[s.previousSolution] ?: s.previousSolution.ifBlank { null },
+                    counterpartyMultiplier = freshProject?.counterpartyType
+                        ?: COUNTERPARTY_MAP[s.counterpartyMultiplier] ?: s.counterpartyMultiplier.ifBlank { null },
+                    responseSpeed          = freshProject?.responseSpeed
+                        ?: RESPONSE_SPEED_MAP[s.responseSpeed] ?: s.responseSpeed.ifBlank { null },
+                    // ข้อ 8-9: null ในโครงการ = ยังไม่เคยตอบ ให้ใช้ค่าที่ผู้ใช้เพิ่งกรอกในฟอร์มนี้แทน
+                    isProposalSent         = freshProject?.isProposalSent ?: s.isProposalSent,
+                    proposalDate           = if (freshProject?.isProposalSent != null) freshProject.proposalDate else s.proposalDate,
+                    competitorCount        = freshProject?.competitorCount ?: s.competitorCount,
                     dmInvolved             = s.dmInvolved,
                     summary                = s.visitSummary,
                     photoUrl               = cover?.url,

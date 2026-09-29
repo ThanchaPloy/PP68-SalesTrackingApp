@@ -86,6 +86,21 @@ data class Project(
     @SerializedName("response_speed")
     val responseSpeed: String? = null,
 
+    // ปัจจัยข้อ 8-9 ย้ายมาอยู่ระดับโครงการชุดเดียวกับข้อ 4-7 ด้านบน (sync ผ่าน trigger ตัวเดียวกัน)
+    // null = ยังไม่เคยตอบ ต่างจาก false/0 ที่แปลว่าตอบแล้วว่าไม่ส่ง/ไม่มีคู่แข่ง — หน้าบันทึกผล
+    // ใช้ความต่างนี้ตัดสินว่าจะถามซ้ำหรือโชว์อ่านอย่างเดียว
+    @ColumnInfo(name = "isProposalSent")
+    @SerializedName("is_proposal_sent")
+    val isProposalSent: Boolean? = null,
+
+    @ColumnInfo(name = "proposalDate")
+    @SerializedName("proposal_date")
+    val proposalDate: String? = null,
+
+    @ColumnInfo(name = "competitorCount")
+    @SerializedName("competitor_count")
+    val competitorCount: Int? = null,
+
     @ColumnInfo(name = "progressPct")
     @SerializedName("progress_pct")
     val progressPct: Int? = null,
