@@ -87,9 +87,9 @@ fun EditProjectFactorsScreen(
                 .padding(horizontal = 20.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(18.dp)
         ) {
-            Text(state.projectName, fontWeight = FontWeight.Bold, fontSize = 16.sp, color = TextDark)
+            Text("โครงการ: ${state.projectName}", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = TextDark)
             Text(
-                "ค่าเหล่านี้เป็นของโครงการ ไม่ใช่ของการเข้าพบครั้งใดครั้งหนึ่ง — แก้ที่นี่แล้วมีผลกับทุกที่ที่แสดงค่านี้",
+                "ค่าเหล่านี้เป็นของโครงการ — แก้ที่นี่แล้วมีผลกับทุกที่ที่แสดงค่านี้",
                 fontSize = 12.sp, color = TextGray
             )
 

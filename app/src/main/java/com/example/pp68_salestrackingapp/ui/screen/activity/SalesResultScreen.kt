@@ -481,6 +481,12 @@ private fun SalesResultContent(
                 if (dealFactorsLocked) {
                     SectionCard(title = "วิเคราะห์ข้อมูลเพิ่มเติม (ข้อ 4-9)", icon = Icons.Default.Lock) {
                         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            s.project?.projectName?.takeIf { it.isNotBlank() }?.let { name ->
+                                Text(
+                                    "โครงการ: $name",
+                                    fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = TextDark
+                                )
+                            }
                             Text("ตำแหน่งของดีล: ${s.dealPosition}", fontSize = 14.sp)
                             Text("Solution เดิมของลูกค้า: ${s.previousSolution}", fontSize = 14.sp)
                             Text("ประเภทคู่สัญญา: ${s.counterpartyMultiplier}", fontSize = 14.sp)
@@ -492,7 +498,7 @@ private fun SalesResultContent(
                             )
                             Text("จำนวนคู่แข่ง: ${s.competitorCount} ราย", fontSize = 14.sp)
                             Text(
-                                "ค่าเหล่านี้เป็นของโครงการ ไม่ใช่ของการเข้าพบครั้งนี้ — กดปุ่มด้านล่างเพื่อแก้",
+                                "ค่าเหล่านี้เป็นของโครงการ — กดปุ่มด้านล่างเพื่อแก้",
                                 fontSize = 12.sp, color = TextGray
                             )
                             s.projectId?.let { pid ->
@@ -583,9 +589,10 @@ private fun SalesResultContent(
                     }
                 }
 
-                // ข้อ 8-9 ถูกล็อกพร้อมข้อ 4-7 เป็นชุดเดียวกัน — โครงการที่ตอบครบแล้วไม่ถามซ้ำ
+                // ข้อ 8-9 ย้ายไปเก็บที่ระดับโครงการแล้ว เงื่อนไขการถามจึงเหมือนข้อ 4-7 เป๊ะ:
+                // ไม่ผูกโครงการ = ไม่มีที่เก็บ จึงไม่ถาม / โครงการที่ตอบครบแล้วก็ไม่ถามซ้ำ
                 // (โชว์เป็น read-only ในการ์ดด้านบนพร้อมปุ่มแก้ไขแทน)
-                if (!dealFactorsLocked) {
+                if (s.projectId != null && !dealFactorsLocked) {
                 CollapsibleSection(
                     title = "Tab ใบเสนอราคา & คู่แข่ง",
                     icon = Icons.Default.Description,
