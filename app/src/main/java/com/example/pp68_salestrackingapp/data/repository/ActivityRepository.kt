@@ -321,6 +321,14 @@ class ActivityRepository @Inject constructor(
     suspend fun checkIn(activityId: String, lat: Double, lng: Double, isVerified: Boolean, distanceDeviation: Double? = null): kotlin.Result<Unit> {
         return withContext(Dispatchers.IO) {
             try {
+                // ✅ W6 เดิมเช็คแค่ชั้น UI (CheckInScreen's navigation guard) — entry point อื่นที่
+                // เรียก repository ตรงๆ เช็คอินซ้ำ/เช็คอินนัดที่ขาดนัดไปแล้วได้เลย ย้ายมาเช็คที่นี่แทน
+                val existing = activityDao.getActivityById(activityId)
+                if (existing != null &&
+                    com.example.pp68_salestrackingapp.utils.AppointmentStatus.effective(existing.status, existing.activityDate) != "planned"
+                ) {
+                    return@withContext kotlin.Result.failure(Exception("นัดหมายนี้เช็คอินไม่ได้แล้ว (เช็คอินไปแล้ว/ขาดนัด/เสร็จสิ้นแล้ว)"))
+                }
                 val nowStr = java.time.Instant.now().toString()
                 val updates = mutableMapOf<String, Any>("check_in_lat" to lat, "check_in_long" to lng, "check_in_time" to nowStr, "plan_status" to "checked_in", "is_location_verified" to isVerified)
                 distanceDeviation?.let { updates["distance_deviation"] = it }
@@ -426,6 +434,17 @@ class ActivityRepository @Inject constructor(
     suspend fun deleteActivity(activityId: String): kotlin.Result<Unit> {
         return withContext(Dispatchers.IO) {
             try {
+                // ✅ W6 เดิมเช็คแค่ชั้น UI (HomeScreen.canDelete) — entry point อื่นที่เรียก
+                // repository ตรงๆ ข้ามกฎ "ห้ามลบแผนที่เหลือเวลา <= 7 วันก่อนวันนัด" ไปได้เลย
+                // ย้ายมาเช็คที่จุดเดียวนี้แทนที่จะเติมเช็คซ้ำในทุก ViewModel ที่เรียกลบ
+                val existing = activityDao.getActivityById(activityId)
+                if (existing != null &&
+                    com.example.pp68_salestrackingapp.utils.AppointmentStatus.isEditLocked(existing.status, existing.activityDate)
+                ) {
+                    return@withContext kotlin.Result.failure(
+                        Exception("ห้ามลบนัดหมายที่เหลือเวลาน้อยกว่า 7 วันก่อนถึงวันนัด")
+                    )
+                }
                 if (activityId.startsWith("TEMP-")) {
                     activityDao.deleteActivityById(activityId)
                     cancelAlarmSafely(activityId)

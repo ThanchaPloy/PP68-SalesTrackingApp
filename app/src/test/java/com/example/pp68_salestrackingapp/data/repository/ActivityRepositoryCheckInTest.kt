@@ -41,7 +41,7 @@ class ActivityRepositoryCheckInTest {
         customerId = "C1",
         projectId = "PRJ-1",
         activityType = "onsite",
-        activityDate = "2026-04-06",
+        activityDate = java.time.LocalDate.now().toString(),
         status = "planned"
     )
 
