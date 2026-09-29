@@ -34,6 +34,15 @@ object AppointmentStatus {
         return daysUntil in 0..7
     }
 
+    // กฎการลบแผน รวมไว้ที่เดียวเพราะมีสองที่ที่ต้องเห็นตรงกันเสมอ: ปุ่มลบในหน้า Home (ซ่อน/แสดง)
+    // กับ ActivityRepository.deleteActivity (บล็อกจริง) ถ้าแยกกันเขียนจะดริฟต์กันแน่นอน
+    //
+    // ห้ามลบเมื่อ (ก) อยู่ในช่วง 7 วันก่อนวันนัด — กันยกเลิกกระชั้นชิด
+    // หรือ (ข) ขาดนัดไปแล้ว — แผนที่ขาดนัดเป็นหลักฐานว่าเกิดอะไรขึ้น ลบทิ้งเท่ากับลบร่องรอย
+    // การพลาดนัด ให้บันทึกผลย้อนหลังแทน (online/call ไม่มีสถานะขาดนัด จึงไม่โดนข้อ (ข) นี้)
+    fun isDeleteLocked(status: String?, plannedDate: String?, activityType: String?): Boolean =
+        isEditLocked(status, plannedDate) || effective(status, plannedDate, activityType) == MISSING
+
     private fun parseDate(raw: String?): LocalDate? =
         raw?.take(10)?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
 }

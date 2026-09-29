@@ -435,15 +435,20 @@ class ActivityRepository @Inject constructor(
         return withContext(Dispatchers.IO) {
             try {
                 // ✅ W6 เดิมเช็คแค่ชั้น UI (HomeScreen.canDelete) — entry point อื่นที่เรียก
-                // repository ตรงๆ ข้ามกฎ "ห้ามลบแผนที่เหลือเวลา <= 7 วันก่อนวันนัด" ไปได้เลย
-                // ย้ายมาเช็คที่จุดเดียวนี้แทนที่จะเติมเช็คซ้ำในทุก ViewModel ที่เรียกลบ
+                // repository ตรงๆ ข้ามกฎห้ามลบไปได้เลย จุดนี้คือจุดบล็อกจริงที่ทุกทางต้องผ่าน
+                // ตัดสินด้วย isDeleteLocked ตัวเดียวกับที่ UI ใช้ซ่อนปุ่ม แล้วค่อยเลือกข้อความ
+                // ตามเหตุผลที่โดนบล็อก เพื่อไม่ให้สองที่นิยามกฎต่างกัน
                 val existing = activityDao.getActivityById(activityId)
+                val status = com.example.pp68_salestrackingapp.utils.AppointmentStatus
                 if (existing != null &&
-                    com.example.pp68_salestrackingapp.utils.AppointmentStatus.isEditLocked(existing.status, existing.activityDate)
+                    status.isDeleteLocked(existing.status, existing.activityDate, existing.activityType)
                 ) {
-                    return@withContext kotlin.Result.failure(
-                        Exception("ห้ามลบนัดหมายที่เหลือเวลาน้อยกว่า 7 วันก่อนถึงวันนัด")
-                    )
+                    val reason = if (status.isEditLocked(existing.status, existing.activityDate)) {
+                        "เหลือเวลาไม่ถึง 7 วันก่อนถึงวันนัดหมาย"
+                    } else {
+                        "นัดหมายนี้ขาดนัดไปแล้ว — ให้บันทึกผลย้อนหลังแทนการลบ"
+                    }
+                    return@withContext kotlin.Result.failure(Exception("ลบนัดหมายนี้ไม่ได้: $reason"))
                 }
                 if (activityId.startsWith("TEMP-")) {
                     activityDao.deleteActivityById(activityId)

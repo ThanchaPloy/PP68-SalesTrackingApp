@@ -270,9 +270,12 @@ fun ActivityCard(
         ?: StatusConfig(effectiveStatus, TextGray, BgLight, null)
 
     val hasNote    = !card.weeklyNote.isNullOrBlank() || card.hasResult
-    // W6: ห้ามลบแผนที่ยังไม่เสร็จ (planned) เมื่อเหลือเวลา <= 7 วันก่อนวันนัด กันลบกระชั้นชิด
+    // W6: ห้ามลบแผนที่ใกล้วันนัด (<= 7 วัน) หรือที่ขาดนัดไปแล้ว — กฎอยู่ใน isDeleteLocked
+    // ที่เดียวกับที่ ActivityRepository.deleteActivity ใช้บล็อกจริง
     val canDelete  = card.planStatus == "planned" &&
-        !com.example.pp68_salestrackingapp.utils.AppointmentStatus.isEditLocked(card.planStatus, card.plannedDate)
+        !com.example.pp68_salestrackingapp.utils.AppointmentStatus.isDeleteLocked(
+            card.planStatus, card.plannedDate, card.activityType
+        )
     // นัดแบบ call/online ไม่มีขั้นเช็คอิน — สถานะ "planned" จึงพาไปหน้าบันทึกผลตรง ๆ
     // เหมือนกับที่ "checked_in"/"completed" ทำอยู่แล้ว
     val isCallOrOnline = card.activityType == "call" || card.activityType == "online"

@@ -85,4 +85,36 @@ class AppointmentStatusTest {
         val yesterday = LocalDate.now().minusDays(1).toString()
         assertFalse(AppointmentStatus.isEditLocked("planned", yesterday))
     }
+
+    // ลบไม่ได้ทั้งสองกรณี: ใกล้วันนัด (กันยกเลิกกระชั้นชิด) และขาดนัดไปแล้ว (กันลบร่องรอยการพลาดนัด)
+    @Test
+    fun `delete is locked within 7 days of the appointment`() {
+        val in3Days = LocalDate.now().plusDays(3).toString()
+        assertTrue(AppointmentStatus.isDeleteLocked("planned", in3Days, "onsite"))
+    }
+
+    @Test
+    fun `delete is locked for an onsite appointment that was already missed`() {
+        val lastWeek = LocalDate.now().minusDays(7).toString()
+        // เลย 7 วันไปแล้วจึงไม่เข้าเงื่อนไข edit lock — ต้องถูกบล็อกด้วยเหตุ "ขาดนัด" เท่านั้น
+        assertFalse(AppointmentStatus.isEditLocked("planned", lastWeek))
+        assertTrue(AppointmentStatus.isDeleteLocked("planned", lastWeek, "onsite"))
+    }
+
+    // online/call ไม่มีสถานะขาดนัด จึงลบแผนที่เลยวันไปแล้วได้ (ไม่มีอะไรให้ "พลาด")
+    @Test
+    fun `delete stays allowed for past online and call appointments`() {
+        val lastWeek = LocalDate.now().minusDays(7).toString()
+        assertFalse(AppointmentStatus.isDeleteLocked("planned", lastWeek, "online"))
+        assertFalse(AppointmentStatus.isDeleteLocked("planned", lastWeek, "call"))
+    }
+
+    @Test
+    fun `delete stays allowed for a distant future plan and for finished ones`() {
+        val in30Days = LocalDate.now().plusDays(30).toString()
+        val lastWeek = LocalDate.now().minusDays(7).toString()
+        assertFalse(AppointmentStatus.isDeleteLocked("planned", in30Days, "onsite"))
+        assertFalse(AppointmentStatus.isDeleteLocked("checked_in", lastWeek, "onsite"))
+        assertFalse(AppointmentStatus.isDeleteLocked("completed", lastWeek, "onsite"))
+    }
 }
