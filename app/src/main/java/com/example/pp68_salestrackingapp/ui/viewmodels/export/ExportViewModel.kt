@@ -138,6 +138,33 @@ class ExportViewModel @Inject constructor(
                 val projectsMap = projectRepo.getAllProjectsFlow().first().associateBy { it.projectId }
                 val exportItems = mutableListOf<ExportActivityItem>()
 
+                // ✅ เดิม filter allResults ทับทุก activity (O(N·M)) — group ครั้งเดียวแล้ว lookup O(1) แทน
+                val resultsByActivityId = allResults.filter { it.activityId != null }.groupBy { it.activityId }
+                val latestResultByActivityId = filteredActivities.associate { act ->
+                    val matched = resultsByActivityId[act.activityId] ?: emptyList()
+                    act.activityId to matched.filter { it.isLatest == true }.ifEmpty { matched }.maxByOrNull { res -> res.version ?: 0 }
+                }
+
+                // 2. ✅ ประมวลผลบันทึกที่ไม่มีนัดหมาย (คำนวณก่อนเพื่อรวม resultId เข้าไปในการดึงรูปแบบ batch ด้านล่าง)
+                val appIdsInWeek = filteredActivities.map { it.activityId }.toSet()
+                val standaloneResults = filteredResults
+                    .filter { it.activityId == null || it.activityId !in appIdsInWeek }
+                    .groupBy { res ->
+                        val dateKey = res.reportDate?.take(10) ?: "no_date"
+                        val contentKey = res.summary?.replace("\\s".toRegex(), "") ?: ""
+                        "${res.projectId}_${dateKey}_$contentKey"
+                    }
+                    .mapNotNull { (_, group) ->
+                        group.filter { it.isLatest == true }.ifEmpty { group }.maxByOrNull { res -> res.version ?: 0 }
+                    }
+                    .sortedByDescending { it.reportDate ?: "" }
+
+                // ✅ เดิม query รูปทีละ result_id ต่อ activity/standalone result (N query ต่อการ export
+                // หนึ่งครั้ง) — ดึงรวดเดียวเป็น map แทน แล้ว lookup O(1) ในลูปด้านล่าง
+                val neededResultIds = (latestResultByActivityId.values.filterNotNull().map { it.resultId } +
+                    standaloneResults.map { it.resultId }).distinct()
+                val photosByResultId = activityRepo.getResultPhotosBatch(neededResultIds)
+
                 // 1. ✅ ประมวลผลกิจกรรมที่มีนัดหมาย (ดึงเฉพาะบันทึกหลังการขายเวอร์ชันล่าสุด + รูปภาพทั้งหมด)
                 var didGeocode = false
                 filteredActivities.forEach { act ->
@@ -159,14 +186,10 @@ class ExportViewModel @Inject constructor(
                     } else {
                         act.locationName ?: ""
                     }
-                    val matchedResults = allResults.filter { it.activityId == act.activityId }
-                    val latestResult = matchedResults
-                        .filter { it.isLatest == true }
-                        .ifEmpty { matchedResults }
-                        .maxByOrNull { res -> res.version ?: 0 }
+                    val latestResult = latestResultByActivityId[act.activityId]
 
                     val resultDetailsList = if (latestResult != null) {
-                        val photos = (listOfNotNull(latestResult.photoUrl) + activityRepo.getResultPhotos(latestResult.resultId)).filter { it.isNotBlank() }.distinct()
+                        val photos = (listOfNotNull(latestResult.photoUrl) + (photosByResultId[latestResult.resultId] ?: emptyList())).filter { it.isNotBlank() }.distinct()
                         listOf(
                             ExportResultDetail(
                                 resultId = latestResult.resultId,
@@ -220,23 +243,9 @@ class ExportViewModel @Inject constructor(
                     )
                 }
 
-                // 2. ✅ ประมวลผลบันทึกที่ไม่มีนัดหมาย (Standalone Results เวอร์ชันล่าสุด + รูปภาพทั้งหมด)
-                val appIdsInWeek = filteredActivities.map { it.activityId }.toSet()
-                val standaloneResults = filteredResults
-                    .filter { it.activityId == null || it.activityId !in appIdsInWeek }
-                    .groupBy { res ->
-                        val dateKey = res.reportDate?.take(10) ?: "no_date"
-                        val contentKey = res.summary?.replace("\\s".toRegex(), "") ?: ""
-                        "${res.projectId}_${dateKey}_$contentKey"
-                    }
-                    .mapNotNull { (_, group) ->
-                        group.filter { it.isLatest == true }.ifEmpty { group }.maxByOrNull { res -> res.version ?: 0 }
-                    }
-                    .sortedByDescending { it.reportDate ?: "" }
-
                 standaloneResults.forEach { res ->
                     val project = projectsMap[res.projectId]
-                    val photos = (listOfNotNull(res.photoUrl) + activityRepo.getResultPhotos(res.resultId)).filter { it.isNotBlank() }.distinct()
+                    val photos = (listOfNotNull(res.photoUrl) + (photosByResultId[res.resultId] ?: emptyList())).filter { it.isNotBlank() }.distinct()
                     val detail = ExportResultDetail(
                         resultId = res.resultId,
                         reportDate = res.reportDate,

@@ -8,6 +8,9 @@ interface ActivityResultPhotoDao {
     @Query("SELECT * FROM activity_result_photo WHERE result_id = :resultId ORDER BY photo_order")
     suspend fun getPhotosByResultId(resultId: String): List<ActivityResultPhoto>
 
+    @Query("SELECT * FROM activity_result_photo WHERE result_id IN (:resultIds) ORDER BY photo_order")
+    suspend fun getPhotosByResultIds(resultIds: List<String>): List<ActivityResultPhoto>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertPhotos(photos: List<ActivityResultPhoto>)
 

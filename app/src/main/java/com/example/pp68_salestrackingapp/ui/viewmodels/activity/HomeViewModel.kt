@@ -9,6 +9,9 @@ import com.example.pp68_salestrackingapp.data.model.AuthUser
 import com.example.pp68_salestrackingapp.data.repository.CustomerRepository
 import com.example.pp68_salestrackingapp.data.repository.ProjectRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import java.time.LocalDate
@@ -69,7 +72,7 @@ class HomeViewModel @Inject constructor(
 
     private fun observeActivities() {
         viewModelScope.launch {
-            // âœ… Observe à¸—à¸±à¹‰à¸‡à¸à¸²à¸£à¹€à¸›à¸¥à¸µà¹ˆà¸¢à¸™à¹à¸›à¸¥à¸‡à¸‚à¸­à¸‡à¸™à¸±à¸”à¸«à¸¡à¸²à¸¢à¹à¸¥à¸°à¸šà¸±à¸™à¸—à¸¶à¸à¸œà¸¥
+            // ✅ Observe ทั้งการเปลี่ยนแปลงของนัดหมายและบันทึกผล
             combine(
                 activityRepo.getAllActivitiesFlow(),
                 activityRepo.getAllResultIdsFlow(),
@@ -85,7 +88,7 @@ class HomeViewModel @Inject constructor(
         viewModelScope.launch {
             val currentMonth = _uiState.value.selectedMonth
 
-            // âœ… à¸”à¸¶à¸‡ Result IDs à¸¥à¹ˆà¸²à¸ªà¸¸à¸”à¸ˆà¸²à¸ Local DB à¹€à¸žà¸·à¹ˆà¸­à¹€à¸Šà¹‡à¸„à¸§à¹ˆà¸²à¸­à¸±à¸™à¹„à¸«à¸™à¸šà¸±à¸™à¸—à¸¶à¸à¸œà¸¥à¹à¸¥à¹‰à¸§
+            // ✅ ดึง Result IDs ล่าสุดจาก Local DB เพื่อเช็คว่าอันไหนบันทึกผลแล้ว
             val resultIds = activityRepo.getAllResultIdsFlow().first().toSet()
 
             activityRepo.getMyActivitiesWithDetails().fold(
@@ -109,7 +112,7 @@ class HomeViewModel @Inject constructor(
                     val grouped = filteredCards
                         .sortedWith(compareBy({ it.plannedDate }, { it.plannedTime }))
                         .groupBy { card ->
-                            card.plannedDate?.let { formatGroupHeader(it) } ?: "à¹„à¸¡à¹ˆà¸£à¸°à¸šà¸¸à¸§à¸±à¸™à¸—à¸µà¹ˆ"
+                            card.plannedDate?.let { formatGroupHeader(it) } ?: "ไม่ระบุวันที่"
                         }
 
                     _uiState.update {
@@ -139,11 +142,15 @@ class HomeViewModel @Inject constructor(
                     _uiState.update { it.copy(showPhonePrompt = true) }
                 }
 
-                // refreshResults à¹€à¸žà¸·à¹ˆà¸­à¸”à¸¶à¸‡à¸ªà¸–à¸²à¸™à¸°à¸à¸²à¸£à¸šà¸±à¸™à¸—à¸¶à¸à¸œà¸¥à¸¥à¹ˆà¸²à¸ªà¸¸à¸”à¸ˆà¸²à¸ Server
-                activityRepo.refreshActivities(userId)
-                activityRepo.refreshResults(userId)
-                customerRepo.refreshCustomers(authRepo.currentUser()?.teamId ?: "")
-                projectRepo.refreshProjects(userId)
+                // ✅ ทั้ง 4 อย่างเป็นอิสระต่อกัน (คนละตารางคนละ endpoint) รันพร้อมกันแทนรอทีละตัว
+                coroutineScope {
+                    awaitAll(
+                        async { activityRepo.refreshActivities(userId) },
+                        async { activityRepo.refreshResults(userId) },
+                        async { customerRepo.refreshCustomers(authRepo.currentUser()?.teamId ?: "") },
+                        async { projectRepo.refreshProjects(userId) }
+                    )
+                }
             } catch (e: Exception) {
                 android.util.Log.e("HomeVM", "Error refreshing data: ${e.message}")
             }

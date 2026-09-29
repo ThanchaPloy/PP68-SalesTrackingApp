@@ -410,28 +410,6 @@ class CreateAppointmentViewModel @Inject constructor(
         }
     }
 
-    private fun formatTimeForUI(timeStr: String): String {
-        return try {
-            val cleanTime = timeStr.trim()
-            val inputFormats = listOf("HH:mm:ss", "HH:mm", "hh:mm:ss a", "hh:mm a")
-            var parsedDate: java.util.Date? = null
-
-            for (format in inputFormats) {
-                try {
-                    val sdf = java.text.SimpleDateFormat(format, java.util.Locale.ENGLISH)
-                    parsedDate = sdf.parse(cleanTime)
-                    if (parsedDate != null) break
-                } catch (e: Exception) { continue }
-            }
-
-            if (parsedDate == null) return timeStr
-            val outputFormat = java.text.SimpleDateFormat("hh:mm a", java.util.Locale.ENGLISH)
-            outputFormat.format(parsedDate)
-        } catch (e: Exception) {
-            timeStr
-        }
-    }
-
     private fun loadInitialProject(projectId: String) {
         viewModelScope.launch {
             projectRepo.getProjectById(projectId).onSuccess { p ->
@@ -783,14 +761,6 @@ class CreateAppointmentViewModel @Inject constructor(
                 LocalDate.parse(uiDate, formatter).toString()
             } catch (e2: Exception) { uiDate }
         }
-    }
-
-    private fun formatDateForUI(isoDate: String?): String? {
-        if (isoDate == null) return null
-        return try {
-            val date = LocalDate.parse(isoDate.take(10))
-            date.format(DateTimeFormatter.ofPattern("MMM dd, yyyy", Locale.ENGLISH))
-        } catch (e: Exception) { isoDate }
     }
 
     private fun getCategoryForProjectStatus(status: String): String? {

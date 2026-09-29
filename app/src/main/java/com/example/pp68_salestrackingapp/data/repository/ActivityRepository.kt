@@ -94,8 +94,8 @@ class ActivityRepository @Inject constructor(
                 if (resp.isSuccessful && resp.body() != null) {
                     val results = resp.body()!!.map { it.copy(isSynced = true) }
                     resultDao.clearAndInsert(results)
-                    // âœ… clearAndInsert à¸¥à¸š+à¸ªà¸£à¹‰à¸²à¸‡à¹à¸–à¸§ activity_result à¹ƒà¸«à¸¡à¹ˆ à¸‹à¸¶à¹ˆà¸‡ cascade à¸¥à¸š activity_result_photo à¸—à¸µà¹ˆà¸œà¸¹à¸à¸­à¸¢à¸¹à¹ˆà¹„à¸›à¸”à¹‰à¸§à¸¢
-                    // à¸•à¹‰à¸­à¸‡à¸”à¸¶à¸‡à¸£à¸¹à¸›à¸à¸¥à¸±à¸šà¸¡à¸²à¸ˆà¸²à¸ server à¹ƒà¸«à¸¡à¹ˆà¸—à¸¸à¸à¸„à¸£à¸±à¹‰à¸‡à¸«à¸¥à¸±à¸‡ sync à¹„à¸¡à¹ˆà¸‡à¸±à¹‰à¸™à¸ˆà¸°à¹€à¸«à¸¥à¸·à¸­à¹à¸„à¹ˆà¸£à¸¹à¸›à¸›à¸ (photo_url à¸šà¸™ activity_result à¹€à¸­à¸‡)
+                    // ✅ clearAndInsert ลบ+สร้างแถว activity_result ใหม่ ซึ่ง cascade ลบ activity_result_photo ที่ผูกอยู่ไปด้วย
+                    // ต้องดึงรูปกลับมาจาก server ใหม่ทุกครั้งหลัง sync ไม่งั้นจะเหลือแค่รูปปก (photo_url บน activity_result เอง)
                     if (results.isNotEmpty()) {
                         val ids = results.map { it.resultId }
                         val chunks = ids.chunked(50)
@@ -149,8 +149,8 @@ class ActivityRepository @Inject constructor(
                         activityDao.insertActivity(localActivity.copy(activityId = realId, isSynced = true))
                         kotlin.Result.success(realId)
                     } else {
-                        // âœ… à¸«à¹‰à¸²à¸¡ mark synced à¸–à¹‰à¸²à¹„à¸¡à¹ˆà¹„à¸”à¹‰ realId à¸à¸¥à¸±à¸šà¸¡à¸² (server à¹„à¸¡à¹ˆà¸„à¸·à¸™à¹à¸–à¸§à¸—à¸µà¹ˆà¸ªà¸£à¹‰à¸²à¸‡ à¹€à¸Šà¹ˆà¸™ RLS à¸šà¸¥à¹‡à¸­à¸)
-                        // à¹„à¸¡à¹ˆà¸‡à¸±à¹‰à¸™à¹à¸–à¸§à¸™à¸µà¹‰à¸ˆà¸°à¸„à¹‰à¸²à¸‡à¹€à¸›à¹‡à¸™ TEMP- à¸•à¸¥à¸­à¸”à¹„à¸›à¹à¸•à¹ˆà¸–à¸¹à¸à¸¡à¸­à¸‡à¸§à¹ˆà¸² sync à¹à¸¥à¹‰à¸§ à¸—à¸³à¹ƒà¸«à¹‰à¸šà¸±à¸™à¸—à¸¶à¸à¸—à¸µà¹ˆà¸œà¸¹à¸à¸à¸±à¸šà¸™à¸±à¸”à¸«à¸¡à¸²à¸¢à¸™à¸µà¹‰ insert à¹„à¸¡à¹ˆà¹„à¸”à¹‰ (FK violation)
+                        // ✅ ห้าม mark synced ถ้าไม่ได้ realId กลับมา (server ไม่คืนแถวที่สร้าง เช่น RLS บล็อก)
+                        // ไม่งั้นแถวนี้จะค้างเป็น TEMP- ตลอดไปแต่ถูกมองว่า sync แล้ว ทำให้บันทึกที่ผูกกับนัดหมายนี้ insert ไม่ได้ (FK violation)
                         syncManager.scheduleSync()
                         kotlin.Result.success(tempId)
                     }
@@ -456,7 +456,7 @@ class ActivityRepository @Inject constructor(
                     cancelAlarmSafely(activityId)
                     kotlin.Result.success(Unit)
                 } else {
-                    kotlin.Result.failure(Exception("à¸¥à¸šà¸™à¸±à¸”à¸«à¸¡à¸²à¸¢à¸šà¸™à¹€à¸‹à¸´à¸£à¹Œà¸Ÿà¹€à¸§à¸­à¸£à¹Œà¹„à¸¡à¹ˆà¸ªà¸³à¹€à¸£à¹‡à¸ˆ"))
+                    kotlin.Result.failure(Exception("ลบนัดหมายบนเซิร์ฟเวอร์ไม่สำเร็จ"))
                 }
             } catch (e: Exception) {
                 if (activityId.startsWith("TEMP-")) {
@@ -464,8 +464,8 @@ class ActivityRepository @Inject constructor(
                     cancelAlarmSafely(activityId)
                     kotlin.Result.success(Unit)
                 } else {
-                    // à¸«à¸²à¸à¸­à¸­à¸Ÿà¹„à¸¥à¸™à¹Œ à¸«à¹‰à¸²à¸¡à¸¥à¸šà¸‚à¹‰à¸­à¸¡à¸¹à¸¥à¸—à¸µà¹ˆà¸‹à¸´à¸‡à¸„à¹Œà¹à¸¥à¹‰à¸§à¹ƒà¸™à¹€à¸„à¸£à¸·à¹ˆà¸­à¸‡ à¹„à¸¡à¹ˆà¸‡à¸±à¹‰à¸™à¸ˆà¸°à¹€à¸›à¹‡à¸™ Zombie Data (à¸”à¸¶à¸‡à¸à¸¥à¸±à¸šà¸¡à¸²à¹ƒà¸«à¸¡à¹ˆà¹€à¸¡à¸·à¹ˆà¸­à¸­à¸­à¸™à¹„à¸¥à¸™à¹Œ)
-                    kotlin.Result.failure(Exception("à¹„à¸¡à¹ˆà¸ªà¸²à¸¡à¸²à¸£à¸–à¸¥à¸šà¸™à¸±à¸”à¸«à¸¡à¸²à¸¢à¸—à¸µà¹ˆà¸‹à¸´à¸‡à¸„à¹Œà¹à¸¥à¹‰à¸§à¸‚à¸“à¸°à¸­à¸­à¸Ÿà¹„à¸¥à¸™à¹Œà¹„à¸”à¹‰"))
+                    // หากออฟไลน์ ห้ามลบข้อมูลที่ซิงค์แล้วในเครื่อง ไม่งั้นจะเป็น Zombie Data (ดึงกลับมาใหม่เมื่อออนไลน์)
+                    kotlin.Result.failure(Exception("ไม่สามารถลบนัดหมายที่ซิงค์แล้วขณะออฟไลน์ได้"))
                 }
             }
         }
@@ -477,9 +477,9 @@ class ActivityRepository @Inject constructor(
                 val resp = apiService.getActivityResult("eq.$activityId")
                 if (resp.isSuccessful && !resp.body().isNullOrEmpty()) {
                     val result = resp.body()!!.first().copy(isSynced = true)
-                    // âœ… insertResult à¹ƒà¸Šà¹‰ OnConflictStrategy.REPLACE â€” à¸–à¹‰à¸² result_id à¸™à¸µà¹‰à¸¡à¸µà¸­à¸¢à¸¹à¹ˆà¹à¸¥à¹‰à¸§à¹ƒà¸™à¹€à¸„à¸£à¸·à¹ˆà¸­à¸‡
-                    // SQLite à¸ˆà¸°à¸¥à¸šà¹à¸–à¸§à¹€à¸”à¸´à¸¡à¸—à¸´à¹‰à¸‡à¸à¹ˆà¸­à¸™à¹à¸¥à¹‰à¸§à¸„à¹ˆà¸­à¸¢ insert à¹ƒà¸«à¸¡à¹ˆ à¸‹à¸¶à¹ˆà¸‡ cascade à¸¥à¸š activity_result_photo à¸—à¸µà¹ˆà¸œà¸¹à¸à¸­à¸¢à¸¹à¹ˆà¹„à¸›à¸”à¹‰à¸§à¸¢
-                    // à¸•à¹‰à¸­à¸‡à¸”à¸¶à¸‡à¸£à¸¹à¸›à¸à¸¥à¸±à¸šà¸¡à¸²à¸ˆà¸²à¸ server à¹ƒà¸«à¸¡à¹ˆà¸—à¸¸à¸à¸„à¸£à¸±à¹‰à¸‡à¸«à¸¥à¸±à¸‡à¸ˆà¸²à¸à¸™à¸µà¹‰ à¹„à¸¡à¹ˆà¸‡à¸±à¹‰à¸™à¸ˆà¸°à¹€à¸«à¸¥à¸·à¸­à¹à¸„à¹ˆà¸£à¸¹à¸›à¸›à¸
+                    // ✅ insertResult ใช้ OnConflictStrategy.REPLACE — ถ้า result_id นี้มีอยู่แล้วในเครื่อง
+                    // SQLite จะลบแถวเดิมทิ้งก่อนแล้วค่อย insert ใหม่ ซึ่ง cascade ลบ activity_result_photo ที่ผูกอยู่ไปด้วย
+                    // ต้องดึงรูปกลับมาจาก server ใหม่ทุกครั้งหลังจากนี้ ไม่งั้นจะเหลือแค่รูปปก
                     resultDao.insertResult(result)
                     refreshPhotosForResult(result.resultId)
                     return@withContext result
@@ -525,8 +525,8 @@ class ActivityRepository @Inject constructor(
         }
     }
 
-    // âœ… à¸—à¸¸à¸à¸„à¸£à¸±à¹‰à¸‡à¸—à¸µà¹ˆà¸šà¸±à¸™à¸—à¸¶à¸ (à¸—à¸±à¹‰à¸‡à¸„à¸£à¸±à¹‰à¸‡à¹à¸£à¸à¹à¸¥à¸°à¹à¸à¹‰à¹„à¸‚) à¸ˆà¸°à¸ªà¸£à¹‰à¸²à¸‡à¹à¸–à¸§à¹ƒà¸«à¸¡à¹ˆà¹€à¸›à¹‡à¸™ version à¸–à¸±à¸”à¹„à¸›à¹€à¸ªà¸¡à¸­
-    // à¹à¸—à¸™à¸à¸²à¸£à¹€à¸‚à¸µà¸¢à¸™à¸—à¸±à¸šà¸‚à¸­à¸‡à¹€à¸”à¸´à¸¡ â€” à¹€à¸žà¸·à¹ˆà¸­à¸£à¸±à¸à¸©à¸²à¸›à¸£à¸°à¸§à¸±à¸•à¸´à¸à¸²à¸£à¹à¸à¹‰à¹„à¸‚à¸šà¸±à¸™à¸—à¸¶à¸à¸œà¸¥à¸à¸²à¸£à¸‚à¸²à¸¢à¹„à¸§à¹‰à¸—à¸±à¹‰à¸‡à¸«à¸¡à¸”
+    // ✅ ทุกครั้งที่บันทึก (ทั้งครั้งแรกและแก้ไข) จะสร้างแถวใหม่เป็น version ถัดไปเสมอ
+    // แทนการเขียนทับของเดิม — เพื่อรักษาประวัติการแก้ไขบันทึกผลการขายไว้ทั้งหมด
     private suspend fun saveResultAsNewVersion(result: ActivityResult, photoUrls: List<String> = emptyList()): kotlin.Result<Unit> {
         val previous = result.resultId.takeIf { it.isNotBlank() }?.let { resultDao.getResultById(it) }
         val tempId = "TEMP-${java.util.UUID.randomUUID().toString().take(8).uppercase()}"
@@ -543,14 +543,14 @@ class ActivityRepository @Inject constructor(
         savePhotosForResult(tempId, photoUrls)
         return try {
             val body = buildResultBody(localResult)
-            body.remove("result_id") // à¹à¸•à¹ˆà¸¥à¸° version à¸„à¸·à¸­à¹à¸–à¸§à¹ƒà¸«à¸¡à¹ˆà¹€à¸ªà¸¡à¸­ à¹ƒà¸«à¹‰ server à¸ªà¸£à¹‰à¸²à¸‡ id à¹ƒà¸«à¹‰
+            body.remove("result_id") // แต่ละ version คือแถวใหม่เสมอ ให้ server สร้าง id ให้
             val apiResp = apiService.insertActivityResultMap(body)
             if (apiResp.isSuccessful) {
                 val realId = apiResp.body()?.firstOrNull()?.resultId
                 if (realId != null && realId != tempId) {
                     val finalGroupId = previous?.resultGroupId ?: previous?.resultId ?: realId
-                    // âœ… à¸•à¹‰à¸­à¸‡ insert à¹à¸–à¸§ realId à¸à¹ˆà¸­à¸™ à¹à¸¥à¹‰à¸§à¸„à¹ˆà¸­à¸¢à¸¢à¹‰à¸²à¸¢à¸£à¸¹à¸›à¸¡à¸²à¸—à¸µà¹ˆ realId à¹à¸¥à¹‰à¸§à¸„à¹ˆà¸­à¸¢à¸¥à¸š tempId à¸—à¸µà¸«à¸¥à¸±à¸‡
-                    // à¹€à¸žà¸£à¸²à¸° activity_result_photo à¸¡à¸µ FK CASCADE à¹„à¸›à¸¢à¸±à¸‡ activity_result â€” à¸–à¹‰à¸²à¸¥à¸š tempId à¸à¹ˆà¸­à¸™ à¸£à¸¹à¸›à¸—à¸µà¹ˆà¸¢à¸±à¸‡à¸œà¸¹à¸à¸à¸±à¸š tempId à¸ˆà¸°à¹‚à¸”à¸™à¸¥à¸šà¹„à¸›à¸”à¹‰à¸§à¸¢
+                    // ✅ ต้อง insert แถว realId ก่อน แล้วค่อยย้ายรูปมาที่ realId แล้วค่อยลบ tempId ทีหลัง
+                    // เพราะ activity_result_photo มี FK CASCADE ไปยัง activity_result — ถ้าลบ tempId ก่อน รูปที่ยังผูกกับ tempId จะโดนลบไปด้วย
                     resultDao.insertResult(localResult.copy(resultId = realId, resultGroupId = finalGroupId, isSynced = true))
                     photoDao.updateResultId(tempId, realId)
                     resultDao.deleteResultById(tempId)
@@ -558,7 +558,7 @@ class ActivityRepository @Inject constructor(
                         try { apiService.addResultPhotos(photoDao.getPhotosByResultId(realId)) } catch (_: Exception) {}
                     }
                     if (previous == null) {
-                        // version à¹à¸£à¸à¸ªà¸¸à¸” â€” à¸œà¸¹à¸ group id à¸‚à¸­à¸‡à¸•à¸±à¸§à¹€à¸­à¸‡à¹€à¸‚à¹‰à¸²à¸à¸±à¸š realId à¸šà¸™ server à¸”à¹‰à¸§à¸¢
+                        // version แรกสุด — ผูก group id ของตัวเองเข้ากับ realId บน server ด้วย
                         val backfilled = try {
                             apiService.updateActivityResult("eq.$realId", mapOf("result_group_id" to realId)).isSuccessful
                         } catch (_: Exception) { false }
@@ -573,7 +573,7 @@ class ActivityRepository @Inject constructor(
                 } else {
                     resultDao.updateSyncStatus(tempId, true)
                 }
-                // âœ… mark version à¹€à¸à¹ˆà¸²à¸šà¸™ server à¸§à¹ˆà¸²à¹„à¸¡à¹ˆà¹ƒà¸Šà¹ˆà¸¥à¹ˆà¸²à¸ªà¸¸à¸”à¹à¸¥à¹‰à¸§ (best-effort à¹€à¸«à¸¡à¸·à¸­à¸™à¸ˆà¸¸à¸”à¸­à¸·à¹ˆà¸™à¹† à¹ƒà¸™à¹„à¸Ÿà¸¥à¹Œà¸™à¸µà¹‰)
+                // ✅ mark version เก่าบน server ว่าไม่ใช่ล่าสุดแล้ว (best-effort เหมือนจุดอื่นในไฟล์นี้)
                 previous?.let {
                     val flipped = try {
                         apiService.updateActivityResult("eq.${it.resultId}", mapOf("is_latest" to false)).isSuccessful
@@ -601,7 +601,7 @@ class ActivityRepository @Inject constructor(
         }
     }
 
-    // âœ… à¹€à¸à¹‡à¸šà¸£à¸¹à¸›à¸¢à¸·à¸™à¸¢à¸±à¸™à¸à¸²à¸£à¹€à¸‚à¹‰à¸²à¸žà¸šà¸ªà¸¹à¸‡à¸ªà¸¸à¸” 5 à¸£à¸¹à¸›à¸•à¹ˆà¸­à¸šà¸±à¸™à¸—à¸¶à¸à¸œà¸¥ à¹€à¸£à¸µà¸¢à¸‡à¸•à¸²à¸¡ photo_order (0 = à¸£à¸¹à¸›à¸›à¸)
+    // ✅ เก็บรูปยืนยันการเข้าพบสูงสุด 5 รูปต่อบันทึกผล เรียงตาม photo_order (0 = รูปปก)
     private suspend fun savePhotosForResult(resultId: String, photoUrls: List<String>) {
         photoDao.deletePhotosByResultId(resultId)
         if (photoUrls.isEmpty()) return
@@ -617,6 +617,15 @@ class ActivityRepository @Inject constructor(
 
     suspend fun getResultPhotos(resultId: String): List<String> {
         return withContext(Dispatchers.IO) { photoDao.getPhotosByResultId(resultId).map { it.photoUrl } }
+    }
+
+    // ✅ ให้ export รายงานดึงรูปของหลาย result ทีเดียวแทนที่จะ query ทีละตัวต่อ activity/result
+    // (เดิม O(N) query ต่อการ export หนึ่งครั้ง ตอนนี้เหลือ 1 query)
+    suspend fun getResultPhotosBatch(resultIds: List<String>): Map<String, List<String>> {
+        return withContext(Dispatchers.IO) {
+            if (resultIds.isEmpty()) return@withContext emptyMap()
+            photoDao.getPhotosByResultIds(resultIds).groupBy({ it.resultId }, { it.photoUrl })
+        }
     }
 
     // เก็บชื่อสถานที่ที่ reverse geocode มาแล้วไว้ใน Room — เป็น local-only field

@@ -279,7 +279,7 @@ class ExportViewModelTest {
         )
         coEvery { activityRepo.getMyActivitiesWithDetails() } returns Result.success(listOf(activity))
         every { activityRepo.getAllResultsFlow() } returns flowOf(listOf(result))
-        coEvery { activityRepo.getResultPhotos("RES-01") } returns listOf("https://example.com/photo2.jpg")
+        coEvery { activityRepo.getResultPhotosBatch(any()) } returns mapOf("RES-01" to listOf("https://example.com/photo2.jpg"))
 
         viewModel.loadWeeklyData(LocalDate.parse("2026-04-08"), LocalDate.parse("2026-04-14"))
         advanceUntilIdle()
