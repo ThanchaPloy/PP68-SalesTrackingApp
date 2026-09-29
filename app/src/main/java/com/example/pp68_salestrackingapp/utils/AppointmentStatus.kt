@@ -9,10 +9,18 @@ import java.time.temporal.ChronoUnit
 object AppointmentStatus {
     const val MISSING = "missing"
 
+    // นัดที่ไม่ต้องเช็คอิน (online/call) ไม่มีวันเป็น "ขาดนัด" — ขาดนัดคือการไม่ไปปรากฏตัวตามนัด
+    // ซึ่งวัดจากการเช็คอินด้วย GPS นัดออนไลน์/โทรศัพท์ไม่มีขั้นตอนนั้น จึงบันทึกผลย้อนหลังเมื่อไหร่ก็ได้
+    private val REQUIRES_CHECK_IN = setOf("onsite")
+
     // ต้องเลยวัน ไม่ใช่เลยเวลา — นัดตอนเช้าของวันนี้ที่ยังไม่เช็คอินตอนบ่ายยังไม่นับขาดนัด
     // ต้องข้ามเที่ยงคืนไปแล้วเท่านั้นถึงจะกลายเป็น missing
-    fun effective(status: String?, plannedDate: String?): String {
+    //
+    // activityType เป็นพารามิเตอร์บังคับโดยตั้งใจ (ไม่ใส่ default) — ทุกจุดที่เรียกต้องตัดสินใจเอง
+    // ว่านัดชนิดไหน ถ้าใส่ default ไว้ จุดที่ลืมส่งจะเงียบๆ กลับไปคิดว่าทุกชนิดขาดนัดได้เหมือนเดิม
+    fun effective(status: String?, plannedDate: String?, activityType: String?): String {
         val fallback = status ?: "planned"
+        if (activityType?.lowercase() !in REQUIRES_CHECK_IN) return fallback
         val date = parseDate(plannedDate) ?: return fallback
         return if (status == "planned" && date.isBefore(LocalDate.now())) MISSING else fallback
     }

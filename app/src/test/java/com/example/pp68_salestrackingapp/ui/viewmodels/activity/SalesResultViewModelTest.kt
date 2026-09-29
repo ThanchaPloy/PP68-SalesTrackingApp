@@ -829,13 +829,18 @@ class SalesResultViewModelTest {
 
     @Test
     fun `save with other loss reason should send code and note as separate fields`() = runTest {
+        // ต้องผูกโครงการ: เหตุผลที่ไม่ได้งานเป็นข้อมูลของโครงการ บันทึกที่ไม่ผูกโครงการจะไม่มี
+        // หัวข้อสถานะ/เหตุผลให้กรอกแล้ว และ save() จะไม่เขียนค่าพวกนี้ลงแถวผลลัพธ์
+        coEvery { projectRepo.getProjectById("PRJ-1") } returns Result.success(
+            Project(projectId = "PRJ-1", custId = "C1", projectName = "Project A", projectStatus = "Quotation")
+        )
         coEvery { activityRepo.getActivityById("A1") } returns Result.success(
             listOf(
                 SalesActivity(
                     activityId = "A1",
                     userId = "U1",
                     customerId = null,
-                    projectId = null,
+                    projectId = "PRJ-1",
                     activityType = "Visit",
                     activityDate = "2026-04-01",
                     status = "planned"
@@ -870,13 +875,17 @@ class SalesResultViewModelTest {
 
     @Test
     fun `save with fixed loss reason should send code with no note`() = runTest {
+        // ผูกโครงการด้วยเหตุผลเดียวกับเทสต์ด้านบน (เหตุผลที่ไม่ได้งานเป็นข้อมูลของโครงการ)
+        coEvery { projectRepo.getProjectById("PRJ-1") } returns Result.success(
+            Project(projectId = "PRJ-1", custId = "C1", projectName = "Project A", projectStatus = "Quotation")
+        )
         coEvery { activityRepo.getActivityById("A1") } returns Result.success(
             listOf(
                 SalesActivity(
                     activityId = "A1",
                     userId = "U1",
                     customerId = null,
-                    projectId = null,
+                    projectId = "PRJ-1",
                     activityType = "Visit",
                     activityDate = "2026-04-01",
                     status = "planned"

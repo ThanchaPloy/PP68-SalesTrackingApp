@@ -85,7 +85,9 @@ class ExportViewModelTest {
         val yesterday = LocalDate.now().minusDays(1)
         val overdue = ActivityCard(
             activityId = "A1",
-            activityType = "visit",
+            // ต้องเป็น onsite: มีแค่ onsite ที่ต้องเช็คอิน จึงมีแค่ชนิดนี้ที่กลายเป็น "ขาดนัด" ได้
+            // (ค่าชนิดจริงในแอปมี onsite/online/call เท่านั้น — "visit" เดิมในเทสต์นี้ไม่มีอยู่จริง)
+            activityType = "onsite",
             projectName = "P1",
             companyName = "C1",
             contactName = null,

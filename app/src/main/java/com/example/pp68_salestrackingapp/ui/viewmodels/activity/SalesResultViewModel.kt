@@ -735,7 +735,10 @@ class SalesResultViewModel @Inject constructor(
             return
         }
 
-        if (s.isStatusUpdateEnabled) {
+        // บันทึกที่ไม่ผูกโครงการไม่มีหัวข้อสถานะ/โอกาส/DM ให้กรอกแล้ว (ทั้งสามเป็นข้อมูลของโครงการ)
+        // ถ้า state ยังค้างค่าพวกนี้มาจากฉบับร่างเก่าหรือบันทึกที่เคยผูกโครงการ ห้ามเอามาบังคับ
+        // validate ที่นี่ ไม่งั้นผู้ใช้จะติดที่ข้อความที่ไม่มีช่องให้แก้ในหน้าจอ
+        if (s.projectId != null && s.isStatusUpdateEnabled) {
             if (s.newStatus.isBlank()) {
                 _uiState.update { it.copy(error = "กรุณาเลือกสถานะใหม่") }
                 return
@@ -758,7 +761,10 @@ class SalesResultViewModel @Inject constructor(
             val user = authRepo.currentUser()
             try {
                 // ✅ W4: ส่งรหัสกับข้อความอิสระแยกกัน แทนการยุบเป็นก้อนเดียว
-                val isLostOrFailed = s.isStatusUpdateEnabled && (s.newStatus == "Lost" || s.newStatus == "Failed")
+                // ไม่ผูกโครงการ = ไม่มีโครงการให้สถานะ/โอกาส/DM ไปมีความหมายด้วย เขียนเป็นค่าว่างเสมอ
+                // ไม่ใช่เขียนค่าที่ค้างใน state (หน้าจอซ่อนหัวข้อพวกนี้ไปแล้ว ผู้ใช้แก้ไม่ได้)
+                val hasProject = s.projectId != null
+                val isLostOrFailed = hasProject && s.isStatusUpdateEnabled && (s.newStatus == "Lost" || s.newStatus == "Failed")
                 val finalLossReason = if (isLostOrFailed) s.lossReason else null
                 val finalLossReasonNote = if (isLostOrFailed && s.lossReason == com.example.pp68_salestrackingapp.utils.LossReasons.OTHER) {
                     s.otherLossReason
@@ -781,8 +787,8 @@ class SalesResultViewModel @Inject constructor(
                     projectId              = s.projectId,
                     createdBy              = user?.userId,
                     reportDate             = s.reportDate,
-                    newStatus              = if (s.isStatusUpdateEnabled) STATUS_MAP[s.newStatus] else null,
-                    opportunityScore       = OPPORTUNITY_MAP[s.opportunityScore] ?: s.opportunityScore,
+                    newStatus              = if (hasProject && s.isStatusUpdateEnabled) STATUS_MAP[s.newStatus] else null,
+                    opportunityScore       = if (hasProject) OPPORTUNITY_MAP[s.opportunityScore] ?: s.opportunityScore else null,
                     dealPosition           = freshProject?.dealPosition
                         ?: DEAL_POSITION_MAP[s.dealPosition] ?: s.dealPosition.ifBlank { null },
                     previousSolution       = freshProject?.previousSolution
@@ -795,7 +801,7 @@ class SalesResultViewModel @Inject constructor(
                     isProposalSent         = freshProject?.isProposalSent ?: s.isProposalSent,
                     proposalDate           = if (freshProject?.isProposalSent != null) freshProject.proposalDate else s.proposalDate,
                     competitorCount        = freshProject?.competitorCount ?: s.competitorCount,
-                    dmInvolved             = s.dmInvolved,
+                    dmInvolved             = hasProject && s.dmInvolved,
                     summary                = s.visitSummary,
                     photoUrl               = cover?.url,
                     photoTakenAt           = cover?.takenAt,

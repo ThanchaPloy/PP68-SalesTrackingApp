@@ -325,7 +325,7 @@ class ActivityRepository @Inject constructor(
                 // เรียก repository ตรงๆ เช็คอินซ้ำ/เช็คอินนัดที่ขาดนัดไปแล้วได้เลย ย้ายมาเช็คที่นี่แทน
                 val existing = activityDao.getActivityById(activityId)
                 if (existing != null &&
-                    com.example.pp68_salestrackingapp.utils.AppointmentStatus.effective(existing.status, existing.activityDate) != "planned"
+                    com.example.pp68_salestrackingapp.utils.AppointmentStatus.effective(existing.status, existing.activityDate, existing.activityType) != "planned"
                 ) {
                     return@withContext kotlin.Result.failure(Exception("นัดหมายนี้เช็คอินไม่ได้แล้ว (เช็คอินไปแล้ว/ขาดนัด/เสร็จสิ้นแล้ว)"))
                 }

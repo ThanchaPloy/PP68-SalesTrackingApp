@@ -265,7 +265,7 @@ fun ActivityCard(
 ) {
     val typeConf   = typeConfigs[card.activityType]
         ?: TypeConfig(card.activityType.uppercase(), Icons.Default.Event, TextGray)
-    val effectiveStatus = com.example.pp68_salestrackingapp.utils.AppointmentStatus.effective(card.planStatus, card.plannedDate)
+    val effectiveStatus = com.example.pp68_salestrackingapp.utils.AppointmentStatus.effective(card.planStatus, card.plannedDate, card.activityType)
     val statusConf = statusConfigs[effectiveStatus]
         ?: StatusConfig(effectiveStatus, TextGray, BgLight, null)
 

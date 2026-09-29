@@ -138,15 +138,34 @@ fun ActivityDetailContent(
                 verticalArrangement = Arrangement.spacedBy(20.dp)
             ) {
                 val effectiveStatus = com.example.pp68_salestrackingapp.utils.AppointmentStatus.effective(
+                    s.activity?.status, s.activity?.activityDate, s.activity?.activityType
+                )
+                // W6: ห้ามแก้แผนที่ยังไม่เสร็จ (planned) เมื่อเหลือเวลา <= 7 วันก่อนวันนัด
+                // เดิมปุ่มแก้ไขโชว์ทุกกรณี ผู้ใช้จึงเข้าไปแก้ฟอร์มได้จนสุดแล้วค่อยโดนบล็อกตอนกดบันทึก
+                // (CreateAppointmentViewModel.validate) ซึ่งเสียเวลาเปล่าและดูเหมือนกฎไม่ทำงาน
+                // สถานะอื่น (checked_in/completed/ขาดนัด) ยังแก้ได้เหมือนเดิม ไม่เข้าเงื่อนไขนี้
+                val editLocked = com.example.pp68_salestrackingapp.utils.AppointmentStatus.isEditLocked(
                     s.activity?.status, s.activity?.activityDate
                 )
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     StatusBadge(effectiveStatus)
                     Spacer(Modifier.weight(1f))
-                    // ✅ ให้แก้ไขได้ทุกสถานะ รวมถึงหลัง check-in/บันทึกผล (completed) แล้ว
-                    IconButton(onClick = onEdit) {
-                        Icon(Icons.Default.Edit, "แก้ไข", tint = RedPrimary)
+                    if (editLocked) {
+                        Icon(
+                            Icons.Default.Lock, "แก้ไขไม่ได้",
+                            tint = TextGray, modifier = Modifier.size(20.dp)
+                        )
+                    } else {
+                        IconButton(onClick = onEdit) {
+                            Icon(Icons.Default.Edit, "แก้ไข", tint = RedPrimary)
+                        }
                     }
+                }
+                if (editLocked) {
+                    Text(
+                        "แก้ไขหรือลบแผนนี้ไม่ได้ เนื่องจากเหลือเวลาไม่ถึง 7 วันก่อนวันนัดหมาย",
+                        fontSize = 12.sp, color = TextGray
+                    )
                 }
                 
                 InfoCard(s)

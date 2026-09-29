@@ -344,7 +344,10 @@ private fun SalesResultContent(
                     )
                 }
 
-                SectionCard(title = "1. สถานะโครงการ", icon = Icons.Default.Info) {
+                // สถานะโครงการ/โอกาสสำเร็จ/การพบผู้มีอำนาจตัดสินใจ เป็นข้อมูลระดับ "โครงการ" ทั้งหมด
+                // บันทึกที่ไม่ผูกโครงการจึงไม่มีที่ให้ข้อมูลพวกนี้ไปลง — เหลือแค่สรุปผลกับรูป
+                if (s.projectId != null) {
+                SectionCard(title = "สถานะโครงการ", icon = Icons.Default.Info) {
                     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text("สถานะปัจจุบัน: ", fontSize = 14.sp, color = TextGray)
@@ -419,7 +422,7 @@ private fun SalesResultContent(
                     }
                 }
 
-                SectionCard(title = "2. โอกาสในการสำเร็จ", icon = Icons.AutoMirrored.Filled.TrendingUp) {
+                SectionCard(title = "โอกาสในการสำเร็จ", icon = Icons.AutoMirrored.Filled.TrendingUp) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -429,8 +432,9 @@ private fun SalesResultContent(
                         OpportunityButton("COLD❄️", s.opportunityScore == "ต่ำ (COLD)", Modifier.weight(1f)) { onOpportunitySelected("ต่ำ (COLD)") }
                     }
                 }
+                }
 
-                SectionCard(title = "3. สรุปการเข้าพบ", icon = Icons.AutoMirrored.Filled.Notes) {
+                SectionCard(title = "สรุปการเข้าพบ", icon = Icons.AutoMirrored.Filled.Notes) {
                     OutlinedTextField(
                         value         = s.visitSummary,
                         onValueChange = onSummaryChanged,
@@ -451,24 +455,31 @@ private fun SalesResultContent(
                     )
                 }
 
-                SectionCard(title = "ผู้มีอำนาจตัดสินใจ (DM)", icon = Icons.Default.Person) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text("ได้พบ/ดีลกับ DM โดยตรง", fontSize = 15.sp)
-                        Switch(
-                            checked = s.dmInvolved,
-                            onCheckedChange = onDmToggle,
-                            colors = SwitchDefaults.colors(checkedThumbColor = White, checkedTrackColor = RedPrimary)
-                        )
+                // DM เป็นปัจจัยประกอบการประเมินดีลของโครงการ เช่นเดียวกับสถานะ/โอกาสสำเร็จด้านบน
+                if (s.projectId != null) {
+                    SectionCard(title = "ผู้มีอำนาจตัดสินใจ (DM)", icon = Icons.Default.Person) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("ได้พบ/ดีลกับ DM โดยตรง", fontSize = 15.sp)
+                            Switch(
+                                checked = s.dmInvolved,
+                                onCheckedChange = onDmToggle,
+                                colors = SwitchDefaults.colors(checkedThumbColor = White, checkedTrackColor = RedPrimary)
+                            )
+                        }
                     }
                 }
 
-                Spacer(Modifier.height(8.dp))
-                HorizontalDivider(color = BorderGray)
-                Text("วิเคราะห์ข้อมูลเพิ่มเติม", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = RedPrimary)
+                // หัวข้อคั่น "วิเคราะห์ข้อมูลเพิ่มเติม" มีไว้สำหรับปัจจัยของโครงการเท่านั้น
+                // บันทึกที่ไม่ผูกโครงการไม่มีอะไรอยู่ใต้หัวข้อนี้เลย จึงไม่ต้องโชว์เส้นคั่นลอยๆ
+                if (s.projectId != null) {
+                    Spacer(Modifier.height(8.dp))
+                    HorizontalDivider(color = BorderGray)
+                    Text("วิเคราะห์ข้อมูลเพิ่มเติม", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = RedPrimary)
+                }
 
                 // W6-2: โครงการที่เคยตอบข้อ 4-9 ครบแล้ว ไม่ต้องถามซ้ำ — โชว์ค่าที่ตอบไว้แบบอ่านอย่างเดียว
                 // ให้กดปุ่มไปแก้ที่หน้าแก้ไขปัจจัยแทน (ข้อ 8-9 ย้ายมาอยู่ชุดเดียวกับ 4-7 แล้ว)
@@ -479,7 +490,7 @@ private fun SalesResultContent(
                 } == true
 
                 if (dealFactorsLocked) {
-                    SectionCard(title = "วิเคราะห์ข้อมูลเพิ่มเติม (ข้อ 4-9)", icon = Icons.Default.Lock) {
+                    SectionCard(title = "ปัจจัยของดีล", icon = Icons.Default.Lock) {
                         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                             s.project?.projectName?.takeIf { it.isNotBlank() }?.let { name ->
                                 Text(
@@ -510,7 +521,7 @@ private fun SalesResultContent(
                                 ) {
                                     Icon(Icons.Default.Tune, null, tint = RedPrimary, modifier = Modifier.size(18.dp))
                                     Spacer(Modifier.width(8.dp))
-                                    Text("แก้ไขปัจจัย (ข้อ 4-9)", color = RedPrimary, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                                    Text("แก้ไขปัจจัยของดีล", color = RedPrimary, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
                                 }
                             }
                         }
@@ -528,7 +539,7 @@ private fun SalesResultContent(
                     ) {
                         Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                             SectionCard(
-                                title = "4. ตำแหน่งของดีล",
+                                title = "ตำแหน่งของดีล",
                                 icon = Icons.Default.Place,
                                 required = true,
                                 errorText = requiredErrorFor(s.showRequiredErrors, s.dealPosition)
@@ -540,7 +551,7 @@ private fun SalesResultContent(
                                 }
                             }
                             SectionCard(
-                                title = "5. Solution เดิมของลูกค้า",
+                                title = "Solution เดิมของลูกค้า",
                                 icon = Icons.Default.History,
                                 required = true,
                                 errorText = requiredErrorFor(s.showRequiredErrors, s.previousSolution)
@@ -562,7 +573,7 @@ private fun SalesResultContent(
                     ) {
                         Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                             SectionCard(
-                                title = "6. ประเภทคู่สัญญา",
+                                title = "ประเภทคู่สัญญา",
                                 icon = Icons.Default.Groups,
                                 required = true,
                                 errorText = requiredErrorFor(s.showRequiredErrors, s.counterpartyMultiplier)
@@ -574,7 +585,7 @@ private fun SalesResultContent(
                                 }
                             }
                             SectionCard(
-                                title = "7. ความรวดเร็วในการตอบรับ",
+                                title = "ความรวดเร็วในการตอบรับ",
                                 icon = Icons.Default.Speed,
                                 required = true,
                                 errorText = requiredErrorFor(s.showRequiredErrors, s.responseSpeed)
@@ -600,7 +611,7 @@ private fun SalesResultContent(
                     onToggle = { expandProposal = !expandProposal }
                 ) {
                     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                        SectionCard(title = "8. การส่งใบเสนอราคา", icon = Icons.Default.Description) {
+                        SectionCard(title = "การส่งใบเสนอราคา", icon = Icons.Default.Description) {
                             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
@@ -623,7 +634,7 @@ private fun SalesResultContent(
                                 }
                             }
                         }
-                        SectionCard(title = "9. จำนวนคู่แข่ง", icon = Icons.AutoMirrored.Filled.CompareArrows) {
+                        SectionCard(title = "จำนวนคู่แข่ง", icon = Icons.AutoMirrored.Filled.CompareArrows) {
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.SpaceBetween,
