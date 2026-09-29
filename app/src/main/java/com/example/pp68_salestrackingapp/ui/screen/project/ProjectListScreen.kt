@@ -57,18 +57,9 @@ fun ProjectStatusBadge(status: String?) {
         "Failed"          -> Color(0xFF1F2937) to Color(0xFF9CA3AF)
         else              -> Color(0xFFF3F4F6) to Color(0xFF6B7280)
     }
-    val label = when (status) {
-        "Lead"            -> "Lead"
-        "New Project"     -> "New Project"
-        "Quotation"       -> "Quotation"
-        "Bidding"         -> "Bidding"
-        "Make a Decision" -> "Decision"
-        "Assured"         -> "Assured"
-        "PO"              -> "PO"
-        "Lost"            -> "Lost"
-        "Failed"          -> "Failed"
-        else              -> status ?: "-"
-    }
+    // เดิม hardcode ชื่อ label เองแยกจาก master data อีกชุด — แอดมินแก้ label จาก master data แล้ว
+    // badge นี้จะไม่เปลี่ยนตามเลย ใช้ ProjectStages.labelFor() แหล่งเดียวกับที่อื่นในแอปแทน
+    val label = status?.let { com.example.pp68_salestrackingapp.utils.ProjectStages.labelFor(it) }.orEmpty().ifBlank { "-" }
     Surface(shape = RoundedCornerShape(20.dp), color = bg) {
         Text(label, color = fg, fontSize = 11.sp, fontWeight = FontWeight.SemiBold,
             modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp))
@@ -226,7 +217,10 @@ fun ProjectListContent(
                     message = "มีโครงการที่กรอกค้างไว้",
                     actionLabel = "ทำต่อ",
                     onAction = onAddClick,
-                    onDismiss = { hasDraft = false }
+                    onDismiss = {
+                        hasDraft = false
+                        com.example.pp68_salestrackingapp.utils.DraftStore.dismiss(context, "add_project:new")
+                    }
                 )
                 Spacer(Modifier.height(8.dp))
             }
@@ -337,7 +331,11 @@ fun FilterModal(
             val statuses = com.example.pp68_salestrackingapp.utils.ProjectStages.SELECTABLE
             FlowRow(mainAxisSpacing = 8.dp, crossAxisSpacing = 8.dp) {
                 statuses.forEach { s ->
-                    FilterTag(label = s, isSelected = s in selectedStatuses, onClick = { onStatusToggle(s) })
+                    FilterTag(
+                        label = com.example.pp68_salestrackingapp.utils.ProjectStages.labelFor(s),
+                        isSelected = s in selectedStatuses,
+                        onClick = { onStatusToggle(s) }
+                    )
                 }
             }
             
@@ -492,7 +490,8 @@ fun ProjectListItem(project: Project, onClick: () -> Unit) {
                     ) {
                         Icon(Icons.Default.Info, null, tint = Color(0xFF991B1B), modifier = Modifier.size(14.dp))
                         Text(
-                            text = "สาเหตุ: ${project.lossReasonNote?.takeIf { it.isNotBlank() } ?: project.lossReason}",
+                            text = "สาเหตุ: ${project.lossReasonNote?.takeIf { it.isNotBlank() }
+                                ?: com.example.pp68_salestrackingapp.utils.LossReasons.labelFor(project.lossReason)}",
                             fontSize = 11.sp,
                             color = Color(0xFF991B1B),
                             fontWeight = FontWeight.Medium,

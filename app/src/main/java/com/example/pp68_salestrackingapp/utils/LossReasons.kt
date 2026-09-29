@@ -25,6 +25,11 @@ object LossReasons {
     val OPTIONS: List<String>
         get() = masters?.sortedBy { it.sequence }?.map { it.code } ?: DEFAULT_OPTIONS
 
+    // OPTIONS คืน code เพราะเป็นค่าที่ต้องผูกกับ backend constraint เสมอ — จุดที่ "แสดง" ให้ผู้ใช้
+    // เห็นต้องผ่านฟังก์ชันนี้ ไม่งั้นแอดมินแก้ label จาก master data ไปแล้วไม่มีผลกับสิ่งที่ผู้ใช้เห็น
+    fun labelFor(code: String?): String =
+        masters?.firstOrNull { it.code == code }?.label ?: code.orEmpty()
+
     // เรียกจาก SyncManager หลัง login สำเร็จ — ว่างเปล่า (offline/error) แปลว่ายังใช้ fallback ต่อ
     fun applyServerData(data: List<LossReasonMaster>) {
         if (data.isNotEmpty()) masters = data

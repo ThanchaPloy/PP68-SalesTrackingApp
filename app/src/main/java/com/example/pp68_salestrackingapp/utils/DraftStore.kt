@@ -18,13 +18,13 @@ class DraftStore @Inject constructor(@ApplicationContext context: Context) {
 
     fun <T> save(key: String, draft: T) {
         val envelope = Envelope(savedAt = Instant.now().toString(), json = gson.toJson(draft))
-        prefs.edit().putString(key, gson.toJson(envelope)).apply()
+        prefs.edit().putString(key, gson.toJson(envelope)).remove(dismissedKey(key)).apply()
     }
 
     fun <T> load(key: String, clazz: Class<T>): T? {
         val raw = prefs.getString(key, null) ?: return null
         val envelope = runCatching { gson.fromJson(raw, Envelope::class.java) }.getOrNull() ?: return null
-        if (isExpired(envelope.savedAt)) {
+        if (Companion.isExpired(envelope.savedAt)) {
             clear(key)
             return null
         }
@@ -34,18 +34,34 @@ class DraftStore @Inject constructor(@ApplicationContext context: Context) {
     fun exists(key: String): Boolean = peekExists(prefs, gson, key)
 
     fun clear(key: String) {
-        prefs.edit().remove(key).apply()
+        prefs.edit().remove(key).remove(dismissedKey(key)).apply()
     }
+
+    // แบนเนอร์ในหน้าลิสต์กด "ปิด" แล้วเดิมแค่ล้าง state ในจอ ไม่เคยจำไว้เลยว่าปิดไปแล้ว พอกลับมาหน้า
+    // เดิม (ON_RESUME) ก็เช็คเจอ draft เดิมอีกแล้วโผล่ขึ้นมาใหม่ทันที — ต้องจำไว้ว่าผู้ใช้ปิดไปแล้ว
+    // จริงๆ (ไม่ลบฉบับร่างทิ้ง ผู้ใช้ยังกลับมาแก้ฟอร์มเดิมต่อได้ปกติ) จนกว่าจะมีการบันทึกทับใหม่
+    fun dismiss(key: String) {
+        prefs.edit().putBoolean(dismissedKey(key), true).apply()
+    }
+
+    private fun dismissedKey(key: String) = "$key:dismissed"
 
     companion object {
         private const val PREFS_NAME = "form_drafts"
 
-        // เช็คแบบเบาๆ ว่ามีฉบับร่างค้างอยู่ไหม (ยังไม่หมดอายุ) — ให้หน้าลิสต์ที่ไม่มี ViewModel
-        // ของตัวเองผูกกับฟอร์มนั้นโดยตรงเรียกใช้ได้โดยไม่ต้อง inject DraftStore เต็มรูปแบบ
+        // เช็คแบบเบาๆ ว่ามีฉบับร่างค้างอยู่ไหม (ยังไม่หมดอายุ และยังไม่ถูกปิดแบนเนอร์ไปแล้ว) — ให้หน้า
+        // ลิสต์ที่ไม่มี ViewModel ของตัวเองผูกกับฟอร์มนั้นโดยตรงเรียกใช้ได้โดยไม่ต้อง inject DraftStore
         fun peekExists(context: Context, key: String): Boolean =
             peekExists(context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE), Gson(), key)
 
+        // ให้หน้าลิสต์ที่ไม่ได้ inject DraftStore เต็มตัวเรียกปิดแบนเนอร์แบบจำถาวรได้ เหมือน peekExists
+        fun dismiss(context: Context, key: String) {
+            context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                .edit().putBoolean("$key:dismissed", true).apply()
+        }
+
         private fun peekExists(prefs: android.content.SharedPreferences, gson: Gson, key: String): Boolean {
+            if (prefs.getBoolean("$key:dismissed", false)) return false
             val raw = prefs.getString(key, null) ?: return false
             val envelope = runCatching { gson.fromJson(raw, Envelope::class.java) }.getOrNull() ?: return false
             return !isExpired(envelope.savedAt)
@@ -55,8 +71,6 @@ class DraftStore @Inject constructor(@ApplicationContext context: Context) {
             runCatching { Instant.parse(savedAtIso).isBefore(Instant.now().minus(7, ChronoUnit.DAYS)) }
                 .getOrElse { true }
     }
-
-    private fun isExpired(savedAtIso: String): Boolean = Companion.isExpired(savedAtIso)
 
     private data class Envelope(val savedAt: String, val json: String)
 }

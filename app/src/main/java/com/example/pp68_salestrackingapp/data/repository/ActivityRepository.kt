@@ -6,7 +6,9 @@ import com.example.pp68_salestrackingapp.data.model.*
 import com.example.pp68_salestrackingapp.data.remote.ApiService
 import com.example.pp68_salestrackingapp.data.remote.UploadApiService
 import com.example.pp68_salestrackingapp.ui.viewmodels.activity.ActivityCard
+import com.example.pp68_salestrackingapp.utils.AppointmentAlarmScheduler
 import com.example.pp68_salestrackingapp.utils.SyncManager
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
@@ -32,7 +34,8 @@ class ActivityRepository @Inject constructor(
     private val photoDao: ActivityResultPhotoDao,
     private val appointmentContactDao: AppointmentContactDao,
     private val projectRepo: ProjectRepository,
-    private val syncManager: SyncManager
+    private val syncManager: SyncManager,
+    @ApplicationContext private val context: android.content.Context
 ) {
     fun getAllActivitiesFlow(): Flow<List<SalesActivity>> = activityDao.getAllActivities()
 
@@ -414,16 +417,24 @@ class ActivityRepository @Inject constructor(
         }
     }
 
+    // ✅ cancelAlarm มีมาตั้งแต่แรกแต่ไม่มีใครเรียกใช้เลย — แยก try/catch ของตัวเองเพราะยกเลิก alarm
+    // พลาดไม่ควรทำให้ผลลัพธ์การลบนัดหมาย (ที่สำเร็จไปแล้วจริง) กลายเป็น failure ไปด้วย
+    private fun cancelAlarmSafely(activityId: String) {
+        try { AppointmentAlarmScheduler(context).cancelAlarm(activityId) } catch (_: Exception) {}
+    }
+
     suspend fun deleteActivity(activityId: String): kotlin.Result<Unit> {
         return withContext(Dispatchers.IO) {
             try {
                 if (activityId.startsWith("TEMP-")) {
                     activityDao.deleteActivityById(activityId)
+                    cancelAlarmSafely(activityId)
                     return@withContext kotlin.Result.success(Unit)
                 }
                 val response = apiService.deleteActivity("eq.$activityId")
                 if (response.isSuccessful) {
                     activityDao.deleteActivityById(activityId)
+                    cancelAlarmSafely(activityId)
                     kotlin.Result.success(Unit)
                 } else {
                     kotlin.Result.failure(Exception("à¸¥à¸šà¸™à¸±à¸”à¸«à¸¡à¸²à¸¢à¸šà¸™à¹€à¸‹à¸´à¸£à¹Œà¸Ÿà¹€à¸§à¸­à¸£à¹Œà¹„à¸¡à¹ˆà¸ªà¸³à¹€à¸£à¹‡à¸ˆ"))
@@ -431,6 +442,7 @@ class ActivityRepository @Inject constructor(
             } catch (e: Exception) {
                 if (activityId.startsWith("TEMP-")) {
                     activityDao.deleteActivityById(activityId)
+                    cancelAlarmSafely(activityId)
                     kotlin.Result.success(Unit)
                 } else {
                     // à¸«à¸²à¸à¸­à¸­à¸Ÿà¹„à¸¥à¸™à¹Œ à¸«à¹‰à¸²à¸¡à¸¥à¸šà¸‚à¹‰à¸­à¸¡à¸¹à¸¥à¸—à¸µà¹ˆà¸‹à¸´à¸‡à¸„à¹Œà¹à¸¥à¹‰à¸§à¹ƒà¸™à¹€à¸„à¸£à¸·à¹ˆà¸­à¸‡ à¹„à¸¡à¹ˆà¸‡à¸±à¹‰à¸™à¸ˆà¸°à¹€à¸›à¹‡à¸™ Zombie Data (à¸”à¸¶à¸‡à¸à¸¥à¸±à¸šà¸¡à¸²à¹ƒà¸«à¸¡à¹ˆà¹€à¸¡à¸·à¹ˆà¸­à¸­à¸­à¸™à¹„à¸¥à¸™à¹Œ)
@@ -528,14 +540,32 @@ class ActivityRepository @Inject constructor(
                     }
                     if (previous == null) {
                         // version à¹à¸£à¸à¸ªà¸¸à¸” â€” à¸œà¸¹à¸ group id à¸‚à¸­à¸‡à¸•à¸±à¸§à¹€à¸­à¸‡à¹€à¸‚à¹‰à¸²à¸à¸±à¸š realId à¸šà¸™ server à¸”à¹‰à¸§à¸¢
-                        try { apiService.updateActivityResult("eq.$realId", mapOf("result_group_id" to realId)) } catch (_: Exception) {}
+                        val backfilled = try {
+                            apiService.updateActivityResult("eq.$realId", mapOf("result_group_id" to realId)).isSuccessful
+                        } catch (_: Exception) { false }
+                        // ถ้าไม่สำเร็จ server จะเหลือ result_group_id เป็น tempId เดิมตลอดไป (ไม่มี
+                        // version ไหนจะ group รวมกับมันได้อีก) — local ถูกต้องแล้ว (finalGroupId) แค่
+                        // mark unsynced ให้ SyncManager ส่ง upsertActivityResult ที่มีค่าถูกไปแก้ซ้ำ
+                        if (!backfilled) {
+                            resultDao.updateSyncStatus(realId, false)
+                            syncManager.scheduleSync()
+                        }
                     }
                 } else {
                     resultDao.updateSyncStatus(tempId, true)
                 }
                 // âœ… mark version à¹€à¸à¹ˆà¸²à¸šà¸™ server à¸§à¹ˆà¸²à¹„à¸¡à¹ˆà¹ƒà¸Šà¹ˆà¸¥à¹ˆà¸²à¸ªà¸¸à¸”à¹à¸¥à¹‰à¸§ (best-effort à¹€à¸«à¸¡à¸·à¸­à¸™à¸ˆà¸¸à¸”à¸­à¸·à¹ˆà¸™à¹† à¹ƒà¸™à¹„à¸Ÿà¸¥à¹Œà¸™à¸µà¹‰)
                 previous?.let {
-                    try { apiService.updateActivityResult("eq.${it.resultId}", mapOf("is_latest" to false)) } catch (_: Exception) {}
+                    val flipped = try {
+                        apiService.updateActivityResult("eq.${it.resultId}", mapOf("is_latest" to false)).isSuccessful
+                    } catch (_: Exception) { false }
+                    // ถ้า flip ไม่สำเร็จ server จะมี 2 แถว is_latest=1 พร้อมกัน — แถวนี้ isSynced=true
+                    // อยู่แล้วตั้งแต่ก่อนหน้า จะไม่มีวันถูกหยิบไป retry เอง ต้อง mark unsynced ให้
+                    // SyncManager ส่ง upsertActivityResult (มี is_latest ปัจจุบัน = false ใน Room แล้ว) ซ้ำจนสำเร็จ
+                    if (!flipped) {
+                        resultDao.updateSyncStatus(it.resultId, false)
+                        syncManager.scheduleSync()
+                    }
                 }
                 syncProjectStatus(localResult)
                 kotlin.Result.success(Unit)
@@ -663,12 +693,14 @@ class ActivityRepository @Inject constructor(
             val items = contactIds.map { AppointmentContact(appointmentId, it) }
             if (items.isNotEmpty()) {
                 appointmentContactDao.insertAppointmentContacts(items)
-                if (!appointmentId.startsWith("TEMP-")) {
-                    try {
-                        apiService.deleteAppointmentContacts("eq.$appointmentId")
-                        apiService.addAppointmentContacts(items)
-                    } catch (_: IOException) { /* offline â€” skip, contacts saved locally */ }
-                }
+            }
+            // ✅ ต้องยิง delete เสมอแม้ items ว่างเปล่า (ลบผู้เข้าร่วมออกหมด) ไม่งั้น server จะเหลือ
+            // รายชื่อเดิมค้างอยู่ตลอดไปเพราะ if (items.isNotEmpty()) เดิมครอบ delete ไว้ด้วย
+            if (!appointmentId.startsWith("TEMP-")) {
+                try {
+                    apiService.deleteAppointmentContacts("eq.$appointmentId")
+                    if (items.isNotEmpty()) apiService.addAppointmentContacts(items)
+                } catch (_: IOException) { /* offline — skip, contacts saved locally */ }
             }
         }
     }

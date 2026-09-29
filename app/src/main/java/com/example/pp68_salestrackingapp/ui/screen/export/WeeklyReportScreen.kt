@@ -480,7 +480,7 @@ private fun PostSalesResultDetailCard(
                     item { DetailChip(label = "โซลูชั่นเดิม: ${detail.previousSolution}", color = Color(0xFFECEFF1), textColor = Color(0xFF37474F)) }
                 }
                 if (!detail.lossReason.isNullOrBlank()) {
-                    item { DetailChip(label = "เหตุผลแพ้: ${detail.lossReason}", color = Color(0xFFFFEBEE), textColor = Color(0xFFC62828)) }
+                    item { DetailChip(label = "เหตุผลแพ้: ${com.example.pp68_salestrackingapp.utils.LossReasons.labelFor(detail.lossReason)}", color = Color(0xFFFFEBEE), textColor = Color(0xFFC62828)) }
                 }
             }
 
@@ -726,7 +726,7 @@ suspend fun exportToExcel(context: Context, fileName: String, activities: List<E
                         item.checkInStatus ?: "",
                         item.locationName ?: "",
                         item.status,
-                        res.newStatus ?: "",
+                        res.newStatus?.let { com.example.pp68_salestrackingapp.utils.ProjectStages.labelFor(it) } ?: "",
                         res.summary ?: "",
                         res.opportunityScore ?: "",
                         if (res.isProposalSent) "Yes" else "No",
@@ -736,7 +736,7 @@ suspend fun exportToExcel(context: Context, fileName: String, activities: List<E
                         res.responseSpeed ?: "",
                         res.dealPosition ?: "",
                         res.previousSolution ?: "",
-                        res.lossReason ?: ""
+                        res.lossReason?.let { com.example.pp68_salestrackingapp.utils.LossReasons.labelFor(it) } ?: ""
                     )
 
                     values.forEachIndexed { i, v ->
@@ -934,13 +934,13 @@ suspend fun exportToPdf(context: Context, fileName: String, activities: List<Exp
                 item.resultDetails.forEach { res ->
                     addAll(pdfLines("• สรุปผล: ${res.summary ?: "N/A"}", 480f, resultPaint, 320f, 14f))
                     val detailParts = mutableListOf<String>()
-                    if (!res.newStatus.isNullOrBlank()) detailParts.add("สถานะใหม่: ${res.newStatus}")
+                    if (!res.newStatus.isNullOrBlank()) detailParts.add("สถานะใหม่: ${com.example.pp68_salestrackingapp.utils.ProjectStages.labelFor(res.newStatus)}")
                     if (!res.opportunityScore.isNullOrBlank()) detailParts.add("โอกาส: ${res.opportunityScore}")
                     if (res.isProposalSent) detailParts.add("proposal: ใช่ (${res.proposalDate ?: ""})") else detailParts.add("proposal: ไม่ใช่")
                     if (res.dmInvolved) detailParts.add("DM: มี")
                     if (res.competitorCount > 0) detailParts.add("คู่แข่ง: ${res.competitorCount} ราย")
                     if (!res.previousSolution.isNullOrBlank()) detailParts.add("โซลูชั่นเดิม: ${res.previousSolution}")
-                    if (!res.lossReason.isNullOrBlank()) detailParts.add("เหตุผลแพ้: ${res.lossReason}")
+                    if (!res.lossReason.isNullOrBlank()) detailParts.add("เหตุผลแพ้: ${com.example.pp68_salestrackingapp.utils.LossReasons.labelFor(res.lossReason)}")
                     detailParts.forEach { detail ->
                         addAll(pdfLines("  - $detail", 480f, subPaint, 320f, 13f))
                     }

@@ -10,9 +10,13 @@ import android.os.Looper
  * แทนที่ FusedLocationProviderClient (Play Services) ด้วย android.location.LocationManager
  * ของ Android เอง — ไม่ต้องพึ่ง Google Play Services
  */
+// onError: เรียกทุกครั้งที่หาพิกัดไม่ได้เลย (ปิด location service ทั้งเครื่อง/ไม่เคยมีพิกัดแคชไว้)
+// ไม่งั้นผู้เรียกไม่มีทางรู้เลยว่าควรเลิกรอ onResult แล้ว — เดิม optional เพื่อไม่กระทบจุดเรียกอื่น
+// ที่ยังไม่ได้ผูก error handling ไว้
 @SuppressLint("MissingPermission")
-fun fetchCurrentLocation(context: Context, onResult: (Double, Double) -> Unit) {
-    val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as? LocationManager ?: return
+fun fetchCurrentLocation(context: Context, onError: (() -> Unit)? = null, onResult: (Double, Double) -> Unit) {
+    val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as? LocationManager
+    if (locationManager == null) { onError?.invoke(); return }
     val provider = when {
         locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER) -> LocationManager.GPS_PROVIDER
         locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER) -> LocationManager.NETWORK_PROVIDER
@@ -20,10 +24,10 @@ fun fetchCurrentLocation(context: Context, onResult: (Double, Double) -> Unit) {
     }
 
     if (provider == null) {
-        locationManager.allProviders
+        val lastKnown = locationManager.allProviders
             .mapNotNull { locationManager.getLastKnownLocation(it) }
             .maxByOrNull { it.time }
-            ?.let { onResult(it.latitude, it.longitude) }
+        if (lastKnown != null) onResult(lastKnown.latitude, lastKnown.longitude) else onError?.invoke()
         return
     }
 
@@ -32,7 +36,8 @@ fun fetchCurrentLocation(context: Context, onResult: (Double, Double) -> Unit) {
             if (location != null) {
                 onResult(location.latitude, location.longitude)
             } else {
-                locationManager.getLastKnownLocation(provider)?.let { onResult(it.latitude, it.longitude) }
+                val lastKnown = locationManager.getLastKnownLocation(provider)
+                if (lastKnown != null) onResult(lastKnown.latitude, lastKnown.longitude) else onError?.invoke()
             }
         }
     } else {

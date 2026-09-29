@@ -552,7 +552,7 @@ private fun PipelineBar(stage: PipelineStageCount, maxCount: Int) {
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Text(stage.stage, fontSize = 13.sp,
+                Text(com.example.pp68_salestrackingapp.utils.ProjectStages.labelFor(stage.stage), fontSize = 13.sp,
                     fontWeight = FontWeight.Medium,
                     color = if (fraction > 0.3f) White else TextDark)
                 Text("${stage.count}", fontSize = 13.sp,

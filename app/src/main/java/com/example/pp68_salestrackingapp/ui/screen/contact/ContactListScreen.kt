@@ -168,7 +168,10 @@ fun ContactListScreenContent(
                     message = "มีผู้ติดต่อที่กรอกค้างไว้",
                     actionLabel = "ทำต่อ",
                     onAction = onAddClick,
-                    onDismiss = { hasDraft = false }
+                    onDismiss = {
+                        hasDraft = false
+                        com.example.pp68_salestrackingapp.utils.DraftStore.dismiss(context, "add_contact:new")
+                    }
                 )
                 Spacer(Modifier.height(8.dp))
             }

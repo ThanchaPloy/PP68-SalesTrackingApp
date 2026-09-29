@@ -303,6 +303,11 @@ class SyncManager @Inject constructor(
                         put("planned_date", activity.activityDate)
                         put("plan_status", activity.status)
                         put("is_appointment", activity.isAppointment)
+                        // ✅ ไม่งั้นแก้นัดหมายให้ผูก/เปลี่ยนโครงการตอนออฟไลน์ แล้ว retry รอบนี้ผ่านแค่
+                        // ฟิลด์อื่น จะถูก mark synced ทั้งที่ project_code/cust_code ไม่เคยถูกส่งเลย
+                        // หายถาวรเงียบๆ ไม่มีโอกาสลองใหม่อีก
+                        activity.projectId?.let { put("project_code", it) }
+                        if (activity.customerId != "CST-UNKNOWN") activity.customerId?.let { put("cust_code", it) }
                         activity.plannedTime?.let { put("planned_time", it) }
                         activity.plannedEndTime?.let { put("planned_end_time", it) }
                         activity.plannedLat?.let { put("planned_lat", it) }
@@ -349,7 +354,12 @@ class SyncManager @Inject constructor(
                                 try { apiService.addResultPhotos(pendingPhotos) } catch (_: Exception) {}
                             }
                             if (wasSelfGroup) {
-                                try { apiService.updateActivityResult("eq.$realId", mapOf("result_group_id" to realId)) } catch (_: Exception) {}
+                                val backfilled = try {
+                                    apiService.updateActivityResult("eq.$realId", mapOf("result_group_id" to realId)).isSuccessful
+                                } catch (_: Exception) { false }
+                                // ไม่งั้นแถวนี้จะเหลือ result_group_id เป็น tempId เดิมตลอดไปเพราะ isSynced
+                                // ถูก mark true ไปแล้วด้านบน จะไม่มีวันถูกหยิบมา retry อีกเลย
+                                if (!backfilled) resultDao.updateSyncStatus(realId, false)
                             }
                         } else {
                             resultDao.updateSyncStatus(res.resultId, true)

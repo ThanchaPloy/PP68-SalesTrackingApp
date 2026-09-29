@@ -94,7 +94,11 @@ object NetworkModule {
             val response = chain.proceed(requestBuilder.build())
             // ✅ 401 จาก endpoint ที่ต้อง auth หมายถึง token หมดอายุ/ไม่ถูกต้องเสมอ (ต่างจาก
             // login-api ที่ 401 หมายถึงรหัสผ่านผิด) — เคลียร์ token แล้วแจ้งให้เด้งไปหน้า Login
-            if (response.code == 401 && !path.contains("login-api") && !path.contains("register-api")) {
+            // change-password-api ก็ 401 ตอนกรอกรหัสผ่านเดิมผิดเหมือนกัน (คนละความหมายกับ token
+            // หมดอายุ) ไม่งั้นพิมพ์รหัสเดิมผิดจะโดนเด้งออกจากระบบทั้งที่ยัง login อยู่ปกติ
+            if (response.code == 401 && !path.contains("login-api") && !path.contains("register-api") &&
+                !path.contains("change-password-api")
+            ) {
                 tokenManager.notifySessionExpired()
             }
             response

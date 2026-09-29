@@ -96,7 +96,7 @@ fun HomeScreen(
         val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
             if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
                 viewModel.loadActivities()
-                hasApptDraft = com.example.pp68_salestrackingapp.utils.DraftStore.peekExists(context, "create_appointment:new")
+                hasApptDraft = com.example.pp68_salestrackingapp.utils.DraftStore.peekExists(context, "create_appointment:new:none")
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -157,7 +157,10 @@ fun HomeScreen(
         onTabChange         = onTabChange,
         onMonthChange       = { viewModel.selectMonth(it) },
         hasApptDraft        = hasApptDraft,
-        onDismissApptDraft  = { hasApptDraft = false }
+        onDismissApptDraft  = {
+            hasApptDraft = false
+            com.example.pp68_salestrackingapp.utils.DraftStore.dismiss(context, "create_appointment:new:none")
+        }
     )
 }
 

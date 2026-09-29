@@ -313,7 +313,8 @@ fun AddProjectContent(
                     errorMsg    = uiState.statusError,
                     onSelect    = { idx ->
                         onEvent(AddProjectEvent.StatusChanged(statusList[idx]))
-                    }
+                    },
+                    displayLabel = { com.example.pp68_salestrackingapp.utils.ProjectStages.labelFor(it) }
                 )
             }
 
@@ -329,7 +330,8 @@ fun AddProjectContent(
                             errorMsg    = uiState.lossReasonError,
                             onSelect    = { idx ->
                                 onEvent(AddProjectEvent.LossReasonChanged(lossReasonOptions[idx]))
-                            }
+                            },
+                            displayLabel = { com.example.pp68_salestrackingapp.utils.LossReasons.labelFor(it) }
                         )
                     }
 

@@ -31,6 +31,7 @@ class ActivityRepositoryCheckInTest {
     private val appointmentContactDao: AppointmentContactDao = mockk(relaxed = true)
     private val projectRepo: ProjectRepository = mockk(relaxed = true)
     private val syncManager: SyncManager = mockk(relaxed = true)
+    private val context: android.content.Context = mockk(relaxed = true)
 
     private lateinit var repo: ActivityRepository
 
@@ -48,7 +49,7 @@ class ActivityRepositoryCheckInTest {
     fun setUp() {
         repo = ActivityRepository(
             apiService, uploadApiService, activityDao, projectDao, customerDao, contactDao,
-            planItemDao, resultDao, photoDao, appointmentContactDao, projectRepo, syncManager
+            planItemDao, resultDao, photoDao, appointmentContactDao, projectRepo, syncManager, context
         )
         coEvery { activityDao.getActivityById("A1") } returns activity
     }

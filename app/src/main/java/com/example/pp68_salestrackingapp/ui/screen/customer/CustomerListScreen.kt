@@ -181,7 +181,10 @@ fun CustomerListContent(
                     message = "มีลูกค้าที่กรอกค้างไว้",
                     actionLabel = "ทำต่อ",
                     onAction = onAddClick,
-                    onDismiss = { hasDraft = false }
+                    onDismiss = {
+                        hasDraft = false
+                        com.example.pp68_salestrackingapp.utils.DraftStore.dismiss(context, "add_customer:new")
+                    }
                 )
                 Spacer(Modifier.height(8.dp))
             }

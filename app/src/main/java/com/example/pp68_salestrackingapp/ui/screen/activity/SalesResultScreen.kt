@@ -282,7 +282,8 @@ private fun SalesResultContent(
                                     value = s.quickAddProjectStatus,
                                     placeholder = "เลือกสถานะ",
                                     options = statusList,
-                                    onSelect = { idx -> onQuickAddProjectStatusChanged(statusList[idx]) }
+                                    onSelect = { idx -> onQuickAddProjectStatusChanged(statusList[idx]) },
+                                    displayLabel = { com.example.pp68_salestrackingapp.utils.ProjectStages.labelFor(it) }
                                 )
                             }
                             s.quickAddProjectError?.let {
@@ -333,7 +334,9 @@ private fun SalesResultContent(
                             Text("สถานะปัจจุบัน: ", fontSize = 14.sp, color = TextGray)
                             Surface(shape = RoundedCornerShape(16.dp), color = Color(0xFFEEEEEE)) {
                                 Text(
-                                    text = s.currentStatus.ifBlank { "ไม่ระบุ" },
+                                    text = s.currentStatus.ifBlank { null }?.let {
+                                        com.example.pp68_salestrackingapp.utils.ProjectStages.labelFor(it)
+                                    } ?: "ไม่ระบุ",
                                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
                                     fontSize = 13.sp, fontWeight = FontWeight.Bold, color = TextDark
                                 )
@@ -357,7 +360,8 @@ private fun SalesResultContent(
                                 value       = s.newStatus,
                                 placeholder = "เลือกสถานะใหม่",
                                 options     = statusList,
-                                onSelect    = { onNewStatusSelected(statusList[it]) }
+                                onSelect    = { onNewStatusSelected(statusList[it]) },
+                                displayLabel = { com.example.pp68_salestrackingapp.utils.ProjectStages.labelFor(it) }
                             )
                         }
 
@@ -376,7 +380,8 @@ private fun SalesResultContent(
                                     options     = lossReasonOptions,
                                     isError     = s.lossReasonError != null,
                                     errorMsg    = s.lossReasonError,
-                                    onSelect    = { onLossReasonChanged(lossReasonOptions[it]) }
+                                    onSelect    = { onLossReasonChanged(lossReasonOptions[it]) },
+                                    displayLabel = { com.example.pp68_salestrackingapp.utils.LossReasons.labelFor(it) }
                                 )
 
                                 if (s.lossReason == "อื่น ๆ") {

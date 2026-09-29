@@ -60,7 +60,11 @@ class CustomerRepository @Inject constructor(
                         val ownCustomers = ownCustResp.body()!!.map { it.copy(isSynced = true) }
                         customers.addAll(ownCustomers)
                         if (ownCustomers.isNotEmpty()) {
-                            customerDao.clearAndInsert(ownCustomers)
+                            // ✅ ห้ามใช้ clearAndInsert ตรงนี้ — มันลบลูกค้าสาขาอื่นที่เคยแคชไว้จาก
+                            // การ refresh รอบก่อนทิ้งทันที ถ้า phase 2 (ดึงทั้งสาขา) ด้านล่างพังหรือ
+                            // ออฟไลน์ต่อ จะไม่มีทาง insert กลับมาอีกเลย ทั้งที่ catch (IOException)
+                            // ด้านล่างบอกว่า "Room data still valid" ซึ่งจะเป็นเท็จทันทีถ้าใช้ clearAndInsert ที่นี่
+                            customerDao.insertCustomers(ownCustomers)
                         }
                     }
                 }

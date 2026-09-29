@@ -98,7 +98,10 @@ fun DropdownField(
     onSelect: (Int) -> Unit,
     enabled: Boolean = true,
     isError: Boolean = false,
-    errorMsg: String? = null
+    errorMsg: String? = null,
+    // options/value อาจเป็น code ที่ต้องคงที่ (เช่น ProjectStages/LossReasons) ไม่ใช่ข้อความที่จะโชว์
+    // จริง — ปล่อย default ไว้เป็น identity ไม่กระทบ dropdown อื่นที่ options คือข้อความแสดงผลอยู่แล้ว
+    displayLabel: (String) -> String = { it }
 ) {
     var expanded by remember { mutableStateOf(false) }
     Column {
@@ -121,7 +124,7 @@ fun DropdownField(
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Text(
-                    text = value.ifBlank { placeholder },
+                    text = if (value.isBlank()) placeholder else displayLabel(value),
                     color = if (!enabled || value.isBlank()) AppColors.TextHint else AppColors.TextPrimary,
                     fontSize = 14.sp
                 )
@@ -140,7 +143,7 @@ fun DropdownField(
         ) {
             options.forEachIndexed { idx, option ->
                 DropdownMenuItem(
-                    text = { Text(option, fontSize = 14.sp, color = AppColors.TextPrimary) },
+                    text = { Text(displayLabel(option), fontSize = 14.sp, color = AppColors.TextPrimary) },
                     onClick = {
                         onSelect(idx)
                         expanded = false

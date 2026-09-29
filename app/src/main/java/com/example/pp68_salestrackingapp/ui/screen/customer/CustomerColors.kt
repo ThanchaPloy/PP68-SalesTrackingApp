@@ -96,8 +96,9 @@ fun ProjectStatusBadge(status: String?) {
         "Failed"             -> Color(0xFF1F2937) to Color(0xFF9CA3AF)
         else                 -> Color(0xFFF3F4F6) to Color(0xFF6B7280)
     }
+    val label = status?.let { com.example.pp68_salestrackingapp.utils.ProjectStages.labelFor(it) }.orEmpty().ifBlank { "-" }
     Surface(shape = RoundedCornerShape(20.dp), color = bg) {
-        Text(status ?: "-", color = textColor, fontSize = 11.sp,
+        Text(label, color = textColor, fontSize = 11.sp,
             fontWeight = FontWeight.SemiBold,
             modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp))
     }

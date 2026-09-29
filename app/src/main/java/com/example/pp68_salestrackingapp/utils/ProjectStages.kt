@@ -37,6 +37,12 @@ object ProjectStages {
     fun probabilityPct(code: String?): Int =
         masters?.firstOrNull { it.code == code }?.probabilityPct ?: DEFAULT_PROBABILITY[code] ?: 0
 
+    // SELECTABLE คืน code เพราะต้องเป็นค่าที่ผูกกับ project.projectStatus/backend constraint เสมอ —
+    // จุดไหนจะ "แสดง" ให้ผู้ใช้เห็นต้องผ่านฟังก์ชันนี้ ไม่งั้นแอดมินแก้ label จาก master data ไปแล้ว
+    // ผู้ใช้จะยังเห็น code ภาษาอังกฤษเดิมอยู่ดี ไม่มีผลอะไรเลย
+    fun labelFor(code: String?): String =
+        masters?.firstOrNull { it.code == code }?.label ?: code.orEmpty()
+
     // เรียกจาก SyncManager หลัง login สำเร็จ — ว่างเปล่า (offline/error) แปลว่ายังใช้ fallback ต่อ
     fun applyServerData(data: List<ProjectStageMaster>) {
         if (data.isNotEmpty()) masters = data

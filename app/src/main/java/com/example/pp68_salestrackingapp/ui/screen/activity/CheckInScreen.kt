@@ -57,13 +57,16 @@ fun CheckInScreen(
     var currentLat by remember { mutableStateOf<Double?>(null) }
     var currentLng by remember { mutableStateOf<Double?>(null) }
     var isFetchingLocation by remember { mutableStateOf(false) }
+    // ✅ ปิด location service ทั้งเครื่องแล้วไม่เคยมีพิกัดแคชไว้เลย fetchCurrentLocation() จะไม่เรียก
+    // callback อะไรกลับมาเลย — เดิมสปินเนอร์หมุนค้างตลอดไปไม่มีทางรู้ว่าต้องเปิด location ก่อน
+    var locationError by remember { mutableStateOf(false) }
 
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
         if (permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
             permissions[Manifest.permission.ACCESS_COARSE_LOCATION] == true) {
-            fetchCurrentLocation(context) { lat, lng ->
+            fetchCurrentLocation(context, onError = { locationError = true }) { lat, lng ->
                 currentLat = lat
                 currentLng = lng
                 viewModel.updateCurrentLocation(lat, lng)
@@ -76,7 +79,8 @@ fun CheckInScreen(
 
         if (ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
             isFetchingLocation = true
-            fetchCurrentLocation(context) { lat, lng ->
+            locationError = false
+            fetchCurrentLocation(context, onError = { isFetchingLocation = false; locationError = true }) { lat, lng ->
                 currentLat = lat
                 currentLng = lng
                 viewModel.updateCurrentLocation(lat, lng)
@@ -128,10 +132,12 @@ fun CheckInScreen(
         currentLat = currentLat,
         currentLng = currentLng,
         isFetchingLocation = isFetchingLocation,
+        locationError = locationError,
         onBack = onBack,
         onRefreshLocation = {
             isFetchingLocation = true
-            fetchCurrentLocation(context) { lat, lng ->
+            locationError = false
+            fetchCurrentLocation(context, onError = { isFetchingLocation = false; locationError = true }) { lat, lng ->
                 currentLat = lat
                 currentLng = lng
                 viewModel.updateCurrentLocation(lat, lng)
@@ -154,6 +160,7 @@ fun CheckInContent(
     currentLat: Double?,
     currentLng: Double?,
     isFetchingLocation: Boolean,
+    locationError: Boolean = false,
     onBack: () -> Unit,
     onRefreshLocation: () -> Unit,
     onConfirmCheckin: (Double, Double) -> Unit
@@ -201,6 +208,20 @@ fun CheckInContent(
                         // เห็นทั้งตำแหน่งเราและจุดนัดหมายพร้อมกัน เหมือนพฤติกรรมเดิม
                         fitBounds = targetPos?.let { listOf(currentPos, it) }
                     )
+                } else if (locationError) {
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(
+                                "หาตำแหน่งไม่พบ กรุณาเปิดสัญญาณ GPS/location แล้วลองใหม่",
+                                color = TextGray, fontSize = 14.sp, textAlign = TextAlign.Center,
+                                modifier = Modifier.padding(horizontal = 32.dp)
+                            )
+                            Spacer(Modifier.height(12.dp))
+                            Button(onClick = onRefreshLocation, colors = ButtonDefaults.buttonColors(containerColor = RedPrimary)) {
+                                Text("ลองอีกครั้ง", color = White)
+                            }
+                        }
+                    }
                 } else {
                     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         CircularProgressIndicator(color = RedPrimary)

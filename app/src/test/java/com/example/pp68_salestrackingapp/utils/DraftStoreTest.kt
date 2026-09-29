@@ -33,8 +33,13 @@ class DraftStoreTest {
             storage.remove(firstArg<String>())
             editor
         }
+        every { editor.putBoolean(any(), any()) } answers {
+            storage[firstArg()] = secondArg<Boolean>().toString()
+            editor
+        }
         every { editor.apply() } just Runs
         every { prefs.getString(any(), any()) } answers { storage[firstArg()] ?: secondArg() }
+        every { prefs.getBoolean(any(), any()) } answers { storage[firstArg<String>()]?.toBoolean() ?: secondArg() }
         every { prefs.contains(any()) } answers { storage.containsKey(firstArg<String>()) }
         store = DraftStore(context)
     }

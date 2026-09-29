@@ -140,7 +140,13 @@ class CreateAppointmentViewModel @Inject constructor(
         endTime, lat, lng, selectedContactIds, selectedMasterIds, isOtherSelected, otherObjectiveText
     )
 
-    private fun draftKey() = "create_appointment:${_uiState.value.activityId ?: "new"}"
+    // ✅ ไม่งั้นนัดหมายใหม่แบบไม่ผูกโครงการ กับนัดหมายใหม่ที่เปิดมาจากหน้าโครงการ (prefill
+    // selectedProjectId ไว้แล้ว) จะใช้ key "new" ร่วมกัน — เจอ draft เก่าที่ไม่เกี่ยวข้องมาแล้วกู้คืน
+    // ทับข้อมูลโครงการที่ prefill ไว้แบบไม่มีการเตือนเลย
+    private fun draftKey(): String {
+        val s = _uiState.value
+        return "create_appointment:${s.activityId ?: "new:${s.selectedProjectId ?: "none"}"}"
+    }
 
     fun checkForDraft() {
         val s = _uiState.value
@@ -728,6 +734,10 @@ class CreateAppointmentViewModel @Inject constructor(
             // ⏰ ตั้งเวลาแจ้งเตือนล่วงหน้า 30 นาที
             try {
                 val alarmScheduler = com.example.pp68_salestrackingapp.utils.AppointmentAlarmScheduler(context)
+                // ✅ แก้ไขนัดหมาย (เวลา/หัวข้อ) ต้องยกเลิกของเดิมก่อนเสมอ — scheduleAlarm() เองจะ
+                // ข้ามเงียบๆ ถ้าช่วงเวลาแจ้งเตือนใดกลายเป็นอดีตไปแล้วหลังแก้ (เช่น เลื่อนนัดเร็วขึ้น)
+                // ถ้าไม่ยกเลิกก่อน alarm เก่าที่ตั้งไว้ล่วงหน้าตอนยังไม่แก้จะยังค้างแจ้งข้อมูลเดิมอยู่
+                alarmScheduler.cancelAlarm(finalId)
                 alarmScheduler.scheduleAlarm(
                     activityId = finalId,
                     companyName = s.selectedCompanyName ?: "สถานที่นัดหมาย",
