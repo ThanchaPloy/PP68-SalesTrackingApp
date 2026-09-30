@@ -293,7 +293,7 @@ private fun InfoTab(customer: Customer?, projects: List<Project>, onProjectClick
                 Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text("ประเภทธุรกิจ: ${customer?.custType ?: "-"}", fontWeight = FontWeight.Bold)
-                        BizGroupBadge(customer?.branchId)
+                        BizGroupBadge(customer?.bizPostingGroup)
                     }
                     if (!customer?.vatRegistrationNo.isNullOrBlank()) {
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {

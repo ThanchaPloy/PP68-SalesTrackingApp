@@ -337,7 +337,9 @@ class CreateAppointmentViewModel @Inject constructor(
                 companyName = s.quickAddCompanyName.trim(),
                 custType = s.quickAddCustType,
                 createdBy = user?.userId,
-                branchId = user?.teamId,
+                // ⚠️ ตรงนี้เขียน "รหัสสาขาของเซลส์" ลงช่องที่ ERP ใช้เก็บ "เทียร์ของลูกค้า" — คนละความหมายกัน
+                // ค่านี้ไปโผล่ที่ BizGroupBadge และชิปกรอง R/W/I/P รอตัดสินว่าควรใส่อะไรแทน (ส่วนสาขาจริงมาจากสาขาของเซลส์ฝั่ง backend อยู่แล้ว)
+                bizPostingGroup = user?.teamId,
                 isLead = true
             )
             customerRepo.addCustomer(newCust).fold(

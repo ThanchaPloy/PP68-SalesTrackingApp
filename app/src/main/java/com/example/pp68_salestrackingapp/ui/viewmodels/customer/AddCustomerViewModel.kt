@@ -220,7 +220,9 @@ class AddCustomerViewModel @Inject constructor(
             val customer = Customer(
                 custId        = s.custId ?: "TEMP-${UUID.randomUUID().toString().take(8).uppercase()}",
                 companyName   = s.companyName,
-                branchId          = userBranchId,
+                // ⚠️ ตรงนี้เขียน "รหัสสาขาของเซลส์" ลงช่องที่ ERP ใช้เก็บ "เทียร์ของลูกค้า" — คนละความหมายกัน
+                // ค่านี้ไปโผล่ที่ BizGroupBadge และชิปกรอง R/W/I/P รอตัดสินว่าควรใส่อะไรแทน (ส่วนสาขาจริงมาจากสาขาของเซลส์ฝั่ง backend อยู่แล้ว)
+                bizPostingGroup   = userBranchId,
                 vatRegistrationNo = s.vatRegistrationNo.ifBlank { null },
                 custType      = s.custType,
                 companyAddr   = s.address.ifBlank { null },

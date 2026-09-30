@@ -532,7 +532,9 @@ class AddProjectViewModel @Inject constructor(
                 companyName = st.quickAddCompanyName.trim(),
                 custType = st.quickAddCustType,
                 createdBy = authRepo.currentUser()?.userId,
-                branchId = authRepo.currentUser()?.teamId,
+                // ⚠️ ตรงนี้เขียน "รหัสสาขาของเซลส์" ลงช่องที่ ERP ใช้เก็บ "เทียร์ของลูกค้า" — คนละความหมายกัน
+                // ค่านี้ไปโผล่ที่ BizGroupBadge และชิปกรอง R/W/I/P รอตัดสินว่าควรใส่อะไรแทน (ส่วนสาขาจริงมาจากสาขาของเซลส์ฝั่ง backend อยู่แล้ว)
+                bizPostingGroup = authRepo.currentUser()?.teamId,
                 isLead = true
             )
             val result = customerRepo.addCustomer(newCust) // Using customerRepo per the constructor

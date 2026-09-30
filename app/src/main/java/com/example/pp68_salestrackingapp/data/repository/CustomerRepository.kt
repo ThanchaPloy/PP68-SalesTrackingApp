@@ -141,7 +141,7 @@ class CustomerRepository @Inject constructor(
             try {
                 val body = mutableMapOf<String, Any?>(
                     "customer_name"         to localCustomer.companyName,
-                    "gen_bus_posting_group" to localCustomer.branchId,
+                    "gen_bus_posting_group" to localCustomer.bizPostingGroup,
                     "cust_type"             to localCustomer.custType,
                     "address"               to localCustomer.companyAddr,
                     "latitude"              to localCustomer.companyLat,
@@ -204,7 +204,7 @@ class CustomerRepository @Inject constructor(
             try {
                 val updates = buildMap<String, Any?> {
                     put("customer_name", customer.companyName)
-                    put("gen_bus_posting_group", customer.branchId)
+                    put("gen_bus_posting_group", customer.bizPostingGroup)
                     put("cust_type", customer.custType)
                     put("address", customer.companyAddr)
                     put("latitude", customer.companyLat)

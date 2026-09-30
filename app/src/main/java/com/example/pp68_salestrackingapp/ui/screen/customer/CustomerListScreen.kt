@@ -400,7 +400,7 @@ fun CustomerListItem(customer: Customer, onClick: () -> Unit) {
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 TypeTag(customer.custType)
-                BizGroupBadge(customer.branchId)
+                BizGroupBadge(customer.bizPostingGroup)
                 if (customer.isLead) {
                     Surface(
                         shape = RoundedCornerShape(4.dp),

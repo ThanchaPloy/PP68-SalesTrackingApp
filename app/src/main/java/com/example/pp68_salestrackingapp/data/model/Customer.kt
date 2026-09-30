@@ -14,8 +14,14 @@ data class Customer(
     @ColumnInfo(name = "company_name")
     @SerializedName("customer_name") val companyName: String,
 
+    // ⚠️ ไม่ใช่รหัสสาขา แม้คอลัมน์ในเครื่องจะชื่อ branch_id — ฟิลด์ต้นทาง gen_bus_posting_group
+    // เป็นของ MS Dynamics 365 และเก็บ "กลุ่มธุรกิจ/เทียร์ของลูกค้า" (retail/wholesale ฯลฯ)
+    // สาขาจริงของลูกค้าคำนวณจากสาขาของเซลส์ที่ดูแล (backend findByBranch JOIN employee.emp_brch_code)
+    // ไม่ได้อ่านจากฟิลด์นี้เลย ส่วนชื่อสาขาที่แสดงบนจอใช้ `branch` ด้านล่าง
+    // ชื่อเดิม branchId ทำให้เข้าใจผิดมาแล้วจนเกือบสร้างตรรกะกรองสาขาผิดที่ — เปลี่ยนแต่ชื่อ property
+    // ส่วน @ColumnInfo/@SerializedName คงเดิม ดีบีและ JSON จึงไม่เปลี่ยนอะไรเลย
     @ColumnInfo(name = "branch_id")
-    @SerializedName("gen_bus_posting_group") val branchId: String? = null,
+    @SerializedName("gen_bus_posting_group") val bizPostingGroup: String? = null,
 
     @ColumnInfo(name = "branch")
     @SerializedName("branch") val branch: String? = null,

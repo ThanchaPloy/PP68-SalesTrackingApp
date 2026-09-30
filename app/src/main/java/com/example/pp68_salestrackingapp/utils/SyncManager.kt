@@ -183,7 +183,7 @@ class SyncManager @Inject constructor(
             try {
                 val body = mutableMapOf<String, Any?>(
                     "customer_name"         to customer.companyName,
-                    "gen_bus_posting_group" to customer.branchId,
+                    "gen_bus_posting_group" to customer.bizPostingGroup,
                     "cust_type"             to customer.custType,
                     "address"               to customer.companyAddr,
                     "latitude"              to customer.companyLat,

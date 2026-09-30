@@ -58,11 +58,11 @@ class CustomerListViewModelTest {
         }
     }
 
-    // ปุ่มกรอง R/W/I/P (BizGroupBadge โชว์จาก customer.branchId) เคยรับค่ามาแต่ไม่เคยกรองจริง
+    // ปุ่มกรอง R/W/I/P (BizGroupBadge โชว์จาก customer.bizPostingGroup) เคยรับค่ามาแต่ไม่เคยกรองจริง
     @Test
-    fun `onBizGroupFilter narrows the list by customer branchId`() = runTest {
-        val retail = Customer("C1", "Retail Co", "R", null, null, null, null, null, null)
-        val wholesale = Customer("C2", "Wholesale Co", "W", null, null, null, null, null, null)
+    fun `onBizGroupFilter narrows the list by customer bizPostingGroup`() = runTest {
+        val retail = Customer(custId = "C1", companyName = "Retail Co", bizPostingGroup = "R")
+        val wholesale = Customer(custId = "C2", companyName = "Wholesale Co", bizPostingGroup = "W")
         every { customerRepo.getAllCustomersFlow() } returns flowOf(listOf(retail, wholesale))
 
         viewModel = CustomerListViewModel(customerRepo, authRepo)
@@ -79,8 +79,8 @@ class CustomerListViewModelTest {
 
     @Test
     fun `onBizGroupFilter toggles off when the same group is tapped again`() = runTest {
-        val retail = Customer("C1", "Retail Co", "R", null, null, null, null, null, null)
-        val wholesale = Customer("C2", "Wholesale Co", "W", null, null, null, null, null, null)
+        val retail = Customer(custId = "C1", companyName = "Retail Co", bizPostingGroup = "R")
+        val wholesale = Customer(custId = "C2", companyName = "Wholesale Co", bizPostingGroup = "W")
         every { customerRepo.getAllCustomersFlow() } returns flowOf(listOf(retail, wholesale))
 
         viewModel = CustomerListViewModel(customerRepo, authRepo)
