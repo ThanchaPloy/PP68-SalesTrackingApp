@@ -1303,4 +1303,63 @@ class SalesResultViewModelTest {
         assertEquals(chosen, vm.uiState.value.dealPosition)
         assertEquals(3, vm.uiState.value.competitorCount)
     }
+
+    // กลไก draft ตัวเดียวกันนี้ถูกคัดลอกไว้ใน ViewModel ฟอร์มทั้ง 5 ตัว — คุมไว้ก่อนจะรวมเป็นตัวเดียว
+    // หน้านี้ key พิเศษตรงที่มันเลือก activityId ก่อน ถ้าไม่มีจึงค่อยใช้ projectId
+    private fun draftVm(): SalesResultViewModel {
+        coEvery { projectRepo.getProjectById("PRJ-1") } returns Result.success(
+            Project(projectId = "PRJ-1", custId = "C1", projectName = "Project A", projectStatus = "Lead")
+        )
+        return SalesResultViewModel(
+            SavedStateHandle(mapOf("projectId" to "PRJ-1")),
+            projectRepo,
+            activityRepo,
+            authRepo,
+            draftStore
+        )
+    }
+
+    @Test
+    fun `an untouched sales result form is not dirty, and typing a summary makes it dirty`() = runTest {
+        val vm = draftVm()
+        advanceUntilIdle()
+
+        assertFalse(vm.isDirty())
+
+        vm.onSummaryChanged("เข้าพบลูกค้าเรียบร้อย")
+        assertTrue(vm.isDirty())
+    }
+
+    @Test
+    fun `saveDraft writes the sales result form under the project key`() = runTest {
+        val vm = draftVm()
+        advanceUntilIdle()
+
+        vm.onSummaryChanged("สรุปที่กรอกค้างไว้")
+        vm.saveDraft()
+
+        val saved = slot<SalesResultDraft>()
+        verify { draftStore.save("sales_result:PRJ-1", capture(saved)) }
+        assertEquals("สรุปที่กรอกค้างไว้", saved.captured.visitSummary)
+    }
+
+    @Test
+    fun `discardDraft clears the same sales result key`() = runTest {
+        val vm = draftVm()
+        advanceUntilIdle()
+
+        vm.discardDraft()
+
+        verify { draftStore.clear("sales_result:PRJ-1") }
+    }
+
+    @Test
+    fun `no stored sales result draft means no prompt`() = runTest {
+        val vm = draftVm()
+        advanceUntilIdle()
+        vm.checkForDraft()
+        advanceUntilIdle()
+
+        assertFalse(vm.uiState.value.draftAvailable)
+    }
 }

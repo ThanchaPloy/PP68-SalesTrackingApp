@@ -16,6 +16,7 @@ import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.slot
+import io.mockk.verify
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.flowOf
@@ -757,5 +758,68 @@ class CreateAppointmentViewModelTest {
 
         assertEquals("กรุณาระบุชื่อโครงการและสถานะให้ครบ", vm.uiState.value.quickAddProjectError)
         coVerify(exactly = 0) { projectRepo.createProject(any(), any()) }
+    }
+
+    // ไฟล์นี้มีเทสต์จังหวะ baseline (GPS auto-fill) อยู่แล้ว แต่ยังขาดส่วน save/restore/discard
+    // ซึ่งเป็นส่วนที่คัดลอกไปฟอร์มอื่นทั้งหมด — คุมไว้ก่อนจะรวมโค้ดชุดนี้เป็นตัวเดียว
+    @Test
+    fun `saveDraft writes the appointment form under the new-appointment key`() = runTest {
+        configureBaseData()
+        val vm = CreateAppointmentViewModel(context, activityRepo, projectRepo, customerRepo, authRepo, draftStore)
+        advanceUntilIdle()
+        vm.onEvent(CreateAppointmentEvent.CheckDraft)
+        advanceUntilIdle()
+
+        vm.onEvent(CreateAppointmentEvent.TitleChanged("เข้าพบเพื่อนำเสนอ"))
+        vm.saveDraft()
+
+        val saved = slot<CreateAppointmentDraft>()
+        verify { draftStore.save("create_appointment:new:none", capture(saved)) }
+        assertEquals("เข้าพบเพื่อนำเสนอ", saved.captured.titleTopic)
+    }
+
+    @Test
+    fun `discardDraft clears the same appointment key`() = runTest {
+        configureBaseData()
+        val vm = CreateAppointmentViewModel(context, activityRepo, projectRepo, customerRepo, authRepo, draftStore)
+        advanceUntilIdle()
+        vm.onEvent(CreateAppointmentEvent.CheckDraft)
+        advanceUntilIdle()
+
+        vm.discardDraft()
+
+        verify { draftStore.clear("create_appointment:new:none") }
+    }
+
+    @Test
+    fun `a saved appointment draft is offered and restoring it fills the form back in`() = runTest {
+        configureBaseData()
+        every { draftStore.load("create_appointment:new:none", CreateAppointmentDraft::class.java) } returns
+            CreateAppointmentDraft(titleTopic = "หัวข้อที่ค้างไว้", activityType = "call")
+
+        val vm = CreateAppointmentViewModel(context, activityRepo, projectRepo, customerRepo, authRepo, draftStore)
+        advanceUntilIdle()
+        vm.onEvent(CreateAppointmentEvent.CheckDraft)
+        advanceUntilIdle()
+
+        assertTrue(vm.uiState.value.draftAvailable)
+
+        vm.onEvent(CreateAppointmentEvent.RestoreDraft)
+        advanceUntilIdle()
+
+        assertEquals("หัวข้อที่ค้างไว้", vm.uiState.value.titleTopic)
+        assertEquals("call", vm.uiState.value.activityType)
+        assertFalse(vm.uiState.value.draftAvailable)
+    }
+
+    @Test
+    fun `no stored appointment draft means no prompt`() = runTest {
+        configureBaseData()
+        val vm = CreateAppointmentViewModel(context, activityRepo, projectRepo, customerRepo, authRepo, draftStore)
+        advanceUntilIdle()
+        vm.onEvent(CreateAppointmentEvent.CheckDraft)
+        advanceUntilIdle()
+
+        assertFalse(vm.uiState.value.draftAvailable)
     }
 }

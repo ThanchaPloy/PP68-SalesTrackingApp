@@ -530,4 +530,69 @@ class AddProjectViewModelTest {
         assertFalse(viewModel.uiState.value.isSaved)
         assertEquals("save failed", viewModel.uiState.value.saveError)
     }
+
+    // กลไก draft autosave ถูกคัดลอกไว้เหมือนกันใน ViewModel ฟอร์มทั้ง 5 ตัว แก้ที่นึ่งแล้วลืมที่เหลือ
+    // เคยเกิดขึ้นจริงมาแล้ว — ชุดนี้คุมกลไกไว้ก่อนจะรวมโค้ดชุดนี้เป็นตัวเดียว
+    @Test
+    fun `an untouched project form is not dirty, and editing a field makes it dirty`() = runTest {
+        initViewModel()
+        advanceUntilIdle()
+
+        assertFalse(viewModel.isDirty())
+
+        viewModel.onEvent(AddProjectEvent.ProjectNameChanged("โครงการทดสอบ"))
+        assertTrue(viewModel.isDirty())
+    }
+
+    @Test
+    fun `saveDraft writes the current project form under the new-project key`() = runTest {
+        initViewModel()
+        advanceUntilIdle()
+
+        viewModel.onEvent(AddProjectEvent.ProjectNameChanged("โครงการทดสอบ"))
+        viewModel.saveDraft()
+
+        val saved = slot<AddProjectDraft>()
+        verify { draftStore.save("add_project:new", capture(saved)) }
+        assertEquals("โครงการทดสอบ", saved.captured.projectName)
+    }
+
+    @Test
+    fun `discardDraft clears the same key it was saved under`() = runTest {
+        initViewModel()
+        advanceUntilIdle()
+
+        viewModel.discardDraft()
+
+        verify { draftStore.clear("add_project:new") }
+    }
+
+    @Test
+    fun `a saved project draft is offered and restoring it fills the form back in`() = runTest {
+        every { draftStore.load("add_project:new", AddProjectDraft::class.java) } returns
+            AddProjectDraft(projectName = "โครงการที่ค้างไว้")
+
+        initViewModel()
+        advanceUntilIdle()
+        viewModel.onEvent(AddProjectEvent.CheckDraft)
+        advanceUntilIdle()
+
+        assertTrue(viewModel.uiState.value.draftAvailable)
+
+        viewModel.onEvent(AddProjectEvent.RestoreDraft)
+        advanceUntilIdle()
+
+        assertEquals("โครงการที่ค้างไว้", viewModel.uiState.value.projectName)
+        assertFalse(viewModel.uiState.value.draftAvailable)
+    }
+
+    @Test
+    fun `no stored project draft means no prompt`() = runTest {
+        initViewModel()
+        advanceUntilIdle()
+        viewModel.onEvent(AddProjectEvent.CheckDraft)
+        advanceUntilIdle()
+
+        assertFalse(viewModel.uiState.value.draftAvailable)
+    }
 }
