@@ -81,6 +81,26 @@ class TokenManager @Inject constructor(
 
     fun getEmpType(): String? = prefs.getString("emp_type", null)
 
+    /**
+     * เจ้าของข้อมูลที่ค้างอยู่ใน Room ขณะนี้ — ต้องอยู่รอดข้าม [clearToken] โดยตั้งใจ
+     *
+     * session หมดอายุจะเรียก clearToken() ซึ่งลบ user_id ไปด้วย ทำให้ AuthRepository.login()
+     * หาไม่ได้ว่าใครเป็นเจ้าของงานที่ยังไม่ได้ซิงค์ในเครื่อง แล้วตีเป็น "คนเดิม login ซ้ำ" ทุกครั้ง
+     * ผลคือถ้าเซลส์อีกคนมา login บนเครื่องเดียวกันหลัง session หมดอายุ งานออฟไลน์ของคนก่อนจะถูก
+     * ดันขึ้นเซิร์ฟเวอร์ด้วย token ของคนใหม่ และ backend บังคับเจ้าของจาก JWT (W1)
+     * = งานของคน A ไปติดชื่อคน B
+     */
+    fun saveLocalDataOwner(userId: String) {
+        prefs.edit().putString("local_data_owner", userId).apply()
+    }
+
+    fun getLocalDataOwner(): String? = prefs.getString("local_data_owner", null)
+
+    /** เรียกตอน logout เท่านั้น — ตอนนั้น Room ถูกล้างแล้ว จึงไม่มีเจ้าของให้จำอีก */
+    fun clearLocalDataOwner() {
+        prefs.edit().remove("local_data_owner").apply()
+    }
+
     fun clearToken() {
         prefs.edit().apply {
             remove("jwt_token")

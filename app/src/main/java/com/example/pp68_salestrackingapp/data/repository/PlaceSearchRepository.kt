@@ -29,14 +29,20 @@ sealed class PlaceSearchState {
 class PlaceSearchRepository @Inject constructor(
     private val apiService: ApiService
 ) {
+    // ⚠️ อ่านและเขียนจากคนละเธรด: การอ่านเกิดบนเธรดของผู้เรียก (ก่อนเข้า withContext) ส่วนการเขียน
+    // เกิดบน Dispatchers.IO และเป็น @Singleton ที่หน้าจอหลายหน้าใช้ร่วมกัน (สร้างนัด/โครงการ/ลูกค้า
+    // ต่างมี MapPickerField ของตัวเอง) LinkedHashMap เปล่า ๆ ไม่ปลอดภัยต่อการใช้ข้ามเธรด —
+    // ชนกันแล้วได้ ConcurrentModificationException หรือโครงสร้างภายในเพี้ยน ต้องล็อกทุกครั้งที่แตะ
     private val cache = LinkedHashMap<String, List<PlaceSuggestion>>()
+
+    private fun cached(key: String): List<PlaceSuggestion>? = synchronized(cache) { cache[key] }
 
     suspend fun search(query: String): PlaceSearchState {
         val trimmed = query.trim()
         if (trimmed.length < MIN_QUERY_LENGTH) return PlaceSearchState.Idle
 
-        cache[trimmed.lowercase()]?.let { cached ->
-            return if (cached.isEmpty()) PlaceSearchState.Empty else PlaceSearchState.Success(cached)
+        cached(trimmed.lowercase())?.let { hit ->
+            return if (hit.isEmpty()) PlaceSearchState.Empty else PlaceSearchState.Success(hit)
         }
 
         return withContext(Dispatchers.IO) {
@@ -72,10 +78,12 @@ class PlaceSearchRepository @Inject constructor(
     }
 
     private fun remember(key: String, places: List<PlaceSuggestion>) {
-        if (cache.size >= CACHE_MAX_ENTRIES) {
-            cache.keys.firstOrNull()?.let { cache.remove(it) }
+        synchronized(cache) {
+            if (cache.size >= CACHE_MAX_ENTRIES) {
+                cache.keys.firstOrNull()?.let { cache.remove(it) }
+            }
+            cache[key] = places
         }
-        cache[key] = places
     }
 
     companion object {

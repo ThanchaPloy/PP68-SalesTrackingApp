@@ -29,7 +29,14 @@ class AuthRepository @Inject constructor(
                     // ต้องรู้ก่อนว่าผู้ login รอบนี้เป็นคนเดิมหรือคนละคนกับ session ก่อนหน้า ก่อนตัดสินใจ
                     // ดันงานค้างขึ้น server — ทำก่อนเซฟ token ใหม่ เพราะ tokenManager.getUserData()
                     // จะคืนข้อมูลของผู้ใช้เดิมได้ก็ต่อเมื่อยังไม่ถูกทับด้วยข้อมูลผู้ใช้ใหม่
+                    // ✅ ถอยไปอ่าน local_data_owner ด้วย — session หมดอายุจะเรียก clearToken() ซึ่งลบ
+                    // user_id ทิ้ง ทำให้ previousUserId เป็น null แล้วเงื่อนไขข้างล่างตีเป็น "คนเดิม
+                    // login ซ้ำ" ทุกครั้ง ซึ่งเป็นช่องที่คอมเมนต์ข้างล่างตั้งใจจะกันไว้พอดี:
+                    // เซลส์ A ทำงานออฟไลน์ค้างไว้ → session หมดอายุ → B มา login บนเครื่องเดียวกัน
+                    // → งานของ A ถูกดันขึ้นด้วย token ของ B และ backend บังคับเจ้าของจาก JWT
+                    // = งานของ A ไปติดชื่อ B (คีย์นี้ไม่ถูก clearToken ลบ จึงยังบอกได้ว่าใครเป็นเจ้าของ)
                     val previousUserId = tokenManager.getUserData()?.userId
+                        ?: tokenManager.getLocalDataOwner()
 
                     // ดึงข้อมูลผู้ใช้ (รองรับทั้ง Ktor/PostgREST backend และ Node.js backend)
                     val finalUserId = loginResp.employee?.empCode ?: loginResp.userId ?: ""
@@ -82,6 +89,9 @@ class AuthRepository @Inject constructor(
                         empType    = finalEmpType
                     )
                     tokenManager.saveUserData(authUser)
+                    // จำไว้ว่าข้อมูลใน Room ตั้งแต่นี้เป็นของใคร — ใช้ตอน login รอบหน้าถ้า session
+                    // หมดอายุไปก่อนแล้ว user_id ถูกลบทิ้ง (ดู previousUserId ด้านบน)
+                    tokenManager.saveLocalDataOwner(finalUserId)
 
                     // 3. Sync ข้อมูลทั้งหมดตามสาขาของผู้ใช้
                     syncManager.syncAll(
@@ -225,6 +235,8 @@ class AuthRepository @Inject constructor(
 
                 database.clearAllTables()
                 tokenManager.clearToken()
+                // Room ว่างแล้ว จึงไม่มีเจ้าของข้อมูลในเครื่องให้จำอีก
+                tokenManager.clearLocalDataOwner()
                 com.example.pp68_salestrackingapp.utils.ProjectStages.clearServerData()
                 com.example.pp68_salestrackingapp.utils.LossReasons.clearServerData()
                 com.example.pp68_salestrackingapp.utils.DealFactors.clearServerData()

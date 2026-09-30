@@ -47,12 +47,18 @@ class EditProfileViewModel @Inject constructor(
             // ดึง phone_number/email จริงจาก API (AuthUser.email เป็นแค่รหัสพนักงานที่ใช้ล็อกอิน ไม่ใช่อีเมลจริง)
             try {
                 val resp = apiService.getUserById("eq.${user.userId}")
-                val userDto = resp.body()?.firstOrNull()
-                _uiState.update {
-                    it.copy(
-                        phoneNumber = userDto?.phoneNumber ?: "",
-                        email       = userDto?.email ?: ""
-                    )
+                // ✅ ต้องเช็ค isSuccessful ก่อน — .body() คืน null เวลา server ตอบ 4xx/5xx ด้วย
+                // เดิมจึงล้างช่องเบอร์โทร/อีเมลให้ว่างทุกครั้งที่เซิร์ฟเวอร์สะดุด ผู้ใช้เปิดหน้ามา
+                // เห็นช่องว่างแล้วเข้าใจว่าตัวเองไม่เคยกรอกไว้ (ตอนกดบันทึกไม่ถึงกับลบของจริง
+                // เพราะ save() ข้ามฟิลด์ที่ว่าง แต่ก็ทำให้เข้าใจผิดและกรอกซ้ำเปล่า ๆ)
+                if (resp.isSuccessful) {
+                    val userDto = resp.body()?.firstOrNull()
+                    _uiState.update {
+                        it.copy(
+                            phoneNumber = userDto?.phoneNumber ?: "",
+                            email       = userDto?.email ?: ""
+                        )
+                    }
                 }
             } catch (e: Exception) { }
         }

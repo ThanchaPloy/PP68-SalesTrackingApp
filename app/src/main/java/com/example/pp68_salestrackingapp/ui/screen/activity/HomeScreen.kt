@@ -124,6 +124,8 @@ fun HomeScreen(
         currentTab          = currentTab,
         onTabChange         = onTabChange,
         onMonthChange       = { viewModel.selectMonth(it) },
+        onRetrySync         = { viewModel.retrySync() },
+        onDismissSyncFailures = { viewModel.dismissSyncFailures() },
         hasApptDraft        = hasApptDraft,
         onDismissApptDraft  = {
             hasApptDraft = false
@@ -147,6 +149,8 @@ private fun HomeScreenContent(
     currentTab:          Int,
     onTabChange:         (Int) -> Unit,
     onMonthChange:       (YearMonth) -> Unit,
+    onRetrySync:         () -> Unit = {},
+    onDismissSyncFailures: () -> Unit = {},
     hasApptDraft:        Boolean = false,
     onDismissApptDraft:  () -> Unit = {}
 ) {
@@ -173,6 +177,16 @@ private fun HomeScreenContent(
         containerColor = BgLight
     ) { padding ->
       Column(Modifier.fillMaxSize().padding(padding)) {
+        // ต้องอยู่นอก when เหมือนการ์ดเบอร์โทร — เคสที่ต้องเห็นแถบนี้มากที่สุดคือ "โหลดไม่สำเร็จ
+        // จนรายการว่าง" ซึ่งจะไปเข้าสาขา EmptyState ถ้าวางไว้ใน LazyColumn จะไม่มีวันโผล่
+        if (uiState.syncFailures.isNotEmpty()) {
+            SyncFailedBanner(
+                parts     = uiState.syncFailures,
+                onRetry   = onRetrySync,
+                onDismiss = onDismissSyncFailures,
+                modifier  = Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp)
+            )
+        }
         // อยู่นอก when โดยตั้งใจ — คนที่ยังไม่มีเบอร์มักเป็นบัญชีใหม่ที่ยังไม่มีนัดหมายเลย
         // ถ้าวางไว้ในสาขา LazyColumn การ์ดจะไม่โผล่ให้คนที่ต้องเห็นมากที่สุด
         if (uiState.needsPhoneNumber) {
@@ -236,6 +250,53 @@ private fun HomeScreenContent(
 // ── การ์ดแจ้งว่ายังไม่มีเบอร์โทร ──────────────────────────────
 // เดิมเป็น AlertDialog ที่ปิดไม่ได้และไม่บอกอะไรเลยเมื่อบันทึกพลาด ทำให้บัญชีนั้นใช้แอปไม่ได้ถาวร
 // การ์ดแบบนี้ยังบังคับให้เห็นทุกครั้งที่เปิดแอป แต่ไม่ขวางงานอื่น และกดแล้วไปหน้ากรอกได้เลย
+/**
+ * แถบเตือนว่าโหลดข้อมูลบางส่วนไม่สำเร็จตอน login
+ *
+ * ตั้งใจให้ "บาง" ไม่ใช่ dialog ขวางทาง — ผู้ใช้ยังทำงานส่วนที่โหลดสำเร็จต่อได้ทันที
+ * แต่ต้องได้รู้ว่าที่เห็นว่างอยู่นั้นเพราะโหลดไม่สำเร็จ ไม่ใช่เพราะข้อมูลหาย
+ */
+@Composable
+private fun SyncFailedBanner(
+    parts: List<String>,
+    onRetry: () -> Unit,
+    onDismiss: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        colors   = CardDefaults.cardColors(containerColor = Color(0xFFFDECEA)),
+        shape    = RoundedCornerShape(12.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(start = 14.dp, top = 10.dp, bottom = 10.dp, end = 4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(Icons.Default.CloudOff, null, tint = Color(0xFFAE2138), modifier = Modifier.size(22.dp))
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text(
+                    "โหลดข้อมูลไม่ครบ: ${parts.joinToString(", ")}",
+                    fontWeight = FontWeight.Bold,
+                    fontSize   = 13.sp,
+                    color      = Color(0xFF7A1226)
+                )
+                Text(
+                    "ข้อมูลในเครื่องยังอยู่ครบ ไม่ได้หายไปไหน",
+                    fontSize = 12.sp,
+                    color    = Color(0xFF9A3A4A)
+                )
+            }
+            TextButton(onClick = onRetry) {
+                Text("ลองใหม่", color = Color(0xFFAE2138), fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+            }
+            IconButton(onClick = onDismiss, modifier = Modifier.size(32.dp)) {
+                Icon(Icons.Default.Close, "ปิด", tint = Color(0xFF9A3A4A), modifier = Modifier.size(16.dp))
+            }
+        }
+    }
+}
+
 @Composable
 private fun PhoneRequiredCard(onClick: () -> Unit, modifier: Modifier = Modifier) {
     Card(

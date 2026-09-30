@@ -210,10 +210,14 @@ class CustomerRepository @Inject constructor(
                     put("latitude", customer.companyLat)
                     put("longitude", customer.companyLong)
                     put("customer_status", customer.companyStatus)
-                    put("create_date", customer.createdAt)
-                    put("created_at", customer.createdAt)
-                    put("create_by", customer.createdBy)
-                    put("salesperson_code", customer.createdBy)
+                    // ⚠️ ห้ามส่ง create_by / salesperson_code / create_date / created_at ตอนแก้ไข
+                    //
+                    // มันคือข้อมูลการสร้าง เจ้าของคือ server ตั้งให้ตอน POST ครั้งเดียว การส่งขึ้นไป
+                    // ตอน PATCH เท่ากับเขียนทับ: ฝั่ง backend อนุญาตให้แก้ลูกค้าของเพื่อนร่วมสาขาได้
+                    // (RouteUtils.allows) เมื่อค่าที่ส่งคือ "คนที่กำลังแก้" ลูกค้าจะเปลี่ยนมือไปเป็น
+                    // ของคนแก้เงียบ ๆ แล้วหลุดจากรายการ "ลูกค้าของฉัน" ของเจ้าของเดิมทันที
+                    // (refreshCustomers เฟสแรกดึงด้วย salespersonCode = eq.<ตัวเอง>)
+                    // ส่วน create_date/created_at ที่ทับไปก็ทำให้ประวัติวันสร้างเพี้ยนไปด้วย
                     put("grade", customer.grade)
                     put("vat_registration_no", customer.vatRegistrationNo)
                 }.filterValues { it != null }
@@ -280,7 +284,15 @@ class CustomerRepository @Inject constructor(
         }
     }
 
-    suspend fun getContactPersons(customerId: String, userId: String? = null): kotlin.Result<List<ContactPerson>> {
+    /**
+     * ผู้ติดต่อทั้งหมดของลูกค้ารายนี้ (ดึงจาก server ทับ Room ก่อนถ้าออนไลน์ แล้วอ่านจาก Room)
+     *
+     * ⚠️ [userId] ไม่ได้ถูกใช้กรองอะไรเลย — เคยมีเจตนาจะกรองให้เห็น "เฉพาะผู้ติดต่อที่ตนเองสร้าง"
+     * แต่ไม่เคยมีโค้ดจริง ผู้ติดต่อเป็นของลูกค้า ไม่ใช่ของเซลส์คนใดคนหนึ่ง การเห็นครบจึงถูกแล้ว
+     * (คงพารามิเตอร์ไว้เพราะมีจุดเรียกและเทสต์อ้างอยู่ประมาณ 20 แห่ง ถอดออกเท่ากับรื้อเทสต์
+     * โดยผู้ใช้ไม่ได้อะไรเพิ่ม) — ถ้าวันหนึ่งต้องกรองจริง ต้องเขียน logic เพิ่ม ไม่ใช่แค่ส่งค่ามา
+     */
+    suspend fun getContactPersons(customerId: String, @Suppress("UNUSED_PARAMETER") userId: String? = null): kotlin.Result<List<ContactPerson>> {
         return withContext(Dispatchers.IO) {
             try {
                 val response = apiService.getContactsByCustomer(custId = "eq.$customerId")

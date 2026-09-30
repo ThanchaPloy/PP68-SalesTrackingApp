@@ -20,6 +20,18 @@ object AppointmentStatus {
     fun requiresCheckIn(activityType: String?): Boolean =
         activityType?.lowercase() in REQUIRES_CHECK_IN
 
+    /**
+     * ชื่อชนิดนัดที่เอาไปโชว์ให้ผู้ใช้อ่านได้ — รหัสที่เก็บใน DB เป็นภาษาอังกฤษตัวเล็ก
+     * ("onsite"/"online"/"call") ซึ่งไม่ควรหลุดขึ้นหน้าจอ อยู่ที่นี่เพราะเป็นกติกาของ "ชนิดนัด"
+     * ชุดเดียวกับ requiresCheckIn รหัสที่ไม่รู้จักคืนค่าเดิมไป ดีกว่าโชว์ค่าว่าง
+     */
+    fun typeLabel(activityType: String?): String = when (activityType?.lowercase()) {
+        "onsite" -> "เข้าพบที่ไซต์งาน"
+        "online" -> "ประชุมออนไลน์"
+        "call"   -> "โทรศัพท์"
+        else     -> activityType.orEmpty()
+    }
+
     // ต้องเลยวัน ไม่ใช่เลยเวลา — นัดตอนเช้าของวันนี้ที่ยังไม่เช็คอินตอนบ่ายยังไม่นับขาดนัด
     // ต้องข้ามเที่ยงคืนไปแล้วเท่านั้นถึงจะกลายเป็น missing
     //

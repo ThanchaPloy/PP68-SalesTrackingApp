@@ -49,6 +49,37 @@ class AuthRepositoryLoginTest {
         }
     }
 
+    // ช่องที่เคยหลุด: session หมดอายุ -> clearToken() ลบ user_id ทิ้ง -> getUserData() คืน null
+    // แล้วโค้ดตีเป็น "คนเดิม login ซ้ำ" ทุกครั้ง ถ้าคนที่มา login คือเซลส์อีกคน งานออฟไลน์ของคนก่อน
+    // จะถูกดันขึ้นด้วย token ของคนใหม่ และ backend บังคับเจ้าของจาก JWT = งานไปติดชื่อผิดคน
+    // ต้องถอยไปอ่าน local_data_owner ที่ไม่ถูก clearToken ลบ
+    @Test
+    fun `a different user logging in after a session expiry does not push the previous owner's work`() = runTest {
+        every { tokenManager.getUserData() } returns null          // token หมดอายุ user_id หายไปแล้ว
+        every { tokenManager.getLocalDataOwner() } returns "U-OLD" // แต่ยังรู้ว่าข้อมูลในเครื่องเป็นของใคร
+        coEvery { outbox.hasPendingChanges() } returns true
+
+        repo.login("newbie@test.com", "pw")
+
+        coVerify(exactly = 0) { outbox.doSync() }
+        coVerify(exactly = 1) { database.clearAllTables() }
+    }
+
+    // คนเดิม login ซ้ำหลัง session หมดอายุ ต้องยังดันงานค้างขึ้นให้ก่อนล้าง ไม่ใช่ทิ้ง
+    @Test
+    fun `the same user logging in after a session expiry still gets their work flushed`() = runTest {
+        every { tokenManager.getUserData() } returns null
+        every { tokenManager.getLocalDataOwner() } returns "U1"
+        coEvery { outbox.hasPendingChanges() } returns true
+
+        repo.login("u@test.com", "pw")
+
+        coVerifyOrder {
+            outbox.doSync()
+            database.clearAllTables()
+        }
+    }
+
     @Test
     fun `nothing pending means no extra sync before the wipe`() = runTest {
         coEvery { outbox.hasPendingChanges() } returns false

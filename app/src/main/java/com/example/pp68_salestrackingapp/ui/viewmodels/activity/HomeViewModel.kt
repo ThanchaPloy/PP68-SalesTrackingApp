@@ -48,7 +48,11 @@ data class HomeUiState(
     val authUser:        AuthUser?              = null,
     // แสดงเป็นการ์ดที่กดไปหน้ากรอกได้ ไม่ใช่ dialog ที่ปิดไม่ได้แบบเดิม — ผู้ใช้ยังทำงานอย่างอื่น
     // ต่อได้ระหว่างที่ยังไม่กรอก และถ้าบันทึกพลาดก็ไม่ติดค้างจนใช้แอปไม่ได้
-    val needsPhoneNumber: Boolean = false
+    val needsPhoneNumber: Boolean = false,
+
+    // ส่วนที่ซิงค์ตอน login ไม่สำเร็จ (ว่าง = ครบดี) — เดิมล้มแล้วเงียบ ผู้ใช้เห็นหน้าจอว่าง
+    // แล้วเข้าใจว่าข้อมูลหาย ทั้งที่แค่โหลดไม่สำเร็จรอบนั้นและกดใหม่ก็ได้
+    val syncFailures: List<String> = emptyList()
 )
 
 @HiltViewModel
@@ -57,7 +61,9 @@ class HomeViewModel @Inject constructor(
     private val authRepo:     AuthRepository,
     private val customerRepo: CustomerRepository,
     private val projectRepo:  ProjectRepository,
-    private val apiService:   ApiService
+    private val apiService:   ApiService,
+    // ตัวดาวน์โหลดข้อมูลหลัง login (data.repository) — คนละตัวกับ outbox ใน utils ที่ชื่อซ้ำกัน
+    private val downloadSync: com.example.pp68_salestrackingapp.data.repository.SyncManager
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(HomeUiState(authUser = authRepo.currentUser()))
@@ -70,6 +76,31 @@ class HomeViewModel @Inject constructor(
             loadActivities()
         }
         observeActivities()
+        observeSyncFailures()
+    }
+
+    private fun observeSyncFailures() {
+        viewModelScope.launch {
+            downloadSync.failedParts.collect { parts ->
+                _uiState.update { it.copy(syncFailures = parts) }
+            }
+        }
+    }
+
+    /** กด "ลองใหม่" บนแถบเตือน — ซิงค์ใหม่ทั้งชุดเหมือนตอน login ไม่ใช่แค่ refresh หน้านี้ */
+    fun retrySync() {
+        val user = authRepo.currentUser() ?: return
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoading = true) }
+            downloadSync.syncAll(userId = user.userId, branchId = user.teamId ?: "")
+            loadActivities()
+            _uiState.update { it.copy(isLoading = false) }
+        }
+    }
+
+    /** ปิดแถบเตือนทิ้ง — ผู้ใช้รับรู้แล้วและเลือกทำงานต่อ */
+    fun dismissSyncFailures() {
+        downloadSync.clearFailedParts()
     }
 
     private fun observeActivities() {
@@ -139,10 +170,14 @@ class HomeViewModel @Inject constructor(
             
             try {
                 // เบอร์โทรไม่ได้เก็บในเครื่อง ต้องถาม server — พลาดก็แค่ไม่ขึ้นการ์ด ไม่ทำให้ refresh พัง
-                runCatching {
-                    apiService.getUserById("eq.$userId").body()?.firstOrNull()?.phoneNumber
-                }.onSuccess { phone ->
-                    _uiState.update { it.copy(needsPhoneNumber = phone.isNullOrBlank()) }
+                // ✅ ต้องเช็ค isSuccessful ก่อน: เดิมอ่าน .body() ตรง ๆ ซึ่งคืน null เวลา server ตอบ
+                // 4xx/5xx ด้วย แล้วถูกตีความว่า "ผู้ใช้ไม่มีเบอร์โทร" การ์ดทวงเบอร์จึงเด้งขึ้นมา
+                // หาคนที่กรอกเบอร์ไว้เรียบร้อยแล้วทุกครั้งที่เซิร์ฟเวอร์สะดุด — ตอบไม่ได้ ≠ ไม่มีเบอร์
+                runCatching { apiService.getUserById("eq.$userId") }.onSuccess { response ->
+                    if (response.isSuccessful) {
+                        val phone = response.body()?.firstOrNull()?.phoneNumber
+                        _uiState.update { it.copy(needsPhoneNumber = phone.isNullOrBlank()) }
+                    }
                 }
 
                 // ✅ ทั้ง 4 อย่างเป็นอิสระต่อกัน (คนละตารางคนละ endpoint) รันพร้อมกันแทนรอทีละตัว
@@ -171,7 +206,10 @@ class HomeViewModel @Inject constructor(
 
     private fun formatGroupHeader(dateStr: String): String {
         return try {
-            val date = LocalDate.parse(dateStr)
+            // ✅ take(10) เหมือนทุกที่ในแอป — ค่าที่มาจาก server อาจเป็น "2026-04-06T00:00:00"
+            // ถ้า parse ทั้งก้อนจะพังแล้วตกไปใช้สตริงดิบเป็นหัวกลุ่ม ผู้ใช้เห็นหัวข้อว่า
+            // "2026-04-06T00:00:00" และนัดของวันเดียวกันที่รูปแบบต่างกันจะถูกแยกเป็นสองกลุ่ม
+            val date = LocalDate.parse(dateStr.take(10))
             val formatter = DateTimeFormatter.ofPattern("d MMM yyyy",
                 java.util.Locale("th", "TH"))
             date.format(formatter).uppercase()

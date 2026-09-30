@@ -60,21 +60,20 @@ class ProjectListViewModel @Inject constructor(
             }
 
             sourceFlow.map { all ->
-                val today = LocalDate.now().toString()
-                
+                // ✅ จัดแท็บด้วย "สถานะ" อย่างเดียว ไม่เอาวันปิดมาร่วมตัดสิน
+                //
+                // เดิมแท็บ Closed คือ PO && closingDate <= today ซึ่งพลาดสองทาง: โครงการที่ปิด
+                // การขายได้แล้วแต่ยังไม่ถึงวันส่งมอบ (หรือไม่เคยกรอกวันปิด) ค้างอยู่แท็บ Active
+                // และการเทียบสตริงยาวไม่เท่ากัน ("2026-04-06T00:00:00" > "2026-04-06") ทำให้
+                // โครงการที่ปิดวันนี้ถูกตีว่ายังไม่ถึงกำหนด — PO แปลว่าขายได้แล้ว จบดีลแล้ว
+                // จึงอยู่แท็บ "ปิดแล้ว" ตั้งแต่ตอนที่สถานะเป็น PO ไม่ต้องรอวันไหน
+                //
+                // WON กับ LOST แยกกันคนละแท็บโดยตั้งใจ: ปิดได้ = ผลงาน, แพ้/ล้มเลิก = inactive
                 var filtered = all.filter { p ->
                     when (criteria.tabIndex) {
-                        1 -> { // Closed: PO & closing date reached
-                            p.projectStatus == "PO" && p.closingDate != null && p.closingDate <= today
-                        }
-                        2 -> { // Inactive: Lost or Failed
-                            p.projectStatus in ProjectStages.LOST
-                        }
-                        else -> { // Active: Everything else
-                            val isClosed = p.projectStatus == "PO" && p.closingDate != null && p.closingDate <= today
-                            val isInactive = p.projectStatus in ProjectStages.LOST
-                            !isClosed && !isInactive
-                        }
+                        1 -> p.projectStatus in ProjectStages.WON   // ปิดแล้ว (ขายได้)
+                        2 -> p.projectStatus in ProjectStages.LOST  // inactive (แพ้/ล้มเลิก)
+                        else -> p.projectStatus !in ProjectStages.CLOSED
                     }
                 }
 

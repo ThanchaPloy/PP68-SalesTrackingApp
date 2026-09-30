@@ -219,6 +219,20 @@ class AddContactViewModel @Inject constructor(
         }
     }
 
+    /**
+     * ผูกผู้ติดต่อที่เพิ่งบันทึกเข้ากับโครงการที่ผู้ใช้เลือกไว้ (ถ้าเลือก)
+     *
+     * ไม่บล็อกผลการบันทึกตามผลของขั้นนี้ — ผู้ติดต่อถูกสร้างสำเร็จไปแล้ว ถ้าตีกลับว่าไม่สำเร็จ
+     * ผู้ใช้จะกดบันทึกซ้ำแล้วได้ผู้ติดต่อซ้ำสองคน ส่วนกรณีออฟไลน์ saveProjectContacts เขียน Room
+     * ไว้ก่อนแล้วปักธงให้ outbox ตามส่งเองอยู่แล้ว
+     */
+    private suspend fun linkToProjectIfChosen(contactId: String) {
+        val projectId = _uiState.value.selectedProjectId ?: return
+        val existing = projectRepo.getProjectContacts(projectId).getOrNull()?.map { it.contactId } ?: emptyList()
+        if (contactId in existing) return
+        projectRepo.saveProjectContacts(projectId, existing + contactId)
+    }
+
     private fun save() {
         if (_uiState.value.selectedCompanyId.isNullOrBlank()) {
             _uiState.update { it.copy(companyError = "กรุณาเลือกบริษัท") }
@@ -255,15 +269,24 @@ class AddContactViewModel @Inject constructor(
                 createdBy   = currentUserId
             )
 
-            // ✅ แยก edit vs create
-            val result = if (s.contactId != null) {
-                contactRepo.updateContact(s.contactId, contactToSave)  // PATCH
+            // ✅ แยก edit vs create — คืน id ของแถวที่บันทึกทั้งสองทาง (แก้ไขก็คือ id เดิม) เพื่อเอาไป
+            // ผูกกับโครงการต่อได้ ตอนสร้างใหม่ addContact คืน id จริงจาก server (หรือ TEMP- ถ้าออฟไลน์)
+            val result: kotlin.Result<String> = if (s.contactId != null) {
+                contactRepo.updateContact(s.contactId, contactToSave).map { s.contactId }  // PATCH
             } else {
                 contactRepo.addContact(contactToSave)                   // POST
             }
 
             result.fold(
-                onSuccess = { discardDraft(); _uiState.update { it.copy(isLoading = false, isSaved = true) } },
+                onSuccess = { savedId ->
+                    // ✅ ฟอร์มมีช่อง "เลือกโครงการ (ไม่บังคับ)" ที่เก็บค่าเข้า state และฉบับร่างแล้ว
+                    // แต่ save() เดิมไม่เคยใช้เลย ผู้ใช้เลือกโครงการแล้วกดบันทึก ความผูกพันหายไปเงียบ ๆ
+                    // (ContactPerson ไม่มีฟิลด์โครงการ ต้องผูกผ่านตาราง project_contact)
+                    // saveProjectContacts เขียนทับรายชื่อทั้งชุด จึงต้องอ่านของเดิมมารวมก่อน ไม่ใช่ส่งไปแค่คนนี้
+                    linkToProjectIfChosen(savedId)
+                    discardDraft()
+                    _uiState.update { it.copy(isLoading = false, isSaved = true) }
+                },
                 onFailure = { e -> _uiState.update { it.copy(isLoading = false, saveError = e.message) } }
             )
         }

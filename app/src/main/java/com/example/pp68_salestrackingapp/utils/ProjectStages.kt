@@ -34,6 +34,16 @@ object ProjectStages {
     val CLOSED: Set<String>
         get() = masters?.filter { it.isClosed }?.map { it.code }?.toSet() ?: DEFAULT_CLOSED
 
+    /**
+     * สถานะที่ถือว่า "ปิดการขายได้" (ชนะ) — จบแล้วเหมือน LOST แต่คนละความหมายโดยสิ้นเชิง
+     *
+     * เปิดออกมาเพราะหลายหน้าต้องแยก "จบแบบชนะ" ออกจาก "จบแบบแพ้": หน้ารายการโครงการเอา PO
+     * ไปไว้แท็บ "ปิดแล้ว" ส่วน Lost/Failed ไปแท็บ "inactive" และแดชบอร์ดนับยอดขายที่ปิดได้จากกลุ่มนี้
+     * เดิมทุกจุดเทียบ == "PO" ตรง ๆ ซึ่งไม่ตามถ้าแอดมินเพิ่มสถานะที่ชนะอีกตัวใน master data
+     */
+    val WON: Set<String>
+        get() = masters?.filter { it.isClosed && it.isWon }?.map { it.code }?.toSet() ?: DEFAULT_WON
+
     fun probabilityPct(code: String?): Int =
         masters?.firstOrNull { it.code == code }?.probabilityPct ?: DEFAULT_PROBABILITY[code] ?: 0
 

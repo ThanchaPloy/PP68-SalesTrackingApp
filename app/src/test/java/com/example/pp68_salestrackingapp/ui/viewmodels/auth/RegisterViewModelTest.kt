@@ -41,14 +41,12 @@ class RegisterViewModelTest {
     @Before
     fun setUp() {
         Dispatchers.setMain(testDispatcher)
-        System.setProperty("is_test", "true")
     }
 
     @After
     fun tearDown() {
         Dispatchers.resetMain()
         unmockkAll()
-        System.clearProperty("is_test")
     }
 
     private fun createViewModel() {

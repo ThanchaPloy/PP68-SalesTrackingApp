@@ -91,6 +91,57 @@ class AddContactViewModelTest {
         assertFalse(state.isSaved)
     }
 
+    // ฟอร์มมีช่อง "เลือกโครงการ (ไม่บังคับ)" อยู่จริงและเก็บค่าเข้า state แล้ว แต่ save() เดิมไม่เคย
+    // ใช้เลย ผู้ใช้เลือกโครงการแล้วกดบันทึก ความผูกพันหายไปเงียบ ๆ (ContactPerson ไม่มีฟิลด์โครงการ
+    // ต้องผูกผ่านตาราง project_contact) — และต้องรวมกับรายชื่อเดิม ไม่ใช่เขียนทับเหลือคนนี้คนเดียว
+    @Test
+    fun `choosing a project links the saved contact to it without dropping the ones already there`() = runTest {
+        coEvery { customerRepository.getCustomers() } returns Result.success(mockCustomers)
+        every { projectRepository.getAllProjectsFlow() } returns flowOf(mockProjects)
+        coEvery { contactRepository.addContact(any()) } returns Result.success("CT-NEW")
+        coEvery { projectRepository.getProjectContacts("P01") } returns Result.success(
+            listOf(ContactPerson(contactId = "CT-OLD", custId = "CUST-01", fullName = "คนเดิม"))
+        )
+        coEvery { projectRepository.saveProjectContacts(any(), any()) } returns Result.success(Unit)
+
+        createViewModel()
+        testDispatcher.scheduler.advanceUntilIdle()
+        viewModel.onEvent(AddContactEvent.CompanySelected("CUST-01", "Acme Corp"))
+        viewModel.onEvent(AddContactEvent.ProjectSelected("P01", "Alpha"))
+        viewModel.onEvent(AddContactEvent.FullNameChanged("คนใหม่"))
+        viewModel.onEvent(AddContactEvent.PhoneChanged("0812345678"))
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        viewModel.onEvent(AddContactEvent.Save)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        assertTrue(viewModel.uiState.value.isSaved)
+        coVerify(exactly = 1) {
+            projectRepository.saveProjectContacts("P01", listOf("CT-OLD", "CT-NEW"))
+        }
+    }
+
+    // ไม่เลือกโครงการ = ไม่ต้องไปแตะรายชื่อผู้ติดต่อของโครงการใดเลย
+    @Test
+    fun `saving without choosing a project touches no project contact list`() = runTest {
+        coEvery { customerRepository.getCustomers() } returns Result.success(mockCustomers)
+        every { projectRepository.getAllProjectsFlow() } returns flowOf(mockProjects)
+        coEvery { contactRepository.addContact(any()) } returns Result.success("CT-NEW")
+
+        createViewModel()
+        testDispatcher.scheduler.advanceUntilIdle()
+        viewModel.onEvent(AddContactEvent.CompanySelected("CUST-01", "Acme Corp"))
+        viewModel.onEvent(AddContactEvent.FullNameChanged("คนใหม่"))
+        viewModel.onEvent(AddContactEvent.PhoneChanged("0812345678"))
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        viewModel.onEvent(AddContactEvent.Save)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        assertTrue(viewModel.uiState.value.isSaved)
+        coVerify(exactly = 0) { projectRepository.saveProjectContacts(any(), any()) }
+    }
+
     // TC-UNIT-VM-ADDCNT-03
     @Test
     fun `FullNameChanged event should update fullName and clear error`() = runTest {

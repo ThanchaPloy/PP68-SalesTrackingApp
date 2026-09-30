@@ -81,7 +81,10 @@ class ProjectRepository @Inject constructor(
                     "create_by"               to project.createBy,
                     "created_at"              to (project.createdAt ?: today)
                 ).filterValues { it != null }
-                Log.d("ProjectRepo", "POST body: $body")
+                // ไม่ log ตัว body — มันมีชื่อลูกค้า มูลค่าโครงการ วันที่ปิดดีล ครบชุด และ
+                // minifyEnabled = false จึงไม่มี ProGuard มาตัด Log.d ออกตอน build release
+                // แปลว่าข้อมูลลูกค้าจริงถูกพิมพ์ลง logcat ของเครื่องผู้ใช้ทุกครั้งที่สร้างโครงการ
+                Log.d("ProjectRepo", "POST project (${body.size} fields)")
                 val response = retrySend(idempotent = false, tag = "createProject") { apiService.addProject(body) }
                 Log.d("ProjectRepo", "POST project → HTTP ${response.code()}")
                 if (response.isSuccessful) {
@@ -194,12 +197,25 @@ class ProjectRepository @Inject constructor(
             try {
                 if (projectId.startsWith("TEMP-")) {
                     projectDao.deleteProjectById(projectId)
+                    // โครงการที่ยังไม่เคยขึ้น server ก็มีผู้ติดต่อผูกไว้ในเครื่องได้เหมือนกัน
+                    projectContactDao.deleteByProject(projectId)
                     return@withContext Result.success(Unit)
                 }
-                apiService.deleteProjectContacts("eq.$projectId")
+                // ✅ ต้องเช็คผลของขั้นแรกก่อนไปขั้นสอง (เหมือนที่ deleteCustomer ทำ) — เดิมยิงลบ
+                // ผู้ติดต่อทิ้งแล้วไม่ดูผลเลย ถ้าลบตัวโครงการต่อไม่สำเร็จ (เช่น 403) จะเหลือโครงการ
+                // ที่ผู้ติดต่อถูกลบไปแล้วบน server โดยผู้ใช้ไม่รู้ว่าเสียอะไรไป
+                val contactsResp = apiService.deleteProjectContacts("eq.$projectId")
+                if (!contactsResp.isSuccessful) {
+                    return@withContext Result.failure(
+                        Exception("ลบผู้ติดต่อของโครงการไม่สำเร็จ (HTTP ${contactsResp.code()}) จึงยังไม่ลบโครงการ")
+                    )
+                }
                 val response = apiService.deleteProject("eq.$projectId")
                 if (response.isSuccessful) {
                     projectDao.deleteProjectById(projectId)
+                    // Room ไม่มี FK CASCADE — ลบแถวผูกผู้ติดต่อในเครื่องเองด้วย ไม่งั้นค้างเป็นแถวกำพร้า
+                    // ที่ชี้ไปหาโครงการที่ไม่มีแล้ว (และจะถูกส่งขึ้น server อีกตอน saveProjectContacts)
+                    projectContactDao.deleteByProject(projectId)
                     Result.success(Unit)
                 } else Result.failure(Exception("HTTP ${response.code()}"))
             } catch (e: Exception) { Result.failure(e) }
@@ -208,7 +224,7 @@ class ProjectRepository @Inject constructor(
 
     suspend fun saveProjectContacts(projectId: String, contactIds: List<String>): Result<Unit> {
         return withContext(Dispatchers.IO) {
-            Log.d("ProjectRepo", "saveProjectContacts started. projectId=$projectId, contactIds=$contactIds")
+            Log.d("ProjectRepo", "saveProjectContacts started. projectId=$projectId, ${contactIds.size} contacts")
             // บันทึก Room ก่อนเสมอ
             projectContactDao.deleteByProject(projectId)
             if (contactIds.isNotEmpty()) {

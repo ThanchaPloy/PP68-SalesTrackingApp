@@ -77,17 +77,31 @@ class StatsViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(StatsUiState(authUser = authRepo.currentUser()))
     val uiState: StateFlow<StatsUiState> = _uiState
 
-    // â”€â”€ Date Logic matching Export UI â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-    private val today        = LocalDate.now(ZoneId.systemDefault())
-    private val weekFields   = WeekFields.of(Locale.getDefault())
-    private val weekStart    = today.with(weekFields.dayOfWeek(), 1L)
-    private val weekEnd      = today.with(weekFields.dayOfWeek(), 7L)
-    
-    private val currentMonth = YearMonth.now(ZoneId.systemDefault())
-    private val monthStart   = currentMonth.atDay(1)
-    private val monthEnd     = currentMonth.atEndOfMonth()
-    
     private val fmt          = DateTimeFormatter.ofPattern("yyyy-MM-dd", Locale.US)
+
+    // ✅ ขอบเขตสัปดาห์/เดือนต้องคำนวณสดทุกครั้งที่คิดสถิติ ไม่ใช่ครั้งเดียวตอนสร้าง ViewModel —
+    // ViewModel อยู่ยาวเท่าอายุหน้าจอ ถ้าผู้ใช้เปิดแอปค้างข้ามเที่ยงคืน (หรือข้ามสิ้นเดือน ซึ่งเซลส์
+    // ทำจริงเพราะเปิดทิ้งไว้ทั้งวัน) ตัวเลขจะยังอ้างสัปดาห์เก่าทั้งที่ข้อมูลใหม่ไหลเข้ามาแล้ว
+    private data class Bounds(
+        val weekStart: LocalDate,
+        val weekEnd: LocalDate,
+        val currentMonth: YearMonth,
+        val monthStart: LocalDate,
+        val monthEnd: LocalDate
+    )
+
+    private fun currentBounds(): Bounds {
+        val today = LocalDate.now(ZoneId.systemDefault())
+        val weekFields = WeekFields.of(Locale.getDefault())
+        val month = YearMonth.now(ZoneId.systemDefault())
+        return Bounds(
+            weekStart = today.with(weekFields.dayOfWeek(), 1L),
+            weekEnd = today.with(weekFields.dayOfWeek(), 7L),
+            currentMonth = month,
+            monthStart = month.atDay(1),
+            monthEnd = month.atEndOfMonth()
+        )
+    }
 
     init {
         observeData()
@@ -147,6 +161,7 @@ class StatsViewModel @Inject constructor(
         customers: List<Customer>,
         currentUserId: String
     ): StatsUiState {
+        val (weekStart, weekEnd, currentMonth, monthStart, monthEnd) = currentBounds()
         // ✅ กรองข้อมูล Lead/Customer ให้เป็นของ User ปัจจุบันรายบุคคล
         val myCustomers = customers.filter { it.createdBy == currentUserId }
         
@@ -164,10 +179,14 @@ class StatsViewModel @Inject constructor(
         val weeklyVisit = weeklyVisitListRaw.size
 
         // â”€â”€ Monthly â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-        val closedSales = myProjects
-            .filter { it.projectStatus == "PO" &&
-                    isInRange(it.closingDate ?: it.startDate, monthStart, monthEnd) }
-            .sumOf { it.expectedValue ?: 0.0 }
+        // ✅ ใช้ ProjectStages.WON แทนการเทียบ == "PO" ตรง ๆ และคำนวณลิสต์ครั้งเดียวแล้วใช้ซ้ำ
+        // (เดิมเขียนเงื่อนไขเดียวกันไว้สองที่ — ตรงนี้กับ monthlyClosedSalesList ด้านล่าง
+        // ถ้าแก้ที่เดียวตัวเลขสรุปกับรายการที่กดดูจะไม่ตรงกัน)
+        val closedSalesList = myProjects.filter {
+            it.projectStatus in ProjectStages.WON &&
+                isInRange(it.closingDate ?: it.startDate, monthStart, monthEnd)
+        }
+        val closedSales = closedSalesList.sumOf { it.expectedValue ?: 0.0 }
 
         val activeProjectsList = myProjects.filter {
             it.projectStatus !in ProjectStages.LOST
@@ -178,7 +197,10 @@ class StatsViewModel @Inject constructor(
         val missingCustList = activeProjectsList.filter { it.customerName.isNullOrBlank() }
         val missingCustCount = missingCustList.size
 
-        val totalValue = myProjects.filter { it.projectStatus !in listOf("Lost", "Failed") }
+        // ✅ เดิม hardcode listOf("Lost", "Failed") ทั้งที่การ์ดอื่นทุกใบในไฟล์นี้ใช้ ProjectStages.LOST
+        // (ซึ่งมาจาก master data) ถ้าแอดมินเพิ่มสถานะแพ้ใหม่ "มูลค่าทั้งหมด" จะนับรวมมันเข้าไป
+        // ขณะที่ "มูลค่าที่ยังเดินอยู่" ตัดออก สองการ์ดบนจอเดียวกันจะเล่าเรื่องไม่ตรงกัน
+        val totalValue = myProjects.filter { it.projectStatus !in ProjectStages.LOST }
             .sumOf { it.expectedValue ?: 0.0 }
 
         val monthlyLeadsList = myCustomers.filter { c -> isInRange(c.createdAt?.take(10), monthStart, monthEnd) }
@@ -225,7 +247,7 @@ class StatsViewModel @Inject constructor(
             weeklyNewLeadsList = weeklyLeadsList,
             weeklyNewProjectsList = weeklyNewProjList,
             weeklyVisitList    = weeklyVisitListRaw,
-            monthlyClosedSalesList = myProjects.filter { it.projectStatus == "PO" && isInRange(it.closingDate ?: it.startDate, monthStart, monthEnd) },
+            monthlyClosedSalesList = closedSalesList,
             monthlyNewLeadsList = monthlyLeadsList,
             monthlyNewProjectsList = monthlyNewProjList,
             activeProjectsList = activeProjectsList,

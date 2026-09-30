@@ -142,23 +142,68 @@ class ExportViewModelTest {
         assertEquals("2026-04-08", state.activities.first().date)
     }
 
-    @Test
-    fun `loadMonthlyData should include matching month and active non final projects`() = runTest {
-        val ym = YearMonth.of(2026, 4)
-        val pStarted = Project("P1", "C1", projectName = "Alpha", startDate = "2026-04-01", projectStatus = "Lead", expectedValue = 100.0)
-        val pClosing = Project("P2", "C1", projectName = "Beta", closingDate = "2026-04-30", projectStatus = "Quotation", expectedValue = 200.0)
-        val pActiveOtherMonth = Project("P3", "C1", projectName = "Gamma", startDate = "2026-03-01", projectStatus = "Assured", expectedValue = 300.0)
-        val pFinalOtherMonth = Project("P4", "C1", projectName = "Delta", startDate = "2026-03-01", projectStatus = "Lost", expectedValue = 400.0)
-        every { projectRepo.getAllProjectsFlow() } returns flowOf(listOf(pStarted, pClosing, pActiveOtherMonth, pFinalOtherMonth))
+    // รายงานของเดือนที่เลือก = ที่ยังเดินอยู่ในเดือนนั้น + ที่แพ้ในเดือนนั้น
+    // เดิมเงื่อนไข "สถานะยังไม่แพ้" ปล่อยโครงการที่ยังเดินผ่านทุกเดือน ตัวเลือกเดือนจึงแทบไม่มีผล
+    private val alpha = Project("P1", "C1", projectName = "Alpha", startDate = "2026-04-01", projectStatus = "Lead", expectedValue = 100.0)
+    private val beta  = Project("P2", "C1", projectName = "Beta", closingDate = "2026-04-30", projectStatus = "Quotation", expectedValue = 200.0)
+    private val gamma = Project("P3", "C1", projectName = "Gamma", startDate = "2026-03-01", projectStatus = "Assured", expectedValue = 300.0)
+    private val delta = Project("P4", "C1", projectName = "Delta", startDate = "2026-03-01", closingDate = "2026-03-20", projectStatus = "Lost", expectedValue = 400.0)
 
-        viewModel.loadMonthlyData(ym)
+    @Test
+    fun `monthly report for April skips a project lost back in March`() = runTest {
+        every { projectRepo.getAllProjectsFlow() } returns flowOf(listOf(alpha, beta, gamma, delta))
+
+        viewModel.loadMonthlyData(YearMonth.of(2026, 4))
         advanceUntilIdle()
 
-        val names = viewModel.uiState.value.projects.map { it.projectName }
-        assertTrue(names.contains("Alpha"))
-        assertTrue(names.contains("Beta"))
-        assertTrue(names.contains("Gamma"))
-        assertFalse(names.contains("Delta"))
+        assertEquals(
+            listOf("Alpha", "Beta", "Gamma"),
+            viewModel.uiState.value.projects.map { it.projectName }
+        )
+    }
+
+    // เลือกเดือนอื่นต้องได้รายการต่างกันจริง ไม่ใช่รายการเดิมทุกเดือน:
+    // มี.ค. — Alpha ยังไม่เริ่ม (เริ่ม 1 เม.ย.), Delta แพ้เดือนนี้จึงต้องขึ้น
+    @Test
+    fun `monthly report for March shows the March loss and hides a project that starts in April`() = runTest {
+        every { projectRepo.getAllProjectsFlow() } returns flowOf(listOf(alpha, beta, gamma, delta))
+
+        viewModel.loadMonthlyData(YearMonth.of(2026, 3))
+        advanceUntilIdle()
+
+        assertEquals(
+            listOf("Beta", "Gamma", "Delta"),
+            viewModel.uiState.value.projects.map { it.projectName }
+        )
+    }
+
+    // โครงการที่ปิดไปแล้วก่อนเดือนที่เลือก ต้องไม่ลอยมาอยู่ในรายงานเดือนหลัง ๆ
+    @Test
+    fun `a project already closed before the month is not listed in it`() = runTest {
+        val done = Project("P5", "C1", projectName = "Done", startDate = "2026-01-05", closingDate = "2026-02-10", projectStatus = "PO")
+        every { projectRepo.getAllProjectsFlow() } returns flowOf(listOf(done))
+
+        viewModel.loadMonthlyData(YearMonth.of(2026, 4))
+        advanceUntilIdle()
+
+        assertTrue(viewModel.uiState.value.projects.isEmpty())
+    }
+
+    // สถานะในรายงานต้องเป็นป้ายที่ผู้ใช้อ่านได้ (ผ่าน ProjectStages) ไม่ใช่รหัสที่เก็บใน DB
+    // ไม่มี master data โหลดอยู่ในเทสต์ labelFor จึง fallback เป็นรหัสเดิม — ที่คุมคือ "ต้องผ่าน labelFor"
+    @Test
+    fun `monthly report exposes the stage label, not whatever raw code happens to be stored`() = runTest {
+        every { projectRepo.getAllProjectsFlow() } returns flowOf(
+            listOf(Project("P1", "C1", projectName = "Alpha", projectStatus = "Make a Decision"))
+        )
+
+        viewModel.loadMonthlyData(YearMonth.of(2026, 4))
+        advanceUntilIdle()
+
+        assertEquals(
+            com.example.pp68_salestrackingapp.utils.ProjectStages.labelFor("Make a Decision"),
+            viewModel.uiState.value.projects.first().status
+        )
     }
 
     @Test

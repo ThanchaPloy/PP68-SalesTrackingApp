@@ -63,7 +63,9 @@ sealed class AddCustomerEvent {
     data class LocationPicked(val lat: Double, val lng: Double) : AddCustomerEvent()
     data class CustTypeChanged(val value: String)    : AddCustomerEvent()
     data class StatusChanged(val value: String)      : AddCustomerEvent()
-    object UseCurrentLocation : AddCustomerEvent()
+    // UseCurrentLocation ถูกลบออก — ไม่มีหน้าจอไหนเรียกเลย และตัว handler เดิมไม่ได้อ่าน GPS จริง
+    // มันฮาร์ดโค้ดพิกัดกลางกรุงเทพ (13.7563, 100.5018) ลงไปตรง ๆ ใครมาต่อปุ่มนี้ทีหลังจะได้ลูกค้า
+    // ที่ปักหมุดกลางกรุงเทพทุกรายโดยดูเหมือนเป็นพิกัดจริง — ถ้าต้องใช้จริงให้เรียก fetchCurrentLocation
     object Save               : AddCustomerEvent()
     // เรียกตอนเปิดหน้านี้แบบสร้างใหม่ (ไม่มี custId) เพื่อเช็คว่ามีฉบับร่างเก่าค้างอยู่ไหม
     object CheckDraft         : AddCustomerEvent()
@@ -126,11 +128,22 @@ class AddCustomerViewModel @Inject constructor(
         _uiState.update { it.copy(draftAvailable = false) }
     }
 
+    // ✅ ค่า is_lead เดิมของลูกค้าที่โหลดมาแก้ — ต้องคงไว้ตอนบันทึก ไม่ใช่ตั้ง true ทับทุกครั้ง
+    // (ดูคำอธิบายในเมธอด save) null = กำลังสร้างใหม่
+    private var loadedIsLead: Boolean? = null
+
+    // ✅ เจ้าของลูกค้า (ผู้สร้าง) ของแถวที่โหลดมาแก้ — ต้องคงไว้เหมือนกัน
+    // แอปให้แก้ลูกค้าของเพื่อนร่วมสาขาได้ ถ้าเขียน createdBy เป็นตัวเองทับ แถวในเครื่องจะกลายเป็น
+    // "ลูกค้าของฉัน" ทันที (แดชบอร์ดนับ myCustomers ด้วยฟิลด์นี้) ทั้งที่เจ้าของจริงไม่เปลี่ยน
+    private var loadedCreatedBy: String? = null
+
     private fun loadCustomer(id: String) {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
             customerRepo.getCustomerById(id).fold(
                 onSuccess = { customer ->
+                    loadedIsLead = customer.isLead
+                    loadedCreatedBy = customer.createdBy
                     _uiState.update {
                         it.copy(
                             custId            = customer.custId,
@@ -183,9 +196,6 @@ class AddCustomerViewModel @Inject constructor(
 
 
 
-            is AddCustomerEvent.UseCurrentLocation ->
-                _uiState.update { it.copy(selectedLat = 13.7563, selectedLng = 100.5018) }
-
             is AddCustomerEvent.Save -> save()
 
             is AddCustomerEvent.CheckDraft -> checkForDraft()
@@ -234,9 +244,15 @@ class AddCustomerViewModel @Inject constructor(
                     "inactive" -> 2
                     else       -> 1
                 },
-                createdBy     = userEmpCode,
+                // สร้างใหม่ = ตัวเองเป็นผู้สร้าง, แก้ไข = คงเจ้าของเดิมไว้ (ดู loadedCreatedBy)
+                createdBy     = loadedCreatedBy ?: userEmpCode,
                 createdAt     = s.custId?.let { null } ?: LocalDate.now().toString(),
-                isLead        = true
+                // ✅ สร้างใหม่จากหน้านี้ = Lead เสมอ (ยังไม่ผ่านการคัดกรอง) แต่ "แก้ไข" ต้องคงค่าเดิมไว้
+                // เดิมตั้ง true ทับทุกครั้ง แค่เข้าไปแก้ที่อยู่ลูกค้าจริงก็ทำให้แถวในเครื่องกลายเป็น Lead
+                // แล้วเด้งจากแท็บ "ลูกค้า" ไปโผล่ในแท็บ "Lead" (CustomerListViewModel กรองด้วยฟิลด์นี้)
+                // จนกว่าจะ login ใหม่แล้วดึงข้อมูลลงมาทับ — ฝั่ง server ไม่โดนเพราะ body ของ PATCH
+                // ไม่มี is_lead อยู่แล้ว ผิดแค่ในเครื่อง ซึ่งคือสิ่งที่ผู้ใช้เห็น
+                isLead        = loadedIsLead ?: true
             )
 
             // ✅ Create = POST, Edit = PATCH

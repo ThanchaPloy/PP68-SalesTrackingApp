@@ -330,7 +330,9 @@ private fun InfoCard(s: ActivityDetailUiState) {
             DetailRow(Icons.Default.Person, "ผู้ติดต่อ", act.contactName ?: "N/A")
             DetailRow(Icons.Default.Business, "บริษัท", act.companyName ?: "N/A")
             DetailRow(Icons.Default.Work, "โครงการ", act.projectName ?: "N/A")
-            DetailRow(Icons.Default.CalendarToday, "วันที่", act.activityDate)
+            // จัดรูปแบบวันที่ตอนแสดงผลเท่านั้น — ค่าใน state ต้องคง ISO ไว้ให้กติกา W6 ข้างบน
+            // (effective/isEditLocked) parse ได้ ไม่งั้นทั้งสองข้อพังเงียบ ๆ
+            DetailRow(Icons.Default.CalendarToday, "วันที่", formatDateForDisplay(act.activityDate))
             
             val timeRange = if (!act.plannedTime.isNullOrBlank()) {
                 if (!act.plannedEndTime.isNullOrBlank()) "${act.plannedTime} - ${act.plannedEndTime}"
@@ -356,6 +358,16 @@ private fun InfoCard(s: ActivityDetailUiState) {
             }
         }
     }
+}
+
+// แปลงวันที่ ISO เป็นรูปแบบที่อ่านง่ายเฉพาะตอนแสดงผล — ค่าที่เก็บใน state ต้องคงเป็น ISO เสมอ
+// เพราะกติกา W6 (AppointmentStatus) parse จากค่านั้นโดยตรง
+private fun formatDateForDisplay(isoDate: String?): String {
+    if (isoDate.isNullOrBlank()) return "N/A"
+    return runCatching {
+        java.time.LocalDate.parse(isoDate.take(10))
+            .format(java.time.format.DateTimeFormatter.ofPattern("d MMM yyyy", java.util.Locale("th", "TH")))
+    }.getOrDefault(isoDate)
 }
 
 @Composable

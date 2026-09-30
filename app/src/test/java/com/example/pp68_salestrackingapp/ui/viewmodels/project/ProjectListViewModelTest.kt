@@ -122,16 +122,20 @@ class ProjectListViewModelTest {
             val result = awaitItem()
 
             assertTrue(result.any { it.projectId == "P1" })
-            assertTrue(result.any { it.projectId == "P4" })
             assertTrue(result.any { it.projectId == "P7" })
             assertTrue(result.any { it.projectId == "P8" })
-            assertFalse(result.any { it.projectId == "P3" || it.projectId == "P5" || it.projectId == "P6" })
+            // PO = ปิดการขายได้แล้ว จึงไม่อยู่แท็บ Active ไม่ว่าวันปิดจะถึงกำหนดหรือยัง (P3 อดีต, P4 อนาคต)
+            assertFalse(result.any { it.projectId == "P3" || it.projectId == "P4" })
+            assertFalse(result.any { it.projectId == "P5" || it.projectId == "P6" })
             cancelAndIgnoreRemainingEvents()
         }
     }
 
+    // แท็บ "ปิดแล้ว" = โครงการที่ขายได้ (PO) ทุกใบ ไม่ขึ้นกับวันปิด — ปิดการขายได้แล้วคือจบดีลแล้ว
+    // เดิมเงื่อนไขคือ PO && closingDate <= today ทำให้ใบที่ยังไม่ถึงวันส่งมอบ (P4) ค้างในแท็บ Active
+    // ส่วน Lost/Failed แยกไปแท็บ inactive ต่างหาก เพราะแพ้ ≠ ขายได้
     @Test
-    fun givenClosedTab_whenSelected_thenReturnsPastPoOnly() = runTest {
+    fun givenClosedTab_whenSelected_thenReturnsEveryWonProject() = runTest {
         initVm()
         viewModel.onSelectTab(1)
 
@@ -140,8 +144,7 @@ class ProjectListViewModelTest {
             advanceTimeBy(305)
             val result = awaitItem()
 
-            assertTrue(result.any { it.projectId == "P3" })
-            assertFalse(result.any { it.projectId == "P4" || it.projectId == "P5" || it.projectId == "P6" })
+            assertEquals(setOf("P3", "P4"), result.map { it.projectId }.toSet())
             cancelAndIgnoreRemainingEvents()
         }
     }

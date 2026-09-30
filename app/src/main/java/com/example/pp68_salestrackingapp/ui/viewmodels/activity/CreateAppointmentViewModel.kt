@@ -358,7 +358,11 @@ class CreateAppointmentViewModel @Inject constructor(
                 contactId = "TEMP-" + java.util.UUID.randomUUID().toString().take(8).uppercase(),
                 custId = custId,
                 fullName = s.quickAddContactName.trim(),
-                phoneNumber = s.quickAddContactPhone.trim()
+                phoneNumber = s.quickAddContactPhone.trim(),
+                // เจ้าของผู้ติดต่อ = คนที่สร้าง ใช้กรองการมองเห็น (บริษัทเห็นร่วมกันทั้งสาขา แต่
+                // ผู้ติดต่อเห็นเฉพาะคนสร้าง) เซิร์ฟเวอร์บังคับค่านี้จาก JWT อยู่แล้ว แต่ต้องใส่ใน
+                // แถวที่เขียนลง Room ด้วย ไม่งั้นช่วงที่ยังไม่ซิงค์ แถวจะไม่มีเจ้าของแล้วเห็นไม่ตรงกัน
+                createdBy = authRepo.currentUser()?.userId
             )
             contactRepo.addContact(newContact).fold(
                 onSuccess = { contactId ->

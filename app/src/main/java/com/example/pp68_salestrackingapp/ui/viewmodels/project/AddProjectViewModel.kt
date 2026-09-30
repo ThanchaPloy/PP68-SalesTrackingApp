@@ -575,7 +575,9 @@ class AddProjectViewModel @Inject constructor(
                 contactId = "TEMP-" + UUID.randomUUID().toString().take(8).uppercase(),
                 custId = custId,
                 fullName = st.quickAddContactName.trim(),
-                phoneNumber = st.quickAddContactPhone.trim()
+                phoneNumber = st.quickAddContactPhone.trim(),
+                // เจ้าของผู้ติดต่อ = คนที่สร้าง (เหตุผลเดียวกับใน CreateAppointmentViewModel)
+                createdBy = authRepo.currentUser()?.userId
             )
             contactRepo.addContact(newContact).fold(
                 onSuccess = { contactId ->

@@ -149,10 +149,17 @@ class ExportViewModel @Inject constructor(
                 val appIdsInWeek = filteredActivities.map { it.activityId }.toSet()
                 val standaloneResults = filteredResults
                     .filter { it.activityId == null || it.activityId !in appIdsInWeek }
+                    // ✅ รวมเวอร์ชันของบันทึกเดียวกันด้วย result_group_id ซึ่งเป็นคีย์จริงของ "กลุ่มเวอร์ชัน"
+                    // เดิมเดาจากโครงการ+วันที่+ข้อความสรุป ซึ่งผิดได้สองทาง: บันทึกสองใบของโครงการเดียวกัน
+                    // วันเดียวกันที่เผอิญสรุปเหมือนกัน จะถูกยุบเหลือใบเดียวในรายงาน (ข้อมูลหาย) และ
+                    // การแก้คำในสรุปตอนบันทึกเวอร์ชันใหม่ ทำให้ contentKey เปลี่ยน กลายเป็นสองกลุ่ม
+                    // โผล่ทั้งเวอร์ชันเก่าและใหม่พร้อมกัน — fallback เป็นคีย์เดิมเฉพาะแถวเก่าที่ยังไม่มี group id
                     .groupBy { res ->
-                        val dateKey = res.reportDate?.take(10) ?: "no_date"
-                        val contentKey = res.summary?.replace("\\s".toRegex(), "") ?: ""
-                        "${res.projectId}_${dateKey}_$contentKey"
+                        res.resultGroupId ?: run {
+                            val dateKey = res.reportDate?.take(10) ?: "no_date"
+                            val contentKey = res.summary?.replace("\\s".toRegex(), "") ?: ""
+                            "${res.projectId}_${dateKey}_$contentKey"
+                        }
                     }
                     .mapNotNull { (_, group) ->
                         group.filter { it.isLatest == true }.ifEmpty { group }.maxByOrNull { res -> res.version ?: 0 }
@@ -298,22 +305,39 @@ class ExportViewModel @Inject constructor(
             try {
                 val all = projectRepo.getAllProjectsFlow().first()
 
+                // รายงานของเดือนที่เลือก = โครงการที่ "ยังเดินอยู่ในเดือนนั้น" + โครงการที่ "แพ้ในเดือนนั้น"
+                //
+                // เงื่อนไขเดิม (เริ่มเดือนนี้ || ปิดเดือนนี้ || สถานะยังไม่แพ้) ข้อสุดท้ายทำให้โครงการที่ยัง
+                // เดินอยู่ติดมาทุกเดือนไม่ว่าจะเลือกเดือนไหน ตัวเลือกเดือนจึงแทบไม่มีผล ตอนนี้ผูกกับ
+                // ช่วงเวลาจริงทั้งสองกลุ่ม กดย้อนดูเดือนเก่าจะได้ภาพของเดือนนั้นจริง ๆ
+                val monthStart = yearMonth.atDay(1)
+                val monthEnd = yearMonth.atEndOfMonth()
+                fun parseDate(raw: String?): LocalDate? =
+                    raw?.take(10)?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
+
                 val filtered = all.filter { p ->
-                    try {
-                        val startD = p.startDate?.let { LocalDate.parse(it.take(10)) }
-                        val closeD = p.closingDate?.let { LocalDate.parse(it.take(10)) }
-
-                        val isStartedThisMonth = startD?.let { YearMonth.from(it) == yearMonth } ?: false
-                        val isClosingThisMonth = closeD?.let { YearMonth.from(it) == yearMonth } ?: false
-
-                        isStartedThisMonth || isClosingThisMonth || p.projectStatus !in ProjectStages.LOST
-                    } catch (e: Exception) { true }
+                    val start = parseDate(p.startDate)
+                    val close = parseDate(p.closingDate)
+                    if (p.projectStatus in ProjectStages.LOST) {
+                        // วันที่แพ้ไม่มีฟิลด์ของตัวเอง — ใช้วันปิดเป็นตัวแทน ไม่มีก็ถอยไปใช้วันเริ่ม
+                        // ถ้าไม่มีวันไหนเลยก็วางบนเส้นเวลาไม่ได้ จึงไม่ขึ้นในเดือนใด ดีกว่าขึ้นทุกเดือน
+                        val lostOn = close ?: start
+                        lostOn != null && !lostOn.isBefore(monthStart) && !lostOn.isAfter(monthEnd)
+                    } else {
+                        // ยังเดินอยู่ในเดือนนั้น = เริ่มไม่เกินสิ้นเดือน และยังไม่ปิดก่อนต้นเดือน
+                        // (ไม่มีวันเริ่ม/วันปิด = ยังเปิดอยู่ ให้ผ่าน — พิสูจน์ไม่ได้ว่าจบไปแล้ว)
+                        val startedByMonthEnd = start == null || !start.isAfter(monthEnd)
+                        val notClosedBeforeMonth = close == null || !close.isBefore(monthStart)
+                        startedByMonthEnd && notClosedBeforeMonth
+                    }
                 }.map {
                     ExportProjectItem(
                         projectName = it.projectName,
-                        companyName = null, 
+                        companyName = null,
                         value = it.expectedValue ?: 0.0,
-                        status = it.projectStatus ?: "",
+                        // ป้ายจาก master data ไม่ใช่รหัสดิบ — ให้ตรงกับที่แสดงในหน้าอื่นทั้งแอป
+                        // (ฟิลด์นี้ถูกเอาไปแสดงบนจอ/CSV/PDF เท่านั้น ไม่มีที่ไหนเทียบกับรหัส)
+                        status = ProjectStages.labelFor(it.projectStatus),
                         score = it.opportunityScore,
                         closeDate = it.closingDate
                     )

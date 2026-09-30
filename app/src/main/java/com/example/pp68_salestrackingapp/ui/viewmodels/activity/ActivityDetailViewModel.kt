@@ -57,10 +57,16 @@ class ActivityDetailViewModel @Inject constructor(
                 repo.enrichActivity(rawActivity)
             } else null
 
-            // ✅ จัดรูปแบบวันที่และเวลาให้สวยงามก่อนแสดงผล
+            // ✅ จัดรูปแบบ "เวลา" ให้อ่านง่ายก่อนแสดงผลได้ แต่ห้ามแตะ activityDate
+            //
+            // เดิมเขียนวันที่รูปแบบแสดงผล ("Apr 06, 2026") ทับลงไปใน activityDate ซึ่งหน้าจอเอาไป
+            // ส่งต่อให้ AppointmentStatus.effective()/isEditLocked() คิดกติกา W6 — พวกนั้น parse
+            // ด้วย LocalDate.parse(take(10)) จึงพังเงียบ ๆ แล้วคืนค่า fallback ผลคือบนหน้านี้
+            // นัดที่ขาดไปแล้วไม่เคยขึ้นว่า "ขาดนัด" และล็อกห้ามแก้ 7 วันก่อนนัดไม่เคยทำงานเลย
+            // (ชั้น repository ยังบล็อกให้อยู่ จึงไม่ถึงกับแก้ข้อมูลได้ แต่ปุ่มโชว์ให้กดแล้วไปเจอ error)
+            // การจัดรูปแบบเพื่อแสดงผลเป็นเรื่องของหน้าจอ ไม่ใช่ของ state
             val finalActivity = enrichedActivity?.let { act ->
                 act.copy(
-                    activityDate = formatDateForUI(act.activityDate) ?: act.activityDate,
                     plannedTime = formatTimeForUI(act.plannedTime),
                     plannedEndTime = formatTimeForUI(act.plannedEndTime)
                 )
@@ -90,14 +96,6 @@ class ActivityDetailViewModel @Inject constructor(
                 }
             }
         }
-    }
-
-    private fun formatDateForUI(isoDate: String?): String? {
-        if (isoDate == null) return null
-        return try {
-            val date = LocalDate.parse(isoDate.take(10))
-            date.format(DateTimeFormatter.ofPattern("MMM dd, yyyy", Locale.ENGLISH))
-        } catch (e: Exception) { isoDate }
     }
 
     private fun formatTimeForUI(timeStr: String?): String? {
@@ -131,10 +129,10 @@ class ActivityDetailViewModel @Inject constructor(
         val plannedLng = act.plannedLong ?: return
 
         val distance = calculateDistance(lat, lng, plannedLat, plannedLng)
-        _uiState.update { 
+        _uiState.update {
             it.copy(
                 currentDistance = distance,
-                isLocationMismatch = distance > 200 // 200 meters threshold
+                isLocationMismatch = distance > CHECKIN_RADIUS_METERS
             )
         }
     }
@@ -156,11 +154,23 @@ class ActivityDetailViewModel @Inject constructor(
 
     fun confirmCheckin(lat: Double, lng: Double) {
         val act = _uiState.value.activity ?: return
-        val isVerified = !(_uiState.value.isLocationMismatch)
+
+        // ✅ คิดระยะจากพิกัดที่กดเช็คอินมาจริงตรงนี้ ไม่ใช่อ่าน isLocationMismatch/currentDistance
+        // จาก state ที่ updateCurrentLocation เป็นคนตั้ง — ตัวนั้น return ทิ้งตั้งแต่ต้นถ้านัดหมาย
+        // ไม่มีพิกัดปลายทาง (แถวเก่าก่อนบังคับปักหมุด) ค่าจึงค้างเป็น mismatch=false, distance=0.0
+        // แล้วเช็คอินถูกบันทึกว่า "ยืนยันตำแหน่งแล้ว ห่าง 0 เมตร" ทั้งที่ไม่ได้เทียบกับอะไรเลย
+        // ไม่มีพิกัดปลายทาง = ยืนยันไม่ได้ ส่ง isVerified = false และไม่ส่งระยะทางขึ้นไป
+        // (ดีกว่าส่ง 0.0 ซึ่งอ่านเหมือนยืนหน้าไซต์พอดี)
+        val plannedLat = act.plannedLat
+        val plannedLng = act.plannedLong
+        val distance = if (plannedLat != null && plannedLng != null) {
+            calculateDistance(lat, lng, plannedLat, plannedLng)
+        } else null
+        val isVerified = distance != null && distance <= CHECKIN_RADIUS_METERS
 
         viewModelScope.launch {
             _uiState.update { it.copy(isCheckingIn = true, error = null) }
-            repo.checkIn(act.activityId, lat, lng, isVerified, _uiState.value.currentDistance).fold(
+            repo.checkIn(act.activityId, lat, lng, isVerified, distance).fold(
                 onSuccess = {
                     _uiState.update { it.copy(isCheckingIn = false, showCheckinDialog = false) }
                     loadActivity(act.activityId)
@@ -193,5 +203,10 @@ class ActivityDetailViewModel @Inject constructor(
 
     fun clearError() {
         _uiState.update { it.copy(error = null) }
+    }
+
+    companion object {
+        // เกณฑ์ "อยู่หน้างานจริง" ของการเช็คอิน — หลวมกว่านี้ที่รูปบันทึกผล (500 ม.) โดยตั้งใจ
+        const val CHECKIN_RADIUS_METERS = 200.0
     }
 }

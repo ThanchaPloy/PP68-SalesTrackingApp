@@ -132,6 +132,11 @@ class ContactRepository @Inject constructor(
             val localContact = contact.copy(isSynced = false)
             contactDao.insertContact(localContact)
             try {
+                // ✅ ไม่กรอง null ออก — ฟอร์มแก้ผู้ติดต่อส่งค่ามาครบทุกฟิลด์ที่มันดูแล ค่าว่างจึงมี
+                // ความหมายว่า "ผู้ใช้ลบทิ้ง" ไม่ใช่ "ไม่ได้แก้" เดิม filterValues ตัด null ออก
+                // ทำให้ลบอีเมล/ไลน์/ตำแหน่ง/ชื่อเล่นไม่ได้เลย ลบในแอปแล้วดูเหมือนสำเร็จ แต่ค่าเก่า
+                // ยังอยู่บนเซิร์ฟเวอร์ แล้ว refreshContacts รอบหน้าดึงกลับมาทับของในเครื่อง
+                // (ฝั่ง backend ก็ใช้ ?.let อยู่เหมือนกัน แก้คู่กันใน ContactPersonRepositoryImpl)
                 val updates = buildMap<String, Any?> {
                     put("contact_name", contact.fullName)
                     put("mobile_phone", contact.phoneNumber)
@@ -141,7 +146,7 @@ class ContactRepository @Inject constructor(
                     put("line", contact.line)
                     put("is_active", contact.isActive)
                     put("is_dm_confirmed", contact.isDmConfirmed)
-                }.filterValues { it != null }
+                }
                 val response = retrySend(idempotent = true, tag = "updateContact") { apiService.updateContact("eq.$contactId", updates) }
                 if (response.isSuccessful && response.body()?.isNotEmpty() == true) {
                     contactDao.updateSyncStatus(contactId, true)

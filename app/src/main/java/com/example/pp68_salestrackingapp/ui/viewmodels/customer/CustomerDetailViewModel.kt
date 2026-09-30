@@ -63,12 +63,7 @@ class CustomerDetailViewModel @Inject constructor(
                 refreshContacts(custId)
 
                 // 3. ดึง Project แยก active/closed
-                val closedStatuses = ProjectStages.LOST
-                val allProjects = projectRepo.getAllProjectsFlow().first()
-                    .filter { it.custId == custId }
-
-                _activeProjects.value = allProjects.filter { it.projectStatus !in closedStatuses }
-                _closedProjects.value = allProjects.filter { it.projectStatus in closedStatuses }
+                observeProjects(custId)
 
             } catch (e: Exception) {
                 e.printStackTrace()
@@ -78,9 +73,33 @@ class CustomerDetailViewModel @Inject constructor(
         }
     }
 
+    private var projectsJob: kotlinx.coroutines.Job? = null
+
+    /**
+     * ✅ เดิมอ่านโครงการด้วย getAllProjectsFlow().first() ซึ่งเป็นภาพนิ่งครั้งเดียว และหน้าจอเรียก
+     * load() จาก LaunchedEffect(custId) เท่านั้น — กลับเข้าหน้านี้ด้วย custId เดิมจึงไม่โหลดใหม่
+     * แก้สถานะโครงการหรือสร้างโครงการใหม่จากหน้านี้แล้วย้อนกลับมา จะยังเห็นรายการเดิมทุกครั้ง
+     * เปลี่ยนมา collect ต่อเนื่องแทน Room จะ push ให้เองทุกครั้งที่ตารางเปลี่ยน
+     */
+    private fun observeProjects(custId: String) {
+        projectsJob?.cancel()
+        projectsJob = viewModelScope.launch {
+            projectRepo.getAllProjectsFlow().collect { all ->
+                val mine = all.filter { it.custId == custId }
+                // ✅ แยกด้วย CLOSED (แพ้ + ชนะ) ไม่ใช่ LOST อย่างเดียว — เดิมโครงการที่ปิดการขาย
+                // ได้แล้ว (PO) ค้างอยู่ใน "โครงการปัจจุบัน" ตลอดไป ไม่เคยลงไปอยู่ในแท็บประวัติ
+                // ทั้งที่ดีลจบแล้ว ส่วนความหมาย "ชนะ/แพ้" ยังแยกกันที่หน้ารายการโครงการ (WON/LOST)
+                _activeProjects.value = mine.filter { it.projectStatus !in ProjectStages.CLOSED }
+                _closedProjects.value = mine.filter { it.projectStatus in ProjectStages.CLOSED }
+            }
+        }
+    }
+
     private suspend fun refreshContacts(custId: String) {
-        val currentUserId = authRepo.currentUser()?.userId
-        customerRepo.getContactPersons(custId, currentUserId).onSuccess { contacts ->
+        // เดิมส่ง currentUserId เข้าไปพร้อมคอมเมนต์ว่า "เฉพาะที่ตนเองสร้าง" แต่ getContactPersons
+        // ไม่เคยเอาไปกรองอะไรเลย (ดู KDoc ของมัน) — ผู้ติดต่อเป็นของลูกค้า ไม่ใช่ของเซลส์คนใดคนหนึ่ง
+        // เลิกส่งเพื่อไม่ให้ใครอ่านโค้ดนี้แล้วเข้าใจผิดว่ามีการกรองอยู่
+        customerRepo.getContactPersons(custId).onSuccess { contacts ->
             _contacts.value = contacts
         }
     }

@@ -119,7 +119,24 @@ class ProjectDetailViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
             projectRepo.getProjectByIdFlow(id).collectLatest { project ->
-                if (project != null) {
+                // ✅ null = ไม่มีแถวนี้ในเครื่อง (ถูกลบไปแล้ว หรือออฟไลน์อยู่และยังไม่เคยดึงลงมา)
+                // เดิมไม่ทำอะไรเลย isLoading จึงค้างเป็น true ตลอด ผู้ใช้เห็นวงกลมหมุนไม่มีวันจบ
+                // และไม่มีทางรู้ว่าเกิดอะไรขึ้น
+                if (project == null) {
+                    _uiState.update {
+                        when {
+                            // เคยโหลดได้แล้วแต่เพิ่งหายไป (ถูกลบ) — คงข้อมูลบนจอไว้ ไม่ต้องขึ้น error ซ้อน
+                            it.project != null -> it
+                            // ถ้าการดึงจาก server ล้มเหลวไปก่อนแล้ว ข้อความของมันบอกสาเหตุได้ตรงกว่า
+                            // (เน็ตหลุด/สิทธิ์ไม่ถึง) อย่าเอาข้อความรวม ๆ ไปทับ
+                            it.error != null -> it.copy(isLoading = false)
+                            else -> it.copy(
+                                isLoading = false,
+                                error = "ไม่พบโครงการนี้ในเครื่อง อาจถูกลบไปแล้ว หรือยังไม่ได้ซิงค์ข้อมูล"
+                            )
+                        }
+                    }
+                } else {
                     _uiState.update { it.copy(isLoading = false, project = project, error = null) }
                     launch {
                         val company = project.custId?.let { 
@@ -147,7 +164,16 @@ class ProjectDetailViewModel @Inject constructor(
                 // 1. งานที่กำลังจะมาถึง
                 val tasks = activities
                     .filter { it.status.lowercase() != "completed" }
-                    .map { TaskItem(it.activityId, it.activityType, it.detail, it.activityDate) }
+                    // ✅ หัวข้อการ์ดเดิมใส่ activityType ดิบลงไป ผู้ใช้จึงเห็นคำว่า "onsite" ตัวโต ๆ
+                    // เป็นชื่องาน ส่วนหัวข้อนัดจริงไปอยู่บรรทัดคำอธิบายข้างล่าง
+                    .map {
+                        TaskItem(
+                            activityId = it.activityId,
+                            title = com.example.pp68_salestrackingapp.utils.AppointmentStatus.typeLabel(it.activityType),
+                            description = it.detail,
+                            plannedDate = it.activityDate
+                        )
+                    }
 
                 val actMap = activities.associateBy { it.activityId }
 

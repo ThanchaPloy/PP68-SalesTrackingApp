@@ -33,22 +33,28 @@ class NotificationViewModelTest {
     private val dispatcher = StandardTestDispatcher()
     private val activityRepo = mockk<ActivityRepository>(relaxed = true)
 
+    // วันศุกร์ที่ 10 เม.ย. 2026 เวลา 08:00 ตามเวลากรุงเทพฯ — ตรึงไว้เพื่อให้เทสต์ไม่ขึ้นกับวันจริง
+    // เลือกวันศุกร์เพราะเป็นช่วงท้ายสัปดาห์ (เหลือไม่เกิน 3 วันจะถึงอาทิตย์) การเตือน "ส่งรายงาน
+    // รายสัปดาห์" จึงต้องโผล่เองตามกติกาจริง ไม่ต้องใช้ System.getProperty("is_test") บังคับ
+    private val zone = java.time.ZoneId.of("Asia/Bangkok")
+    private val fixedToday: java.time.LocalDate = java.time.LocalDate.of(2026, 4, 10)
+    private val fixedClock: java.time.Clock =
+        java.time.Clock.fixed(fixedToday.atTime(8, 0).atZone(zone).toInstant(), zone)
+
     @Before
     fun setUp() {
-        System.setProperty("is_test", "true")
         Dispatchers.setMain(dispatcher)
     }
 
     @After
     fun tearDown() {
-        System.clearProperty("is_test")
         Dispatchers.resetMain()
     }
 
     @Test
     fun `loadNotifications should create reminders and weekly notification`() = runTest {
-        val today = LocalDate.now().toString()
-        val tomorrow = LocalDate.now().plusDays(1).toString()
+        val today = fixedToday.toString()
+        val tomorrow = fixedToday.plusDays(1).toString()
         coEvery { activityRepo.getMyActivitiesWithDetails() } returns Result.success(
             listOf(
                 ActivityCard(
@@ -78,7 +84,7 @@ class NotificationViewModelTest {
             )
         )
 
-        val vm = NotificationViewModel(activityRepo)
+        val vm = NotificationViewModel(activityRepo, fixedClock)
         advanceUntilIdle()
 
         assertFalse(vm.uiState.value.isLoading)
@@ -91,7 +97,7 @@ class NotificationViewModelTest {
     fun `loadNotifications when repository throws should set error`() = runTest {
         coEvery { activityRepo.getMyActivitiesWithDetails() } throws Exception("fetch fail")
 
-        val vm = NotificationViewModel(activityRepo)
+        val vm = NotificationViewModel(activityRepo, fixedClock)
         advanceUntilIdle()
 
         assertFalse(vm.uiState.value.isLoading)
@@ -100,7 +106,7 @@ class NotificationViewModelTest {
 
     @Test
     fun `loadNotifications should ignore invalid date and map checked in to report action`() = runTest {
-        val today = LocalDate.now().toString()
+        val today = fixedToday.toString()
         coEvery { activityRepo.getMyActivitiesWithDetails() } returns Result.success(
             listOf(
                 ActivityCard(
@@ -142,7 +148,7 @@ class NotificationViewModelTest {
             )
         )
 
-        val vm = NotificationViewModel(activityRepo)
+        val vm = NotificationViewModel(activityRepo, fixedClock)
         advanceUntilIdle()
 
         val notis = vm.uiState.value.notifications
@@ -154,7 +160,7 @@ class NotificationViewModelTest {
 
     @Test
     fun `loadNotifications should map objective fallback when time string is unparsable`() = runTest {
-        val today = LocalDate.now().toString()
+        val today = fixedToday.toString()
         coEvery { activityRepo.getMyActivitiesWithDetails() } returns Result.success(
             listOf(
                 ActivityCard(
@@ -172,7 +178,7 @@ class NotificationViewModelTest {
             )
         )
 
-        val vm = NotificationViewModel(activityRepo)
+        val vm = NotificationViewModel(activityRepo, fixedClock)
         advanceUntilIdle()
 
         val noti = vm.uiState.value.notifications.first { it.id == "A10" }
@@ -184,11 +190,11 @@ class NotificationViewModelTest {
     @Test
     fun `loadNotifications should keep previous error after throw then subsequent success`() = runTest {
         coEvery { activityRepo.getMyActivitiesWithDetails() } throws Exception("first fail")
-        val vm = NotificationViewModel(activityRepo)
+        val vm = NotificationViewModel(activityRepo, fixedClock)
         advanceUntilIdle()
         assertEquals("first fail", vm.uiState.value.error)
 
-        val today = LocalDate.now().toString()
+        val today = fixedToday.toString()
         coEvery { activityRepo.getMyActivitiesWithDetails() } returns Result.success(
             listOf(
                 ActivityCard(
@@ -217,7 +223,7 @@ class NotificationViewModelTest {
     fun `loadNotifications with no cards should still finish loading and contain only weekly report`() = runTest {
         coEvery { activityRepo.getMyActivitiesWithDetails() } returns Result.success(emptyList())
 
-        val vm = NotificationViewModel(activityRepo)
+        val vm = NotificationViewModel(activityRepo, fixedClock)
         advanceUntilIdle()
 
         assertFalse(vm.uiState.value.isLoading)
@@ -232,7 +238,7 @@ class NotificationViewModelTest {
             Result.success(emptyList())
         }
 
-        val vm = NotificationViewModel(activityRepo)
+        val vm = NotificationViewModel(activityRepo, fixedClock)
         assertTrue(vm.uiState.value.notifications.isEmpty())
         assertNull(vm.uiState.value.error)
 
@@ -247,7 +253,7 @@ class NotificationViewModelTest {
     fun `loadNotifications with Result failure should handle gracefully without throwing`() = runTest {
         coEvery { activityRepo.getMyActivitiesWithDetails() } returns Result.failure(Exception("api fail"))
 
-        val vm = NotificationViewModel(activityRepo)
+        val vm = NotificationViewModel(activityRepo, fixedClock)
         advanceUntilIdle()
 
         assertFalse(vm.uiState.value.isLoading)
@@ -257,7 +263,7 @@ class NotificationViewModelTest {
 
     @Test
     fun `loadNotifications should exclude cards not in today and tomorrow`() = runTest {
-        val futureDateString = LocalDate.now().plusDays(2).toString()
+        val futureDateString = fixedToday.plusDays(2).toString()
         coEvery { activityRepo.getMyActivitiesWithDetails() } returns Result.success(
             listOf(
                 ActivityCard(
@@ -275,7 +281,7 @@ class NotificationViewModelTest {
             )
         )
 
-        val vm = NotificationViewModel(activityRepo)
+        val vm = NotificationViewModel(activityRepo, fixedClock)
         advanceUntilIdle()
 
         assertTrue(vm.uiState.value.notifications.none { it.id == "A-FUTURE" })
@@ -285,7 +291,7 @@ class NotificationViewModelTest {
     fun `calling loadNotifications manually should trigger repository again`() = runTest {
         coEvery { activityRepo.getMyActivitiesWithDetails() } returns Result.success(emptyList())
 
-        val vm = NotificationViewModel(activityRepo)
+        val vm = NotificationViewModel(activityRepo, fixedClock)
         advanceUntilIdle()
         vm.loadNotifications()
         advanceUntilIdle()
@@ -297,7 +303,7 @@ class NotificationViewModelTest {
     // เดิมดูแต่ planStatus อย่างเดียว นัดโทรจึงได้ปุ่ม check-in ทั้งที่กดไปก็ไม่มีจุดให้เช็คอิน
     @Test
     fun `only an onsite appointment is offered check-in`() = runTest {
-        val today = LocalDate.now().toString()
+        val today = fixedToday.toString()
         coEvery { activityRepo.getMyActivitiesWithDetails() } returns Result.success(
             listOf(
                 ActivityCard(
@@ -321,7 +327,7 @@ class NotificationViewModelTest {
             )
         )
 
-        val vm = NotificationViewModel(activityRepo)
+        val vm = NotificationViewModel(activityRepo, fixedClock)
         advanceUntilIdle()
 
         val byId = vm.uiState.value.notifications.associateBy { it.id }

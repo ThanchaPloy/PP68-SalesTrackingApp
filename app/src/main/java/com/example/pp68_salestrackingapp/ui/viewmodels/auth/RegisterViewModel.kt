@@ -1,6 +1,5 @@
 package com.example.pp68_salestrackingapp.ui.viewmodels.auth
 
-import android.util.Patterns
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.pp68_salestrackingapp.data.model.Branch
@@ -43,12 +42,8 @@ class RegisterViewModel @Inject constructor(
                 branchRepo.syncFromRemote()
                 val branches = branchRepo.observeBranches()
 
-                // ✅ เพิ่ม log ดูว่าได้ข้อมูลกี่สาขา
-                android.util.Log.d("BranchDebug", "Total branches: ${branches.size}")
-                branches.forEach {
-                    android.util.Log.d("BranchDebug", "Branch: ${it.branchId} - ${it.branchName}")
-                }
-
+                // ลบ log ที่ไล่พิมพ์รหัส+ชื่อสาขาทุกแถวออก — เป็น log ดีบักที่ค้างมาจากตอนพัฒนา
+                // และ minifyEnabled = false ทำให้มันพิมพ์จริงบน release ด้วย ไม่ใช่แค่ debug
                 _uiState.update { it.copy(branches = branches, isLoading = false) }
             } catch (e: Exception) {
                 android.util.Log.e("BranchDebug", "Error: ${e.message}")
@@ -71,12 +66,16 @@ class RegisterViewModel @Inject constructor(
         }
     }
 
-    private fun isValidEmail(email: String): Boolean {
-        return if (System.getProperty("is_test") == "true") {
-            email.matches(Regex("^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,6}$"))
-        } else {
-            Patterns.EMAIL_ADDRESS.matcher(email).matches()
-        }
+    private fun isValidEmail(email: String): Boolean = email.matches(EMAIL_PATTERN)
+
+    private companion object {
+        // ✅ เดิมแยกสองทางด้วย System.getProperty("is_test"): ตอนรันเทสต์ใช้ regex นี้ ตอนใช้งานจริง
+        // ใช้ android.util.Patterns.EMAIL_ADDRESS (ซึ่งเรียกในเทสต์แบบ JVM ไม่ได้ คืน null)
+        // ผลคือโค้ดที่ผู้ใช้รันมีทางแยกที่มีอยู่เพื่อเอาใจเทสต์ และ "is_test" เป็นชื่อ property
+        // ที่ไม่มีใครจอง ถ้าไลบรารีไหนไปตั้งขึ้นมา แอปจริงจะเปลี่ยนพฤติกรรมเองเงียบ ๆ
+        // ใช้ regex ตัวเดียวทั้งสองที่จึงตรงไปตรงมากว่า และเป็นเส้นทางเดียวกับที่เทสต์คุมอยู่แล้ว
+        // (ฝั่ง backend ตรวจอีกชั้นอยู่แล้ว ตรงนี้แค่กันพิมพ์ผิดตั้งแต่หน้าจอ)
+        private val EMAIL_PATTERN = Regex("^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,6}$")
     }
 
     fun register() {

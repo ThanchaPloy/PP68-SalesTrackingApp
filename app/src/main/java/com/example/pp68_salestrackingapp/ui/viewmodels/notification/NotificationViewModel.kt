@@ -28,7 +28,10 @@ data class NotificationUiState(
 
 @HiltViewModel
 class NotificationViewModel @Inject constructor(
-    private val activityRepo: ActivityRepository
+    private val activityRepo: ActivityRepository,
+    // ✅ ฉีดนาฬิกาเข้ามาแทนการเรียก now() ตรง ๆ — เทสต์ตรึงวันได้โดยไม่ต้องมี
+    // System.getProperty("is_test") เป็นทางแยกอยู่ในโค้ดที่ผู้ใช้รัน (ดู AppModule.provideClock)
+    private val clock: java.time.Clock = java.time.Clock.system(java.time.ZoneId.of("Asia/Bangkok"))
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(NotificationUiState())
@@ -48,13 +51,16 @@ class NotificationViewModel @Inject constructor(
                 val activitiesResult = activityRepo.getMyActivitiesWithDetails()
                 val cards = activitiesResult.getOrDefault(emptyList())
 
-                // ✅ ใช้ timezone Bangkok
-                val bangkokZone = java.time.ZoneId.of("Asia/Bangkok")
-                val now   = LocalDateTime.now(bangkokZone)
-                val today = LocalDate.now(bangkokZone)
+                // เวลาทั้งหมดอ่านจากนาฬิกาที่ฉีดเข้ามา (โปรดักชัน = โซนกรุงเทพฯ, เทสต์ = ตรึงวันได้)
+                val now   = LocalDateTime.now(clock)
+                val today = LocalDate.now(clock)
                 val tomorrow = today.plusDays(1)
 
                 val notis = mutableListOf<NotificationItem>()
+                // ✅ เก็บเวลานัดคู่กับแต่ละรายการไว้เรียงลำดับ — เดิมเรียงด้วย isToday อย่างเดียว
+                // ลำดับภายในวันจึงเป็นลำดับที่ repository คืนมา ผู้ใช้เห็นนัดบ่ายอยู่เหนือนัดเช้าได้
+                // (NotificationItem เก็บแต่ timeLabel ที่เป็นข้อความ เรียงตามนั้นไม่ได้)
+                val timed = mutableListOf<Pair<LocalDateTime, NotificationItem>>()
 
                 cards.filter {
                     it.planStatus == "planned" || it.planStatus == "checked_in"
@@ -92,12 +98,15 @@ class NotificationViewModel @Inject constructor(
                                 "อีก ${minutesLeft / 60} ชม."
                         }
 
-                        notis.add(
-                            NotificationItem(
+                        timed.add(
+                            planDateTime to NotificationItem(
                                 id        = card.activityId,
                                 type      = NotiType.REMINDER,
-                                title     = card.objective
-                                    ?: card.activityType ?: "แผนการเข้าพบ",  // ✅ แสดง topic
+                                // หัวข้อนัดมาก่อน ถ้าไม่มีก็ใช้ "ชื่อชนิดนัด" ที่อ่านได้ — เดิม fallback
+                                // เป็น activityType ดิบ ผู้ใช้เห็นแจ้งเตือนหัวข้อว่า "onsite"
+                                title     = card.objective?.takeIf { t -> t.isNotBlank() }
+                                    ?: com.example.pp68_salestrackingapp.utils.AppointmentStatus
+                                        .typeLabel(card.activityType).ifBlank { "แผนการเข้าพบ" },
                                 timeLabel = timeLabel,
                                 subtitle  = card.projectName ?: card.companyName ?: "",
                                 location  = card.companyName ?: "",
@@ -113,15 +122,17 @@ class NotificationViewModel @Inject constructor(
                     }
                 }
 
+                // เรียงตามเวลานัดจริงก่อน แล้วค่อยเอาเข้า notis — ของวันนี้ที่ใกล้ถึงเวลาจะอยู่บนสุด
+                notis.addAll(timed.sortedBy { it.first }.map { it.second })
+
                 // Weekly report reminder
                 val endOfWeek = today.with(
                     TemporalAdjusters.nextOrSame(java.time.DayOfWeek.SUNDAY)
                 )
-                if (Duration.between(
-                        today.atStartOfDay(),
-                        endOfWeek.atStartOfDay()
-                    ).toDays() <= 3 || System.getProperty("is_test") == "true"
-                ) {
+                // เตือนช่วงท้ายสัปดาห์ (เหลือไม่เกิน 3 วันจะถึงอาทิตย์) — เดิมมี
+                // || System.getProperty("is_test") == "true" ต่อท้ายไว้ให้เทสต์บังคับให้โผล่
+                // ตอนนี้เทสต์ตรึงวันผ่านนาฬิกาที่ฉีดเข้ามาแทน ไม่ต้องมีกิ่งพิเศษในโค้ดจริง
+                if (Duration.between(today.atStartOfDay(), endOfWeek.atStartOfDay()).toDays() <= 3) {
                     notis.add(
                         NotificationItem(
                             id        = "weekly_report",
@@ -138,6 +149,8 @@ class NotificationViewModel @Inject constructor(
 
                 _uiState.update {
                     it.copy(
+                        // ของวันนี้ขึ้นก่อนพรุ่งนี้ และภายในกลุ่มเดียวกันคงลำดับเวลาที่เรียงไว้แล้ว
+                        // (sortedWith เสถียร จึงไม่สลับลำดับที่จัดมาข้างบน)
                         notifications = notis.sortedWith(
                             compareByDescending<NotificationItem> { it.isToday }
                         ),
