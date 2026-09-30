@@ -47,14 +47,30 @@ class AuthRepository @Inject constructor(
                     // ที่กำลัง login ซ้ำเท่านั้น ถ้าเป็นคนละคน (เครื่องเดียวกันส่งต่อให้เซลส์อีกคน) ห้ามดันขึ้น
                     // เพราะ backend บังคับ owner จาก JWT เสมอ (ดู W1) จะกลายเป็นงานของคน A ไปติดชื่อคน B แทน
                     val isSameUserReLogin = previousUserId.isNullOrBlank() || previousUserId == finalUserId
+                    var keepLocalData = false
                     if (isSameUserReLogin) {
                         try {
                             if (outboxSyncManager.hasPendingChanges()) outboxSyncManager.doSync()
                         } catch (_: Exception) {
-                            // ยังออฟไลน์อยู่ก็ปล่อยผ่าน — ล้างต่อเพื่อไม่ให้ข้อมูลผู้ใช้เก่าค้างในเครื่อง
+                            // ดันขึ้นไม่สำเร็จ ไม่เป็นไร ข้างล่างจะตรวจอีกทีว่าเหลืออะไรค้าง
+                        }
+                        // ดันขึ้นไม่หมด = ห้ามล้าง — clearAllTables ลบจริงและกู้คืนไม่ได้
+                        // ทางนี้เคยข้ามด่าน logout ทั้งหมด เช็คอิน/บันทึกผลที่ทำตอนออฟไลน์จึงหายเงียบ ๆ
+                        // ทั้งที่ logout มี dialog ให้ยืนยันก่อน แต่ตรงนี้ไม่มีจังหวะถาม
+                        // เก็บไว้กู้คืนได้เสมอ ลบทิ้งแล้วจบ — จึงเลือกเก็บ แล้วไปจัดการตอน logout ที่ถามได้
+                        // (ดาวน์โหลดหลัง login ใช้ clearAndInsert รายตารางอยู่แล้ว แถวเก่าจึงไม่ค้าง)
+                        val pending  = runCatching { outboxSyncManager.pendingSummary() }.getOrDefault(emptyList())
+                        val rejected = runCatching { outboxSyncManager.rejectedSummary() }.getOrDefault(emptyList())
+                        if (pending.isNotEmpty() || rejected.isNotEmpty()) {
+                            keepLocalData = true
+                            Log.w(
+                                "AuthRepository",
+                                "login: ไม่ล้างฐานข้อมูลในเครื่อง — ยังค้าง ${pending.size} ชนิด, ถูกปฏิเสธถาวร ${rejected.size} รายการ"
+                            )
                         }
                     }
-                    database.clearAllTables()
+                    // คนละคน = ต้องล้างเสมอ ข้อมูลคนก่อนจะไปโผล่ในบัญชีคนใหม่ไม่ได้
+                    if (!keepLocalData) database.clearAllTables()
 
                     val authUser = AuthUser(
                         userId     = finalUserId,

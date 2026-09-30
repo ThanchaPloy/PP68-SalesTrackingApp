@@ -94,4 +94,46 @@ class AuthRepositoryLoginTest {
 
         coVerify(exactly = 1) { outbox.doSync() }
     }
+
+    // ด่าน logout เตือนและให้ยืนยันก่อนทิ้งข้อมูล แต่ login เคย clearAllTables ทิ้งเงียบ ๆ
+    // แม้ดันขึ้นไม่หมด — ช่องโหว่เดียวที่ข้ามการยืนยันนั้นได้
+    @Test
+    fun `work still unsent after the flush keeps the local database`() = runTest {
+        coEvery { outbox.hasPendingChanges() } returns true
+        coEvery { outbox.pendingSummary() } returns listOf("เช็คอิน" to 2)
+
+        repo.login("u@test.com", "pw")
+
+        coVerify(exactly = 1) { outbox.doSync() }
+        coVerify(exactly = 0) { database.clearAllTables() }
+    }
+
+    // แถวที่เซิร์ฟเวอร์ปฏิเสธถาวรก็ห้ามลบที่นี่ เพราะตอน login ไม่มี dialog ให้ผู้ใช้ยืนยัน
+    @Test
+    fun `rows the server refuses also keep the local database`() = runTest {
+        coEvery { outbox.hasPendingChanges() } returns false
+        coEvery { outbox.pendingSummary() } returns emptyList()
+        coEvery { outbox.rejectedSummary() } returns listOf(
+            com.example.pp68_salestrackingapp.data.model.SyncRejection(
+                entityType = "result", entityId = "R1", httpCode = 403,
+                reason = "ไม่มีสิทธิ์", rejectedAt = "2026-09-30T00:00:00Z"
+            )
+        )
+
+        repo.login("u@test.com", "pw")
+
+        coVerify(exactly = 0) { database.clearAllTables() }
+    }
+
+    // ส่งขึ้นครบแล้วต้องล้างตามเดิม ไม่งั้นข้อมูลเก่าจะค้างในเครื่องตลอดไป
+    @Test
+    fun `a clean flush still wipes the local database`() = runTest {
+        coEvery { outbox.hasPendingChanges() } returns true
+        coEvery { outbox.pendingSummary() } returns emptyList()
+        coEvery { outbox.rejectedSummary() } returns emptyList()
+
+        repo.login("u@test.com", "pw")
+
+        coVerify(exactly = 1) { database.clearAllTables() }
+    }
 }
