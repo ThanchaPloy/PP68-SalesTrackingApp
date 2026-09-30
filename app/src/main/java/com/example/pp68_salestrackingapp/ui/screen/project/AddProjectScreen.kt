@@ -205,7 +205,7 @@ fun AddProjectContent(
                         )
                     }
 
-                    if (uiState.lossReason == "อื่น ๆ") {
+                    if (uiState.lossReason == com.example.pp68_salestrackingapp.utils.LossReasons.OTHER) {
                         FormField("ระบุเหตุผลอื่น ๆ", required = true) {
                             FormTextField(
                                 value         = uiState.otherLossReason,

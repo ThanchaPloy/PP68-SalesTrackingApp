@@ -195,7 +195,9 @@ class ActivityRepository @Inject constructor(
 
     suspend fun updateActivity(
         activityId: String,
-        updates: Map<String, Any>,
+        // Any? ไม่ใช่ Any — ผู้เรียกต้องส่ง null ได้เพื่อ "ล้างค่าฟิลด์นี้" (เช่น ถอดโครงการออกจาก
+        // นัดหมาย) ตัว apply ด้านล่างกับ backend เช็คด้วย containsKey แล้วยอมรับ null อยู่แล้ว
+        updates: Map<String, Any?>,
         isPlanEdit: Boolean = true
     ): kotlin.Result<Unit> {
         return withContext(Dispatchers.IO) {

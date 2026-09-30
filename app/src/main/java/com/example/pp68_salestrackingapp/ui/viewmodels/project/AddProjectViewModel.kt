@@ -324,6 +324,16 @@ class AddProjectViewModel @Inject constructor(
                     _uiState.update { it.copy(isLoadingTeams = false) }
                 }
             }
+
+            // ✅ ทีมที่ระบบเลือกให้เองตอนเปิดฟอร์มโครงการใหม่ (สาขาของผู้ใช้ / สาขาเดียวที่มี) ไม่ใช่
+            // สิ่งที่ผู้ใช้กรอก — ต้องดูดเข้า baseline ด้วย เพราะฟอร์มสร้างใหม่ไม่เคยเรียก
+            // captureBaseline() เลย baseline จึงเป็นฟอร์มเปล่า การเติมทีมให้เองจะนับเป็น "ผู้ใช้แก้ไข"
+            // ทันที เปิดหน้ามาเฉย ๆ แล้วกดย้อนกลับก็โดนถาม "มีข้อมูลที่ยังไม่ได้บันทึก"
+            // (บั๊กเดียวกับ GPS auto-fill ในหน้าสร้างนัดหมายที่แก้ไปแล้วใน fce6dae คนละไฟล์)
+            if (_uiState.value.projectId == null) {
+                val autoTeamId = _uiState.value.selectedTeamId
+                draft.absorbIntoBaseline { it.copy(selectedTeamId = autoTeamId) }
+            }
         }
     }
 
@@ -626,8 +636,10 @@ class AddProjectViewModel @Inject constructor(
                             quickAddCustType = ""
                         )
                     }
-                    // Load contacts for the new customer (which will be empty, but clears previous)
-                    loadContacts(newCust.custId) // Function is loadContacts in this ViewModel
+                    // โหลดผู้ติดต่อของบริษัทใหม่ (ว่างอยู่แล้ว แต่ต้องล้างของบริษัทเดิมทิ้ง) — ต้องใช้
+                    // realCustId ไม่ใช่ newCust.custId ที่เป็น TEMP- เพราะ state เลือก realCustId ไปแล้ว
+                    // ถ้าใช้ id คนละตัวก็ไปยิงหาผู้ติดต่อของรหัสที่ไม่มีอยู่บน server เปล่า ๆ
+                    loadContacts(realCustId)
                 },
                 onFailure = { e ->
                     _uiState.update { it.copy(isSavingQuickCust = false, saveError = e.message) }
@@ -650,7 +662,7 @@ class AddProjectViewModel @Inject constructor(
             if (s.lossReason.isBlank()) {
                 _uiState.update { it.copy(lossReasonError = "กรุณาเลือกหรือระบุเหตุผลที่ไม่ได้งาน") }
                 valid = false
-            } else if (s.lossReason == "อื่น ๆ" && s.otherLossReason.isBlank()) {
+            } else if (s.lossReason == com.example.pp68_salestrackingapp.utils.LossReasons.OTHER && s.otherLossReason.isBlank()) {
                 _uiState.update { it.copy(lossReasonError = "กรุณาระบุเหตุผลอื่น ๆ") }
                 valid = false
             }

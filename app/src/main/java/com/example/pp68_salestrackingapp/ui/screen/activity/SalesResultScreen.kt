@@ -403,7 +403,7 @@ private fun SalesResultContent(
                                     displayLabel = { com.example.pp68_salestrackingapp.utils.LossReasons.labelFor(it) }
                                 )
 
-                                if (s.lossReason == "อื่น ๆ") {
+                                if (s.lossReason == com.example.pp68_salestrackingapp.utils.LossReasons.OTHER) {
                                     OutlinedTextField(
                                         value         = s.otherLossReason,
                                         onValueChange = onOtherLossReasonChanged,

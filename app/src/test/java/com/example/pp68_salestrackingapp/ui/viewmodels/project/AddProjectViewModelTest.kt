@@ -65,6 +65,23 @@ class AddProjectViewModelTest {
         viewModel = AddProjectViewModel(projectRepo, customerRepo, contactRepo, authRepo, branchRepo, apiService, draftStore)
     }
 
+    // ฟอร์มสร้างโครงการใหม่ไม่เคยเรียก captureBaseline() เลย baseline จึงเป็นฟอร์มเปล่า —
+    // การที่ระบบเลือกสาขาให้เองตอนเปิดหน้าจะถูกนับเป็น "ผู้ใช้แก้ไข" ทันที เปิดมาเฉย ๆ แล้วกด
+    // ย้อนกลับก็โดนถาม "มีข้อมูลที่ยังไม่ได้บันทึก" (บั๊กเดียวกับ GPS auto-fill ในหน้าสร้างนัดหมาย)
+    @Test
+    fun `a form whose branch was auto selected is not dirty until the user edits something`() = runTest {
+        coEvery { branchRepo.observeBranches() } returns listOf(Branch("TS-001", "สาขาทดสอบ", "Bangkok"))
+
+        initViewModel()
+        advanceUntilIdle()
+
+        assertEquals("TS-001", viewModel.uiState.value.selectedTeamId)
+        assertFalse(viewModel.isDirty())
+
+        viewModel.onEvent(AddProjectEvent.ProjectNameChanged("โครงการใหม่"))
+        assertTrue(viewModel.isDirty())
+    }
+
     @Test
     fun `init when user in PJ-001 should auto select project team`() = runTest {
         every { authRepo.currentUser() } returns AuthUser("U1", "u@test.com", "sale", "PJ-001")

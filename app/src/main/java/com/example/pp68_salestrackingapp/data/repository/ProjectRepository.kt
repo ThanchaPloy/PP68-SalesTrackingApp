@@ -157,6 +157,14 @@ class ProjectRepository @Inject constructor(
                     "progress_pct" to project.progressPct,
                     "updated_at" to java.time.Instant.now().toString()
                 ).filterValues { it != null }.toMutableMap()
+                // ✅ filterValues ข้างบนจำเป็น — มันกันฟิลด์ที่ผู้เรียกไม่ได้ดูแล (progress_pct,
+                // is_proposal_sent, competitor_count ฯลฯ) ไม่ให้ถูกล้างทิ้งโดยไม่ตั้งใจ
+                // แต่ loss_reason ต้องยกเว้น เพราะ "ค่าว่าง" คือความหมายจริงที่ต้องส่ง: ทั้งสองผู้เรียก
+                // (ฟอร์มแก้โครงการ และ syncProjectStatus ตอนสถานะออกจาก Lost/Failed) ตั้งใจให้ล้าง
+                // ถ้าปล่อยให้ถูกกรองทิ้ง โครงการที่กลับมาเดินต่อจะยังติดเหตุผลที่ไม่ได้งานค้างบน server
+                // แล้วแถวที่ตอบกลับมาก็เขียนทับ Room ให้ค่าเก่าเด้งกลับมาให้ผู้ใช้เห็นว่า "แก้ไม่ติด"
+                updates["loss_reason"] = project.lossReason
+                updates["loss_reason_note"] = project.lossReasonNote
                 project.projectLat?.let { updates["project_lat"] = it }
                 project.projectLong?.let { updates["project_long"] = it }
                 resultAppointmentId?.let { updates["stage_appointment_id"] = it }

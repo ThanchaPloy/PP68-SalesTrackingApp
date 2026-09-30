@@ -253,6 +253,11 @@ class SalesResultViewModel @Inject constructor(
                     loadPhotosForResult(result)
                     result.projectId?.let { loadProjectData(it) }
                     result.activityId?.let { loadChecklist(it) }
+                } else {
+                    // ✅ ไม่ใช่ทั้งนัดหมายและบันทึกผล (เช่น เปิดจากแจ้งเตือนของนัดที่ถูกลบไปแล้ว หรือ
+                    // ออฟไลน์อยู่และแถวนั้นยังไม่เคยถูกดึงลงเครื่อง) เดิมเงียบสนิท — ได้ฟอร์มเปล่า
+                    // ที่ activityId ยังเป็น null แล้วพอกดบันทึกค่อยขึ้น "ไม่พบรหัสนัดหมาย" ให้งงทีหลัง
+                    _uiState.update { it.copy(error = "ไม่พบข้อมูลนัดหมายหรือบันทึกผลนี้ในเครื่อง ลองเชื่อมต่ออินเทอร์เน็ตแล้วเปิดใหม่") }
                 }
             }
             // นัดหมายที่ไม่ได้ผูกโครงการไว้แต่แรก ให้ผูกเพิ่มได้ตอนบันทึกผล (ดู onProjectSelected/saveQuickProject)
@@ -617,7 +622,6 @@ class SalesResultViewModel @Inject constructor(
     }
 
     private fun addPhoto(context: Context, uri: Uri, exif: ExifData) {
-        val index = _uiState.value.photos.size
         _uiState.update {
             it.copy(photos = it.photos + ResultPhoto(
                 localUri = uri,
@@ -629,7 +633,7 @@ class SalesResultViewModel @Inject constructor(
                 isLocationValid = exif.isLocationValid
             ))
         }
-        uploadPhotoAt(context, index, uri)
+        uploadPhoto(context, uri)
     }
 
     fun onRemovePhoto(index: Int) {
@@ -683,35 +687,36 @@ class SalesResultViewModel @Inject constructor(
     fun onCompetitorCountChanged(delta: Int)      { _uiState.update { it.copy(competitorCount = (it.competitorCount + delta).coerceAtLeast(0)) } }
     fun onSummaryChanged(text: String)            { _uiState.update { it.copy(visitSummary = text) } }
 
-    private fun uploadPhotoAt(context: Context, index: Int, uri: Uri) {
+    // ✅ ตามหารูปด้วย localUri ไม่ใช่ตำแหน่งในลิสต์ — เดิมจับ index ไว้ก่อนเข้า coroutine ถ้าผู้ใช้
+    // ลบรูปก่อนหน้าออกระหว่างที่ยังอัปโหลดไม่เสร็จ ตำแหน่งจะเลื่อน แล้ว url ที่ได้กลับมาจะไปทับ
+    // รูปผิดใบ = บันทึกผลแนบรูปผิดรูปโดยไม่มีใครเห็น (และรูปที่กำลังอัปโหลดจริงจะค้างหมุนตลอด)
+    private fun uploadPhoto(context: Context, uri: Uri) {
         val s = _uiState.value
         val uploadId = s.activityId ?: s.projectId
         if (uploadId == null) {
-            updatePhotoAt(index) { it.copy(isUploading = false) }
+            updatePhoto(uri) { it.copy(isUploading = false) }
             return
         }
         viewModelScope.launch {
             val bytes = try { context.contentResolver.openInputStream(uri)?.use { it.readBytes() } } catch (e: Exception) { null }
             if (bytes == null) {
-                updatePhotoAt(index) { it.copy(isUploading = false) }
+                updatePhoto(uri) { it.copy(isUploading = false) }
                 _uiState.update { it.copy(error = "ไม่สามารถอ่านไฟล์รูปภาพได้") }
                 return@launch
             }
 
             activityRepo.uploadVisitPhoto(uploadId, bytes).onSuccess { url ->
-                updatePhotoAt(index) { it.copy(url = url, isUploading = false) }
+                updatePhoto(uri) { it.copy(url = url, isUploading = false) }
             }.onFailure { e ->
-                updatePhotoAt(index) { it.copy(isUploading = false) }
+                updatePhoto(uri) { it.copy(isUploading = false) }
                 _uiState.update { it.copy(error = "อัปโหลดรูปไม่สำเร็จ: ${e.message}") }
             }
         }
     }
 
-    private fun updatePhotoAt(index: Int, transform: (ResultPhoto) -> ResultPhoto) {
+    private fun updatePhoto(uri: Uri, transform: (ResultPhoto) -> ResultPhoto) {
         _uiState.update { s ->
-            val list = s.photos.toMutableList()
-            if (index in list.indices) list[index] = transform(list[index])
-            s.copy(photos = list)
+            s.copy(photos = s.photos.map { if (it.localUri == uri) transform(it) else it })
         }
     }
 
@@ -726,6 +731,16 @@ class SalesResultViewModel @Inject constructor(
         if (s.isReadOnlyVersion) { _uiState.update { it.copy(error = "กำลังดูเวอร์ชันเก่า ไม่สามารถแก้ไขได้") }; return }
         if (s.visitSummary.isBlank()) { _uiState.update { it.copy(error = "กรุณากรอกสรุปการเข้าพบ") }; return }
         if (s.photos.any { it.isUploading }) { _uiState.update { it.copy(error = "กรุณารอให้อัปโหลดรูปให้เสร็จก่อนบันทึก") }; return }
+        // ✅ รูปที่อัปโหลดไม่ผ่าน (isUploading = false แต่ยังไม่มี url) เดิมถูก mapNotNull ทิ้งเงียบ ๆ
+        // ตอนประกอบ photoUrls — ผู้ใช้เห็นรูปครบบนจอ กดบันทึกแล้วได้บันทึกที่มีรูปน้อยกว่าที่เห็น
+        // ข้อความ error ตอนอัปโหลดพลาดก็หายไปแล้วตั้งแต่กดอย่างอื่นต่อ จึงไม่มีใครรู้ว่าตกไป
+        val failedCount = s.photos.count { it.url.isNullOrBlank() }
+        if (failedCount > 0) {
+            _uiState.update {
+                it.copy(error = "มี $failedCount รูปที่อัปโหลดไม่สำเร็จ ลบรูปนั้นออกหรือถ่าย/เลือกใหม่ก่อนบันทึก")
+            }
+            return
+        }
 
         // ข้อ 4-7 วิเคราะห์ดีลผูกกับโครงการ (เขียนลง project_code) — นัดหมาย/แผนที่ไม่ได้ผูกโครงการ
         // ไม่มีที่เก็บค่าพวกนี้ จึงไม่ต้องถามและไม่บังคับตอบ
@@ -757,7 +772,7 @@ class SalesResultViewModel @Inject constructor(
                     _uiState.update { it.copy(lossReasonError = "กรุณาระบุเหตุผลที่ไม่ได้งาน", error = "กรุณาระบุเหตุผลที่ไม่ได้งาน") }
                     return 
                 }
-                if (s.lossReason == "อื่น ๆ" && s.otherLossReason.isBlank()) {
+                if (s.lossReason == com.example.pp68_salestrackingapp.utils.LossReasons.OTHER && s.otherLossReason.isBlank()) {
                     _uiState.update { it.copy(lossReasonError = "กรุณาระบุเหตุผลอื่น ๆ", error = "กรุณาระบุเหตุผลอื่น ๆ") }
                     return
                 }

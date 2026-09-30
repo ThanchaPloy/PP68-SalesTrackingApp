@@ -168,6 +168,47 @@ class SalesResultViewModelTest {
         coVerify(exactly = 1) { activityRepo.saveActivityResult(any(), any()) }
     }
 
+    // รูปที่ไม่มี url (อัปโหลดไม่ผ่าน / แถวรูปเสีย) เดิมถูก mapNotNull ทิ้งเงียบ ๆ ตอนประกอบ
+    // photoUrls — ผู้ใช้เห็นรูปครบบนจอ กดบันทึกแล้วได้บันทึกที่แนบรูปน้อยกว่าที่เห็น และไม่มีใครรู้
+    @Test
+    fun `save refuses while a photo has no uploaded url instead of dropping it silently`() = runTest {
+        coEvery { projectRepo.getProjectById("PRJ-1") } returns Result.success(
+            Project(
+                projectId = "PRJ-1", custId = "C1", projectName = "Project A", projectStatus = "Lead",
+                dealPosition = "incumbent", previousSolution = "no_solution",
+                counterpartyType = "direct_main_contractor", responseSpeed = "fast",
+                isProposalSent = false, competitorCount = 0
+            )
+        )
+        coEvery { activityRepo.getActivityById("A1") } returns Result.success(
+            listOf(
+                SalesActivity(
+                    activityId = "A1", userId = "U1", customerId = "C1", projectId = "PRJ-1",
+                    activityType = "onsite", activityDate = "2026-04-01", status = "planned"
+                )
+            )
+        )
+        coEvery { activityRepo.getActivityResult("A1") } returns ActivityResult(
+            resultId = "RES-1", activityId = "A1", projectId = "PRJ-1", summary = "เดิม"
+        )
+        coEvery { activityRepo.getResultPhotos("RES-1") } returns listOf("")
+        coEvery { activityRepo.saveActivityResult(any(), any()) } returns Result.success(Unit)
+
+        val vm = SalesResultViewModel(
+            SavedStateHandle(mapOf("activityId" to "A1")),
+            projectRepo, activityRepo, authRepo, draftStore
+        )
+        advanceUntilIdle()
+        vm.onSummaryChanged("summary")
+
+        vm.save()
+        advanceUntilIdle()
+
+        assertFalse(vm.uiState.value.isSaved)
+        assertTrue(vm.uiState.value.error!!.contains("อัปโหลดไม่สำเร็จ"))
+        coVerify(exactly = 0) { activityRepo.saveActivityResult(any(), any()) }
+    }
+
     @Test
     fun `init with activityId should load existing result mapping`() = runTest {
         coEvery { activityRepo.getActivityById("A1") } returns Result.success(

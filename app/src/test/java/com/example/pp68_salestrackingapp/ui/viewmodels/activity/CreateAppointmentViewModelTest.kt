@@ -508,7 +508,51 @@ class CreateAppointmentViewModelTest {
         assertTrue(vm.uiState.value.isSaved)
         coVerify(exactly = 1) { activityRepo.updateActivity("A-EDIT", any()) }
         coVerify(exactly = 0) { activityRepo.addActivity(any()) }
-        coVerify(exactly = 0) { activityRepo.savePlanItems(any(), any()) }
+        // ต้องเรียกด้วยลิสต์ว่าง ไม่ใช่ข้ามไปเลย — เดิมข้าม ทำให้ "ติ๊กเช็คลิสต์ออกจนหมด" ไม่เคย
+        // ถูกส่งไปไหน ของเก่ายังค้างทั้งในเครื่องและบน server (savePlanItems ลบก่อนเสมอ)
+        coVerify(exactly = 1) { activityRepo.savePlanItems("A-EDIT", emptyList()) }
+    }
+
+    // ถอดโครงการออกจากนัดหมาย (เลือก "ไม่ระบุโครงการ") ต้องส่ง project_code = null ขึ้นไป
+    // เดิมใช้ ?.let จึงไม่ส่ง key เลย ทั้ง Room และ server เข้าใจว่า "ไม่ได้แก้ฟิลด์นี้" แล้วคงค่าเดิม
+    // กลับมาเปิดดูก็ยังผูกโครงการเดิมอยู่เหมือนไม่ได้กดอะไรเลย
+    @Test
+    fun `clearing the project sends an explicit null so the link is actually removed`() = runTest {
+        configureBaseData()
+        coEvery { activityRepo.getMasterActivities() } returns emptyList()
+        every { authRepo.currentUser() } returns AuthUser("U1", "u@test.com", "sale")
+        val updates = slot<Map<String, Any?>>()
+        coEvery { activityRepo.updateActivity("A-EDIT", capture(updates)) } returns Result.success(Unit)
+        coEvery { activityRepo.getActivityById("A-EDIT") } returns Result.success(
+            listOf(
+                SalesActivity(
+                    activityId = "A-EDIT",
+                    userId = "U1",
+                    customerId = "C1",
+                    projectId = "PRJ-1",
+                    activityType = "onsite",
+                    detail = "old",
+                    activityDate = java.time.LocalDate.now().plusDays(30).toString(),
+                    plannedTime = "10:00 AM",
+                    plannedLat = 13.0,
+                    plannedLong = 100.0,
+                    status = "planned"
+                )
+            )
+        )
+        coEvery { activityRepo.getPlanItems("A-EDIT") } returns Result.success(emptyList())
+        coEvery { activityRepo.getAppointmentContacts("A-EDIT") } returns emptyList()
+
+        val vm = CreateAppointmentViewModel(context, activityRepo, projectRepo, customerRepo, contactRepo, authRepo, draftStore)
+        advanceUntilIdle()
+        vm.onEvent(CreateAppointmentEvent.LoadActivity("A-EDIT"))
+        advanceUntilIdle()
+        vm.onEvent(CreateAppointmentEvent.ProjectSelected(null, null, null))
+        vm.onEvent(CreateAppointmentEvent.Save)
+        advanceUntilIdle()
+
+        assertTrue(updates.captured.containsKey("project_code"))
+        assertEquals(null, updates.captured["project_code"])
     }
 
     // แก้ไขนัดหมายแล้วไม่มีผู้ติดต่อเลย (ถอดออกหมด หรือไม่เคยมี) ต้องไม่ทำให้นัดหมายกลายเป็น

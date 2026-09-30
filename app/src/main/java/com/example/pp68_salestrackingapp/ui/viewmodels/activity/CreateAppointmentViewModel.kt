@@ -570,7 +570,12 @@ class CreateAppointmentViewModel @Inject constructor(
                         originalStatus      = activity.status,
                         originalPlannedDate = activity.activityDate,
                         selectedProjectId = activity.projectId,
-                        selectedCustomerId = activity.customerId,
+                        // ✅ CST-UNKNOWN เป็นค่า sentinel ของนัดที่ไม่ระบุลูกค้า ไม่ใช่รหัสลูกค้าจริง
+                        // ถ้าปล่อยเข้ามาเป็น selectedCustomerId ตรง ๆ การ "สร้างผู้ติดต่อด่วน" และ
+                        // "สร้างโครงการด่วน" จะเช็คแค่ isNullOrBlank แล้วผ่าน ได้แถวที่ผูกกับรหัส
+                        // ลูกค้าที่ไม่มีอยู่จริง (server ไม่มี FK คอยดัก) แบบเงียบ ๆ
+                        // ทางบันทึกใส่ sentinel กลับให้เองอยู่แล้ว จึงไม่มีอะไรหาย
+                        selectedCustomerId = activity.customerId?.takeIf { it != "CST-UNKNOWN" },
                         titleTopic        = activity.detail ?: "",
                         activityType      = activity.activityType,
                         plannedDate       = activity.activityDate,
@@ -602,7 +607,9 @@ class CreateAppointmentViewModel @Inject constructor(
                             masterOptions = state.allMasterOptions
                         )
                     }
-                    activity.customerId?.let { custId ->
+                    // ใช้ค่าที่กรอง sentinel แล้ว ไม่ใช่ activity.customerId ดิบ — ไม่งั้นยิงหาลูกค้า
+                    // รหัส CST-UNKNOWN ที่ไม่มีอยู่จริงทุกครั้งที่เปิดนัดที่ไม่ระบุลูกค้ามาแก้
+                    _uiState.value.selectedCustomerId?.let { custId ->
                         customerRepo.getCustomerById(custId).onSuccess { c ->
                             _uiState.update { it.copy(selectedCompanyName = c.companyName) }
                         }
@@ -904,7 +911,7 @@ class CreateAppointmentViewModel @Inject constructor(
                 // ✅ ตอนสร้างใหม่ตั้ง isAppointment=true เสมอ (ไม่ขึ้นกับว่าเลือกผู้ติดต่อหรือยัง)
                 // ตอนแก้ไขก็ต้องเหมือนกัน ไม่งั้นถอดผู้ติดต่อออกหมดแล้วบันทึก จะเผลอเปลี่ยนนัดหมายที่มีอยู่
                 // ให้กลายเป็น "ไม่ใช่นัดหมาย" ทั้งที่ไม่ได้ตั้งใจ
-                val updates = mutableMapOf<String, Any>(
+                val updates = mutableMapOf<String, Any?>(
                     "type"           to s.activityType,
                     "planned_date"   to isoDate,
                     "topic"          to s.titleTopic,
@@ -914,8 +921,15 @@ class CreateAppointmentViewModel @Inject constructor(
                 s.endTime?.let   { updates["planned_end_time"] = formatTimeToDb(it) ?: it }
                 s.lat?.let       { updates["planned_lat"]      = it }
                 s.lng?.let       { updates["planned_long"]     = it }
-                s.selectedProjectId?.let  { updates["project_code"] = it }
-                s.selectedCustomerId?.let { updates["cust_code"]    = it }
+                // ✅ ต้องใส่ key เสมอแม้ค่าเป็น null — เดิมใช้ ?.let จึงไม่ส่ง key เลยตอนผู้ใช้เลือก
+                // "ไม่ระบุโครงการ" หรือล้างบริษัทออก ทั้ง Room และ server มองว่า "ไม่ได้แก้ฟิลด์นี้"
+                // แล้วคงค่าเดิมไว้ กลับมาเปิดดูก็ยังผูกโครงการเดิมอยู่เหมือนไม่ได้กดอะไร
+                // (ทั้ง ActivityRepository และ AppointmentRepositoryImpl เช็คด้วย containsKey
+                // แล้วยอมรับ null เป็นการล้างค่าอยู่แล้ว)
+                updates["project_code"] = s.selectedProjectId
+                // บริษัทใช้ค่า sentinel เดียวกับทางสร้างใหม่ ไม่ใช่ null — ฝั่ง Room ตั้งใจไม่ยอมล้าง
+                // cust_code เป็น null ถ้าส่ง null ไปจะได้ server ล้างแต่ในเครื่องไม่ล้าง กลายเป็นคนละค่า
+                updates["cust_code"] = s.selectedCustomerId ?: "CST-UNKNOWN"
                 // เดิมทิ้ง Result ทิ้งไปเฉย ๆ ต่างจากทางสร้างใหม่ที่อยู่ถัดลงไปซึ่งเช็ค isFailure
                 // แก้ไขที่บันทึกไม่ลงจึงเด้งกลับหน้ารายการเหมือนสำเร็จ ทั้งที่ไม่มีอะไรเปลี่ยน
                 val updateResult = activityRepo.updateActivity(appointmentId, updates)
@@ -963,9 +977,10 @@ class CreateAppointmentViewModel @Inject constructor(
                 )
             }
 
-            if (planItems.isNotEmpty()) {
-                activityRepo.savePlanItems(finalId, planItems)
-            }
+            // ✅ ต้องเรียกเสมอแม้รายการว่าง — เดิมครอบด้วย isNotEmpty() ทำให้การ "ติ๊กออกจนหมด"
+            // ไม่เคยถูกส่งไปไหน ทั้งในเครื่องและบน server ยังเหลือเช็คลิสต์ชุดเดิมอยู่
+            // (savePlanItems ลบของเก่าก่อนเสมออยู่แล้ว ส่งลิสต์ว่างจึงหมายถึงล้างทิ้งพอดี)
+            activityRepo.savePlanItems(finalId, planItems)
 
             // ⏰ ตั้งเวลาแจ้งเตือนล่วงหน้า 30 นาที
             try {
