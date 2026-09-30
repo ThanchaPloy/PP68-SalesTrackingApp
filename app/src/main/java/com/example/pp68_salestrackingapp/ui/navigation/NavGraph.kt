@@ -99,6 +99,7 @@ fun SalesTrackingApp() {
                 onNotificationClick = { navController.navigate(Route.Notification.path) },
                 onSettingsClick     = { navController.navigate(Route.Settings.path) },
                 onLogoutClick       = onLogout,
+                onAddPhoneClick     = { navController.navigate(Route.Settings.createRoute("edit_profile")) },
                 currentTab          = currentTab,
                 onTabChange         = { tab -> navigateToTab(navController, tab) }
             )
@@ -394,12 +395,18 @@ fun SalesTrackingApp() {
             )
         }
 
-        composable(Route.Settings.path) {
+        composable(
+            route = Route.Settings.PATTERN,
+            arguments = listOf(
+                navArgument("open") { type = NavType.StringType; nullable = true; defaultValue = null }
+            )
+        ) { backStackEntry ->
             // หน้านี้เรียก logout() ผ่าน SettingsViewModel เองและรอผลอยู่แล้ว
             // จึงรับแค่ตัวพาไปหน้า Login ไม่ใช่ตัวที่สั่ง logout ซ้ำ
             SettingScreen(
                 onBack = { navController.popBackStack() },
-                onLogout = navigateToLogin
+                onLogout = navigateToLogin,
+                initialSubScreen = backStackEntry.arguments?.getString("open")
             )
         }
     }

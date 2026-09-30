@@ -2,6 +2,7 @@ package com.example.pp68_salestrackingapp.ui.screen.activity
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -83,6 +84,7 @@ fun HomeScreen(
     onNotificationClick: () -> Unit = {},
     onSettingsClick:     () -> Unit = {},
     onLogoutClick:       () -> Unit = {},
+    onAddPhoneClick:     () -> Unit = {},
     currentTab:          Int,
     onTabChange:         (Int) -> Unit,
     viewModel: HomeViewModel = hiltViewModel()
@@ -118,6 +120,7 @@ fun HomeScreen(
         onNotificationClick = onNotificationClick,
         onSettingsClick     = onSettingsClick,
         onLogoutClick       = onLogoutClick,
+        onAddPhoneClick     = onAddPhoneClick,
         currentTab          = currentTab,
         onTabChange         = onTabChange,
         onMonthChange       = { viewModel.selectMonth(it) },
@@ -140,6 +143,7 @@ private fun HomeScreenContent(
     onNotificationClick: () -> Unit,
     onSettingsClick:     () -> Unit,
     onLogoutClick:       () -> Unit,
+    onAddPhoneClick:     () -> Unit = {},
     currentTab:          Int,
     onTabChange:         (Int) -> Unit,
     onMonthChange:       (YearMonth) -> Unit,
@@ -168,16 +172,25 @@ private fun HomeScreenContent(
         bottomBar   = { BottomNavBar(currentTab = currentTab, onTabChange = onTabChange) },
         containerColor = BgLight
     ) { padding ->
+      Column(Modifier.fillMaxSize().padding(padding)) {
+        // อยู่นอก when โดยตั้งใจ — คนที่ยังไม่มีเบอร์มักเป็นบัญชีใหม่ที่ยังไม่มีนัดหมายเลย
+        // ถ้าวางไว้ในสาขา LazyColumn การ์ดจะไม่โผล่ให้คนที่ต้องเห็นมากที่สุด
+        if (uiState.needsPhoneNumber) {
+            PhoneRequiredCard(
+                onClick  = onAddPhoneClick,
+                modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp)
+            )
+        }
         when {
             uiState.isLoading -> Box(
-                Modifier.fillMaxSize().padding(padding),
+                Modifier.fillMaxSize(),
                 contentAlignment = Alignment.Center
             ) { CircularProgressIndicator(color = RedPrimary) }
 
-            uiState.groupedCards.isEmpty() -> EmptyState(Modifier.padding(padding))
+            uiState.groupedCards.isEmpty() -> EmptyState(Modifier)
 
             else -> LazyColumn(
-                modifier            = Modifier.fillMaxSize().padding(padding),
+                modifier            = Modifier.fillMaxSize(),
                 contentPadding      = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
                 verticalArrangement = Arrangement.spacedBy(0.dp)
             ) {
@@ -215,6 +228,41 @@ private fun HomeScreenContent(
                 }
                 item { Spacer(Modifier.height(80.dp)) }
             }
+        }
+      }
+    }
+}
+
+// ── การ์ดแจ้งว่ายังไม่มีเบอร์โทร ──────────────────────────────
+// เดิมเป็น AlertDialog ที่ปิดไม่ได้และไม่บอกอะไรเลยเมื่อบันทึกพลาด ทำให้บัญชีนั้นใช้แอปไม่ได้ถาวร
+// การ์ดแบบนี้ยังบังคับให้เห็นทุกครั้งที่เปิดแอป แต่ไม่ขวางงานอื่น และกดแล้วไปหน้ากรอกได้เลย
+@Composable
+private fun PhoneRequiredCard(onClick: () -> Unit, modifier: Modifier = Modifier) {
+    Card(
+        modifier = modifier.fillMaxWidth().clickable { onClick() },
+        colors   = CardDefaults.cardColors(containerColor = Color(0xFFFFF4E5)),
+        shape    = RoundedCornerShape(12.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(14.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(Icons.Default.Phone, null, tint = Color(0xFFB26A00), modifier = Modifier.size(22.dp))
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text(
+                    "ยังไม่ได้กรอกเบอร์โทรศัพท์",
+                    fontWeight = FontWeight.Bold,
+                    fontSize   = 14.sp,
+                    color      = Color(0xFF7A4A00)
+                )
+                Text(
+                    "แตะเพื่อกรอกเบอร์ติดต่อของคุณ",
+                    fontSize = 12.sp,
+                    color    = Color(0xFF9A6A20)
+                )
+            }
+            Icon(Icons.Default.ChevronRight, null, tint = Color(0xFFB26A00))
         }
     }
 }

@@ -41,6 +41,9 @@ private val DividerCol = Color(0xFFEEEEEE)
 fun SettingScreen(
     onBack: () -> Unit,
     onLogout: () -> Unit,
+    // มาจาก argument ของ route — การ์ดบนหน้า Home ส่ง "edit_profile" มาเพื่อเปิด
+    // หน้ากรอกเบอร์ให้เลย ไม่ใช่ทิ้งไว้ที่หน้าตั้งค่าแล้วให้หาเอง
+    initialSubScreen: String? = null,
     viewModel: SettingsViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -51,6 +54,7 @@ fun SettingScreen(
 
     SettingScreenContent(
         uiState = uiState,
+        initialSubScreen = initialSubScreen,
         onBack = onBack,
         onLogout = { viewModel.logout() },
         onForceLogout = { viewModel.logout(force = true) },
@@ -63,6 +67,7 @@ fun SettingScreen(
 @Composable
 fun SettingScreenContent(
     uiState: SettingsUiState,
+    initialSubScreen: String? = null,
     onBack: () -> Unit,
     onLogout: () -> Unit,
     onForceLogout: () -> Unit = {},
@@ -70,7 +75,7 @@ fun SettingScreenContent(
     onDismissLogoutError: () -> Unit = {}
 ) {
     // State สำหรับควบคุมว่ากำลังแสดงหน้าย่อยไหน
-    var activeSubScreen by remember { mutableStateOf<String?>(null) }
+    var activeSubScreen by remember { mutableStateOf(initialSubScreen) }
     var showLanguageDialog by remember { mutableStateOf(false) }
 
     if (uiState.logoutError != null) {

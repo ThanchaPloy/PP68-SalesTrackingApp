@@ -2,6 +2,7 @@ package com.example.pp68_salestrackingapp.ui.viewmodels.activity
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.pp68_salestrackingapp.data.remote.ApiService
 import com.example.pp68_salestrackingapp.data.repository.ActivityRepository
 import com.example.pp68_salestrackingapp.data.repository.AuthRepository
 import com.example.pp68_salestrackingapp.data.model.AuthUser
@@ -44,7 +45,10 @@ data class HomeUiState(
     val groupedCards: Map<String, List<ActivityCard>> = emptyMap(),
     val isLoading:       Boolean                = false,
     val error:           String?                = null,
-    val authUser:        AuthUser?              = null
+    val authUser:        AuthUser?              = null,
+    // แสดงเป็นการ์ดที่กดไปหน้ากรอกได้ ไม่ใช่ dialog ที่ปิดไม่ได้แบบเดิม — ผู้ใช้ยังทำงานอย่างอื่น
+    // ต่อได้ระหว่างที่ยังไม่กรอก และถ้าบันทึกพลาดก็ไม่ติดค้างจนใช้แอปไม่ได้
+    val needsPhoneNumber: Boolean = false
 )
 
 @HiltViewModel
@@ -52,7 +56,8 @@ class HomeViewModel @Inject constructor(
     private val activityRepo: ActivityRepository,
     private val authRepo:     AuthRepository,
     private val customerRepo: CustomerRepository,
-    private val projectRepo:  ProjectRepository
+    private val projectRepo:  ProjectRepository,
+    private val apiService:   ApiService
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(HomeUiState(authUser = authRepo.currentUser()))
@@ -133,6 +138,13 @@ class HomeViewModel @Inject constructor(
             }
             
             try {
+                // เบอร์โทรไม่ได้เก็บในเครื่อง ต้องถาม server — พลาดก็แค่ไม่ขึ้นการ์ด ไม่ทำให้ refresh พัง
+                runCatching {
+                    apiService.getUserById("eq.$userId").body()?.firstOrNull()?.phoneNumber
+                }.onSuccess { phone ->
+                    _uiState.update { it.copy(needsPhoneNumber = phone.isNullOrBlank()) }
+                }
+
                 // ✅ ทั้ง 4 อย่างเป็นอิสระต่อกัน (คนละตารางคนละ endpoint) รันพร้อมกันแทนรอทีละตัว
                 coroutineScope {
                     awaitAll(

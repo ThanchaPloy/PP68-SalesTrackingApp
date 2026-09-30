@@ -54,7 +54,12 @@ sealed class Route(val path: String) {
     object WeeklyReport : Route("weekly_report")
     object MonthlyReport : Route("monthly_report")
     object Notification : Route("notification")
-    object Settings : Route("settings")
+    object Settings : Route("settings") {
+        // รับ argument ได้เพื่อเปิด sub-screen ได้เลย — การ์ดเบอร์โทรบนหน้า Home
+        // ต้องพาไปหน้ากรอกตรง ๆ ไม่ใช่แค่หน้าตั้งค่าแล้วให้ผู้ใช้หาเอง
+        const val PATTERN = "settings?open={open}"
+        fun createRoute(openSubScreen: String) = "settings?open=$openSubScreen"
+    }
     object ContactList : Route("contact_list")
     object AddContact : Route("add_contact")
     object EditContact : Route("edit_contact/{contactId}") {

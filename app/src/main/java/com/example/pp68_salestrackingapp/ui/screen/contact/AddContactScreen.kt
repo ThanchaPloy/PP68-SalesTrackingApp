@@ -206,13 +206,15 @@ fun AddContactContent(
             }
 
             // ── Mobile Number ─────────────────────────────────
-            FormField("เบอร์โทรศัพท์มือถือ") {
+            FormField("เบอร์โทรศัพท์มือถือ", required = true) {
                 FormTextField(
                     value         = uiState.phoneNum,
                     onValueChange = { onEvent(AddContactEvent.PhoneChanged(it)) },
                     placeholder   = "เช่น 06x-xxx-xxxx",
                     leadingIcon   = Icons.Default.Phone,
-                    keyboardType  = KeyboardType.Phone
+                    keyboardType  = KeyboardType.Phone,
+                    isError       = uiState.phoneError != null,
+                    errorMsg      = uiState.phoneError
                 )
             }
 

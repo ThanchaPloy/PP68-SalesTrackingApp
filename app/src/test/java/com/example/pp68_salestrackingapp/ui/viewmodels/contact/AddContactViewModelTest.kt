@@ -227,6 +227,7 @@ class AddContactViewModelTest {
 
         viewModel.onEvent(AddContactEvent.CompanySelected("CUST-01", "Acme Corp"))
         viewModel.onEvent(AddContactEvent.FullNameChanged("Jane Doe"))
+        viewModel.onEvent(AddContactEvent.PhoneChanged("0812345678"))
         viewModel.onEvent(AddContactEvent.Save)
         testDispatcher.scheduler.advanceUntilIdle()
 
@@ -247,6 +248,7 @@ class AddContactViewModelTest {
 
         viewModel.onEvent(AddContactEvent.CompanySelected("CUST-01", "Acme Corp"))
         viewModel.onEvent(AddContactEvent.FullNameChanged("Jane Doe"))
+        viewModel.onEvent(AddContactEvent.PhoneChanged("0812345678"))
         viewModel.onEvent(AddContactEvent.Save)
         testDispatcher.scheduler.advanceUntilIdle()
 
@@ -391,6 +393,8 @@ class AddContactViewModelTest {
 
         viewModel.onEvent(AddContactEvent.CompanySelected("CUST-01", "Acme Corp"))
         viewModel.onEvent(AddContactEvent.FullNameChanged("Jane Doe"))
+        // เบอร์เป็นฟิลด์บังคับแล้วและถูกตรวจก่อน email — ไม่ใส่จะติดด่านแรกก่อนถึง email
+        viewModel.onEvent(AddContactEvent.PhoneChanged("0812345678"))
         viewModel.onEvent(AddContactEvent.EmailChanged("invalid-email"))
         viewModel.onEvent(AddContactEvent.Save)
         testDispatcher.scheduler.advanceUntilIdle()
@@ -452,9 +456,26 @@ class AddContactViewModelTest {
 
         viewModel.onEvent(AddContactEvent.CompanySelected("CUST-01", "Acme Corp"))
         viewModel.onEvent(AddContactEvent.FullNameChanged("Jane Doe"))
+        viewModel.onEvent(AddContactEvent.PhoneChanged("0812345678"))
         viewModel.onEvent(AddContactEvent.Save)
         testDispatcher.scheduler.advanceUntilIdle()
 
         io.mockk.verify { draftStore.clear("add_contact:new") }
+    }
+
+    // เบอร์โทรผู้ติดต่อเป็นข้อมูลที่เซลส์ต้องใช้จริง ไม่ใช่ของเสริม — บังคับกรอก
+    @Test
+    fun `save without a phone number is refused`() = runTest {
+        coEvery { customerRepository.getCustomers() } returns Result.success(emptyList())
+        createViewModel()
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        viewModel.onEvent(AddContactEvent.CompanySelected("CUST-01", "Acme Corp"))
+        viewModel.onEvent(AddContactEvent.FullNameChanged("Jane Doe"))
+        viewModel.onEvent(AddContactEvent.Save)
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        assertEquals("กรุณากรอกเบอร์โทรศัพท์", viewModel.uiState.value.phoneError)
+        coVerify(exactly = 0) { contactRepository.addContact(any()) }
     }
 }

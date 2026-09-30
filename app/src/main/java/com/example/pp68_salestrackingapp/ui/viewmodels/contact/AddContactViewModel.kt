@@ -38,6 +38,7 @@ data class AddContactUiState(
     val isLoadingProjects:   Boolean = false,
     val companyError:  String? = null,
     val fullNameError: String? = null,
+    val phoneError: String? = null,
     val emailError:    String? = null,
     val isLoading: Boolean = false,
     val isSaved:   Boolean = false,
@@ -206,7 +207,7 @@ class AddContactViewModel @Inject constructor(
             is AddContactEvent.FullNameChanged -> _uiState.update { it.copy(fullName = event.value, fullNameError = null) }
             is AddContactEvent.NicknameChanged -> _uiState.update { it.copy(nickname = event.value) }
             is AddContactEvent.PositionChanged -> _uiState.update { it.copy(position = event.value) }
-            is AddContactEvent.PhoneChanged -> _uiState.update { it.copy(phoneNum = event.value) }
+            is AddContactEvent.PhoneChanged -> _uiState.update { it.copy(phoneNum = event.value, phoneError = null) }
             is AddContactEvent.EmailChanged -> _uiState.update { it.copy(email = event.value, emailError = null) }
             is AddContactEvent.LineIdChanged -> _uiState.update { it.copy(lineId = event.value) }
             is AddContactEvent.IsActiveToggled -> _uiState.update { it.copy(isActive = !it.isActive) }
@@ -225,6 +226,10 @@ class AddContactViewModel @Inject constructor(
         }
         if (_uiState.value.fullName.isBlank()) {
             _uiState.update { it.copy(fullNameError = "กรุณากรอกชื่อ") }
+            return
+        }
+        if (_uiState.value.phoneNum.isBlank()) {
+            _uiState.update { it.copy(phoneError = "กรุณากรอกเบอร์โทรศัพท์") }
             return
         }
         val email = _uiState.value.email
