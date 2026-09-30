@@ -132,8 +132,13 @@ class SalesResultViewModel @Inject constructor(
 
     private var custId: String? = null
 
-    private var baseline: SalesResultDraft = SalesResultDraft()
-    private var pendingDraft: SalesResultDraft? = null
+    private val draft = com.example.pp68_salestrackingapp.utils.DraftController(
+        store = draftStore,
+        type = SalesResultDraft::class.java,
+        initialBaseline = SalesResultDraft(),
+        keyOf = { draftKey() },
+        currentOf = { _uiState.value.toDraft() }
+    )
 
     private fun SalesResultUiState.toDraft() = SalesResultDraft(
         projectId, isStatusUpdateEnabled, newStatus, opportunityScore, dealPosition, previousSolution,
@@ -150,20 +155,18 @@ class SalesResultViewModel @Inject constructor(
     }
 
     fun checkForDraft() {
-        val key = draftKey() ?: return
-        val draft = draftStore.load(key, SalesResultDraft::class.java) ?: return
-        pendingDraft = draft
-        _uiState.update { it.copy(draftAvailable = true) }
+        if (draft.check()) _uiState.update { it.copy(draftAvailable = true) }
     }
 
-    fun isDirty(): Boolean = draftKey() != null && _uiState.value.toDraft() != baseline
+    // เวอร์ชันเก่าดูอย่างเดียว (key = null) ต้องไม่ dirty เสมอ — เงื่อนไขนี้เฉพาะหน้านี้ จึงไม่อยู่ใน DraftController
+    fun isDirty(): Boolean = draftKey() != null && draft.isDirty()
 
-    fun saveDraft() { draftKey()?.let { draftStore.save(it, _uiState.value.toDraft()) } }
+    fun saveDraft() = draft.save()
 
-    fun discardDraft() { draftKey()?.let { draftStore.clear(it) } }
+    fun discardDraft() = draft.discard()
 
     fun restoreDraft() {
-        val d = pendingDraft ?: return
+        val d = draft.takePending() ?: return
         _uiState.update {
             it.copy(
                 projectId = d.projectId ?: it.projectId,
@@ -188,11 +191,9 @@ class SalesResultViewModel @Inject constructor(
         // draft ที่กู้มาอาจมีโครงการที่เพิ่งผูก/สร้างด่วนไว้ — ต้องโหลดข้อมูลโครงการนั้นกลับมาด้วย
         // ไม่งั้น projectId ตั้งแล้วแต่ project/currentStatus ยังว่างอยู่เหมือนไม่ได้ผูกอะไรเลย
         d.projectId?.let { viewModelScope.launch { loadProjectData(it) } }
-        pendingDraft = null
     }
 
     fun dismissDraftPrompt() {
-        pendingDraft = null
         _uiState.update { it.copy(draftAvailable = false) }
     }
 
@@ -206,7 +207,7 @@ class SalesResultViewModel @Inject constructor(
             _uiState.update { it.copy(projectId = pId, mode = ResultMode.STANDALONE) }
             viewModelScope.launch {
                 pId?.let { loadProjectData(it) }
-                baseline = _uiState.value.toDraft()
+                draft.captureBaseline()
                 checkForDraft()
             }
         } else {
@@ -258,7 +259,7 @@ class SalesResultViewModel @Inject constructor(
             if (_uiState.value.mode == ResultMode.FROM_APPOINTMENT && _uiState.value.projectId == null) {
                 loadProjectOptions()
             }
-            baseline = _uiState.value.toDraft()
+            draft.captureBaseline()
             checkForDraft()
             _uiState.update { it.copy(isLoading = false) }
         }
@@ -502,7 +503,7 @@ class SalesResultViewModel @Inject constructor(
                         competitorCount = p.competitorCount ?: it.competitorCount
                     )
                 }
-                if (!wasDirty) baseline = _uiState.value.toDraft()
+                if (!wasDirty) draft.captureBaseline()
             }
         }
     }

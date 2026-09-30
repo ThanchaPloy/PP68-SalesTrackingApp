@@ -91,30 +91,32 @@ class AddContactViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(AddContactUiState())
     val uiState: StateFlow<AddContactUiState> = _uiState
 
-    private var baseline: AddContactDraft = AddContactDraft()
-    private var pendingDraft: AddContactDraft? = null
+    private val draft = com.example.pp68_salestrackingapp.utils.DraftController(
+        store = draftStore,
+        type = AddContactDraft::class.java,
+        initialBaseline = AddContactDraft(),
+        keyOf = { "add_contact:${_uiState.value.contactId ?: "new"}" },
+        currentOf = { _uiState.value.toDraft() }
+    )
 
     private fun AddContactUiState.toDraft() = AddContactDraft(
         fullName, nickname, position, phoneNum, email, lineId, isActive, isDecisionMaker,
         selectedCompanyId, selectedCompanyName, selectedProjectId, selectedProjectName
     )
 
-    private fun draftKey() = "add_contact:${_uiState.value.contactId ?: "new"}"
 
     private fun checkForDraft() {
-        val draft = draftStore.load(draftKey(), AddContactDraft::class.java) ?: return
-        pendingDraft = draft
-        _uiState.update { it.copy(draftAvailable = true) }
+        if (draft.check()) _uiState.update { it.copy(draftAvailable = true) }
     }
 
-    fun isDirty(): Boolean = _uiState.value.toDraft() != baseline
+    fun isDirty(): Boolean = draft.isDirty()
 
-    fun saveDraft() { draftStore.save(draftKey(), _uiState.value.toDraft()) }
+    fun saveDraft() = draft.save()
 
-    fun discardDraft() { draftStore.clear(draftKey()) }
+    fun discardDraft() = draft.discard()
 
     private fun restoreDraft() {
-        val d = pendingDraft ?: return
+        val d = draft.takePending() ?: return
         _uiState.update {
             it.copy(
                 fullName = d.fullName,
@@ -133,11 +135,9 @@ class AddContactViewModel @Inject constructor(
             )
         }
         d.selectedCompanyId?.let { loadProjectsForCompany(it) }
-        pendingDraft = null
     }
 
     private fun dismissDraftPrompt() {
-        pendingDraft = null
         _uiState.update { it.copy(draftAvailable = false) }
     }
 
@@ -165,7 +165,7 @@ class AddContactViewModel @Inject constructor(
                         isLoading = false
                     ) }
                     loadProjectsForCompany(contact.custId)
-                    baseline = _uiState.value.toDraft()
+                    draft.captureBaseline()
                     checkForDraft()
                 } else {
                     _uiState.update { it.copy(isLoading = false, saveError = "ไม่พบข้อมูลผู้ติดต่อ") }

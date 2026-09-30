@@ -149,8 +149,13 @@ class AddProjectViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(AddProjectUiState())
     val uiState: StateFlow<AddProjectUiState> = _uiState
 
-    private var baseline: AddProjectDraft = AddProjectDraft()
-    private var pendingDraft: AddProjectDraft? = null
+    private val draft = com.example.pp68_salestrackingapp.utils.DraftController(
+        store = draftStore,
+        type = AddProjectDraft::class.java,
+        initialBaseline = AddProjectDraft(),
+        keyOf = { "add_project:${_uiState.value.projectId ?: "new"}" },
+        currentOf = { _uiState.value.toDraft() }
+    )
 
     private fun AddProjectUiState.toDraft() = AddProjectDraft(
         projectName, branch, expectedValue, startDate, closeDate, projectStatus, opportunityScore,
@@ -159,22 +164,19 @@ class AddProjectViewModel @Inject constructor(
         lossReason, otherLossReason, dealPosition, previousSolution, counterpartyType, responseSpeed
     )
 
-    private fun draftKey() = "add_project:${_uiState.value.projectId ?: "new"}"
 
     private fun checkForDraft() {
-        val draft = draftStore.load(draftKey(), AddProjectDraft::class.java) ?: return
-        pendingDraft = draft
-        _uiState.update { it.copy(draftAvailable = true) }
+        if (draft.check()) _uiState.update { it.copy(draftAvailable = true) }
     }
 
-    fun isDirty(): Boolean = _uiState.value.toDraft() != baseline
+    fun isDirty(): Boolean = draft.isDirty()
 
-    fun saveDraft() { draftStore.save(draftKey(), _uiState.value.toDraft()) }
+    fun saveDraft() = draft.save()
 
-    fun discardDraft() { draftStore.clear(draftKey()) }
+    fun discardDraft() = draft.discard()
 
     private fun restoreDraft() {
-        val d = pendingDraft ?: return
+        val d = draft.takePending() ?: return
         _uiState.update {
             it.copy(
                 projectName = d.projectName,
@@ -223,11 +225,9 @@ class AddProjectViewModel @Inject constructor(
                 if (billingName != null) _uiState.update { it.copy(selectedBillingBranchName = billingName) }
             }
         }
-        pendingDraft = null
     }
 
     private fun dismissDraftPrompt() {
-        pendingDraft = null
         _uiState.update { it.copy(draftAvailable = false) }
     }
 
@@ -388,7 +388,7 @@ class AddProjectViewModel @Inject constructor(
                         _uiState.update { it.copy(selectedContactIds = selectedIds) }
                         // ต้องตั้ง baseline หลังฟิลด์ที่นับใน draft (รวม selectedContactIds) โหลดครบแล้วเท่านั้น
                         // ไม่งั้นพอ contact โหลดเสร็จทีหลังจะดูเหมือนผู้ใช้แก้ไขทั้งที่ไม่ได้แตะอะไรเลย
-                        baseline = _uiState.value.toDraft()
+                        draft.captureBaseline()
                         checkForDraft()
                     }
 
@@ -670,7 +670,7 @@ class AddProjectViewModel @Inject constructor(
             val s = _uiState.value
             // จับ key ตอนเริ่มเซฟ — ตอนสร้างใหม่ projectId ยังว่างตอนนี้ (key="new") แต่จะถูกเซ็ตเป็น
             // id จริงก่อน draftStore.clear() ด้านล่างจะรัน ถ้าอ่าน key จาก state สดตอนนั้นจะเคลียร์ผิด key
-            val keyToClearOnSuccess = draftKey()
+            val keyToClearOnSuccess = draft.currentKey()
             try {
                 val user      = authRepo.currentUser()
                 val userId    = user?.userId ?: "USR-0000"
@@ -740,7 +740,7 @@ class AddProjectViewModel @Inject constructor(
                             return@onSuccess
                         }
                     }
-                    draftStore.clear(keyToClearOnSuccess)
+                    keyToClearOnSuccess?.let { draft.discard(it) }
                     _uiState.update { it.copy(isLoading = false, isSaved = true) }
                 }.onFailure { e ->
                     _uiState.update { it.copy(isLoading = false, saveError = e.message) }

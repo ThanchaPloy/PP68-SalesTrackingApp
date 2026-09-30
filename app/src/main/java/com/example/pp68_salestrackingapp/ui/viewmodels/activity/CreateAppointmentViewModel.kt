@@ -159,8 +159,13 @@ class CreateAppointmentViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(CreateAppointmentUiState())
     val uiState: StateFlow<CreateAppointmentUiState> = _uiState
 
-    private var baseline: CreateAppointmentDraft = CreateAppointmentDraft()
-    private var pendingDraft: CreateAppointmentDraft? = null
+    private val draft = com.example.pp68_salestrackingapp.utils.DraftController(
+        store = draftStore,
+        type = CreateAppointmentDraft::class.java,
+        initialBaseline = CreateAppointmentDraft(),
+        keyOf = { draftKey() },
+        currentOf = { _uiState.value.toDraft() }
+    )
 
     // นัดหมายใหม่แบบ onsite ตั้งพิกัดให้อัตโนมัติจาก GPS หลัง CheckDraft จับ baseline ไปแล้ว (เพราะ
     // ต้องรอ permission/GPS fetch ที่เป็น async แยกอยู่ในหน้าจอ) ถ้าไม่กันไว้ ผู้ใช้เปิดหน้าจอเฉยๆ
@@ -185,19 +190,17 @@ class CreateAppointmentViewModel @Inject constructor(
         val s = _uiState.value
         awaitingInitialLocation = s.activityId == null && s.activityType == "onsite" &&
             s.lat == null && s.lng == null
-        val draft = draftStore.load(draftKey(), CreateAppointmentDraft::class.java) ?: return
-        pendingDraft = draft
-        _uiState.update { it.copy(draftAvailable = true) }
+        if (draft.check()) _uiState.update { it.copy(draftAvailable = true) }
     }
 
-    fun isDirty(): Boolean = _uiState.value.toDraft() != baseline
+    fun isDirty(): Boolean = draft.isDirty()
 
-    fun saveDraft() { draftStore.save(draftKey(), _uiState.value.toDraft()) }
+    fun saveDraft() = draft.save()
 
-    fun discardDraft() { draftStore.clear(draftKey()) }
+    fun discardDraft() = draft.discard()
 
     fun restoreDraft() {
-        val d = pendingDraft ?: return
+        val d = draft.takePending() ?: return
         _uiState.update {
             it.copy(
                 selectedProjectId = d.selectedProjectId,
@@ -217,11 +220,9 @@ class CreateAppointmentViewModel @Inject constructor(
             )
         }
         d.selectedProjectId?.let { loadContactsForProject(it, d.selectedContactIds) }
-        pendingDraft = null
     }
 
     fun dismissDraftPrompt() {
-        pendingDraft = null
         _uiState.update { it.copy(draftAvailable = false) }
     }
 
@@ -584,7 +585,7 @@ class CreateAppointmentViewModel @Inject constructor(
                         isLoading         = false
                     )
                 }
-                baseline = _uiState.value.toDraft()
+                draft.captureBaseline()
                 checkForDraft()
 
                 if (activity.projectId != null) {
@@ -622,7 +623,7 @@ class CreateAppointmentViewModel @Inject constructor(
                     )
                 }
                 // สร้างใหม่จากหน้าโครงการ ค่าที่ prefill มานี้ถือเป็นจุดเริ่มต้น ไม่ใช่ของที่ผู้ใช้แก้ไข
-                baseline = _uiState.value.toDraft()
+                draft.captureBaseline()
                 checkForDraft()
                 loadContactsForProject(projectId)
             }
@@ -777,7 +778,7 @@ class CreateAppointmentViewModel @Inject constructor(
                 // ไปด้วย ครั้งต่อไป (ผู้ใช้ปักหมุดเองจริงๆ) จะไม่โดนดูดซ้ำ นับเป็นการแก้ไขตามปกติ
                 if (awaitingInitialLocation) {
                     awaitingInitialLocation = false
-                    baseline = baseline.copy(lat = event.lat, lng = event.lng)
+                    draft.absorbIntoBaseline { it.copy(lat = event.lat, lng = event.lng) }
                 }
             }
 

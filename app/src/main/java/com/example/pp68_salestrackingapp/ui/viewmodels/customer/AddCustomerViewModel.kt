@@ -82,29 +82,31 @@ class AddCustomerViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(AddCustomerUiState())
     val uiState: StateFlow<AddCustomerUiState> = _uiState
 
-    private var baseline: AddCustomerDraft = AddCustomerDraft()
-    private var pendingDraft: AddCustomerDraft? = null
+    private val draft = com.example.pp68_salestrackingapp.utils.DraftController(
+        store = draftStore,
+        type = AddCustomerDraft::class.java,
+        initialBaseline = AddCustomerDraft(),
+        keyOf = { "add_customer:${_uiState.value.custId ?: "new"}" },
+        currentOf = { _uiState.value.toDraft() }
+    )
 
     private fun AddCustomerUiState.toDraft() = AddCustomerDraft(
         companyName, vatRegistrationNo, address, selectedLat, selectedLng, custType, companyStatus
     )
 
-    private fun draftKey() = "add_customer:${_uiState.value.custId ?: "new"}"
 
     private fun checkForDraft() {
-        val draft = draftStore.load(draftKey(), AddCustomerDraft::class.java) ?: return
-        pendingDraft = draft
-        _uiState.update { it.copy(draftAvailable = true) }
+        if (draft.check()) _uiState.update { it.copy(draftAvailable = true) }
     }
 
-    fun isDirty(): Boolean = _uiState.value.toDraft() != baseline
+    fun isDirty(): Boolean = draft.isDirty()
 
-    fun saveDraft() { draftStore.save(draftKey(), _uiState.value.toDraft()) }
+    fun saveDraft() = draft.save()
 
-    fun discardDraft() { draftStore.clear(draftKey()) }
+    fun discardDraft() = draft.discard()
 
     private fun restoreDraft() {
-        val d = pendingDraft ?: return
+        val d = draft.takePending() ?: return
         _uiState.update {
             it.copy(
                 companyName = d.companyName,
@@ -117,11 +119,10 @@ class AddCustomerViewModel @Inject constructor(
                 draftAvailable = false
             )
         }
-        pendingDraft = null
     }
 
     private fun dismissDraftPrompt() {
-        pendingDraft = null
+        draft.takePending()
         _uiState.update { it.copy(draftAvailable = false) }
     }
 
@@ -147,7 +148,7 @@ class AddCustomerViewModel @Inject constructor(
                             isLoading         = false
                         )
                     }
-                    baseline = _uiState.value.toDraft()
+                    draft.captureBaseline()
                     checkForDraft()
                 },
                 onFailure = { e ->
