@@ -25,10 +25,15 @@ object AppointmentStatus {
         return if (status == "planned" && date.isBefore(LocalDate.now())) MISSING else fallback
     }
 
-    // ห้ามแก้ไข/ลบแผนที่ยังไม่เสร็จ (planned) เมื่อเหลือเวลา <= 7 วันก่อนถึงวันนัด — กันเปลี่ยน/ยกเลิก
-    // กระชั้นชิด แผนที่ขาดนัดไปแล้ว (เลยวันมาแล้ว) ไม่เข้าเงื่อนไขนี้ เพราะเป็นคนละกติกากัน
-    fun isEditLocked(status: String?, plannedDate: String?): Boolean {
+    // ห้ามแก้ไขแผนนัดหมายเมื่อ
+    //   (ก) เหลือเวลา <= 7 วันก่อนถึงวันนัด — กันเปลี่ยน/ยกเลิกกระชั้นชิด
+    //   (ข) ขาดนัดไปแล้ว — ด้วยเหตุผลเดียวกับที่ห้ามลบ: แผนที่ขาดนัดคือหลักฐาน
+    //       การแก้วันนัดเป็นอนาคตทำให้สถานะกลับเป็น planned เท่ากับลบร่องรอยทิ้ง แค่ใช้ทางอ้อม
+    //
+    // การ "บันทึกผล" ไม่ถูกล็อกโดยกติกานี้ — นัดที่ขาดไปต้องบันทึกย้อนหลังได้เสมอ
+    fun isEditLocked(status: String?, plannedDate: String?, activityType: String?): Boolean {
         if (status != "planned") return false
+        if (effective(status, plannedDate, activityType) == MISSING) return true
         val date = parseDate(plannedDate) ?: return false
         val daysUntil = ChronoUnit.DAYS.between(LocalDate.now(), date)
         return daysUntil in 0..7
@@ -40,8 +45,9 @@ object AppointmentStatus {
     // ห้ามลบเมื่อ (ก) อยู่ในช่วง 7 วันก่อนวันนัด — กันยกเลิกกระชั้นชิด
     // หรือ (ข) ขาดนัดไปแล้ว — แผนที่ขาดนัดเป็นหลักฐานว่าเกิดอะไรขึ้น ลบทิ้งเท่ากับลบร่องรอย
     // การพลาดนัด ให้บันทึกผลย้อนหลังแทน (online/call ไม่มีสถานะขาดนัด จึงไม่โดนข้อ (ข) นี้)
+    // ตอนนี้กติกาเดียวกับการแก้ไข — คงชื่อไว้เพราะผู้เรียกอ่านแล้วเข้าใจเจตนาชัดกว่า
     fun isDeleteLocked(status: String?, plannedDate: String?, activityType: String?): Boolean =
-        isEditLocked(status, plannedDate) || effective(status, plannedDate, activityType) == MISSING
+        isEditLocked(status, plannedDate, activityType)
 
     private fun parseDate(raw: String?): LocalDate? =
         raw?.take(10)?.let { runCatching { LocalDate.parse(it) }.getOrNull() }

@@ -145,7 +145,7 @@ fun ActivityDetailContent(
                 // (CreateAppointmentViewModel.validate) ซึ่งเสียเวลาเปล่าและดูเหมือนกฎไม่ทำงาน
                 // สถานะอื่น (checked_in/completed/ขาดนัด) ยังแก้ได้เหมือนเดิม ไม่เข้าเงื่อนไขนี้
                 val editLocked = com.example.pp68_salestrackingapp.utils.AppointmentStatus.isEditLocked(
-                    s.activity?.status, s.activity?.activityDate
+                    s.activity?.status, s.activity?.activityDate, s.activity?.activityType
                 )
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     StatusBadge(effectiveStatus)
@@ -163,7 +163,10 @@ fun ActivityDetailContent(
                 }
                 if (editLocked) {
                     Text(
-                        "ใกล้ถึงวันนัดแล้ว (เหลือไม่ถึง 7 วัน) จึงแก้ไขหรือลบแผนนี้ไม่ได้",
+                        if (effectiveStatus == com.example.pp68_salestrackingapp.utils.AppointmentStatus.MISSING)
+                            "นัดหมายนี้ขาดไปแล้ว จึงแก้ไขหรือลบไม่ได้ — บันทึกผลย้อนหลังได้ตามปกติ"
+                        else
+                            "ใกล้ถึงวันนัดแล้ว (เหลือไม่ถึง 7 วัน) จึงแก้ไขหรือลบแผนนี้ไม่ได้",
                         fontSize = 12.sp, color = TextGray
                     )
                 }

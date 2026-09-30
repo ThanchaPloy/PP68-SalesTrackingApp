@@ -178,8 +178,38 @@ class ActivityRepository @Inject constructor(
         }
     }
 
-    suspend fun updateActivity(activityId: String, updates: Map<String, Any>): kotlin.Result<Unit> {
+    /**
+     * @param isPlanEdit true = การแก้แผนนัดหมายโดยผู้ใช้ จึงต้องเคารพกติกาล็อกแก้ไข (W6)
+     *   false สำหรับการอัปเดตที่เกิดจากการบันทึกผล (เช่นผูกโครงการเข้ากับนัด) — นัดที่ขาดไป
+     *   ต้องบันทึกย้อนหลังได้เสมอ การล็อกตรงนี้จะทำให้บันทึกผลนัดที่ขาดไม่ได้เลย
+     */
+    /** แยกเหตุผลให้ชัด — สองเหตุผลนี้คนละอย่างกัน บอกรวม ๆ ผู้ใช้จะไม่รู้ว่าต้องทำอะไรต่อ */
+    private fun lockedEditMessage(status: String?, plannedDate: String?, activityType: String?): String {
+        val st = com.example.pp68_salestrackingapp.utils.AppointmentStatus
+        return if (st.effective(status, plannedDate, activityType) == st.MISSING) {
+            "นัดหมายนี้ขาดไปแล้ว จึงแก้ไขแผนไม่ได้ — ให้บันทึกผลย้อนหลังแทน"
+        } else {
+            "ใกล้ถึงวันนัดแล้ว (เหลือไม่ถึง 7 วัน) จึงแก้ไขแผนนี้ไม่ได้"
+        }
+    }
+
+    suspend fun updateActivity(
+        activityId: String,
+        updates: Map<String, Any>,
+        isPlanEdit: Boolean = true
+    ): kotlin.Result<Unit> {
         return withContext(Dispatchers.IO) {
+            // กติกาเดียวกับที่ UI ใช้ซ่อนปุ่มดินสอ — entry point อื่นที่เรียก repository ตรง ๆ จึงข้ามไม่ได้
+            if (isPlanEdit) {
+                val existing = activityDao.getActivityById(activityId)
+                if (existing != null && com.example.pp68_salestrackingapp.utils.AppointmentStatus
+                        .isEditLocked(existing.status, existing.activityDate, existing.activityType)
+                ) {
+                    return@withContext kotlin.Result.failure(
+                        Exception(lockedEditMessage(existing.status, existing.activityDate, existing.activityType))
+                    )
+                }
+            }
             // ── ชั้นในเครื่อง: ต้องสำเร็จก่อน ถ้าพังต้องคืน failure ─────────────────────────
             // เดิม catch ครอบทั้งฟังก์ชันแล้วคืน success(Unit) เสมอ ทำให้ cast พลาด (as String
             // ด้านล่างไม่มีอะไรการันตีชนิด) หรือ Room พังตรงนี้ กลายเป็น "บันทึกสำเร็จ" ทั้งที่
@@ -503,7 +533,7 @@ class ActivityRepository @Inject constructor(
                 if (existing != null &&
                     status.isDeleteLocked(existing.status, existing.activityDate, existing.activityType)
                 ) {
-                    val message = if (status.isEditLocked(existing.status, existing.activityDate)) {
+                    val message = if (status.isEditLocked(existing.status, existing.activityDate, existing.activityType)) {
                         "ใกล้ถึงวันนัดแล้ว (เหลือไม่ถึง 7 วัน) จึงยกเลิกหรือลบแผนนี้ไม่ได้"
                     } else {
                         "เลยวันนัดแล้วแต่ไม่ได้เช็คอิน จึงถือว่าขาดนัด และลบทิ้งไม่ได้ " +

@@ -68,22 +68,32 @@ class AppointmentStatusTest {
         val in8Days = LocalDate.now().plusDays(8).toString()
         val today = LocalDate.now().toString()
 
-        assertTrue(AppointmentStatus.isEditLocked("planned", today))
-        assertTrue(AppointmentStatus.isEditLocked("planned", in7Days))
-        assertFalse(AppointmentStatus.isEditLocked("planned", in8Days))
+        assertTrue(AppointmentStatus.isEditLocked("planned", today, "onsite"))
+        assertTrue(AppointmentStatus.isEditLocked("planned", in7Days, "onsite"))
+        assertFalse(AppointmentStatus.isEditLocked("planned", in8Days, "onsite"))
     }
 
     @Test
     fun `edit lock never applies to non-planned statuses`() {
         val today = LocalDate.now().toString()
-        assertFalse(AppointmentStatus.isEditLocked("checked_in", today))
-        assertFalse(AppointmentStatus.isEditLocked("completed", today))
+        assertFalse(AppointmentStatus.isEditLocked("checked_in", today, "onsite"))
+        assertFalse(AppointmentStatus.isEditLocked("completed", today, "onsite"))
     }
 
+    // เดิมกฎนี้ปล่อยนัดที่เลยวันมาแล้วให้แก้ได้ ซึ่งเป็นช่องโหว่: ลบนัดที่ขาดไม่ได้
+    // แต่แก้วันนัดเป็นอนาคตได้ สถานะก็กลับเป็น planned เท่ากับลบร่องรอยทิ้ง
     @Test
-    fun `edit lock does not apply once the date has already passed`() {
+    fun `editing an onsite appointment that was already missed is locked`() {
         val yesterday = LocalDate.now().minusDays(1).toString()
-        assertFalse(AppointmentStatus.isEditLocked("planned", yesterday))
+        assertTrue(AppointmentStatus.isEditLocked("planned", yesterday, "onsite"))
+    }
+
+    // online/call ไม่มีสถานะขาดนัด จึงแก้ย้อนหลังได้ตามเดิม
+    @Test
+    fun `editing a past online appointment is not locked`() {
+        val yesterday = LocalDate.now().minusDays(1).toString()
+        assertFalse(AppointmentStatus.isEditLocked("planned", yesterday, "online"))
+        assertFalse(AppointmentStatus.isEditLocked("planned", yesterday, "call"))
     }
 
     // ลบไม่ได้ทั้งสองกรณี: ใกล้วันนัด (กันยกเลิกกระชั้นชิด) และขาดนัดไปแล้ว (กันลบร่องรอยการพลาดนัด)
@@ -96,8 +106,8 @@ class AppointmentStatusTest {
     @Test
     fun `delete is locked for an onsite appointment that was already missed`() {
         val lastWeek = LocalDate.now().minusDays(7).toString()
-        // เลย 7 วันไปแล้วจึงไม่เข้าเงื่อนไข edit lock — ต้องถูกบล็อกด้วยเหตุ "ขาดนัด" เท่านั้น
-        assertFalse(AppointmentStatus.isEditLocked("planned", lastWeek))
+        // ตอนนี้ขาดนัดทำให้ล็อกทั้งแก้และลบ — กติกาเดียวกัน เพราะแก้วันนัดก็ลบร่องรอยได้เหมือนกัน
+        assertTrue(AppointmentStatus.isEditLocked("planned", lastWeek, "onsite"))
         assertTrue(AppointmentStatus.isDeleteLocked("planned", lastWeek, "onsite"))
     }
 

@@ -488,7 +488,8 @@ class CreateAppointmentViewModelTest {
                     projectId = "PRJ-1",
                     activityType = "onsite",
                     detail = "old",
-                    activityDate = "2026-04-06",
+                    // วันอนาคตแบบสัมพัทธ์ — วันที่ hardcode ไว้จะกลายเป็นอดีตแล้วไปติดล็อก "ขาดนัด" ในอนาคต
+                    activityDate = java.time.LocalDate.now().plusDays(30).toString(),
                     plannedTime = "10:00 AM",
                     status = "planned"
                 )
@@ -523,7 +524,8 @@ class CreateAppointmentViewModelTest {
             listOf(
                 SalesActivity(
                     activityId = "A-EDIT", userId = "U1", customerId = "C1", projectId = "PRJ-1",
-                    activityType = "onsite", detail = "old", activityDate = "2026-04-06",
+                    activityType = "onsite", detail = "old", // วันอนาคตแบบสัมพัทธ์ — วันที่ hardcode ไว้จะกลายเป็นอดีตแล้วไปติดล็อก "ขาดนัด" ในอนาคต
+                    activityDate = java.time.LocalDate.now().plusDays(30).toString(),
                     plannedTime = "10:00 AM", status = "planned"
                 )
             )

@@ -1121,7 +1121,10 @@ class SalesResultViewModelTest {
         advanceUntilIdle()
 
         assertTrue(vm.uiState.value.isSaved)
-        coVerify(exactly = 1) { activityRepo.updateActivity("A1", mapOf("project_code" to "PRJ-1")) }
+        // isPlanEdit = false สำคัญ: การผูกโครงการตอนบันทึกผลต้องทำได้แม้นัดนั้นจะขาดไปแล้ว
+        coVerify(exactly = 1) {
+            activityRepo.updateActivity("A1", mapOf("project_code" to "PRJ-1"), isPlanEdit = false)
+        }
     }
 
     @Test
@@ -1147,7 +1150,7 @@ class SalesResultViewModelTest {
         advanceUntilIdle()
 
         assertTrue(vm.uiState.value.isSaved)
-        coVerify(exactly = 0) { activityRepo.updateActivity(any(), any()) }
+        coVerify(exactly = 0) { activityRepo.updateActivity(any(), any(), any()) }
     }
 
     // โครงการที่ตอบปัจจัยข้อ 4-9 ครบแล้ว (ล็อก) — ใช้ในกลุ่มเทสต์ "กลับมาจากหน้าแก้ไขปัจจัย" ด้านล่าง

@@ -836,7 +836,7 @@ class CreateAppointmentViewModel @Inject constructor(
             }
             // W6: ห้ามแก้ไขแผนที่ยังไม่เสร็จ (planned) เมื่อเหลือเวลา <= 7 วันก่อนวันนัดเดิม — เช็คจาก
             // ค่าดั้งเดิมตอนโหลดมา ไม่ใช่วันที่ที่กำลังพิมพ์แก้อยู่ในฟอร์ม
-            s.activityId != null && com.example.pp68_salestrackingapp.utils.AppointmentStatus.isEditLocked(s.originalStatus, s.originalPlannedDate) -> {
+            s.activityId != null && com.example.pp68_salestrackingapp.utils.AppointmentStatus.isEditLocked(s.originalStatus, s.originalPlannedDate, s.activityType) -> {
                 _uiState.update { it.copy(saveError = "ใกล้ถึงวันนัดแล้ว (เหลือไม่ถึง 7 วัน) จึงแก้ไขแผนนี้ไม่ได้") }
                 false
             }

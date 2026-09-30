@@ -213,4 +213,50 @@ class ActivityRepositoryCheckInTest {
         // ห้ามยิง API ลบสำหรับ id ที่ server ไม่เคยรู้จัก
         coVerify(exactly = 0) { apiService.deleteActivity(any()) }
     }
+
+    // แผนที่ขาดนัดคือหลักฐานว่าเกิดอะไรขึ้น — เดิมลบไม่ได้แต่แก้ได้ จึงเลี่ยงลบด้วยการ
+    // เลื่อนวันนัดไปอนาคต สถานะก็กลับเป็น planned เหมือนไม่เคยขาด
+    @Test
+    fun `editing an appointment that was already missed is refused`() = runTest {
+        val yesterday = java.time.LocalDate.now().minusDays(1).toString()
+        coEvery { activityDao.getActivityById("A-MISSED") } returns
+            activity.copy(activityId = "A-MISSED", activityDate = yesterday, status = "planned")
+
+        val result = repo.updateActivity("A-MISSED", mapOf("planned_date" to "2030-01-01"))
+
+        assertTrue(result.isFailure)
+        coVerify(exactly = 0) { apiService.updateActivity(any(), any()) }
+    }
+
+    // การบันทึกผลต้องทำได้เสมอ — การผูกโครงการตอนบันทึกผลไม่ใช่การแก้แผน
+    // ถ้าข้อนี้พัง = พนักงานบันทึกผลนัดที่ขาดไปไม่ได้เลย ซึ่งตรงข้ามกับกติกาที่ตั้งไว้
+    @Test
+    fun `linking a project from the result flow is allowed on a missed appointment`() = runTest {
+        val yesterday = java.time.LocalDate.now().minusDays(1).toString()
+        coEvery { activityDao.getActivityById("A-MISSED") } returns
+            activity.copy(activityId = "A-MISSED", activityDate = yesterday, status = "planned")
+        coEvery { apiService.updateActivity(any(), any()) } returns
+            Response.success(listOf(activity))
+
+        val result = repo.updateActivity(
+            "A-MISSED", mapOf("project_code" to "PRJ-9"), isPlanEdit = false
+        )
+
+        assertTrue(result.isSuccess)
+        coVerify(exactly = 1) { apiService.updateActivity(any(), any()) }
+    }
+
+    // online/call ไม่มีสถานะขาดนัด จึงแก้ย้อนหลังได้ตามเดิม
+    @Test
+    fun `editing a past online appointment is still allowed`() = runTest {
+        val yesterday = java.time.LocalDate.now().minusDays(1).toString()
+        coEvery { activityDao.getActivityById("A-ONLINE") } returns
+            activity.copy(activityId = "A-ONLINE", activityDate = yesterday, activityType = "online")
+        coEvery { apiService.updateActivity(any(), any()) } returns
+            Response.success(listOf(activity))
+
+        val result = repo.updateActivity("A-ONLINE", mapOf("topic" to "แก้หัวข้อ"))
+
+        assertTrue(result.isSuccess)
+    }
 }

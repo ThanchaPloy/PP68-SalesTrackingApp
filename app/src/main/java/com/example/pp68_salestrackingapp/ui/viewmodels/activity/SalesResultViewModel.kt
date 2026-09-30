@@ -834,7 +834,10 @@ class SalesResultViewModel @Inject constructor(
                         // ผูกโครงการเพิ่มตอนบันทึกผล (นัดหมายที่ไม่ได้ผูกไว้แต่แรก) ต้องอัปเดตกลับไปที่
                         // ตัวนัดหมายจริงด้วย ไม่งั้นเปิดนัดหมายนี้ครั้งหน้าจะยังว่างเหมือนเดิม
                         if (s.activityId != null && s.projectId != null) {
-                            activityRepo.updateActivity(s.activityId, mapOf("project_code" to s.projectId))
+                            // นัดที่ขาดไปแล้วก็ต้องผูกโครงการได้ — นี่คือผลพลอยจากการบันทึกผล ไม่ใช่การแก้แผน
+                            activityRepo.updateActivity(
+                                s.activityId, mapOf("project_code" to s.projectId), isPlanEdit = false
+                            )
                         }
                     }
                     discardDraft()
