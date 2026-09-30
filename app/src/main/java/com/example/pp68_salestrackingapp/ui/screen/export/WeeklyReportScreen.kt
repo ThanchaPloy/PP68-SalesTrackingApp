@@ -243,7 +243,7 @@ fun WeeklyReportContent(
                     Spacer(Modifier.width(8.dp))
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text(
-                            text = "\u0e2a\u0e31\u0e1b\u0e14\u0e32\u0e2b\u0e4c\u0e17\u0e35\u0e48\u0e40\u0e25\u0e37\u0e2d\u0e01", // สัปดาห์ที่เลือก
+                            text = "สัปดาห์ที่เลือก", // สัปดาห์ที่เลือก
                             fontSize = 12.sp,
                             color = Color.Gray
                         )
@@ -457,22 +457,22 @@ private fun PostSalesResultDetailCard(
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 if (!detail.newStatus.isNullOrBlank()) {
-                    item { DetailChip(label = "\u0e2a\u0e16\u0e32\u0e19\u0e30\u0e43\u0e2b\u0e21\u0e48: ${detail.newStatus}", color = Color(0xFFE3F2FD), textColor = Color(0xFF1565C0)) } // สถานะใหม่
+                    item { DetailChip(label = "สถานะใหม่: ${detail.newStatus}", color = Color(0xFFE3F2FD), textColor = Color(0xFF1565C0)) } // สถานะใหม่
                 }
                 if (!detail.opportunityScore.isNullOrBlank()) {
-                    item { DetailChip(label = "\u0e42\u0e2d\u0e01\u0e32\u0e2a: ${detail.opportunityScore}", color = Color(0xFFFFF8E1), textColor = Color(0xFFF57F17)) } // โอกาส
+                    item { DetailChip(label = "โอกาส: ${detail.opportunityScore}", color = Color(0xFFFFF8E1), textColor = Color(0xFFF57F17)) } // โอกาส
                 }
                 if (!detail.dealPosition.isNullOrBlank()) {
-                    item { DetailChip(label = "\u0e2a\u0e16\u0e32\u0e19\u0e30\u0e14\u0e35\u0e25: ${detail.dealPosition}", color = Color(0xFFEDE7F6), textColor = Color(0xFF512DA8)) } // สถานะดีล
+                    item { DetailChip(label = "สถานะดีล: ${detail.dealPosition}", color = Color(0xFFEDE7F6), textColor = Color(0xFF512DA8)) } // สถานะดีล
                 }
                 if (detail.isProposalSent) {
-                    item { DetailChip(label = "\u0e43\u0e1a\u0e40\u0e2a\u0e19\u0e2d\u0e23\u0e32\u0e04\u0e32: \u0e2a\u0e48\u0e07\u0e41\u0e25\u0e49\u0077 (${detail.proposalDate ?: ""})", color = Color(0xFFE8F5E9), textColor = Color(0xFF2E7D32)) } // ใบเสนอราคา: ส่งแล้ว
+                    item { DetailChip(label = "ใบเสนอราคา: ส่งแล้ว (${detail.proposalDate ?: ""})", color = Color(0xFFE8F5E9), textColor = Color(0xFF2E7D32)) } // ใบเสนอราคา: ส่งแล้ว
                 }
                 if (detail.dmInvolved) {
-                    item { DetailChip(label = "DM \u0e23\u0e48\u0e27\u0e21\u0e1b\u0e23\u0e30\u0e0a\u0e38\u0e21", color = Color(0xFFE0F7FA), textColor = Color(0xFF00838F)) } // ร่วมประชุม
+                    item { DetailChip(label = "DM ร่วมประชุม", color = Color(0xFFE0F7FA), textColor = Color(0xFF00838F)) } // ร่วมประชุม
                 }
                 if (detail.competitorCount > 0) {
-                    item { DetailChip(label = "\u0e04\u0e39\u0e48\u0e41\u0e02\u0e48\u0e07: ${detail.competitorCount} \u0e23\u0e32\u0e22", color = Color(0xFFFFF3E0), textColor = Color(0xFFE65100)) } // คู่แข่ง: ... ราย
+                    item { DetailChip(label = "คู่แข่ง: ${detail.competitorCount} ราย", color = Color(0xFFFFF3E0), textColor = Color(0xFFE65100)) } // คู่แข่ง: ... ราย
                 }
                 if (!detail.responseSpeed.isNullOrBlank()) {
                     item { DetailChip(label = "ตอบสนอง: ${detail.responseSpeed}", color = Color(0xFFF3E5F5), textColor = Color(0xFF6A1B9A)) }
@@ -781,12 +781,12 @@ suspend fun exportToExcel(context: Context, fileName: String, activities: List<E
         }
 
         val headers = listOf(
-            "\u0e27\u0e31\u0e19\u0e17\u0e35\u0e48 (Date)", "\u0e1b\u0e23\u0e30\u0e40\u0e20\u0e17 (Type)", "\u0e2b\u0e31\u0e27\u0e02\u0e49\u0e2d (Topic)", "\u0e1a\u0e23\u0e34\u0e29\u0e31\u0e17 (Company)",
-            "\u0e1c\u0e39\u0e49\u0e15\u0e34\u0e14\u0e15\u0e48\u0e2d (Contact)", "\u0e42\u0e04\u0e23\u0e07\u0e01\u0e32\u0e23 (Project)", "\u0e40\u0e0a\u0e47\u0e04\u0e2d\u0e34\u0e19 (Check-in)", "\u0e2a\u0e16\u0e32\u0e19\u0e30\u0e40\u0e0a\u0e47\u0e04\u0e2d\u0e34\u0e19 (Check-in Status)",
-            "\u0e2a\u0e16\u0e32\u0e19\u0e17\u0e35\u0e48\u0e19\u0e31\u0e14\u0e2b\u0e21\u0e32\u0e22 (Location Name)", "\u0e2a\u0e16\u0e32\u0e19\u0e30 (Status)", "\u0e2a\u0e16\u0e32\u0e19\u0e30\u0e43\u0e2b\u0e21\u0e48 (New Status)", "\u0e2a\u0e23\u0e38\u0e1b\u0e1c\u0e25\u0e01\u0e32\u0e23\u0e17\u0e33\u0e07\u0e32\u0e19 (Summary)",
-            "\u0e42\u0e2d\u0e01\u0e32\u0e2a (Opportunity)", "\u0e43\u0e1a\u0e40\u0e2a\u0e19\u0e2d\u0e23\u0e32\u0e04\u0e32 (Proposal)", "\u0e27\u0e31\u0e19\u0e17\u0e35\u0e48\u0e40\u0e2a\u0e19\u0e2d\u0e23\u0e32\u0e04\u0e32 (Proposal Date)",
-            "DM \u0e23\u0e48\u0e27\u0e21\u0e1b\u0e23\u0e30\u0e0a\u0e38\u0e21 (DM Involved)", "\u0e08\u0e33\u0e19\u0e27\u0e19\u0e04\u0e39\u0e48\u0e41\u0e02\u0e48\u0e07 (CompetitorCount)", "\u0e04\u0e27\u0e32\u0e21\u0e40\u0e23\u0e47\u0e27 (Speed)", "\u0e2a\u0e16\u0e32\u0e19\u0e30\u0e14\u0e35\u0e25 (Deal)",
-            "\u0e42\u0e0b\u0e25\u0e39\u0e0a\u0e31\u0e48\u0e19\u0e40\u0e14\u0e34\u0e21 (Solution)", "\u0e40\u0e2b\u0e15\u0e38\u0e1c\u0e25\u0e41\u0e1e\u0e49 (Loss)", "\u0e23\u0e39\u0e1b\u0e20\u0e32\u0e1e (Photos)"
+            "วันที่ (Date)", "ประเภท (Type)", "หัวข้อ (Topic)", "บริษัท (Company)",
+            "ผู้ติดต่อ (Contact)", "โครงการ (Project)", "เช็คอิน (Check-in)", "สถานะเช็คอิน (Check-in Status)",
+            "สถานที่นัดหมาย (Location Name)", "สถานะ (Status)", "สถานะใหม่ (New Status)", "สรุปผลการทำงาน (Summary)",
+            "โอกาส (Opportunity)", "ใบเสนอราคา (Proposal)", "วันที่เสนอราคา (Proposal Date)",
+            "DM ร่วมประชุม (DM Involved)", "จำนวนคู่แข่ง (CompetitorCount)", "ความเร็ว (Speed)", "สถานะดีล (Deal)",
+            "โซลูชั่นเดิม (Solution)", "เหตุผลแพ้ (Loss)", "รูปภาพ (Photos)"
         )
         val headerRow = sheet.createRow(0)
         headers.forEachIndexed { i, title ->
