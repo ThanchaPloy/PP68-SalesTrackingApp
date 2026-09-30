@@ -2,7 +2,6 @@ package com.example.pp68_salestrackingapp.ui.viewmodels.activity
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.example.pp68_salestrackingapp.data.remote.ApiService
 import com.example.pp68_salestrackingapp.data.repository.ActivityRepository
 import com.example.pp68_salestrackingapp.data.repository.AuthRepository
 import com.example.pp68_salestrackingapp.data.model.AuthUser
@@ -45,8 +44,7 @@ data class HomeUiState(
     val groupedCards: Map<String, List<ActivityCard>> = emptyMap(),
     val isLoading:       Boolean                = false,
     val error:           String?                = null,
-    val authUser:        AuthUser?              = null,
-    val showPhonePrompt: Boolean = false
+    val authUser:        AuthUser?              = null
 )
 
 @HiltViewModel
@@ -54,8 +52,7 @@ class HomeViewModel @Inject constructor(
     private val activityRepo: ActivityRepository,
     private val authRepo:     AuthRepository,
     private val customerRepo: CustomerRepository,
-    private val projectRepo:  ProjectRepository,
-    private val apiService:  ApiService
+    private val projectRepo:  ProjectRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(HomeUiState(authUser = authRepo.currentUser()))
@@ -136,12 +133,6 @@ class HomeViewModel @Inject constructor(
             }
             
             try {
-                val resp = apiService.getUserById("eq.$userId")
-                val userDto = resp.body()?.firstOrNull()
-                if (userDto != null && userDto.phoneNumber.isNullOrBlank()) {
-                    _uiState.update { it.copy(showPhonePrompt = true) }
-                }
-
                 // ✅ ทั้ง 4 อย่างเป็นอิสระต่อกัน (คนละตารางคนละ endpoint) รันพร้อมกันแทนรอทีละตัว
                 coroutineScope {
                     awaitAll(
@@ -182,21 +173,6 @@ class HomeViewModel @Inject constructor(
                 _uiState.update { it.copy(error = result.exceptionOrNull()?.message) }
             }
             loadActivities()
-        }
-    }
-
-    fun savePhoneNumber(phone: String) {
-        viewModelScope.launch {
-            try {
-                val userId = authRepo.currentUser()?.userId ?: return@launch
-                val updates = mapOf("phone_number" to phone.trim())
-                val response = apiService.updateUserProfile("eq.$userId", updates)
-                if (response.isSuccessful) {
-                    _uiState.update { it.copy(showPhonePrompt = false) }
-                }
-            } catch (e: Exception) {
-                android.util.Log.e("HomeVM", "Error saving phone: ")
-            }
         }
     }
 }

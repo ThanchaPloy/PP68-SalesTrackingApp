@@ -622,29 +622,20 @@ class ActivityRepository @Inject constructor(
             body.remove("result_id") // แต่ละ version คือแถวใหม่เสมอ ให้ server สร้าง id ให้
             val apiResp = retrySend(idempotent = false, tag = "saveResult") { apiService.insertActivityResultMap(body) }
             if (apiResp.isSuccessful) {
-                val realId = apiResp.body()?.firstOrNull()?.resultId
+                val serverRow = apiResp.body()?.firstOrNull()
+                val realId = serverRow?.resultId
                 if (realId != null && realId != tempId) {
-                    val finalGroupId = previous?.resultGroupId ?: previous?.resultId ?: realId
+                    // trigger generate_result_id ฝั่ง server เป็นเจ้าของ version กับ result_group_id แล้ว
+                    // เพราะค่าที่คำนวณจาก Room ในเครื่องจะผิดทันทีถ้าเครื่องนั้นมองประวัติไม่ครบ
+                    // จึงต้องเอาค่าที่ server คืนมาเท่านั้น ไม่งั้นเครื่องกับ server จะต่างกัน
+                    val finalGroupId = serverRow.resultGroupId ?: previous?.resultGroupId ?: previous?.resultId ?: realId
                     // ✅ ต้อง insert แถว realId ก่อน แล้วค่อยย้ายรูปมาที่ realId แล้วค่อยลบ tempId ทีหลัง
                     // เพราะ activity_result_photo มี FK CASCADE ไปยัง activity_result — ถ้าลบ tempId ก่อน รูปที่ยังผูกกับ tempId จะโดนลบไปด้วย
-                    resultDao.insertResult(localResult.copy(resultId = realId, resultGroupId = finalGroupId, isSynced = true))
+                    resultDao.insertResult(localResult.copy(resultId = realId, version = serverRow.version, resultGroupId = finalGroupId, isSynced = true))
                     photoDao.updateResultId(tempId, realId)
                     resultDao.deleteResultById(tempId)
                     if (photoUrls.isNotEmpty()) {
                         try { apiService.addResultPhotos(photoDao.getPhotosByResultId(realId)) } catch (_: Exception) {}
-                    }
-                    if (previous == null) {
-                        // version แรกสุด — ผูก group id ของตัวเองเข้ากับ realId บน server ด้วย
-                        val backfilled = try {
-                            apiService.updateActivityResult("eq.$realId", mapOf("result_group_id" to realId)).isSuccessful
-                        } catch (_: Exception) { false }
-                        // ถ้าไม่สำเร็จ server จะเหลือ result_group_id เป็น tempId เดิมตลอดไป (ไม่มี
-                        // version ไหนจะ group รวมกับมันได้อีก) — local ถูกต้องแล้ว (finalGroupId) แค่
-                        // mark unsynced ให้ SyncManager ส่ง upsertActivityResult ที่มีค่าถูกไปแก้ซ้ำ
-                        if (!backfilled) {
-                            resultDao.updateSyncStatus(realId, false)
-                            syncManager.scheduleSync()
-                        }
                     }
                 } else {
                     resultDao.updateSyncStatus(tempId, true)
