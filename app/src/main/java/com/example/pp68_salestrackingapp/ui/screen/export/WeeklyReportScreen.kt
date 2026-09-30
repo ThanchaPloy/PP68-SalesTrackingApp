@@ -47,6 +47,7 @@ import org.apache.poi.ss.usermodel.*
 import org.apache.poi.xssf.usermodel.XSSFWorkbook
 import java.io.ByteArrayOutputStream
 import android.graphics.Bitmap
+import android.util.Log
 import android.graphics.BitmapFactory
 
 private val RedReport = Color(0xFFAE2138)
@@ -569,7 +570,109 @@ fun ImagePreviewDialog(imageUrl: String, onDismiss: () -> Unit) {
 }
 
 // หนึ่งบรรทัดที่พร้อมวาด พร้อมความสูงที่มันกิน — เก็บไว้ก่อนเพื่อวัดความสูงแถวได้ล่วงหน้า
-private data class PdfLine(val text: String, val x: Float, val paint: Paint, val lineHeight: Float)
+// bitmap != null = วาดรูปแทนข้อความ ใส่ไว้ในโมเดลเดิมเพราะการคำนวณความสูงแถวกับการขึ้นหน้าใหม่
+// อิง lineHeight อยู่แล้ว รูปจึงถูกนับรวมโดยไม่ต้องแก้ตรรกะพวกนั้นเลย
+internal data class PdfLine(
+    val text: String,
+    val x: Float,
+    val paint: Paint,
+    val lineHeight: Float,
+    val bitmap: Bitmap? = null,
+    // ห้ามให้ตัวแบ่งหน้าตัดหลังบรรทัดนี้ — ใช้กับหัวข้อที่ไร้ความหมายถ้าโดนแยกจากของที่มันพูดถึง
+    val keepWithNext: Boolean = false
+)
+
+// คอลัมน์ผลการขายเริ่มที่ x = 480 และเส้นขอบขวาอยู่ที่ 810 -> กว้างราว 330
+// 3 รูป x 104 + ช่องไฟ = 324 พอดีหนึ่งแถว ส่วนที่เกินขึ้นแถวใหม่เอง
+// หน้าจอบันทึกผลจำกัดไว้ที่ 5 รูปต่อบันทึกอยู่แล้ว ค่านี้จึงครอบคลุมทุกกรณีจริง
+private const val PDF_THUMB_W = 104f
+private const val PDF_THUMB_H = 78f
+private const val PDF_PHOTOS_PER_ROW = 3
+private const val MAX_PDF_PHOTOS = 5
+
+// ขอบบน/ล่างของพื้นที่เนื้อหาในหน้า A4 แนวนอน (สูง 595)
+private const val PDF_PAGE_TOP = 50f
+private const val PDF_PAGE_BOTTOM = 540f
+
+/**
+ * รูปที่อยู่แถวเดียวกันถูกเก็บเป็นหลาย PdfLine โดยตัวที่ไม่ใช่ตัวท้ายมี lineHeight = 0 เพื่อให้วาดที่ y
+ * เดียวกัน ถ้าตัดหน้าคั่นกลางกลุ่มนี้ รูปจะกระจายคนละหน้า จึงต้องมองเป็นก้อนเดียวที่แบ่งไม่ได้
+ */
+internal fun List<PdfLine>.leadingBlockSize(): Int {
+    var n = 0
+    while (n < size && (this[n].lineHeight == 0f || this[n].keepWithNext)) n++
+    return (n + 1).coerceAtMost(size)
+}
+
+internal fun List<PdfLine>.leadingBlockHeight(): Float =
+    take(leadingBlockSize()).sumOf { it.lineHeight.toDouble() }.toFloat()
+
+private fun drawPdfLine(canvas: Canvas, line: PdfLine, cy: Float) {
+    val bmp = line.bitmap
+    when {
+        // drawText ใช้ cy เป็น baseline ส่วน drawBitmap ใช้เป็นขอบบน — วางที่ cy ตรง ๆ
+        // รูปจึงเริ่มใต้บรรทัดข้อความก่อนหน้าพอดี ไม่ทับกัน
+        bmp != null            -> canvas.drawBitmap(bmp, line.x, cy, null)
+        line.text.isNotEmpty() -> canvas.drawText(line.text, line.x, cy, line.paint)
+    }
+}
+
+/**
+ * รูปจากมือถือกว้างระดับ 4000px การ decode เต็มความละเอียดทีละหลายรูปต่อหลายสิบแถวจะ OOM
+ * ก่อนได้ไฟล์ PDF จึงวัดขนาดด้วย inJustDecodeBounds ก่อน แล้วค่อย decode ด้วย inSampleSize
+ */
+private fun decodePdfThumbnail(bytes: ByteArray): Bitmap? = try {
+    val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+    BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+    if (bounds.outWidth <= 0 || bounds.outHeight <= 0) {
+        null
+    } else {
+        var sample = 1
+        while (bounds.outWidth / (sample * 2) >= PDF_THUMB_W && bounds.outHeight / (sample * 2) >= PDF_THUMB_H) {
+            sample *= 2
+        }
+        val decoded = BitmapFactory.decodeByteArray(
+            bytes, 0, bytes.size,
+            BitmapFactory.Options().apply { inSampleSize = sample }
+        )
+        decoded?.let { rotateByExif(bytes, it) }?.let { src ->
+            // คงสัดส่วนเดิม ไม่ยืดให้เต็มกรอบ ไม่งั้นรูปแนวตั้งจะแบนผิดรูป
+            val scale = minOf(PDF_THUMB_W / src.width, PDF_THUMB_H / src.height)
+            Bitmap.createScaledBitmap(
+                src,
+                (src.width * scale).toInt().coerceAtLeast(1),
+                (src.height * scale).toInt().coerceAtLeast(1),
+                true
+            )
+        }
+    }
+} catch (e: Exception) {
+    Log.w("WeeklyReport", "decode รูปสำหรับ PDF ไม่สำเร็จ: ${e.message}")
+    null
+}
+
+/** กล้องมือถือเก็บภาพตามเซ็นเซอร์แล้วบอกมุมหมุนไว้ใน EXIF — ถ้าไม่หมุนตาม รูปจะตะแคงในรายงาน */
+private fun rotateByExif(bytes: ByteArray, bmp: Bitmap): Bitmap = try {
+    val degrees = when (
+        androidx.exifinterface.media.ExifInterface(java.io.ByteArrayInputStream(bytes))
+            .getAttributeInt(
+                androidx.exifinterface.media.ExifInterface.TAG_ORIENTATION,
+                androidx.exifinterface.media.ExifInterface.ORIENTATION_NORMAL
+            )
+    ) {
+        androidx.exifinterface.media.ExifInterface.ORIENTATION_ROTATE_90  -> 90f
+        androidx.exifinterface.media.ExifInterface.ORIENTATION_ROTATE_180 -> 180f
+        androidx.exifinterface.media.ExifInterface.ORIENTATION_ROTATE_270 -> 270f
+        else -> 0f
+    }
+    if (degrees == 0f) bmp
+    else Bitmap.createBitmap(
+        bmp, 0, 0, bmp.width, bmp.height,
+        android.graphics.Matrix().apply { postRotate(degrees) }, true
+    )
+} catch (e: Exception) {
+    bmp
+}
 
 private fun pdfLines(text: String, x: Float, paint: Paint, maxWidth: Float, lineHeight: Float): List<PdfLine> =
     wrapTextLines(text, paint, maxWidth).map { PdfLine(it, x, paint, lineHeight) }
@@ -852,6 +955,23 @@ suspend fun exportToExcel(context: Context, fileName: String, activities: List<E
 }
 
 suspend fun exportToPdf(context: Context, fileName: String, activities: List<ExportActivityItem>) {
+    val file = buildWeeklyPdf(context, fileName, activities)
+
+    val uri    = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+    val intent = Intent(Intent.ACTION_SEND).apply {
+        type = "application/pdf"
+        putExtra(Intent.EXTRA_SUBJECT, fileName)
+        putExtra(Intent.EXTRA_STREAM, uri)
+        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    }
+    context.startActivity(Intent.createChooser(intent, "Share PDF Report"))
+}
+
+/**
+ * สร้างไฟล์ PDF อย่างเดียว ไม่แชร์ — แยกออกมาเพื่อให้เรียกทดสอบได้โดยไม่เด้ง share sheet
+ * (ตัวแชร์ต้องมี Activity context และจะค้างเมื่อรันในเทสต์)
+ */
+internal suspend fun buildWeeklyPdf(context: Context, fileName: String, activities: List<ExportActivityItem>): File {
     val doc         = PdfDocument()
     val paint       = Paint()
     val titlePaint  = Paint().apply { textSize = 18f; isFakeBoldText = true }
@@ -870,18 +990,7 @@ suspend fun exportToPdf(context: Context, fileName: String, activities: List<Exp
     var pageInfo = PdfDocument.PageInfo.Builder(842, 595, pageNum).create()
     var page     = doc.startPage(pageInfo)
     var canvas: Canvas = page.canvas
-    var y = 50f
-
-    val checkPageBreak: (Float) -> Unit = { neededHeight ->
-        if (y + neededHeight > 540f) {
-            doc.finishPage(page)
-            pageNum++
-            pageInfo = PdfDocument.PageInfo.Builder(842, 595, pageNum).create()
-            page     = doc.startPage(pageInfo)
-            canvas   = page.canvas
-            y        = 50f
-        }
-    }
+    var y = PDF_PAGE_TOP
 
     canvas.drawText("Weekly Performance Report (Landscape)", 30f, y, titlePaint); y += 35f
     canvas.drawText("Date", 30f, y, headerPaint)
@@ -946,7 +1055,36 @@ suspend fun exportToPdf(context: Context, fileName: String, activities: List<Exp
                     }
                     if (res.photoUrls.isNotEmpty()) {
                         add(PdfLine("", 480f, subPaint, 6f))
-                        add(PdfLine("มีรูปภาพแนบ ${res.photoUrls.size} รูป (กรุณาดูในรายงาน Excel)", 480f, subPaint, 13f))
+                        val thumbs = res.photoUrls.take(MAX_PDF_PHOTOS).mapNotNull { url ->
+                            getPhotoBytes(context, url)?.let { decodePdfThumbnail(it) }
+                        }
+                        if (thumbs.isEmpty()) {
+                            // โหลดรูปไม่ได้จริง ๆ (ออฟไลน์ หรือ token หมดอายุ) — บอกตามตรง
+                            // ดีกว่าปล่อยช่องว่างไว้ให้เดาว่าไม่มีรูปหรือระบบพัง
+                            add(PdfLine("มีรูปภาพแนบ ${res.photoUrls.size} รูป (โหลดรูปไม่สำเร็จ)", 480f, subPaint, 13f))
+                        } else {
+                            // ผูกหัวข้อกับแถวรูปแรก ไม่งั้นหัวข้อค้างท้ายหน้าแล้วรูปไปโผล่หน้าถัดไป
+                            add(PdfLine("รูปถ่ายยืนยัน (${res.photoUrls.size} รูป):", 480f, subPaint, 13f, keepWithNext = true))
+                            // รูปในแถวเดียวกันต้องวาดที่ y เดียวกัน จึงให้ทุกตัวยกเว้นตัวสุดท้ายมี
+                            // lineHeight = 0 แล้วให้ตัวสุดท้ายเป็นตัวดันบรรทัดลงทั้งแถว
+                            thumbs.chunked(PDF_PHOTOS_PER_ROW).forEach { rowThumbs ->
+                                val rowH = rowThumbs.maxOf { it.height }.toFloat()
+                                rowThumbs.forEachIndexed { i, bmp ->
+                                    add(
+                                        PdfLine(
+                                            text = "",
+                                            x = 480f + i * (PDF_THUMB_W + 6f),
+                                            paint = subPaint,
+                                            lineHeight = if (i == rowThumbs.lastIndex) rowH + 6f else 0f,
+                                            bitmap = bmp
+                                        )
+                                    )
+                                }
+                            }
+                            if (res.photoUrls.size > thumbs.size) {
+                                add(PdfLine("(อีก ${res.photoUrls.size - thumbs.size} รูป ดูได้ในรายงาน Excel)", 480f, subPaint, 13f))
+                            }
+                        }
                     }
                     add(PdfLine("", 480f, subPaint, 6f))
                 }
@@ -957,20 +1095,54 @@ suspend fun exportToPdf(context: Context, fileName: String, activities: List<Exp
             }
         }
 
-        val rowHeight = listOf(col2, col3, col4).maxOf { col -> col.sumOf { it.lineHeight.toDouble() } }.toFloat()
-        // ponytail: แถวที่สูงเกินหนึ่งหน้ายังล้นอยู่ — ถ้าเจอสรุปยาวขนาดนั้นจริงค่อยทำให้แถวไหลข้ามหน้าได้
-        checkPageBreak(rowHeight + 8f)
+        // วาดแถวแบบไหลข้ามหน้าได้ — เดิมวัดความสูงทั้งแถวแล้วขึ้นหน้าใหม่ถ้าที่ไม่พอ ซึ่งช่วยได้เฉพาะ
+        // แถวที่ "สูงไม่เกินหนึ่งหน้า" แถวที่สูงกว่านั้น (ผลหลายรายการ หรือมีรูป) จะถูกวาดทะลุขอบล่าง
+        // แล้วหายไปเงียบ ๆ ตอนนี้ตัดเป็นช่วงตามที่ว่างจริงของแต่ละหน้า และตัดทั้งสามคอลัมน์ที่เส้นเดียวกัน
+        val queues = listOf(col2, col3, col4).map { ArrayDeque(it) }
+        var segment = 0
 
-        canvas.drawText(item.date.take(10), 30f, y, bodyPaint)
-        listOf(col2, col3, col4).forEach { col ->
-            var cy = y
-            col.forEach { line ->
-                if (line.text.isNotEmpty()) canvas.drawText(line.text, line.x, cy, line.paint)
-                cy += line.lineHeight
+        while (true) {
+            val available = PDF_PAGE_BOTTOM - y
+            var used = 0f
+
+            queues.forEach { queue ->
+                var cy = y
+                while (queue.isNotEmpty()) {
+                    // อยู่ต้นหน้าใหม่แล้วยังไม่พอ = ก้อนนี้สูงเกินหนึ่งหน้าจริง ๆ ขึ้นหน้าใหม่กี่ครั้งก็ไม่ช่วย
+                    // ต้องยอมวาดทะลุเพื่อให้คืบหน้า ไม่งั้นจะวนขึ้นหน้าใหม่ไม่รู้จบ
+                    val atFreshPage = y <= PDF_PAGE_TOP && cy == y
+                    if ((cy - y) + queue.leadingBlockHeight() > available && !atFreshPage) break
+                    repeat(queue.leadingBlockSize()) {
+                        val line = queue.removeFirst()
+                        drawPdfLine(canvas, line, cy)
+                        cy += line.lineHeight
+                    }
+                }
+                used = maxOf(used, cy - y)
             }
+
+            // เขียนวันที่หลังรู้แล้วว่าช่วงนี้วาดอะไรลงไปจริง ไม่งั้นช่วงที่ไม่มีอะไรพอจะใส่
+            // จะเหลือวันที่โดดอยู่ท้ายหน้าเปล่า ๆ  ส่วนที่ไหลต่อหน้าถัดไปต้องมีวันที่กำกับด้วย
+            // ไม่งั้นเปิดดูเฉพาะหน้ากลางจะไม่รู้ว่าเป็นของวันไหน
+            if (used > 0f) {
+                val dateLabel =
+                    if (segment == 0) item.date.take(10) else "${item.date.take(10)} (ต่อ)"
+                canvas.drawText(dateLabel, 30f, y, bodyPaint)
+                segment++
+            }
+
+            y += used
+            if (queues.all { it.isEmpty() }) break
+
+            doc.finishPage(page)
+            pageNum++
+            pageInfo = PdfDocument.PageInfo.Builder(842, 595, pageNum).create()
+            page     = doc.startPage(pageInfo)
+            canvas   = page.canvas
+            y        = PDF_PAGE_TOP
         }
 
-        y += rowHeight + 8f
+        y += 8f
         canvas.drawLine(30f, y, 810f, y, Paint().apply { strokeWidth = 0.5f; color = android.graphics.Color.LTGRAY })
         y += 14f
     }
@@ -979,15 +1151,7 @@ suspend fun exportToPdf(context: Context, fileName: String, activities: List<Exp
     val file = File(context.cacheDir, "$fileName.pdf")
     doc.writeTo(FileOutputStream(file))
     doc.close()
-
-    val uri    = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
-    val intent = Intent(Intent.ACTION_SEND).apply {
-        type = "application/pdf"
-        putExtra(Intent.EXTRA_SUBJECT, fileName)
-        putExtra(Intent.EXTRA_STREAM, uri)
-        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-    }
-    context.startActivity(Intent.createChooser(intent, "Share PDF Report"))
+    return file
 }
 
 @Preview(showBackground = true)
