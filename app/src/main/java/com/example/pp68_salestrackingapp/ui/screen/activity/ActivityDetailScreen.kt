@@ -188,9 +188,13 @@ fun ActivityDetailContent(
                         }
                     } else {
                         s.planItems.forEach { item ->
-                            val isCompleted = s.activity?.status == "completed"
-                            val canToggle = s.activity?.status == "planned" ||
-                                    s.activity?.status == "checked_in"
+                            // ใช้ effectiveStatus ให้ตรงกับที่ปุ่มด้านล่างใช้ — เดิมไฟล์นี้ใช้สองมาตรฐานปนกัน
+                            // นัดที่ขาดไปรวมอยู่ในชุดที่ติ๊กได้โดยตั้งใจ — กติกาเดียวกับที่ไม่ล็อกการบันทึกผล
+                            // (แผนที่ขาดต้องบันทึกย้อนหลังได้) เดิมมันทำงานได้เพราะสถานะดิบยังเป็น planned โดยบังเอิญ
+                            val isCompleted = effectiveStatus == "completed"
+                            val canToggle = effectiveStatus == "planned" ||
+                                    effectiveStatus == "checked_in" ||
+                                    effectiveStatus == com.example.pp68_salestrackingapp.utils.AppointmentStatus.MISSING
 
                             Row(
                                 modifier = Modifier

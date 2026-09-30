@@ -114,6 +114,8 @@ fun CheckInScreen(
             },
             confirmButton = {
                 TextButton(
+                    // GPS หลุดระหว่างเปิด dialog = ปุ่มต้องกดไม่ได้ ไม่ใช่กดได้แต่เงียบ
+                    enabled = currentLat != null && currentLng != null,
                     onClick = {
                         if (currentLat != null && currentLng != null) {
                             viewModel.confirmCheckin(currentLat!!, currentLng!!)
@@ -320,7 +322,8 @@ fun CheckInContent(
                         modifier = Modifier.fillMaxWidth().height(56.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = RedPrimary),
                         shape = RoundedCornerShape(14.dp),
-                        enabled = currentLat != null && !uiState.isCheckingIn
+                        // ต้องตรงกับเงื่อนไขใน onClick เป๊ะ — ถ้าเปิดปุ่มกว้างกว่า ผู้ใช้จะกดได้แต่ไม่เกิดอะไรขึ้น
+                        enabled = currentLat != null && currentLng != null && !uiState.isCheckingIn
                     ) {
                         if (uiState.isCheckingIn) CircularProgressIndicator(color = White, modifier = Modifier.size(24.dp))
                         else Text("ยืนยันการเช็คอิน", fontWeight = FontWeight.Bold, fontSize = 16.sp)
