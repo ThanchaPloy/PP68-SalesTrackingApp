@@ -1143,8 +1143,19 @@ internal suspend fun buildWeeklyPdf(context: Context, fileName: String, activiti
         }
 
         y += 8f
-        canvas.drawLine(30f, y, 810f, y, Paint().apply { strokeWidth = 0.5f; color = android.graphics.Color.LTGRAY })
-        y += 14f
+        // แถวที่จบลงพอดีขอบล่างจะทำให้เส้นคั่นถูกวาดพ้นหน้ากระดาษไปเฉย ๆ (มองไม่เห็น) และแถวถัดไป
+        // เริ่มที่ y เกินขอบ ทำให้เสียรอบวนไปหนึ่งครั้งก่อนจะขึ้นหน้าใหม่ — ขึ้นหน้าใหม่ตรงนี้เลยดีกว่า
+        if (y + 14f > PDF_PAGE_BOTTOM) {
+            doc.finishPage(page)
+            pageNum++
+            pageInfo = PdfDocument.PageInfo.Builder(842, 595, pageNum).create()
+            page     = doc.startPage(pageInfo)
+            canvas   = page.canvas
+            y        = PDF_PAGE_TOP
+        } else {
+            canvas.drawLine(30f, y, 810f, y, Paint().apply { strokeWidth = 0.5f; color = android.graphics.Color.LTGRAY })
+            y += 14f
+        }
     }
     doc.finishPage(page)
 

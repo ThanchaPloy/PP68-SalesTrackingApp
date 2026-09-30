@@ -62,7 +62,9 @@ object NetworkModule {
 
     // Only serialize fields that have @SerializedName — local-only Room fields (isSynced,
     // projectName, companyName, etc.) have no @SerializedName and must not reach PostgREST.
-    private val gson = GsonBuilder()
+    // internal เพื่อให้เทสต์ยิง gson ตัวเดียวกับที่ Retrofit ใช้จริง — ถ้าเทสต์สร้าง Gson ของตัวเอง
+    // มันจะไม่ได้ทดสอบ adapter ตัวจริงเลย กลายเป็นเทสต์ที่ผ่านแต่ไม่กันอะไร
+    internal val gson = GsonBuilder()
         .addSerializationExclusionStrategy(object : ExclusionStrategy {
             override fun shouldSkipField(f: FieldAttributes) =
                 f.getAnnotation(SerializedName::class.java) == null

@@ -73,15 +73,24 @@ class CustomerRepository @Inject constructor(
                 }
 
                 // 2. Fetch branch team member customers in background to enrich local database
+                var branchFetchOk = branchId.isBlank() // ไม่มีสาขาให้ดึง = ไม่ถือว่าพลาด
                 if (branchId.isNotBlank()) {
                     val custResp = authService.getCustomers(branchId = "eq.$branchId", limit = 5000)
                     if (custResp.isSuccessful && custResp.body() != null) {
                         customers.addAll(custResp.body()!!.map { it.copy(isSynced = true) })
+                        branchFetchOk = true
                     }
                 }
 
                 val deduped = customers.distinctBy { it.custId }.map { it.copy(isSynced = true) }
-                if (deduped.isNotEmpty()) customerDao.clearAndInsert(deduped)
+                if (deduped.isNotEmpty()) {
+                    // ✅ clearAndInsert = "รายการนี้คือทั้งหมดที่มี" ซึ่งจริงเฉพาะตอนที่ดึงครบทั้งสองรอบ
+                    // ถ้ารอบสอง (ทั้งสาขา) พัง เราจะเหลือแค่ลูกค้าของตัวเอง แล้วการล้างทิ้งจะลบลูกค้า
+                    // ของเพื่อนร่วมสาขาที่แคชไว้รอบก่อนหายไปหมด ทั้งที่ไม่มีอะไรบอกว่ามันถูกลบจริง
+                    // — merge แทน แล้วรอให้รอบถัดไปที่สำเร็จครบเป็นคนล้างของที่ไม่มีแล้วออก
+                    if (branchFetchOk) customerDao.clearAndInsert(deduped)
+                    else customerDao.insertCustomers(deduped)
+                }
                 kotlin.Result.success(Unit)
             } catch (e: IOException) {
                 kotlin.Result.success(Unit) // offline — Room data still valid
