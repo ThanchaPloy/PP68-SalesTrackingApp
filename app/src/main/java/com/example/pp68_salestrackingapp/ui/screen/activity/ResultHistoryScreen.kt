@@ -107,7 +107,12 @@ private fun VersionCard(item: ResultVersionItem, onClick: () -> Unit) {
             }
             if (!item.newStatus.isNullOrBlank()) {
                 Spacer(Modifier.height(6.dp))
-                Text("สถานะใหม่: ${item.newStatus}", fontSize = 13.sp, color = TextDark, fontWeight = FontWeight.Medium)
+                // แสดงชื่อจาก master ไม่ใช่รหัสดิบ — วันนี้สองค่าเท่ากัน แต่ถ้าแอดมินเปลี่ยนชื่อ
+                // สถานะทีหลัง หน้านี้จะค้างรหัสเก่าอยู่คนละอย่างกับที่อื่นในแอป
+                Text(
+                    "สถานะใหม่: " + com.example.pp68_salestrackingapp.utils.ProjectStages.labelFor(item.newStatus),
+                    fontSize = 13.sp, color = TextDark, fontWeight = FontWeight.Medium
+                )
             }
             if (!item.summary.isNullOrBlank()) {
                 Spacer(Modifier.height(4.dp))

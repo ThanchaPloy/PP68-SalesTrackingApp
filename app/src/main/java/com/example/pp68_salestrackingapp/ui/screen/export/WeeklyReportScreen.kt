@@ -457,7 +457,7 @@ private fun PostSalesResultDetailCard(
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 if (!detail.newStatus.isNullOrBlank()) {
-                    item { DetailChip(label = "สถานะใหม่: ${detail.newStatus}", color = Color(0xFFE3F2FD), textColor = Color(0xFF1565C0)) } // สถานะใหม่
+                    item { DetailChip(label = "สถานะใหม่: " + com.example.pp68_salestrackingapp.utils.ProjectStages.labelFor(detail.newStatus), color = Color(0xFFE3F2FD), textColor = Color(0xFF1565C0)) } // สถานะใหม่
                 }
                 if (!detail.opportunityScore.isNullOrBlank()) {
                     item { DetailChip(label = "โอกาส: ${detail.opportunityScore}", color = Color(0xFFFFF8E1), textColor = Color(0xFFF57F17)) } // โอกาส
