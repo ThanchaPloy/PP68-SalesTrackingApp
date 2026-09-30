@@ -33,7 +33,12 @@ object DatabaseModule {
             AppDatabase::class.java,
             "sales_tracking_db"
         )
-            .fallbackToDestructiveMigration()
+            // ✅ เดิมเป็น fallbackToDestructiveMigration() เปล่า ๆ = ถ้าใครขยับ version โดยไม่เขียน
+            // Migration คู่กัน (CLAUDE.md เตือนไว้ว่าเคยเกิด) Room จะ "ล้าง DB ทั้งก้อนแบบเงียบ ๆ"
+            // รวมงานที่ยังไม่ได้ซิงค์ขึ้น server ด้วย ผู้ใช้ไม่รู้ตัวและกู้ไม่ได้เลย
+            // จำกัดให้ล้างได้เฉพาะ DB เก่ากว่าต้นสาย migration (28) ซึ่งไม่มีทางกู้อยู่แล้ว —
+            // ส่วนกรณีลืมเขียน migration จะกลายเป็น crash ตอนเปิดแอป เจอในเทสต์ทันที ไม่ใช่ข้อมูลหาย
+            .fallbackToDestructiveMigrationFrom(*IntArray(27) { it + 1 })
             .addMigrations(
                 AppDatabase.MIGRATION_28_29,
                 AppDatabase.MIGRATION_29_30,

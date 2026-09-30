@@ -16,6 +16,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.util.Collections
 import java.util.concurrent.TimeUnit
@@ -171,7 +172,15 @@ class SyncManager @Inject constructor(
     suspend fun rejectedSummary(): List<com.example.pp68_salestrackingapp.data.model.SyncRejection> =
         withContext(Dispatchers.IO) { runCatching { syncRejectionDao.getAll() }.getOrDefault(emptyList()) }
 
-    internal suspend fun doSync() {
+    // ✅ doSync ถูกยิงจากสามทางที่ทับกันได้จริง: MainActivity.runSyncNow ทุกครั้งที่เปิดแอป,
+    // SyncWorker ของ WorkManager และ AuthRepository ตอน login/logout ถ้าสองรอบวนแถว TEMP- ชุดเดียวกัน
+    // พร้อมกัน ทั้งคู่จะ POST แถวเดิม = ข้อมูลซ้ำบน server (ต้นเหตุเดียวกับ duplicate key ที่เคยเจอ)
+    // ใช้ withLock ไม่ใช่ tryLock เพราะ AuthRepository เรียกแล้วต้องได้ผลจริงก่อน logout
+    private val syncMutex = kotlinx.coroutines.sync.Mutex()
+
+    internal suspend fun doSync() = syncMutex.withLock { doSyncLocked() }
+
+    private suspend fun doSyncLocked() {
         Log.d("SyncManager", "Starting sync...")
         tokenManager.getUserData()?.userId?.let { userId ->
             try { apiService.setAppContext(mapOf("user_id" to userId)) } catch (_: Exception) {}
@@ -369,23 +378,22 @@ class SyncManager @Inject constructor(
                     ).filterValues { it != null }
                     val response = apiService.addActivityMap(body)
                     noteOutcome("activity", activity.activityId, response.isSuccessful, response.code())
-                    if (response.isSuccessful) {
-                        val realId = response.body()?.firstOrNull()?.activityId
-                        val finalId = realId ?: activity.activityId
-                        if (realId != null && realId != activity.activityId) {
-                            activityDao.insertActivity(activity.copy(activityId = realId, isSynced = true))
+                    // ✅ ถ้าไม่ได้ realId กลับมา ห้าม mark synced เด็ดขาด ปล่อยให้ลองใหม่รอบถัดไป
+                    val realId = if (response.isSuccessful) response.body()?.firstOrNull()?.activityId else null
+                    if (realId != null) {
+                        if (realId != activity.activityId) {
+                            activityDao.insertActivity(activity.copy(activityId = realId, isSynced = false))
                             appointmentContactDao.updateAppointmentId(activity.activityId, realId)
                             planItemDao.updateAppointmentId(activity.activityId, realId)
                             activityDao.deleteActivityById(activity.activityId)
+                            // alarm ถูกตั้งไว้ด้วย requestCode ที่คำนวณจาก TEMP- id — ถ้าไม่ย้ายมาที่ id จริง
+                            // จะยกเลิกไม่ได้อีกเลย (เตือนต่อแม้ลบนัดหมายไปแล้ว) และกดแจ้งเตือนจะ deep link
+                            // ไปหา id ที่ไม่มีอยู่ ส่วนการแก้เวลานัดก็จะไปตั้งซ้ำใต้ id ใหม่ กลายเป็นเตือนสองครั้ง
+                            moveAlarmToRealId(activity, realId)
                         }
-                        // ✅ ถ้าไม่ได้ realId กลับมา ห้าม mark synced เด็ดขาด ปล่อยให้ลองใหม่รอบถัดไป
-                        val contacts = appointmentContactDao.getContactsByAppointmentId(finalId)
-                        if (contacts.isNotEmpty()) {
-                            try {
-                                apiService.deleteAppointmentContacts("eq.$finalId")
-                                apiService.addAppointmentContacts(contacts)
-                            } catch (_: Exception) {}
-                        }
+                        // ผู้เข้าร่วมต้อง "ขึ้นสำเร็จด้วย" ถึงจะนับว่านัดหมายนี้ซิงค์แล้ว ไม่งั้นรายชื่อหายเงียบ
+                        // ตอนนี้แถวมี id จริงแล้ว รอบหน้าจะเข้าเส้น PATCH ไม่ใช่ POST ซ้ำ
+                        activityDao.updateSyncStatus(realId, pushAppointmentContacts(realId))
                     }
                 } else {
                     val patchBody = buildMap<String, Any> {
@@ -415,7 +423,10 @@ class SyncManager @Inject constructor(
                     val response = apiService.updateActivity("eq.${activity.activityId}", patchBody)
                     noteOutcome("activity", activity.activityId, response.isSuccessful, response.code())
                     if (response.isSuccessful && response.body()?.isNotEmpty() == true) {
-                        activityDao.updateSyncStatus(activity.activityId, true)
+                        // ✅ เส้นนี้เดิมไม่ส่งผู้เข้าร่วมเลย — แก้รายชื่อผู้เข้าร่วมตอนออฟไลน์แล้วรอบนี้
+                        // PATCH ผ่านแค่ฟิลด์อื่น จะถูก mark synced ทั้งที่ appointment_contact
+                        // ไม่เคยถูกส่งขึ้นไป (ตารางนี้ไม่มี is_synced ของตัวเอง จึงไม่มีใครมาเก็บให้ทีหลัง)
+                        activityDao.updateSyncStatus(activity.activityId, pushAppointmentContacts(activity.activityId))
                     }
                 }
             } catch (e: Exception) {
@@ -492,6 +503,43 @@ class SyncManager @Inject constructor(
         }
 
         Log.d("SyncManager", "Sync finished")
+    }
+
+    /**
+     * ส่งผู้เข้าร่วมทั้งชุดของนัดหมายหนึ่ง — คืน true เมื่อฝั่ง server ตรงกับในเครื่องแล้ว
+     *
+     * ต้องยิง delete เสมอแม้ในเครื่องไม่เหลือผู้เข้าร่วมแล้ว ไม่งั้นการลบออกจนหมดจะไม่ถูกส่งขึ้นไป
+     * แล้ว sync รอบถัดไปจะดึงรายชื่อเก่ากลับลงมา (บั๊กเดียวกับที่ saveAppointmentContacts เคยมี)
+     */
+    private suspend fun pushAppointmentContacts(appointmentId: String): Boolean {
+        return try {
+            val contacts = appointmentContactDao.getContactsByAppointmentId(appointmentId)
+            val deleted = apiService.deleteAppointmentContacts("eq.$appointmentId")
+            if (!deleted.isSuccessful) return false
+            if (contacts.isEmpty()) return true
+            apiService.addAppointmentContacts(contacts).isSuccessful
+        } catch (e: Exception) {
+            Log.e("SyncManager", "Failed to sync appointment contacts for $appointmentId: ${e.message}")
+            false
+        }
+    }
+
+    // ย้าย alarm ที่ตั้งไว้ใต้ TEMP- id มาอยู่ใต้ id จริงหลังซิงค์สำเร็จ — requestCode คำนวณจาก
+    // activityId จึงต้องยกเลิกของเดิมแล้วตั้งใหม่ ไม่ใช่แค่ตั้งใหม่ ไม่งั้นได้สองชุดซ้อนกัน
+    private fun moveAlarmToRealId(activity: com.example.pp68_salestrackingapp.data.model.SalesActivity, realId: String) {
+        runCatching {
+            val scheduler = AppointmentAlarmScheduler(context)
+            scheduler.cancelAlarm(activity.activityId)
+            if (activity.isAppointment) {
+                scheduler.scheduleAlarm(
+                    activityId      = realId,
+                    companyName     = activity.companyName ?: "สถานที่นัดหมาย",
+                    topic           = activity.detail ?: "นัดหมายพบลูกค้า",
+                    plannedDateStr  = activity.activityDate,
+                    plannedTimeStr  = activity.plannedTime ?: ""
+                )
+            }
+        }
     }
 
     /**

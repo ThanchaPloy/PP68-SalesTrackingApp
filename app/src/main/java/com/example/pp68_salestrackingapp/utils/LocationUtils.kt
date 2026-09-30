@@ -13,6 +13,8 @@ import android.os.Looper
 // onError: เรียกทุกครั้งที่หาพิกัดไม่ได้เลย (ปิด location service ทั้งเครื่อง/ไม่เคยมีพิกัดแคชไว้)
 // ไม่งั้นผู้เรียกไม่มีทางรู้เลยว่าควรเลิกรอ onResult แล้ว — เดิม optional เพื่อไม่กระทบจุดเรียกอื่น
 // ที่ยังไม่ได้ผูก error handling ไว้
+private const val SINGLE_UPDATE_TIMEOUT_MS = 20_000L
+
 @SuppressLint("MissingPermission")
 fun fetchCurrentLocation(context: Context, onError: (() -> Unit)? = null, onResult: (Double, Double) -> Unit) {
     val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as? LocationManager
@@ -45,9 +47,23 @@ fun fetchCurrentLocation(context: Context, onError: (() -> Unit)? = null, onResu
         if (lastKnown != null) {
             onResult(lastKnown.latitude, lastKnown.longitude)
         } else {
-            locationManager.requestSingleUpdate(provider, { location ->
+            // requestSingleUpdate ไม่รับประกันว่าจะ callback — ในอาคาร/GPS จับดาวเทียมไม่ได้
+            // มันเงียบไปเลย ผู้เรียกจะค้างหมุนรอตลอดโดยไม่มี onError ให้เลิกรอ (เส้นนี้ยังใช้จริง
+            // เพราะ minSdk = 26 ส่วน API 30+ ไปใช้ getCurrentLocation ที่มี timeout ให้อยู่แล้ว)
+            var settled = false
+            val listener = android.location.LocationListener { location ->
+                if (settled) return@LocationListener
+                settled = true
                 onResult(location.latitude, location.longitude)
-            }, Looper.getMainLooper())
+            }
+            locationManager.requestSingleUpdate(provider, listener, Looper.getMainLooper())
+            android.os.Handler(Looper.getMainLooper()).postDelayed({
+                if (!settled) {
+                    settled = true
+                    runCatching { locationManager.removeUpdates(listener) }
+                    onError?.invoke()
+                }
+            }, SINGLE_UPDATE_TIMEOUT_MS)
         }
     }
 }

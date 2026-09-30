@@ -132,6 +132,9 @@ object NetworkModule {
         val logging = HttpLoggingInterceptor().apply {
             level = if (BuildConfig.DEBUG) HttpLoggingInterceptor.Level.BODY
                     else HttpLoggingInterceptor.Level.NONE
+            // ✅ Level.BODY log ทุก header รวม Authorization — APK debug ถูกแจกให้ทีมทดสอบใช้จริง
+            // ใครต่อ USB ดู logcat ก็ได้ JWT ของคนอื่นไปใช้ต่อได้เลย (อายุ token 168 ชั่วโมง)
+            redactHeader("Authorization")
         }
         return OkHttpClient.Builder()
             .addInterceptor(logging)

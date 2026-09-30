@@ -112,6 +112,63 @@ class SyncManagerTest {
         coVerify(exactly = 0) { syncRejectionDao.upsert(match { it.entityId == "C-500" }) }
     }
 
+    private fun appointment(id: String) = com.example.pp68_salestrackingapp.data.model.SalesActivity(
+        activityId = id, userId = "U1", activityType = "onsite",
+        activityDate = "2026-04-01", status = "planned", isSynced = false
+    )
+
+    // appointment_contact ไม่มี is_synced ของตัวเอง ตัวที่พาให้ส่งซ้ำได้คือธง is_synced ของนัดหมายแม่
+    // ถ้า mark synced ทั้งที่รายชื่อยังไม่ขึ้น จะไม่มีใครมาเก็บให้อีกเลย แล้วหายตอน login รอบหน้า
+    @Test
+    fun `an appointment is not marked synced while its attendee list still fails to upload`() = runTest {
+        coEvery { activityDao.getUnsyncedActivities() } returns listOf(appointment("APT-1"))
+        coEvery { apiService.updateActivity("eq.APT-1", any()) } returns
+            Response.success(listOf(appointment("APT-1")))
+        coEvery { appointmentContactDao.getContactsByAppointmentId("APT-1") } returns emptyList()
+        coEvery { apiService.deleteAppointmentContacts("eq.APT-1") } returns
+            Response.error(500, "".toResponseBody(null))
+
+        sync.doSync()
+
+        coVerify(exactly = 1) { activityDao.updateSyncStatus("APT-1", false) }
+        coVerify(exactly = 0) { activityDao.updateSyncStatus("APT-1", true) }
+    }
+
+    // แก้รายชื่อผู้เข้าร่วมตอนออฟไลน์ เดิมเส้น PATCH ไม่ส่ง appointment_contact เลยสักครั้ง
+    @Test
+    fun `patching an appointment pushes its attendee list too`() = runTest {
+        val contacts = listOf(com.example.pp68_salestrackingapp.data.model.AppointmentContact("APT-1", "CT-9"))
+        coEvery { activityDao.getUnsyncedActivities() } returns listOf(appointment("APT-1"))
+        coEvery { apiService.updateActivity("eq.APT-1", any()) } returns
+            Response.success(listOf(appointment("APT-1")))
+        coEvery { appointmentContactDao.getContactsByAppointmentId("APT-1") } returns contacts
+        coEvery { apiService.deleteAppointmentContacts("eq.APT-1") } returns Response.success(Unit)
+        coEvery { apiService.addAppointmentContacts(any()) } returns Response.success(Unit)
+
+        sync.doSync()
+
+        coVerifyOrder {
+            apiService.deleteAppointmentContacts("eq.APT-1")
+            apiService.addAppointmentContacts(match { it.size == 1 && it.first().contactId == "CT-9" })
+        }
+        coVerify(exactly = 1) { activityDao.updateSyncStatus("APT-1", true) }
+    }
+
+    // ลบผู้เข้าร่วมออกจนหมดก็ต้องส่งคำสั่งลบขึ้นไป เหมือนฝั่งผู้ติดต่อโครงการ
+    @Test
+    fun `clearing every attendee still issues the server-side delete`() = runTest {
+        coEvery { activityDao.getUnsyncedActivities() } returns listOf(appointment("APT-1"))
+        coEvery { apiService.updateActivity("eq.APT-1", any()) } returns
+            Response.success(listOf(appointment("APT-1")))
+        coEvery { appointmentContactDao.getContactsByAppointmentId("APT-1") } returns emptyList()
+        coEvery { apiService.deleteAppointmentContacts("eq.APT-1") } returns Response.success(Unit)
+
+        sync.doSync()
+
+        coVerify(exactly = 1) { apiService.deleteAppointmentContacts("eq.APT-1") }
+        coVerify(exactly = 0) { apiService.addAppointmentContacts(any()) }
+    }
+
     // ต้นเหตุถูกแก้แล้ว (แอดมินให้สิทธิ์เพิ่ม) แถวต้องหลุดจากรายการที่จะเตือนตอน logout
     @Test
     fun `a successful sync clears an earlier rejection`() = runTest {

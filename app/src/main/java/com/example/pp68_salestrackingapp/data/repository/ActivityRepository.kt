@@ -828,7 +828,14 @@ class ActivityRepository @Inject constructor(
                 try {
                     apiService.deleteAppointmentContacts("eq.$appointmentId")
                     if (items.isNotEmpty()) apiService.addAppointmentContacts(items)
-                } catch (_: IOException) { /* offline — skip, contacts saved locally */ }
+                } catch (_: IOException) {
+                    // ✅ Room เก็บรายชื่อใหม่ไว้แล้ว แต่ appointment_contact ไม่มี is_synced ของตัวเอง
+                    // และ outbox วนเฉพาะนัดหมายที่ is_synced = 0 — ถ้าไม่ปักธงตรงนี้ การแก้ผู้เข้าร่วม
+                    // ตอนออฟไลน์จะไม่มีวันถูกอัปขึ้น server เลย แล้วหายถาวรตอน login รอบหน้าที่ล้าง DB
+                    // (saveProjectContacts กันไว้แบบเดียวกันอยู่แล้ว ฝั่งนัดหมายเดิมตกไป)
+                    activityDao.updateSyncStatus(appointmentId, false)
+                    syncManager.scheduleSync()
+                }
             }
         }
     }
