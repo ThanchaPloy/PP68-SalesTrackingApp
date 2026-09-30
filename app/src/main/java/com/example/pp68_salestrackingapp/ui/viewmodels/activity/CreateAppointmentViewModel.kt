@@ -337,9 +337,10 @@ class CreateAppointmentViewModel @Inject constructor(
                 companyName = s.quickAddCompanyName.trim(),
                 custType = s.quickAddCustType,
                 createdBy = user?.userId,
-                // ⚠️ ตรงนี้เขียน "รหัสสาขาของเซลส์" ลงช่องที่ ERP ใช้เก็บ "เทียร์ของลูกค้า" — คนละความหมายกัน
-                // ค่านี้ไปโผล่ที่ BizGroupBadge และชิปกรอง R/W/I/P รอตัดสินว่าควรใส่อะไรแทน (ส่วนสาขาจริงมาจากสาขาของเซลส์ฝั่ง backend อยู่แล้ว)
-                bizPostingGroup = user?.teamId,
+                // ไม่ตั้ง bizPostingGroup โดยตั้งใจ — มันคือเทียร์ลูกค้าที่ MS Dynamics 365 เป็นเจ้าของ
+                // เดิมใส่รหัสสาขาของเซลส์ลงไป ทำให้ป้าย BizGroupBadge แสดงรหัสสาขาแทนเทียร์
+                // และชิปกรอง R/W/I/P กรองลูกค้ากลุ่มนี้ไม่เจอ — ปล่อย null ให้ ERP เติม
+                // (body ทั้ง create และ update มี filterValues ตัด null ทิ้ง จึงไม่ไปล้างค่าเดิมบน server)
                 isLead = true
             )
             customerRepo.addCustomer(newCust).fold(
