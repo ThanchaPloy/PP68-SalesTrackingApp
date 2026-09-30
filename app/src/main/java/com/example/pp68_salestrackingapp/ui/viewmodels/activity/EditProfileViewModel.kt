@@ -72,7 +72,10 @@ class EditProfileViewModel @Inject constructor(
             try {
                 val user = authRepo.currentUser()
                 if (user == null) {
-                    _uiState.update { it.copy(isLoading = false) }
+                    // เดิมจบเงียบ — สปินเนอร์หยุดแล้วไม่มีอะไรเกิดขึ้น ผู้ใช้ไม่รู้ว่าต้องทำอะไรต่อ
+                    _uiState.update {
+                        it.copy(isLoading = false, error = "ไม่พบข้อมูลผู้ใช้ กรุณาเข้าสู่ระบบใหม่")
+                    }
                     return@launch
                 }
                 val userId = user.userId
@@ -105,8 +108,14 @@ class EditProfileViewModel @Inject constructor(
                         )
                     }
                 }
+            } catch (e: java.io.IOException) {
+                // หน้านี้ไม่ได้เก็บลง Room และไม่มี outbox — ออฟไลน์คือบันทึกไม่ได้จริง
+                // ต้องบอกด้วยภาษาคน ไม่ใช่โยนข้อความ exception ดิบ ๆ ให้ผู้ใช้อ่านเอง
+                _uiState.update {
+                    it.copy(isLoading = false, error = "บันทึกไม่สำเร็จ: เชื่อมต่อเซิร์ฟเวอร์ไม่ได้ กรุณาลองใหม่เมื่อมีสัญญาณ")
+                }
             } catch (e: Exception) {
-                _uiState.update { it.copy(isLoading = false, error = e.message) }
+                _uiState.update { it.copy(isLoading = false, error = e.message ?: "บันทึกไม่สำเร็จ") }
             }
         }
     }

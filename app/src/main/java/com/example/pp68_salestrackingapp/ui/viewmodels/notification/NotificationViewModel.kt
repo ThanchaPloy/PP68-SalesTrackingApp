@@ -101,7 +101,11 @@ class NotificationViewModel @Inject constructor(
                                 timeLabel = timeLabel,
                                 subtitle  = card.projectName ?: card.companyName ?: "",
                                 location  = card.companyName ?: "",
-                                action    = if (card.planStatus == "checked_in")
+                                // เฉพาะ onsite ที่มีขั้นเช็คอิน — online/call ไปหน้าบันทึกผลตรง ๆ
+                                // เหมือนที่ ActivityDetailScreen ทำ ถ้าใช้ planStatus อย่างเดียว
+                                // แจ้งเตือนนัดโทรจะมีปุ่ม check-in ซึ่งทั้งแอปถือว่าไม่มีสำหรับชนิดนี้
+                                action    = if (card.planStatus == "checked_in" ||
+                                    card.activityType.lowercase() != "onsite")
                                     NotiAction.REPORT else NotiAction.CHECK_IN,
                                 isToday   = date == today
                             )

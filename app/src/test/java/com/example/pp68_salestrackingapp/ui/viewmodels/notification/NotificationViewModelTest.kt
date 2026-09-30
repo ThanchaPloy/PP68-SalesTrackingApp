@@ -292,4 +292,41 @@ class NotificationViewModelTest {
 
         coVerify(exactly = 2) { activityRepo.getMyActivitiesWithDetails() }
     }
+
+    // ปุ่มในแจ้งเตือนต้องตรงกับที่หน้ารายละเอียดนัดทำ — มีแต่ onsite ที่มีขั้นเช็คอิน
+    // เดิมดูแต่ planStatus อย่างเดียว นัดโทรจึงได้ปุ่ม check-in ทั้งที่กดไปก็ไม่มีจุดให้เช็คอิน
+    @Test
+    fun `only an onsite appointment is offered check-in`() = runTest {
+        val today = LocalDate.now().toString()
+        coEvery { activityRepo.getMyActivitiesWithDetails() } returns Result.success(
+            listOf(
+                ActivityCard(
+                    activityId = "ONSITE", activityType = "onsite",
+                    projectName = "P", companyName = "C", contactName = null, objective = "o",
+                    planStatus = "planned", plannedDate = today,
+                    plannedTime = "09:00", plannedEndTime = "10:00"
+                ),
+                ActivityCard(
+                    activityId = "ONLINE", activityType = "online",
+                    projectName = "P", companyName = "C", contactName = null, objective = "o",
+                    planStatus = "planned", plannedDate = today,
+                    plannedTime = "09:00", plannedEndTime = "10:00"
+                ),
+                ActivityCard(
+                    activityId = "CALL", activityType = "call",
+                    projectName = "P", companyName = "C", contactName = null, objective = "o",
+                    planStatus = "planned", plannedDate = today,
+                    plannedTime = "09:00", plannedEndTime = "10:00"
+                )
+            )
+        )
+
+        val vm = NotificationViewModel(activityRepo)
+        advanceUntilIdle()
+
+        val byId = vm.uiState.value.notifications.associateBy { it.id }
+        assertEquals(NotiAction.CHECK_IN, byId["ONSITE"]?.action)
+        assertEquals(NotiAction.REPORT,   byId["ONLINE"]?.action)
+        assertEquals(NotiAction.REPORT,   byId["CALL"]?.action)
+    }
 }
