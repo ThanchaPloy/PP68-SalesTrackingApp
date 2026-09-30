@@ -220,7 +220,7 @@ class AddContactViewModelTest {
     @Test
     fun `Save success should set isSaved to true and clear loading`() = runTest {
         coEvery { customerRepository.getCustomers() } returns Result.success(emptyList())
-        coEvery { contactRepository.addContact(any()) } returns Result.success(Unit)
+        coEvery { contactRepository.addContact(any()) } returns Result.success("CT-1")
         every { projectRepository.getAllProjectsFlow() } returns flowOf(emptyList())
         createViewModel()
         testDispatcher.scheduler.advanceUntilIdle()
@@ -450,7 +450,7 @@ class AddContactViewModelTest {
     @Test
     fun `save success discards the pending draft`() = runTest {
         coEvery { customerRepository.getCustomers() } returns Result.success(emptyList())
-        coEvery { contactRepository.addContact(any()) } returns Result.success(Unit)
+        coEvery { contactRepository.addContact(any()) } returns Result.success("CT-1")
         createViewModel()
         testDispatcher.scheduler.advanceUntilIdle()
 

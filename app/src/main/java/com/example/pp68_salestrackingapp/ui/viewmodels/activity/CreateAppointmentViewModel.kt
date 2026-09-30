@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.pp68_salestrackingapp.data.repository.ActivityRepository
 import com.example.pp68_salestrackingapp.data.repository.AuthRepository
+import com.example.pp68_salestrackingapp.data.repository.ContactRepository
 import com.example.pp68_salestrackingapp.data.repository.CustomerRepository
 import com.example.pp68_salestrackingapp.data.repository.ProjectRepository
 import com.example.pp68_salestrackingapp.data.model.ActivityMaster
@@ -80,7 +81,14 @@ data class CreateAppointmentUiState(
     val quickAddProjectName: String = "",
     val quickAddProjectStatus: String = "",
     val isSavingQuickProject: Boolean = false,
-    val quickAddProjectError: String? = null
+    val quickAddProjectError: String? = null,
+
+    // สร้างผู้ติดต่อด่วน — เจอบ่อยว่าบริษัทมีแล้วแต่คนที่จะเข้าพบยังไม่เคยถูกบันทึก
+    val isQuickAddContactOpen: Boolean = false,
+    val quickAddContactName: String = "",
+    val quickAddContactPhone: String = "",
+    val isSavingQuickContact: Boolean = false,
+    val quickAddContactError: String? = null
 )
 
 data class ProjectOption(val id: String, val name: String, val status: String)
@@ -117,6 +125,9 @@ sealed class CreateAppointmentEvent {
     data class QuickAddProjectNameChanged(val value: String)   : CreateAppointmentEvent()
     data class QuickAddProjectStatusChanged(val value: String) : CreateAppointmentEvent()
     object SaveQuickAddProject                              : CreateAppointmentEvent()
+    data class ToggleQuickAddContact(val isOpen: Boolean)   : CreateAppointmentEvent()
+    data class QuickAddContactChanged(val name: String, val phone: String) : CreateAppointmentEvent()
+    object SaveQuickAddContact                              : CreateAppointmentEvent()
     data class TitleChanged(val value: String)              : CreateAppointmentEvent()
     data class TypeChanged(val value: String)               : CreateAppointmentEvent()
     data class ContactToggled(val id: String)               : CreateAppointmentEvent()
@@ -140,6 +151,7 @@ class CreateAppointmentViewModel @Inject constructor(
     private val activityRepo: ActivityRepository,
     private val projectRepo:  ProjectRepository,
     private val customerRepo: CustomerRepository,
+    private val contactRepo:  ContactRepository,
     private val authRepo:     AuthRepository,
     private val draftStore:   DraftStore
 ) : ViewModel() {
@@ -323,6 +335,56 @@ class CreateAppointmentViewModel @Inject constructor(
 
     // สร้างบริษัทลูกค้าแบบ Lead ด่วน — กรอกแค่ชื่อกับประเภท แล้วเลือกให้ทันที (เหมือน saveQuickCustomer
     // ใน AddProjectViewModel) isLead = true เสมอ เพราะยังไม่ผ่านการคัดกรองเป็นลูกค้าจริง
+    /**
+     * ผู้ติดต่อต้องผูกกับบริษัทเสมอ จึงเปิดให้สร้างได้เฉพาะตอนเลือกบริษัทแล้ว
+     * เบอร์โทรบังคับกรอกเหมือนหน้าเพิ่มผู้ติดต่อเต็ม — ผู้ติดต่อที่โทรหาไม่ได้ไม่มีประโยชน์กับงานขาย
+     */
+    private fun saveQuickContact() {
+        val s = _uiState.value
+        val custId = s.selectedCustomerId
+        if (custId.isNullOrBlank()) {
+            _uiState.update { it.copy(quickAddContactError = "เลือกบริษัทก่อนจึงจะเพิ่มผู้ติดต่อได้") }
+            return
+        }
+        if (s.quickAddContactName.isBlank() || s.quickAddContactPhone.isBlank()) {
+            _uiState.update { it.copy(quickAddContactError = "กรุณาระบุชื่อและเบอร์โทรศัพท์ให้ครบ") }
+            return
+        }
+        viewModelScope.launch {
+            _uiState.update { it.copy(isSavingQuickContact = true, quickAddContactError = null) }
+            val newContact = com.example.pp68_salestrackingapp.data.model.ContactPerson(
+                // TEMP- จำเป็น — outbox ใช้คำนำหน้านี้ตัดสินว่าจะ POST หรือ PATCH
+                contactId = "TEMP-" + java.util.UUID.randomUUID().toString().take(8).uppercase(),
+                custId = custId,
+                fullName = s.quickAddContactName.trim(),
+                phoneNumber = s.quickAddContactPhone.trim()
+            )
+            contactRepo.addContact(newContact).fold(
+                onSuccess = { contactId ->
+                    _uiState.update {
+                        it.copy(
+                            contactOptions = it.contactOptions + ContactOption(
+                                id = contactId,
+                                name = newContact.fullName ?: "",
+                                companyName = it.selectedCompanyName
+                            ),
+                            selectedContactIds = it.selectedContactIds + contactId,
+                            isQuickAddContactOpen = false,
+                            isSavingQuickContact = false,
+                            quickAddContactName = "",
+                            quickAddContactPhone = ""
+                        )
+                    }
+                },
+                onFailure = { e ->
+                    _uiState.update {
+                        it.copy(isSavingQuickContact = false, quickAddContactError = e.message ?: "สร้างผู้ติดต่อไม่สำเร็จ")
+                    }
+                }
+            )
+        }
+    }
+
     private fun saveQuickCustomer() {
         val s = _uiState.value
         if (s.quickAddCompanyName.isBlank() || s.quickAddCustType.isBlank()) {
@@ -333,7 +395,10 @@ class CreateAppointmentViewModel @Inject constructor(
             _uiState.update { it.copy(isSavingQuickCust = true, quickAddCustomerError = null) }
             val user = authRepo.currentUser()
             val newCust = com.example.pp68_salestrackingapp.data.model.Customer(
-                custId = java.util.UUID.randomUUID().toString(),
+                // ต้องมีคำนำหน้า TEMP- — outbox ใช้มันตัดสินว่าจะ POST (สร้างใหม่)
+                // หรือ PATCH (แก้ของเดิม) ถ้าเป็น UUID เปล่า การสร้างตอนไม่มีเน็ตจะกลายเป็น PATCH
+                // ไปหาแถวที่ไม่มีจริง → 404 → ถูกบันทึกเป็นการปฏิเสธถาวร ลูกค้าหายไปเงียบ ๆ
+                custId = "TEMP-" + java.util.UUID.randomUUID().toString().take(8).uppercase(),
                 companyName = s.quickAddCompanyName.trim(),
                 custType = s.quickAddCustType,
                 createdBy = user?.userId,
@@ -632,6 +697,19 @@ class CreateAppointmentViewModel @Inject constructor(
                     it.copy(quickAddCompanyName = event.name, quickAddCustType = event.type, quickAddCustomerError = null)
                 }
             CreateAppointmentEvent.SaveQuickAddCustomer -> saveQuickCustomer()
+
+            is CreateAppointmentEvent.ToggleQuickAddContact ->
+                _uiState.update {
+                    it.copy(
+                        isQuickAddContactOpen = event.isOpen,
+                        quickAddContactName = "", quickAddContactPhone = "", quickAddContactError = null
+                    )
+                }
+            is CreateAppointmentEvent.QuickAddContactChanged ->
+                _uiState.update {
+                    it.copy(quickAddContactName = event.name, quickAddContactPhone = event.phone, quickAddContactError = null)
+                }
+            CreateAppointmentEvent.SaveQuickAddContact -> saveQuickContact()
 
             is CreateAppointmentEvent.ToggleQuickAddProject ->
                 _uiState.update {

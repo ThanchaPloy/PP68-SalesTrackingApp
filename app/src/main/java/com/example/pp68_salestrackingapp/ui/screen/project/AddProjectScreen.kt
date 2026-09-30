@@ -257,6 +257,12 @@ fun AddProjectContent(
 
             // ── Contact Person (กรองตาม customer) ────────────
             FormField("ผู้ติดต่อ") {
+                // โชว์เมื่อเลือกบริษัทแล้วเท่านั้น — ผู้ติดต่อต้องมีบริษัทสังกัดเสมอ
+                if (uiState.selectedCustomerId != null) {
+                    TextButton(onClick = { onEvent(AddProjectEvent.ToggleQuickAddContact(true)) }) {
+                        Text("+ สร้างผู้ติดต่อด่วน", color = AppColors.Primary, fontSize = 13.sp)
+                    }
+                }
                 if (uiState.isLoadingContacts) {
                     LoadingFieldProject()
                 } else if (uiState.contactOptions.isNotEmpty()) {
@@ -464,6 +470,53 @@ fun AddProjectContent(
                             CircularProgressIndicator(color = androidx.compose.ui.graphics.Color.White, modifier = Modifier.size(24.dp))
                         } else {
                             Text("บันทึก Lead ใหม่", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(32.dp))
+                }
+            }
+        }
+
+        if (uiState.isQuickAddContactOpen) {
+            androidx.compose.material3.ModalBottomSheet(
+                onDismissRequest = { onEvent(AddProjectEvent.ToggleQuickAddContact(false)) },
+                containerColor = AppColors.BgWhite
+            ) {
+                Column(
+                    modifier = Modifier.fillMaxWidth().padding(24.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    Text("สร้างผู้ติดต่อใหม่", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = AppColors.Primary)
+                    FormField("ชื่อ-นามสกุล", required = true) {
+                        FormTextField(
+                            value = uiState.quickAddContactName,
+                            onValueChange = { onEvent(AddProjectEvent.QuickAddContactChanged(it, uiState.quickAddContactPhone)) },
+                            placeholder = "ระบุชื่อผู้ติดต่อ"
+                        )
+                    }
+                    FormField("เบอร์โทรศัพท์", required = true) {
+                        FormTextField(
+                            value = uiState.quickAddContactPhone,
+                            onValueChange = { onEvent(AddProjectEvent.QuickAddContactChanged(uiState.quickAddContactName, it)) },
+                            placeholder = "เช่น 06x-xxx-xxxx",
+                            keyboardType = KeyboardType.Phone
+                        )
+                    }
+                    uiState.quickAddContactError?.let {
+                        Text(it, color = AppColors.Error, fontSize = 13.sp)
+                    }
+                    Button(
+                        onClick = { onEvent(AddProjectEvent.SaveQuickAddContact) },
+                        modifier = Modifier.fillMaxWidth().height(48.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = AppColors.Primary),
+                        shape = RoundedCornerShape(10.dp),
+                        enabled = !uiState.isSavingQuickContact &&
+                            uiState.quickAddContactName.isNotBlank() && uiState.quickAddContactPhone.isNotBlank()
+                    ) {
+                        if (uiState.isSavingQuickContact) {
+                            CircularProgressIndicator(color = androidx.compose.ui.graphics.Color.White, modifier = Modifier.size(24.dp))
+                        } else {
+                            Text("บันทึกผู้ติดต่อ", fontSize = 16.sp, fontWeight = FontWeight.Bold)
                         }
                     }
                     Spacer(modifier = Modifier.height(32.dp))

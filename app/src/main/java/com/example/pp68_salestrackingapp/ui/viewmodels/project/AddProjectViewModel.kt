@@ -66,6 +66,12 @@ data class AddProjectUiState(
     val isQuickAddCustomerOpen: Boolean = false,
     val quickAddCompanyName:    String  = "",
     val quickAddCustType:       String  = "",
+    // สร้างผู้ติดต่อด่วน — เจอบ่อยว่าเลือกบริษัทได้แต่คนที่ติดต่อจริงยังไม่มีในระบบ
+    val isQuickAddContactOpen:  Boolean = false,
+    val quickAddContactName:    String  = "",
+    val quickAddContactPhone:   String  = "",
+    val isSavingQuickContact:   Boolean = false,
+    val quickAddContactError:   String? = null,
     val isSavingQuickCust:      Boolean = false,
     val draftAvailable: Boolean = false
 )
@@ -119,6 +125,9 @@ sealed class AddProjectEvent {
     data class ToggleQuickAddCustomer(val isOpen: Boolean)        : AddProjectEvent()
     data class QuickAddCustomerChanged(val name: String, val type: String) : AddProjectEvent()
     object SaveQuickAddCustomer                                   : AddProjectEvent()
+    data class ToggleQuickAddContact(val isOpen: Boolean)         : AddProjectEvent()
+    data class QuickAddContactChanged(val name: String, val phone: String) : AddProjectEvent()
+    object SaveQuickAddContact                                    : AddProjectEvent()
 
     object Save                                                   : AddProjectEvent()
     object CheckDraft         : AddProjectEvent()
@@ -511,6 +520,19 @@ class AddProjectViewModel @Inject constructor(
             is AddProjectEvent.QuickAddCustomerChanged -> {
                 _uiState.update { it.copy(quickAddCompanyName = event.name, quickAddCustType = event.type) }
             }
+            is AddProjectEvent.ToggleQuickAddContact -> {
+                _uiState.update {
+                    it.copy(isQuickAddContactOpen = event.isOpen, quickAddContactName = "",
+                            quickAddContactPhone = "", quickAddContactError = null)
+                }
+            }
+            is AddProjectEvent.QuickAddContactChanged -> {
+                _uiState.update {
+                    it.copy(quickAddContactName = event.name, quickAddContactPhone = event.phone,
+                            quickAddContactError = null)
+                }
+            }
+            is AddProjectEvent.SaveQuickAddContact -> saveQuickContact()
             is AddProjectEvent.SaveQuickAddCustomer -> {
                 saveQuickCustomer()
             }
@@ -521,6 +543,53 @@ class AddProjectViewModel @Inject constructor(
         }
     }
 
+    /**
+     * ผู้ติดต่อผูกกับบริษัท จึงสร้างได้เฉพาะตอนเลือกบริษัทแล้ว และติดให้เลยหลังสร้างเสร็จ
+     * เพราะคนที่กดสร้างตอนนี้ตั้งใจจะใส่เขาเป็นผู้ติดต่อของโครงการนี้อยู่แล้ว
+     */
+    private fun saveQuickContact() {
+        val st = _uiState.value
+        val custId = st.selectedCustomerId
+        if (custId.isNullOrBlank()) {
+            _uiState.update { it.copy(quickAddContactError = "เลือกบริษัทก่อนจึงจะเพิ่มผู้ติดต่อได้") }
+            return
+        }
+        if (st.quickAddContactName.isBlank() || st.quickAddContactPhone.isBlank()) {
+            _uiState.update { it.copy(quickAddContactError = "กรุณาระบุชื่อและเบอร์โทรศัพท์ให้ครบ") }
+            return
+        }
+        viewModelScope.launch {
+            _uiState.update { it.copy(isSavingQuickContact = true, quickAddContactError = null) }
+            val newContact = com.example.pp68_salestrackingapp.data.model.ContactPerson(
+                // TEMP- จำเป็น — outbox ใช้คำนำหน้านี้ตัดสินว่าจะ POST หรือ PATCH
+                contactId = "TEMP-" + UUID.randomUUID().toString().take(8).uppercase(),
+                custId = custId,
+                fullName = st.quickAddContactName.trim(),
+                phoneNumber = st.quickAddContactPhone.trim()
+            )
+            contactRepo.addContact(newContact).fold(
+                onSuccess = { contactId ->
+                    _uiState.update {
+                        it.copy(
+                            contactOptions = it.contactOptions + (contactId to (newContact.fullName ?: "")),
+                            selectedContactIds = it.selectedContactIds + contactId,
+                            isQuickAddContactOpen = false,
+                            isSavingQuickContact = false,
+                            quickAddContactName = "",
+                            quickAddContactPhone = ""
+                        )
+                    }
+                },
+                onFailure = { e ->
+                    _uiState.update {
+                        it.copy(isSavingQuickContact = false,
+                                quickAddContactError = e.message ?: "สร้างผู้ติดต่อไม่สำเร็จ")
+                    }
+                }
+            )
+        }
+    }
+
     private fun saveQuickCustomer() {
         val st = _uiState.value
         if (st.quickAddCompanyName.isBlank() || st.quickAddCustType.isBlank()) { _uiState.update { it.copy(saveError = "กรุณาระบุชื่อบริษัทและประเภทลูกค้าให้ครบถ้วน") }; return }
@@ -528,7 +597,10 @@ class AddProjectViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.update { it.copy(isSavingQuickCust = true) }
             val newCust = Customer(
-                custId = UUID.randomUUID().toString(),
+                // ต้องมีคำนำหน้า TEMP- — outbox ใช้มันตัดสินว่าจะ POST (สร้างใหม่)
+                // หรือ PATCH (แก้ของเดิม) ถ้าเป็น UUID เปล่า การสร้างตอนไม่มีเน็ตจะกลายเป็น PATCH
+                // ไปหาแถวที่ไม่มีจริง → 404 → ถูกบันทึกเป็นการปฏิเสธถาวร ลูกค้าหายไปเงียบ ๆ
+                custId = "TEMP-" + UUID.randomUUID().toString().take(8).uppercase(),
                 companyName = st.quickAddCompanyName.trim(),
                 custType = st.quickAddCustType,
                 createdBy = authRepo.currentUser()?.userId,

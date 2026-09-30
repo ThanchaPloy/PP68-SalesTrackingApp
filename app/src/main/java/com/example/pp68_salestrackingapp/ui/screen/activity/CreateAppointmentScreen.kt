@@ -20,6 +20,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Color.Companion.White
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -234,6 +235,14 @@ fun CreateAppointmentScreen(
             }
 
             FormField(label = "ผู้ติดต่อ") {
+                // ผู้ติดต่อต้องผูกกับบริษัท ปุ่มนี้จึงโผล่เมื่อรู้แล้วว่าจะสร้างให้ใคร
+                if (state.selectedCustomerId != null) {
+                    TextButton(onClick = { onEvent(CreateAppointmentEvent.ToggleQuickAddContact(true)) }) {
+                        Icon(Icons.Default.PersonAdd, null, tint = RedPrimary, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("สร้างผู้ติดต่อด่วน", color = RedPrimary, fontSize = 13.sp)
+                    }
+                }
                 // เลือกโครงการหรือบริษัทแล้ว = รู้แล้วว่าผู้ติดต่อควรมาจากที่ไหน โชว์เป็นชิปให้เลือกเลย
                 // ช่องค้นหาทั้งฐานข้อมูลเหลือไว้เฉพาะตอนยังไม่ระบุทั้งโครงการและบริษัท
                 if (state.selectedProjectId == null && state.selectedCustomerId == null) {
@@ -572,6 +581,53 @@ fun CreateAppointmentScreen(
                         CircularProgressIndicator(color = White, modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
                     } else {
                         Text("บันทึก Lead ใหม่", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = White)
+                    }
+                }
+                Spacer(Modifier.height(24.dp))
+            }
+        }
+    }
+
+    if (state.isQuickAddContactOpen) {
+        ModalBottomSheet(
+            onDismissRequest = { onEvent(CreateAppointmentEvent.ToggleQuickAddContact(false)) },
+            containerColor = White
+        ) {
+            Column(
+                modifier = Modifier.fillMaxWidth().padding(24.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                Text("สร้างผู้ติดต่อใหม่", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = RedPrimary)
+                state.selectedCompanyName?.let {
+                    Text("ของบริษัท: $it", fontSize = 13.sp, color = TextGray)
+                }
+                FormField(label = "ชื่อ-นามสกุล", required = true) {
+                    FormTextField(
+                        value = state.quickAddContactName,
+                        onValueChange = { onEvent(CreateAppointmentEvent.QuickAddContactChanged(it, state.quickAddContactPhone)) },
+                        placeholder = "ระบุชื่อผู้ติดต่อ"
+                    )
+                }
+                FormField(label = "เบอร์โทรศัพท์", required = true) {
+                    FormTextField(
+                        value = state.quickAddContactPhone,
+                        onValueChange = { onEvent(CreateAppointmentEvent.QuickAddContactChanged(state.quickAddContactName, it)) },
+                        placeholder = "เช่น 06x-xxx-xxxx",
+                        keyboardType = KeyboardType.Phone
+                    )
+                }
+                state.quickAddContactError?.let { Text(it, color = ErrorRed, fontSize = 13.sp) }
+                Button(
+                    onClick = { onEvent(CreateAppointmentEvent.SaveQuickAddContact) },
+                    modifier = Modifier.fillMaxWidth().height(48.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = RedPrimary),
+                    shape = RoundedCornerShape(10.dp),
+                    enabled = !state.isSavingQuickContact
+                ) {
+                    if (state.isSavingQuickContact) {
+                        CircularProgressIndicator(color = White, modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                    } else {
+                        Text("บันทึกผู้ติดต่อ", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = White)
                     }
                 }
                 Spacer(Modifier.height(24.dp))

@@ -74,7 +74,12 @@ class ContactRepository @Inject constructor(
         }
     }
 
-    suspend fun addContact(contact: ContactPerson): kotlin.Result<Unit> {
+    /**
+     * คืน contact_id ที่ใช้งานได้จริง — id จาก server ถ้าส่งขึ้นสำเร็จ หรือ TEMP- ถ้ายังค้าง
+     * ผู้ที่ต้องเลือกผู้ติดต่อที่เพิ่งสร้างต่อทันที (สร้างด่วนในหน้านัดหมาย/โครงการ) ต้องรู้ id นี้
+     * เดิมคืน Unit แล้วสลับแถว TEMP- เป็นแถวจริงเงียบ ๆ ผู้เรียกจึงหา id ที่ถูกต้องไม่ได้
+     */
+    suspend fun addContact(contact: ContactPerson): kotlin.Result<String> {
         return withContext(Dispatchers.IO) {
             val localContact = contact.copy(isSynced = false)
             contactDao.insertContact(localContact)
@@ -99,10 +104,11 @@ class ContactRepository @Inject constructor(
                         // server generated real contact_id — replace TEMP record
                         contactDao.deleteContactById(localContact.contactId)
                         contactDao.insertContact(serverContact.copy(isSynced = true))
+                        kotlin.Result.success(serverContact.contactId)
                     } else {
                         contactDao.updateSyncStatus(localContact.contactId, true)
+                        kotlin.Result.success(localContact.contactId)
                     }
-                    kotlin.Result.success(Unit)
                 } else if (response.code() == 403) {
                     syncManager.markBlocked("contact", localContact.contactId)
                     kotlin.Result.failure(Exception("บันทึกผู้ติดต่อไม่สำเร็จ: ไม่มีสิทธิ์ทำรายการนี้"))
@@ -110,11 +116,11 @@ class ContactRepository @Inject constructor(
                     val errBody = response.errorBody()?.string()
                     Log.e("ContactRepo", "POST failed ${response.code()}: $errBody")
                     syncManager.scheduleSync()
-                    networkMonitor.queuedOrFailed(Unit, "เซิร์ฟเวอร์ตอบ ${response.code()}")
+                    networkMonitor.queuedOrFailed(localContact.contactId, "เซิร์ฟเวอร์ตอบ ${response.code()}")
                 }
             } catch (e: IOException) {
                 syncManager.scheduleSync()
-                networkMonitor.queuedOrFailed(Unit, e.message)
+                networkMonitor.queuedOrFailed(localContact.contactId, e.message)
             } catch (e: Exception) {
                 kotlin.Result.failure(e)
             }
