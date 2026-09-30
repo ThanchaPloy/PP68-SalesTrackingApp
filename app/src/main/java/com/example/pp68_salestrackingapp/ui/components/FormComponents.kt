@@ -221,7 +221,10 @@ fun SearchableDropdownField(
         )
         ExposedDropdownMenu(
             expanded = expanded && filtered.isNotEmpty(),
-            onDismissRequest = { expanded = false },
+            // ✅ พิมพ์คำค้นแล้วแตะออกไปโดยไม่เลือกอะไร เดิม query ค้างอยู่ในช่อง ผู้ใช้เห็นชื่อลูกค้า
+            // ครึ่งท่อนอยู่ในช่องเหมือนเลือกแล้ว แต่ selectedCustomerId ยังว่าง กดบันทึกจะเจอ
+            // "กรุณาเลือกลูกค้า" ทั้งที่ตาเห็นว่ากรอกแล้ว — ต้องดีดกลับเป็นค่าที่เลือกไว้จริง
+            onDismissRequest = { expanded = false; query = value },
             modifier = Modifier
                 .heightIn(max = 300.dp)
                 .background(Color.White)
@@ -281,7 +284,9 @@ fun DatePickerField(
                     fontSize = 14.sp
                 )
             }
-            if (selectedDate != null) {
+            // ปุ่มกากบาทต้องขึ้นเฉพาะตอนมีวันที่ให้ล้างจริง — เทียบกับ null เฉย ๆ ทำให้ช่องที่เพิ่งถูก
+            // ล้างไปแล้ว (ค่าเป็น "") ยังมีกากบาทค้างอยู่ข้างข้อความ placeholder
+            if (!selectedDate.isNullOrBlank()) {
                 IconButton(
                     onClick = { onDateSelected("") },
                     modifier = Modifier.size(20.dp)

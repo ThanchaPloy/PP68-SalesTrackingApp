@@ -77,6 +77,11 @@ fun MapPickerField(
     var searchQuery     by remember { mutableStateOf("") }
     var showSuggestions by remember { mutableStateOf(false) }
     var selectedPlaceLabel by remember { mutableStateOf<String?>(null) }
+    // ✅ ปิด location service ทั้งเครื่อง/อยู่ในอาคารจนจับดาวเทียมไม่ได้ = fetchCurrentLocation()
+    // ไม่เรียก onResult กลับมาเลย เดิมไม่ได้ส่ง onError มาด้วย ปุ่ม "รีเซ็ตเป็นตำแหน่งปัจจุบัน"
+    // จึงกดแล้วเงียบสนิท ไม่มีอะไรเกิดขึ้นและไม่มีทางรู้ว่าต้องไปเปิด location ก่อน
+    // (CheckInScreen ผูก onError ไว้แล้ว เหลือจุดนี้จุดเดียว)
+    var locationError by remember { mutableStateOf(false) }
 
     val hasLocation  = lat != null && lng != null && lat != 0.0 && lng != 0.0
     val effectiveLat = if (lat == null || lat == 0.0) MapConfig.DEFAULT_LAT else lat
@@ -89,7 +94,9 @@ fun MapPickerField(
                 permissions[Manifest.permission.ACCESS_COARSE_LOCATION] == true
         hasLocationPermission = granted
         if (granted) {
-            fetchCurrentLocation(context) { fetchedLat, fetchedLng ->
+            locationError = false
+            fetchCurrentLocation(context, onError = { locationError = true }) { fetchedLat, fetchedLng ->
+                locationError = false
                 onLocationPicked(fetchedLat, fetchedLng)
             }
         }
@@ -105,7 +112,9 @@ fun MapPickerField(
 
     val actualResetToCurrentLocation = onResetToCurrentLocation ?: {
         if (hasLocationPermission) {
-            fetchCurrentLocation(context) { fetchedLat, fetchedLng ->
+            locationError = false
+            fetchCurrentLocation(context, onError = { locationError = true }) { fetchedLat, fetchedLng ->
+                locationError = false
                 onLocationPicked(fetchedLat, fetchedLng)
             }
         } else if (!isPreview) {
@@ -289,7 +298,14 @@ fun MapPickerField(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            if (hasLocation) {
+            if (locationError) {
+                Text(
+                    "หาตำแหน่งปัจจุบันไม่ได้ เปิด GPS/ตำแหน่งที่ตั้งแล้วลองอีกครั้ง หรือแตะบนแผนที่เพื่อปักหมุดเอง",
+                    fontSize = 11.sp,
+                    color = RedPrimary,
+                    modifier = Modifier.weight(1f)
+                )
+            } else if (hasLocation) {
                 Text(
                     "📍 ${"%.6f".format(lat)}, ${"%.6f".format(lng)}",
                     fontSize = 11.sp,

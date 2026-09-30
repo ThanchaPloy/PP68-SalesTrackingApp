@@ -13,6 +13,13 @@ object AppointmentStatus {
     // ซึ่งวัดจากการเช็คอินด้วย GPS นัดออนไลน์/โทรศัพท์ไม่มีขั้นตอนนั้น จึงบันทึกผลย้อนหลังเมื่อไหร่ก็ได้
     private val REQUIRES_CHECK_IN = setOf("onsite")
 
+    /**
+     * นัดชนิดนี้ต้องไปปรากฏตัวที่หน้างานหรือไม่ — ใช้ตัดสินทั้งเรื่องขาดนัดและเรื่องที่ควร
+     * เตือนพิกัด/เสนอเช็คอิน เปิดออกมาเพราะ ProximityMonitorService ต้องถามกติกาเดียวกันนี้
+     */
+    fun requiresCheckIn(activityType: String?): Boolean =
+        activityType?.lowercase() in REQUIRES_CHECK_IN
+
     // ต้องเลยวัน ไม่ใช่เลยเวลา — นัดตอนเช้าของวันนี้ที่ยังไม่เช็คอินตอนบ่ายยังไม่นับขาดนัด
     // ต้องข้ามเที่ยงคืนไปแล้วเท่านั้นถึงจะกลายเป็น missing
     //
@@ -20,7 +27,7 @@ object AppointmentStatus {
     // ว่านัดชนิดไหน ถ้าใส่ default ไว้ จุดที่ลืมส่งจะเงียบๆ กลับไปคิดว่าทุกชนิดขาดนัดได้เหมือนเดิม
     fun effective(status: String?, plannedDate: String?, activityType: String?): String {
         val fallback = status ?: "planned"
-        if (activityType?.lowercase() !in REQUIRES_CHECK_IN) return fallback
+        if (!requiresCheckIn(activityType)) return fallback
         val date = parseDate(plannedDate) ?: return fallback
         return if (status == "planned" && date.isBefore(LocalDate.now())) MISSING else fallback
     }

@@ -49,7 +49,12 @@ class SalesTrackingApplication : Application(), Configuration.Provider, ImageLoa
         // เผื่อมีนัดหมายวันนี้ค้างอยู่ตอนเปิดแอป — service เช็คเองแล้วหยุดถ้าไม่มีอะไรต้องติดตาม
         // ✅ ต้องเช็ค toggle "แจ้งเตือนนัดหมาย" เหมือน AppointmentAlarmReceiver ไม่งั้นผู้ใช้ปิดสวิตช์
         // ไปแล้วแต่ proximity alert (แจ้งเตือนตอนเข้าใกล้ 500m) ยังยิงอยู่เหมือนเดิม
-        if (tokenManager.isVisitReminderEnabled() &&
+        // ✅ ต้องเช็คว่ายัง login อยู่ด้วย — onCreate ตัวนี้รันทุกครั้งที่ process เกิด รวมตอนที่
+        // WorkManager ปลุกขึ้นมาทำ SyncWorker เบื้องหลัง ซึ่งแอปไม่ได้อยู่หน้าจอ การสตาร์ต
+        // foreground service จากเบื้องหลังบน Android 12+ ถูกปฏิเสธด้วย
+        // ForegroundServiceStartNotAllowedException = แอปแครชทั้งตัว ไม่ใช่แค่ service ไม่ขึ้น
+        if (tokenManager.getToken() != null &&
+            tokenManager.isVisitReminderEnabled() &&
             ContextCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
         ) {
             ProximityMonitorService.startIfNeeded(this)

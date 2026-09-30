@@ -43,7 +43,11 @@ fun ProjectProgressBar(
                 verticalAlignment     = Alignment.CenterVertically
             ) {
                 Text(
-                    text       = status ?: "Unknown",
+                    // ✅ เดิมโชว์รหัสขั้นตอนดิบ ("Make a Decision") ทั้งที่ badge อีกสามที่ในแอป
+                    // ผ่าน labelFor() หมดแล้ว — แอดมินแก้ label จาก master data แล้วแถบนี้
+                    // (หน้ารายการโครงการ + หน้ารายละเอียด) จะไม่เปลี่ยนตามอยู่ที่เดียว
+                    text       = com.example.pp68_salestrackingapp.utils.ProjectStages
+                        .labelFor(status).ifBlank { "Unknown" },
                     fontSize   = 12.sp,
                     color      = color,
                     fontWeight = FontWeight.SemiBold

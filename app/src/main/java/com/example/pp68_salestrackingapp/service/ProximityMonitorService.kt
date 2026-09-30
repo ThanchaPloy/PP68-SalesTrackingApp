@@ -17,6 +17,7 @@ import androidx.core.content.ContextCompat
 import com.example.pp68_salestrackingapp.R
 import com.example.pp68_salestrackingapp.data.local.AppDatabase
 import com.example.pp68_salestrackingapp.di.TokenManager
+import com.example.pp68_salestrackingapp.utils.AppointmentStatus
 import com.example.pp68_salestrackingapp.utils.NotificationChannels
 import com.example.pp68_salestrackingapp.utils.haversineMeters
 import dagger.hilt.android.AndroidEntryPoint
@@ -121,6 +122,11 @@ class ProximityMonitorService : Service() {
         val today = LocalDate.now().toString()
         return db.activityDao().getActivitiesByDateRange(today, today).first()
             .filter { it.status != "checked_in" && it.status != "completed" && it.plannedLat != null && it.plannedLong != null }
+            // ✅ การโทร/ประชุมออนไลน์ไม่มีการไปปรากฏตัวที่หน้างาน เตือน "คุณอยู่ใกล้สถานที่นัดหมาย"
+            // แล้วกดเข้าไปก็ไม่มีปุ่มเช็คอินให้ (ปิดไปแล้วใน 6d70e38) ปกติสองชนิดนี้ไม่มีพิกัดจึงถูก
+            // กรองทิ้งด้วย plannedLat != null อยู่แล้ว แต่นัดที่สร้างเป็น onsite แล้วแก้ชนิดทีหลัง
+            // พิกัดเดิมยังค้างอยู่ ไม่มีใครล้างให้ — กรองด้วยกติกาเดียวกับเรื่องขาดนัดตรงนี้เลย
+            .filter { AppointmentStatus.requiresCheckIn(it.activityType) }
     }
 
     private suspend fun checkProximity(location: Location) {
@@ -205,7 +211,12 @@ class ProximityMonitorService : Service() {
             if (ContextCompat.checkSelfPermission(context, android.Manifest.permission.ACCESS_FINE_LOCATION)
                 != PackageManager.PERMISSION_GRANTED
             ) return
-            ContextCompat.startForegroundService(context, Intent(context, ProximityMonitorService::class.java))
+            // OS ปฏิเสธการสตาร์ต foreground service จากเบื้องหลังได้ตลอด (Android 12+) ทั้งกรณี
+            // ที่คาดไว้และกรณีที่คาดไม่ถึง — ปล่อยให้ exception หลุดออกไปเท่ากับแครชแอปเพื่อ
+            // แลกกับการเตือนพิกัดซึ่งเป็นของเสริม ยอมไม่ได้ ถือว่าไม่ได้เริ่มก็จบ
+            runCatching {
+                ContextCompat.startForegroundService(context, Intent(context, ProximityMonitorService::class.java))
+            }.onFailure { android.util.Log.w("ProximityMonitor", "สตาร์ต service ไม่ได้: ${it.message}") }
         }
     }
 }

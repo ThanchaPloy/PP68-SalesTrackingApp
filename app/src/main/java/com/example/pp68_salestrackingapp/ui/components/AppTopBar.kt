@@ -31,7 +31,8 @@ fun AppTopBar(
     onBackClick: (() -> Unit)? = null,
     onNotificationClick: () -> Unit = {},
     onSettingsClick: () -> Unit = {},
-    onProfileClick: () -> Unit = {},
+    // onProfileClick ถูกลบออก — ไม่เคยถูกอ่านในตัวฟังก์ชัน (แตะรูปโปรไฟล์เปิด popup แทน) และ
+    // ไม่มีใครส่งมาเลย ปล่อยไว้มีแต่จะมีคนส่งมาแล้วสงสัยว่าทำไมกดไม่ติด
     onLogoutClick: () -> Unit = {},
     user: AuthUser? = null,
     viewModel: AppTopBarViewModel? = null

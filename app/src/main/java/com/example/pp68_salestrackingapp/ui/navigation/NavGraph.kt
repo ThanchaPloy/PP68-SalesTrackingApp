@@ -232,6 +232,9 @@ fun SalesTrackingApp() {
                 onProjectClick = { id -> navController.navigate(Route.ProjectDetail.createRoute(id)) },
                 onNotificationClick = { navController.navigate(Route.Notification.path) },
                 onSettingsClick = { navController.navigate(Route.Settings.path) },
+                // ✅ หน้านี้เป็นหน้าเดียวที่วาดเมนู "ออกจากระบบ" ขึ้นมาแต่ไม่มีใครส่ง callback ให้
+                // (พารามิเตอร์มี default = {}) กดแล้วเงียบ ไม่มีอะไรเกิดขึ้นเลย
+                onLogoutClick = onLogout,
                 onTabChange = { tab -> navigateToTab(navController, tab) }
             )
         }
