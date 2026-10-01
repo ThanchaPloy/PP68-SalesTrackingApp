@@ -242,7 +242,7 @@ class AddProjectViewModelTest {
         val state = viewModel.uiState.value
         assertEquals("กรุณากรอกชื่อโครงการ", state.projectNameError)
         assertEquals("กรุณาเลือกสถานะ", state.statusError)
-        assertEquals("กรุณาเลือกสาขาที่รับผิดชอบ", state.saveError)
+        assertEquals("กรุณาเลือกสาขาที่พนักงานขายรับผิดชอบ", state.saveError)
         coVerify(exactly = 0) { projectRepo.createProject(any(), any()) }
         coVerify(exactly = 0) { projectRepo.updateProject(any(), any()) }
     }

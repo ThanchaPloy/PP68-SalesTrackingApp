@@ -87,6 +87,28 @@ class HomeViewModel @Inject constructor(
         }
     }
 
+    /**
+     * เช็คว่ายังไม่ได้กรอกเบอร์โทรหรือเปล่า — เบอร์ไม่ได้เก็บในเครื่อง ต้องถาม server
+     *
+     * แยกออกมาเพื่อให้หน้าแรกเรียกซ้ำได้ตอนกลับเข้าหน้า (ON_RESUME) ด้วย เดิมอยู่ใน refreshData()
+     * อย่างเดียว ผู้ใช้กรอกเบอร์ในหน้าโปรไฟล์แล้วย้อนกลับมา การ์ดทวงเบอร์จึงยังค้างอยู่
+     * จนกว่าจะลากรีเฟรชเอง
+     *
+     * เช็ค isSuccessful ก่อนเสมอ — .body() คืน null เวลา server ตอบ 4xx/5xx ด้วย
+     * ถ้าไม่ดูจะกลายเป็น "ตอบไม่ได้ = ไม่มีเบอร์" แล้วการ์ดเด้งใส่คนที่กรอกไว้แล้ว
+     */
+    fun recheckPhoneNumber() {
+        val userId = authRepo.currentUser()?.userId ?: return
+        viewModelScope.launch {
+            runCatching { apiService.getUserById("eq.$userId") }.onSuccess { response ->
+                if (response.isSuccessful) {
+                    val phone = response.body()?.firstOrNull()?.phoneNumber
+                    _uiState.update { it.copy(needsPhoneNumber = phone.isNullOrBlank()) }
+                }
+            }
+        }
+    }
+
     /** กด "ลองใหม่" บนแถบเตือน — ซิงค์ใหม่ทั้งชุดเหมือนตอน login ไม่ใช่แค่ refresh หน้านี้ */
     fun retrySync() {
         val user = authRepo.currentUser() ?: return
@@ -173,12 +195,7 @@ class HomeViewModel @Inject constructor(
                 // ✅ ต้องเช็ค isSuccessful ก่อน: เดิมอ่าน .body() ตรง ๆ ซึ่งคืน null เวลา server ตอบ
                 // 4xx/5xx ด้วย แล้วถูกตีความว่า "ผู้ใช้ไม่มีเบอร์โทร" การ์ดทวงเบอร์จึงเด้งขึ้นมา
                 // หาคนที่กรอกเบอร์ไว้เรียบร้อยแล้วทุกครั้งที่เซิร์ฟเวอร์สะดุด — ตอบไม่ได้ ≠ ไม่มีเบอร์
-                runCatching { apiService.getUserById("eq.$userId") }.onSuccess { response ->
-                    if (response.isSuccessful) {
-                        val phone = response.body()?.firstOrNull()?.phoneNumber
-                        _uiState.update { it.copy(needsPhoneNumber = phone.isNullOrBlank()) }
-                    }
-                }
+                recheckPhoneNumber()
 
                 // ✅ ทั้ง 4 อย่างเป็นอิสระต่อกัน (คนละตารางคนละ endpoint) รันพร้อมกันแทนรอทีละตัว
                 coroutineScope {

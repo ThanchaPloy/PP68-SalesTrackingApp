@@ -21,6 +21,7 @@ import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 import javax.inject.Inject
+import com.example.pp68_salestrackingapp.utils.withUniqueLabels
 
 data class CreateAppointmentUiState(
     val activityId:          String? = null,
@@ -239,7 +240,7 @@ class CreateAppointmentViewModel @Inject constructor(
             customerRepo.getCustomers().onSuccess { customers ->
                 _uiState.update {
                     it.copy(
-                        companyOptions    = customers.map { c -> c.custId to c.companyName },
+                        companyOptions    = customers.map { c -> c.custId to c.companyName }.withUniqueLabels(),
                         isLoadingCompanies = false
                     )
                 }
@@ -417,7 +418,7 @@ class CreateAppointmentViewModel @Inject constructor(
                 onSuccess = { realCustId ->
                     _uiState.update {
                         it.copy(
-                            companyOptions = it.companyOptions + (realCustId to newCust.companyName),
+                            companyOptions = (it.companyOptions + (realCustId to newCust.companyName)).withUniqueLabels(),
                             selectedCustomerId = realCustId,
                             selectedCompanyName = newCust.companyName,
                             // บริษัทใหม่ยังไม่มีผู้ติดต่อ ล้างของบริษัทเดิมทิ้งไม่ให้ค้าง
@@ -511,7 +512,14 @@ class CreateAppointmentViewModel @Inject constructor(
             _uiState.update { it.copy(isLoadingContacts = true, contactOptions = emptyList()) }
             try {
                 val project = projectRepo.getProjectById(projectId).getOrNull()
-                val custId  = project?.custId ?: return@launch
+                // ✅ ทางออกก่อนกำหนดตรงนี้เดิมไม่ปิด isLoadingContacts ผู้ใช้จึงค้างอยู่กับวงกลม
+                // หมุนตลอดไปในช่องผู้ติดต่อ (โหลดโครงการไม่ได้ หรือโครงการไม่ได้ผูกบริษัทไว้)
+                // แทนที่จะได้เห็นว่าเกิดอะไรขึ้น
+                if (project?.custId.isNullOrBlank()) {
+                    _uiState.update { it.copy(isLoadingContacts = false, contactOptions = emptyList()) }
+                    return@launch
+                }
+                val custId  = project!!.custId!!
                 val status  = project.projectStatus ?: ""
 
                 _uiState.update { it.copy(selectedCustomerId = custId) }

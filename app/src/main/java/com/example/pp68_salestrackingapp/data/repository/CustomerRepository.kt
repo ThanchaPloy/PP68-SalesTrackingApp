@@ -219,8 +219,17 @@ class CustomerRepository @Inject constructor(
                     // (refreshCustomers เฟสแรกดึงด้วย salespersonCode = eq.<ตัวเอง>)
                     // ส่วน create_date/created_at ที่ทับไปก็ทำให้ประวัติวันสร้างเพี้ยนไปด้วย
                     put("grade", customer.grade)
-                    put("vat_registration_no", customer.vatRegistrationNo)
-                }.filterValues { it != null }
+                }.filterValues { it != null }.toMutableMap().apply {
+                    // ⚠️ filterValues ข้างบนตัด null ทิ้งหมด = "ล้างค่าไม่ได้เลย" ผู้ใช้ลบที่อยู่หรือ
+                    // เลขผู้เสียภาษีในฟอร์มแล้วกดบันทึก (AddCustomerViewModel ส่ง .ifBlank { null })
+                    // คีย์หายไปทั้งคู่ server คงค่าเดิมไว้ แล้ว refresh รอบหน้าดึงกลับมาทับ
+                    // สองช่องนี้จึงต้องส่ง "" แทน null ให้ backend แปลงเป็น NULL — ข้อตกลงเดียวกับ
+                    // ContactRepository.updateContact (Gson ของแอปไม่ได้เปิด serializeNulls
+                    // คีย์ที่ค่าเป็น null จะถูกตัดออกจาก body ตั้งแต่ตอนแปลงเป็น JSON อยู่แล้ว)
+                    // ฟิลด์ที่เหลือยังพึ่ง filterValues ต่อโดยตั้งใจ — ผู้เรียกไม่ได้ดูแลครบทุกช่อง
+                    put("address", customer.companyAddr.orEmpty())
+                    put("vat_registration_no", customer.vatRegistrationNo.orEmpty())
+                }
                 val response = retrySend(idempotent = true, tag = "updateCustomer") {
                     if (customer.isLead) apiService.updateLeadCustomer("eq.$custId", updates)
                     else apiService.updateCustomer("eq.$custId", updates)
@@ -294,13 +303,16 @@ class CustomerRepository @Inject constructor(
      */
     suspend fun getContactPersons(customerId: String, @Suppress("UNUSED_PARAMETER") userId: String? = null): kotlin.Result<List<ContactPerson>> {
         return withContext(Dispatchers.IO) {
+            // ตัดช่องว่างหัวท้ายก่อนใช้ — รหัสที่ส่งมาจากหน้าจอผ่านมือผู้ใช้/ค่าที่ประกอบจากที่อื่นได้
+            // (เป็นการกันไว้เฉย ๆ ไม่ได้แก้อาการที่เคยเจอ ซึ่งพิสูจน์แล้วว่ามาจากข้อมูลคนละบริษัท)
+            val cleanId = customerId.trim()
             try {
-                val response = apiService.getContactsByCustomer(custId = "eq.$customerId")
+                val response = apiService.getContactsByCustomer(custId = "eq.$cleanId")
                 if (response.isSuccessful && response.body() != null) {
                     contactDao.insertAll(response.body()!!.map { it.copy(isSynced = true) })
                 }
             } catch (_: Exception) { /* offline — ใช้ local */ }
-            val all = contactDao.getContactsByCustomer(customerId).first()
+            val all = contactDao.getContactsByCustomer(cleanId).first()
             kotlin.Result.success(all)
         }
     }

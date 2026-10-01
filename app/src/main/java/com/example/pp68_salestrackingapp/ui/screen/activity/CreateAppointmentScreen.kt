@@ -214,15 +214,11 @@ fun CreateAppointmentScreen(
                 } else if (state.isLoadingCompanies) {
                     CircularProgressIndicator(color = RedPrimary, modifier = Modifier.size(24.dp))
                 } else {
-                    SearchableDropdownField(
+                    SearchableIdDropdownField(
                         value       = state.selectedCompanyName ?: "",
                         placeholder = "ค้นหาชื่อบริษัท...",
-                        options     = state.companyOptions.map { it.second },
-                        onSelect    = { name ->
-                            state.companyOptions.firstOrNull { it.second == name }?.let { (id, n) ->
-                                onEvent(CreateAppointmentEvent.CompanySelected(id, n))
-                            }
-                        },
+                        options     = state.companyOptions,
+                        onSelect    = { id, name -> onEvent(CreateAppointmentEvent.CompanySelected(id, name)) },
                         onClear     = { onEvent(CreateAppointmentEvent.CompanySelected("", "")) }
                     )
                     // ลูกค้ารายใหม่ที่ยังไม่มีในระบบ — สร้างเป็น Lead ตรงนี้ได้เลยไม่ต้องออกไปหน้าอื่น

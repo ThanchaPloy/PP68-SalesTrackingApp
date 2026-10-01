@@ -168,6 +168,14 @@ class ProjectRepository @Inject constructor(
                 // แล้วแถวที่ตอบกลับมาก็เขียนทับ Room ให้ค่าเก่าเด้งกลับมาให้ผู้ใช้เห็นว่า "แก้ไม่ติด"
                 updates["loss_reason"] = project.lossReason
                 updates["loss_reason_note"] = project.lossReasonNote
+                // ✅ สามช่องนี้ฟอร์มแก้โครงการเป็นเจ้าของเต็มและลบทิ้งได้จริง (AddProjectViewModel
+                // ส่ง toDoubleOrNull() / ifBlank { null }) ถ้าปล่อยให้ filterValues ตัดทิ้งตอนเป็น null
+                // = ลบมูลค่าหรือวันที่แล้วบันทึก ค่าเก่ายังอยู่บน server แล้ว refresh ดึงกลับมาทับ
+                // ส่ง "" แทน null เพราะ Gson ไม่ได้เปิด serializeNulls — backend แปลง "" เป็น NULL ให้
+                // (ผู้เรียกอีกทางคือ syncProjectStatus ซึ่งส่งแถวเต็มจาก Room จึงไม่กระทบ)
+                updates["expected_value"] = project.expectedValue?.toString() ?: ""
+                updates["start_date"] = project.startDate.orEmpty()
+                updates["closing_date"] = project.closingDate.orEmpty()
                 project.projectLat?.let { updates["project_lat"] = it }
                 project.projectLong?.let { updates["project_long"] = it }
                 resultAppointmentId?.let { updates["stage_appointment_id"] = it }

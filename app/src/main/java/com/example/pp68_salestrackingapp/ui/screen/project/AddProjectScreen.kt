@@ -229,14 +229,11 @@ fun AddProjectContent(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Box(modifier = Modifier.weight(1f)) {
-                            SearchableDropdownField(
+                            SearchableIdDropdownField(
                                 value       = uiState.selectedCustomerName ?: "",
                                 placeholder = "เลือกลูกค้า",
-                                options     = uiState.customerOptions.map { it.second },
-                                onSelect    = { name ->
-                                    val found = uiState.customerOptions.firstOrNull { it.second == name }
-                                    found?.let { onEvent(AddProjectEvent.CustomerSelected(it.first, it.second)) }
-                                },
+                                options     = uiState.customerOptions,
+                                onSelect    = { id, name -> onEvent(AddProjectEvent.CustomerSelected(id, name)) },
                                 onClear     = { onEvent(AddProjectEvent.CustomerSelected("", "")) }
                             )
                         }
@@ -308,7 +305,7 @@ fun AddProjectContent(
             }
 
             // ── Branch/Team ────────────────────────────────────
-            FormField("สาขาที่รับผิดชอบ") {
+            FormField("สาขาที่พนักงานขายรับผิดชอบ") {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     if (uiState.isLoadingTeams) LoadingFieldProject()
                     else DropdownField(

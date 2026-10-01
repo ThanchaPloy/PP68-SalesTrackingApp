@@ -18,6 +18,7 @@ import com.example.pp68_salestrackingapp.data.model.Customer
 import com.example.pp68_salestrackingapp.utils.DraftStore
 import java.util.UUID
 import javax.inject.Inject
+import com.example.pp68_salestrackingapp.utils.withUniqueLabels
 
 data class AddProjectUiState(
     val projectId:              String? = null,
@@ -434,7 +435,7 @@ class AddProjectViewModel @Inject constructor(
                 onSuccess = { list ->
                     _uiState.update {
                         it.copy(
-                            customerOptions    = list.map { c -> c.custId.trim() to c.companyName },
+                            customerOptions    = list.map { c -> c.custId.trim() to c.companyName }.withUniqueLabels(),
                             isLoadingCustomers = false
                         )
                     }
@@ -629,7 +630,7 @@ class AddProjectViewModel @Inject constructor(
                     val newOption = Pair(realCustId, newCust.companyName)
                     _uiState.update { 
                         it.copy(
-                            customerOptions = it.customerOptions + newOption,
+                            customerOptions = (it.customerOptions + newOption).withUniqueLabels(),
                             selectedCustomerId = realCustId,
                             selectedCustomerName = newCust.companyName,
                             isQuickAddCustomerOpen = false,
@@ -670,7 +671,7 @@ class AddProjectViewModel @Inject constructor(
             }
         }
         if (s.selectedTeamId.isNullOrBlank()) {
-            _uiState.update { it.copy(saveError = "กรุณาเลือกสาขาที่รับผิดชอบ") }
+            _uiState.update { it.copy(saveError = "กรุณาเลือกสาขาที่พนักงานขายรับผิดชอบ") }
             valid = false
         }
         // ❌ เอาการเช็ค billingBranch ออก เพื่อให้ไม่บังคับกรอกตามที่ผู้ใช้แจ้ง

@@ -293,7 +293,11 @@ fun DashboardScreenContent(
                     s.pipelineStages.forEach { stage ->
                         PipelineBar(
                             stage    = stage,
-                            maxCount = maxCount
+                            maxCount = maxCount,
+                            onClick  = {
+                                selectedPipelineStage = stage.stage
+                                selectedStatType      = StatDetailType.PIPELINE_STAGE
+                            }
                         )
                     }
                 }
@@ -303,7 +307,13 @@ fun DashboardScreenContent(
             SectionCard(title = "ภาพรวมโอกาสการขาย (Opportunity)") {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     s.opportunityGroups.forEach { group ->
-                        OpportunityRow(group = group)
+                        OpportunityRow(
+                            group   = group,
+                            onClick = {
+                                selectedOpportunityGroup = group.score
+                                selectedStatType         = StatDetailType.OPPORTUNITY_GROUP
+                            }
+                        )
                     }
                     if (s.opportunityGroups.all { it.count == 0 }) {
                         Text("ยังไม่มีโครงการที่ระบุ Opportunity Score",
@@ -328,12 +338,27 @@ fun DashboardScreenContent(
                 StatDetailType.ACTIVE_PROJECTS -> s.activeProjectsList
                 StatDetailType.CLOSING_MONTH -> s.closingThisMonthList
                 StatDetailType.MONTHLY_VISITS -> s.monthlyVisitList
+                // แถบ Pipeline / HOT-WARM-COLD ถือรายชื่อโครงการของตัวเองมาแล้ว
+                // (ดู PipelineStageCount.projects / OpportunityGroup.projects ใน StatViewModel)
+                StatDetailType.PIPELINE_STAGE ->
+                    s.pipelineStages.find { it.stage == selectedPipelineStage }?.projects.orEmpty()
+                StatDetailType.OPPORTUNITY_GROUP ->
+                    s.opportunityGroups.find { it.score == selectedOpportunityGroup }?.projects.orEmpty()
                 else -> emptyList<Any>()
             }
             StatDetailBottomSheet(
-                title = selectedStatType?.title ?: "",
+                title = when (selectedStatType) {
+                    StatDetailType.PIPELINE_STAGE ->
+                        com.example.pp68_salestrackingapp.utils.ProjectStages.labelFor(selectedPipelineStage.orEmpty())
+                    StatDetailType.OPPORTUNITY_GROUP -> "โอกาสการขาย ${selectedOpportunityGroup.orEmpty()}"
+                    else -> selectedStatType?.title ?: ""
+                },
                 items = listData,
-                onDismiss = { selectedStatType = null }
+                onDismiss = {
+                    selectedStatType         = null
+                    selectedPipelineStage    = null
+                    selectedOpportunityGroup = null
+                }
             )
         }
     }
@@ -398,7 +423,8 @@ fun StatDetailBottomSheet(
                                 ) {
                                     Column {
                                         androidx.compose.material3.Text(item.projectName, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold)
-                                        androidx.compose.material3.Text("มูลค่า: ${item.expectedValue ?: 0.0}", fontSize = 12.sp, color = androidx.compose.ui.graphics.Color.Gray)
+                                        // เดิมต่อ Double ดิบลงข้อความ ได้ "มูลค่า: 1.5E7" โชว์ผู้ใช้
+                                        androidx.compose.material3.Text("มูลค่า: ${"%,.0f".format(item.expectedValue ?: 0.0)} บาท", fontSize = 12.sp, color = androidx.compose.ui.graphics.Color.Gray)
                                     }
                                 }
                             }
@@ -519,13 +545,15 @@ private fun VisitCountCard(count: Int, label: String = "จำนวนการ
 
 // ── Pipeline bar ─────────────────────────────────────────────
 @Composable
-private fun PipelineBar(stage: PipelineStageCount, maxCount: Int) {
+private fun PipelineBar(stage: PipelineStageCount, maxCount: Int, onClick: () -> Unit = {}) {
     val barColor = pipelineColors.find { it.first == stage.stage }?.second
         ?: Color(0xFFEF9A9A)
     val fraction = stage.count.toFloat() / maxCount.toFloat()
 
     Row(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(enabled = stage.count > 0) { onClick() },
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
@@ -565,11 +593,13 @@ private fun PipelineBar(stage: PipelineStageCount, maxCount: Int) {
 
 // ── Opportunity row ───────────────────────────────────────────
 @Composable
-private fun OpportunityRow(group: OpportunityGroup) {
+private fun OpportunityRow(group: OpportunityGroup, onClick: () -> Unit = {}) {
     val (textColor, bgColor, emoji) = oppColors[group.score]
         ?: Triple(TextGray, BgLight, "⚪")
 
     Surface(
+        onClick  = onClick,
+        enabled  = group.count > 0,
         shape    = RoundedCornerShape(10.dp),
         color    = bgColor,
         modifier = Modifier.fillMaxWidth()

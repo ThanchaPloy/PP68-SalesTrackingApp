@@ -98,6 +98,8 @@ fun HomeScreen(
         val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
             if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
                 viewModel.loadActivities()
+                // กรอกเบอร์ในหน้าโปรไฟล์แล้วย้อนกลับมา การ์ดทวงเบอร์ต้องหายทันที ไม่ต้องรอลากรีเฟรช
+                viewModel.recheckPhoneNumber()
                 hasApptDraft = com.example.pp68_salestrackingapp.utils.DraftStore.peekExists(context, "create_appointment:new:none")
             }
         }

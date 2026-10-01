@@ -132,18 +132,25 @@ class ContactRepository @Inject constructor(
             val localContact = contact.copy(isSynced = false)
             contactDao.insertContact(localContact)
             try {
-                // ✅ ไม่กรอง null ออก — ฟอร์มแก้ผู้ติดต่อส่งค่ามาครบทุกฟิลด์ที่มันดูแล ค่าว่างจึงมี
-                // ความหมายว่า "ผู้ใช้ลบทิ้ง" ไม่ใช่ "ไม่ได้แก้" เดิม filterValues ตัด null ออก
-                // ทำให้ลบอีเมล/ไลน์/ตำแหน่ง/ชื่อเล่นไม่ได้เลย ลบในแอปแล้วดูเหมือนสำเร็จ แต่ค่าเก่า
-                // ยังอยู่บนเซิร์ฟเวอร์ แล้ว refreshContacts รอบหน้าดึงกลับมาทับของในเครื่อง
-                // (ฝั่ง backend ก็ใช้ ?.let อยู่เหมือนกัน แก้คู่กันใน ContactPersonRepositoryImpl)
+                // ⚠️ ส่ง "" ไม่ใช่ null เพื่อล้างค่า — Gson ของแอปไม่ได้เปิด serializeNulls
+                // (ดู NetworkModule) คีย์ที่ค่าเป็น null จะถูกตัดออกจาก body ตั้งแต่ตอนแปลงเป็น JSON
+                // ส่ง null ไปจึงเท่ากับ "ไม่ได้แก้ฟิลด์นี้" ผลคือลบอีเมล/ไลน์/ตำแหน่ง/ชื่อเล่นไม่ได้เลย
+                // ลบในแอปแล้วดูเหมือนสำเร็จ แต่ค่าเก่ายังอยู่บน server แล้ว refresh รอบหน้าดึงกลับมาทับ
+                // ฝั่ง backend แปลง "" เป็น NULL ให้ (ContactPersonRepositoryImpl) — เป็นวิธีเดียวกับ
+                // ที่ EditProjectFactorsViewModel ใช้กับ proposal_date อยู่แล้ว
                 val updates = buildMap<String, Any?> {
+                    // ⚠️ ฟอร์มแก้ไขเปิดให้เปลี่ยน "บริษัท" ได้ (ดรอปดาวน์ไม่ถูกปิดตอน edit)
+                    // แต่เดิมไม่เคยส่งคีย์นี้ขึ้นไป ผลคือย้ายผู้ติดต่อไปบริษัทอื่นแล้ว
+                    // PATCH สำเร็จ ไม่มี error แต่ server ยังผูกกับบริษัทเดิม พอ refresh รอบหน้า
+                    // clearAndInsert ดึงแถวเก่ากลับมาทับ ชื่อบริษัทในแอปก็เด้งกลับเอง
+                    // (SyncManager ฝั่ง outbox ส่ง customer_code อยู่แล้ว ทางนี้ทางเดียวที่หลุด)
+                    put("customer_code", contact.custId)
                     put("contact_name", contact.fullName)
-                    put("mobile_phone", contact.phoneNumber)
-                    put("email", contact.email)
-                    put("nickname", contact.nickname)
-                    put("position", contact.position)
-                    put("line", contact.line)
+                    put("mobile_phone", contact.phoneNumber.orEmpty())
+                    put("email", contact.email.orEmpty())
+                    put("nickname", contact.nickname.orEmpty())
+                    put("position", contact.position.orEmpty())
+                    put("line", contact.line.orEmpty())
                     put("is_active", contact.isActive)
                     put("is_dm_confirmed", contact.isDmConfirmed)
                 }

@@ -160,13 +160,21 @@ fun DropdownField(
     }
 }
 
+/**
+ * ดรอปดาวน์ค้นหาได้ที่ "คืน id ของแถวที่ถูกกดจริง" ไม่ใช่คืนชื่อแล้วให้ผู้เรียกไปค้นกลับเอง
+ *
+ * เดิมมีแต่รุ่นที่คืนชื่อ ทุกจอจึงต้องแปลงกลับด้วย `firstOrNull { it.second == name }` ซึ่งถ้ามี
+ * สองแถวชื่อเหมือนกันเป๊ะ (customer กับ lead_customer ถูกรวมเป็น v_unified_customer ลูกค้าราย
+ * เดียวกันจึงมีได้สองแถว) มันจะได้ id ของแถวแรกเสมอ ไม่ว่าผู้ใช้กดอันไหน — บันทึกสำเร็จ ไม่มี
+ * error แต่ผูกผิดบริษัทเงียบ ๆ
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SearchableDropdownField(
+fun SearchableIdDropdownField(
     value: String,
     placeholder: String,
-    options: List<String>,
-    onSelect: (String) -> Unit,
+    options: List<Pair<String, String>>,          // id to ชื่อที่แสดง
+    onSelect: (id: String, label: String) -> Unit,
     onClear: () -> Unit = {},
     enabled: Boolean = true
 ) {
@@ -181,7 +189,7 @@ fun SearchableDropdownField(
         // the user typed something. 300 comfortably covers categorical lists (brands,
         // groups, units); genuinely huge lists (customers) still get bounded.
         if (q.isBlank()) options.take(300)
-        else options.filter { it.contains(q, ignoreCase = true) }.take(300)
+        else options.filter { it.second.contains(q, ignoreCase = true) }.take(300)
     }
 
     ExposedDropdownMenuBox(
@@ -205,7 +213,17 @@ fun SearchableDropdownField(
             enabled = enabled,
             modifier = Modifier
                 .menuAnchor()
-                .fillMaxWidth(),
+                .fillMaxWidth()
+                // ✅ ดีดคำค้นที่ค้างอยู่กลับเป็นค่าที่เลือกไว้จริง "ตอนหลุดโฟกัส" เท่านั้น
+                //
+                // เดิมผูกไว้กับ onDismissRequest ของเมนู ซึ่งผิด: เมนูถูกตั้งให้เปิดเมื่อ
+                // expanded && filtered.isNotEmpty() พอพิมพ์จนผลกรองเหลือศูนย์ เมนูจะปิดตัวเอง
+                // แล้วยิง onDismissRequest ทันที = ลบสิ่งที่ผู้ใช้กำลังพิมพ์ทิ้งกลางคัน
+                // (อาการ "พิมพ์ได้ตัวอักษรเดียว พิมพ์เพิ่มแล้วหาย")
+                // ระหว่างพิมพ์โฟกัสยังอยู่ จึงไม่โดนแตะ ส่วนการแตะออกไปโดยไม่เลือกอะไรยังดีดกลับให้
+                .onFocusChanged { focus ->
+                    if (!focus.isFocused && query != value) query = value
+                },
             shape = RoundedCornerShape(10.dp),
             colors = OutlinedTextFieldDefaults.colors(
                 unfocusedBorderColor = AppColors.Border,
@@ -221,18 +239,17 @@ fun SearchableDropdownField(
         )
         ExposedDropdownMenu(
             expanded = expanded && filtered.isNotEmpty(),
-            // ✅ พิมพ์คำค้นแล้วแตะออกไปโดยไม่เลือกอะไร เดิม query ค้างอยู่ในช่อง ผู้ใช้เห็นชื่อลูกค้า
-            // ครึ่งท่อนอยู่ในช่องเหมือนเลือกแล้ว แต่ selectedCustomerId ยังว่าง กดบันทึกจะเจอ
-            // "กรุณาเลือกลูกค้า" ทั้งที่ตาเห็นว่ากรอกแล้ว — ต้องดีดกลับเป็นค่าที่เลือกไว้จริง
-            onDismissRequest = { expanded = false; query = value },
+            // ปิดเมนูอย่างเดียว ห้ามแตะ query ตรงนี้ — เมนูปิดตัวเองทุกครั้งที่ผลกรองเหลือศูนย์
+            // ระหว่างที่ผู้ใช้ยังพิมพ์อยู่ (ดูคำอธิบายที่ onFocusChanged ด้านบน)
+            onDismissRequest = { expanded = false },
             modifier = Modifier
                 .heightIn(max = 300.dp)
                 .background(Color.White)
         ) {
-            filtered.forEach { option ->
+            filtered.forEach { (id, label) ->
                 DropdownMenuItem(
-                    text = { Text(option, fontSize = 14.sp, color = AppColors.TextPrimary) },
-                    onClick = { query = option; onSelect(option); expanded = false }
+                    text = { Text(label, fontSize = 14.sp, color = AppColors.TextPrimary) },
+                    onClick = { query = label; onSelect(id, label); expanded = false }
                 )
             }
         }

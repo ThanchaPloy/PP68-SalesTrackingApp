@@ -23,6 +23,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.pp68_salestrackingapp.ui.components.*
+import com.example.pp68_salestrackingapp.ui.theme.AppColors
 import com.example.pp68_salestrackingapp.ui.theme.SalesTrackingTheme
 import com.example.pp68_salestrackingapp.ui.viewmodels.contact.AddContactViewModel
 import com.example.pp68_salestrackingapp.ui.viewmodels.contact.AddContactUiState
@@ -82,6 +83,7 @@ fun AddContactScreen(
     )
 }
 
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 fun AddContactContent(
     uiState: AddContactUiState,
@@ -131,19 +133,28 @@ fun AddContactContent(
             }
 
             // ── Select Company * ──────────────────────────────
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Spacer(Modifier.weight(1f))
+                TextButton(onClick = { onEvent(AddContactEvent.ToggleQuickAddCompany(true)) }) {
+                    Icon(Icons.Default.AddBusiness, null, tint = AppColors.Primary, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("สร้างบริษัทด่วน", color = AppColors.Primary, fontSize = 13.sp)
+                }
+            }
             FormField("เลือกบริษัท", required = true) {
                 if (uiState.isLoadingCompanies) {
                     LoadingField()
                 } else {
                     Column {
-                        SearchableDropdownField(
+                        SearchableIdDropdownField(
                             value       = uiState.selectedCompanyName ?: "",
                             placeholder = "เลือกบริษัทลูกค้า",
-                            options     = uiState.companyOptions.map { it.second },
-                            onSelect    = { name ->
-                                val found = uiState.companyOptions.firstOrNull { it.second == name }
-                                found?.let { onEvent(AddContactEvent.CompanySelected(it.first, it.second)) }
-                            },
+                            options     = uiState.companyOptions,
+                            onSelect    = { id, name -> onEvent(AddContactEvent.CompanySelected(id, name)) },
                             onClear     = { onEvent(AddContactEvent.CompanySelected("", "")) }
                         )
                         if (uiState.companyError != null)
@@ -155,6 +166,26 @@ fun AddContactContent(
             }
 
             // ── Select Project (กรองตาม company) ─────────────
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Spacer(Modifier.weight(1f))
+                // เปิดให้กดได้เฉพาะตอนเลือกบริษัทแล้ว — โครงการต้องสังกัดบริษัทเสมอ
+                TextButton(
+                    onClick = { onEvent(AddContactEvent.ToggleQuickAddProject(true)) },
+                    enabled = uiState.selectedCompanyId != null
+                ) {
+                    Icon(Icons.Default.CreateNewFolder, null,
+                        tint = if (uiState.selectedCompanyId != null) AppColors.Primary else AppColors.TextHint,
+                        modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("สร้างโครงการด่วน",
+                        color = if (uiState.selectedCompanyId != null) AppColors.Primary else AppColors.TextHint,
+                        fontSize = 13.sp)
+                }
+            }
             FormField("เลือกโครงการ (ไม่บังคับ)") {
                 if (uiState.isLoadingProjects) {
                     LoadingField()
@@ -327,6 +358,113 @@ fun AddContactContent(
             }
 
             Spacer(Modifier.height(32.dp))
+        }
+
+        // ── สร้างบริษัทด่วน ─────────────────────────────────
+        if (uiState.isQuickAddCompanyOpen) {
+            ModalBottomSheet(
+                onDismissRequest = { onEvent(AddContactEvent.ToggleQuickAddCompany(false)) },
+                containerColor = Color.White
+            ) {
+                Column(
+                    modifier = Modifier.fillMaxWidth().padding(24.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    // ตั้ง isLead = true เสมอเหมือนหน้าอื่น — ยังไม่ผ่านการคัดกรองเป็นลูกค้าจริง
+                    Text("สร้าง Lead ใหม่ (สร้างด่วน)", fontWeight = FontWeight.Bold, fontSize = 18.sp,
+                        color = AppColors.Primary)
+
+                    FormField("ชื่อบริษัท/ชื่อลูกค้า", required = true) {
+                        FormTextField(
+                            value = uiState.quickAddCompanyName,
+                            onValueChange = { onEvent(AddContactEvent.QuickAddCompanyChanged(it, uiState.quickAddCustType)) },
+                            placeholder = "ระบุชื่อบริษัท หรือชื่อลูกค้า"
+                        )
+                    }
+                    FormField("ประเภทลูกค้า", required = true) {
+                        val types = listOf("Owner", "Developer", "Main Contractor", "Sub Contractor",
+                            "Installer", "Architect", "Interior Designer", "Consultant",
+                            "Industrial", "Wholesale", "Factory")
+                        DropdownField(
+                            value = uiState.quickAddCustType,
+                            placeholder = "เลือกประเภท",
+                            options = types,
+                            onSelect = { idx -> onEvent(AddContactEvent.QuickAddCompanyChanged(uiState.quickAddCompanyName, types[idx])) }
+                        )
+                    }
+                    uiState.quickAddCompanyError?.let {
+                        Text(it, color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
+                    }
+                    Button(
+                        onClick = { onEvent(AddContactEvent.SaveQuickAddCompany) },
+                        enabled = !uiState.isSavingQuickCompany,
+                        modifier = Modifier.fillMaxWidth().height(50.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = RedPrimary)
+                    ) {
+                        if (uiState.isSavingQuickCompany) {
+                            CircularProgressIndicator(color = White, modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                        } else {
+                            Text("สร้างและเลือกบริษัทนี้", color = White, fontWeight = FontWeight.SemiBold)
+                        }
+                    }
+                    Spacer(Modifier.height(8.dp))
+                }
+            }
+        }
+
+        // ── สร้างโครงการด่วน ────────────────────────────────
+        if (uiState.isQuickAddProjectOpen) {
+            ModalBottomSheet(
+                onDismissRequest = { onEvent(AddContactEvent.ToggleQuickAddProject(false)) },
+                containerColor = Color.White
+            ) {
+                Column(
+                    modifier = Modifier.fillMaxWidth().padding(24.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    Text("สร้างโครงการใหม่ (สร้างด่วน)", fontWeight = FontWeight.Bold, fontSize = 18.sp,
+                        color = AppColors.Primary)
+                    Text("จะถูกผูกกับบริษัท: ${uiState.selectedCompanyName ?: "-"}",
+                        fontSize = 13.sp, color = AppColors.TextSecondary)
+
+                    FormField("ชื่อโครงการ", required = true) {
+                        FormTextField(
+                            value = uiState.quickAddProjectName,
+                            onValueChange = { onEvent(AddContactEvent.QuickAddProjectNameChanged(it)) },
+                            placeholder = "ระบุชื่อโครงการ"
+                        )
+                    }
+                    FormField("สถานะโครงการ", required = true) {
+                        val stages = com.example.pp68_salestrackingapp.utils.ProjectStages.SELECTABLE
+                        DropdownField(
+                            value = uiState.quickAddProjectStatus,
+                            placeholder = "เลือกสถานะ",
+                            options = stages,
+                            onSelect = { idx -> onEvent(AddContactEvent.QuickAddProjectStatusChanged(stages[idx])) },
+                            // เก็บเป็นรหัสแต่โชว์ป้ายจาก master data เหมือนทุกที่ในแอป
+                            displayLabel = { com.example.pp68_salestrackingapp.utils.ProjectStages.labelFor(it) }
+                        )
+                    }
+                    uiState.quickAddProjectError?.let {
+                        Text(it, color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
+                    }
+                    Button(
+                        onClick = { onEvent(AddContactEvent.SaveQuickAddProject) },
+                        enabled = !uiState.isSavingQuickProject,
+                        modifier = Modifier.fillMaxWidth().height(50.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = RedPrimary)
+                    ) {
+                        if (uiState.isSavingQuickProject) {
+                            CircularProgressIndicator(color = White, modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                        } else {
+                            Text("สร้างและเลือกโครงการนี้", color = White, fontWeight = FontWeight.SemiBold)
+                        }
+                    }
+                    Spacer(Modifier.height(8.dp))
+                }
+            }
         }
     }
 }
