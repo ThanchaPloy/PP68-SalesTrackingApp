@@ -78,8 +78,6 @@ interface ContactDao {
     @Query("DELETE FROM contact_person WHERE contactId = :contactId")
     suspend fun deleteContactById(contactId: String)
 
-    @Query("DELETE FROM contact_person")
-    suspend fun deleteAll()
 
     @Query("DELETE FROM contact_person WHERE is_synced = 1")
     suspend fun deleteAllSynced()

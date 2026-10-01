@@ -68,8 +68,6 @@ interface ProjectDao {
     @Query("DELETE FROM project WHERE projectId = :projectId")
     suspend fun deleteProjectById(projectId: String)
 
-    @Query("DELETE FROM project")
-    suspend fun deleteAllProjects()
 
     @Query("DELETE FROM project WHERE is_synced = 1")
     suspend fun deleteAllSynced()

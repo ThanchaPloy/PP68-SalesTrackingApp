@@ -37,9 +37,9 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun activityResultPhotoDao(): ActivityResultPhotoDao
     abstract fun syncRejectionDao(): SyncRejectionDao
 
-    fun clearAllData() {
-        this.clearAllTables()
-    }
+    // clearAllData() ถูกลบออก — เป็น wrapper บาง ๆ ของ clearAllTables() ที่ไม่มีใครเรียกเลย
+    // ตัวที่ใช้งานจริงคือ clearAllTables() ที่ AuthRepository เรียกตอน login คนละคน/logout ซึ่งมี
+    // การ์ดกันงานค้างหายอยู่แล้ว การมีชื่อที่สองสำหรับ "ล้างข้อมูลทั้งเครื่อง" ชวนให้เรียกผิดจุดเปล่า ๆ
 
     companion object {
         val MIGRATION_28_29 = object : Migration(28, 29) {

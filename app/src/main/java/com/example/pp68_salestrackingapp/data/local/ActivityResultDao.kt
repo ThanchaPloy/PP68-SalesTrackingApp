@@ -66,8 +66,6 @@ interface ActivityResultDao {
         }
     }
 
-    @Query("DELETE FROM activity_result")
-    suspend fun deleteAll()
 
     @Query("DELETE FROM activity_result WHERE is_synced = 1")
     suspend fun deleteAllSynced()

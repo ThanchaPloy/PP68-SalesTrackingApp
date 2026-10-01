@@ -67,16 +67,12 @@ interface ActivityDao {
         }
     }
 
-    @Query("DELETE FROM activity_table")
-    suspend fun deleteAllActivities()
 
     @Transaction
     suspend fun insertAll(activities: List<SalesActivity>) {
         insertActivities(activities)
     }
 
-    @Query("DELETE FROM activity_table")
-    suspend fun deleteAll()
 
     @Query("DELETE FROM activity_table WHERE is_synced = 1")
     suspend fun deleteAllSynced()

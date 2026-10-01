@@ -57,11 +57,7 @@ interface CustomerDao {
     @Query("DELETE FROM customer WHERE cust_id = :customerId")
     suspend fun deleteCustomerById(customerId: String)
 
-    @Query("DELETE FROM customer")
-    suspend fun deleteAllCustomers()
 
-    @Query("DELETE FROM customer")
-    suspend fun deleteAll()
 
     @Query("DELETE FROM customer WHERE is_synced = 1")
     suspend fun deleteAllSynced()

@@ -828,8 +828,15 @@ class ActivityRepository @Inject constructor(
             // รายชื่อเดิมค้างอยู่ตลอดไปเพราะ if (items.isNotEmpty()) เดิมครอบ delete ไว้ด้วย
             if (!appointmentId.startsWith("TEMP-")) {
                 try {
-                    apiService.deleteAppointmentContacts("eq.$appointmentId")
-                    if (items.isNotEmpty()) apiService.addAppointmentContacts(items)
+                    // ✅ ต้องดูผลด้วย — เซิร์ฟเวอร์ตอบ 4xx/5xx ไม่ได้โยน exception ออกมา จึงตกไปที่
+                    // "ถือว่าสำเร็จ" เงียบ ๆ ทั้งที่รายชื่อไม่เคยขึ้นไปถึง (เดิมจับแค่ IOException
+                    // ซึ่งครอบแค่กรณีเน็ตหลุด) ปักธงให้ outbox ตามส่งด้วยกลไกเดียวกับตอนออฟไลน์
+                    val deleted = apiService.deleteAppointmentContacts("eq.$appointmentId")
+                    val added = if (items.isNotEmpty()) apiService.addAppointmentContacts(items) else null
+                    if (!deleted.isSuccessful || added?.isSuccessful == false) {
+                        activityDao.updateSyncStatus(appointmentId, false)
+                        syncManager.scheduleSync()
+                    }
                 } catch (_: IOException) {
                     // ✅ Room เก็บรายชื่อใหม่ไว้แล้ว แต่ appointment_contact ไม่มี is_synced ของตัวเอง
                     // และ outbox วนเฉพาะนัดหมายที่ is_synced = 0 — ถ้าไม่ปักธงตรงนี้ การแก้ผู้เข้าร่วม
