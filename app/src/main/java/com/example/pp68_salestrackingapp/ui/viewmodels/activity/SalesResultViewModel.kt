@@ -753,7 +753,7 @@ class SalesResultViewModel @Inject constructor(
              s.counterpartyMultiplier.isBlank() || s.responseSpeed.isBlank())
         ) {
             _uiState.update {
-                it.copy(showRequiredErrors = true, error = "กรุณาตอบข้อ 4-7 ในหัวข้อวิเคราะห์ข้อมูลให้ครบ")
+                it.copy(showRequiredErrors = true, error = "กรุณาตอบคำถามในหัวข้อวิเคราะห์ข้อมูลให้ครบ")
             }
             return
         }

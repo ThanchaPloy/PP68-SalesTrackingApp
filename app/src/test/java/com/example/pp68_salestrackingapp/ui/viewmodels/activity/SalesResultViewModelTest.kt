@@ -416,7 +416,7 @@ class SalesResultViewModelTest {
         advanceUntilIdle()
 
         assertTrue(vm.uiState.value.showRequiredErrors)
-        assertEquals("กรุณาตอบข้อ 4-7 ในหัวข้อวิเคราะห์ข้อมูลให้ครบ", vm.uiState.value.error)
+        assertEquals("กรุณาตอบคำถามในหัวข้อวิเคราะห์ข้อมูลให้ครบ", vm.uiState.value.error)
         assertFalse(vm.uiState.value.isSaved)
         coVerify(exactly = 0) { activityRepo.saveActivityResult(any(), any()) }
     }

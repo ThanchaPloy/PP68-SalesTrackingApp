@@ -155,7 +155,7 @@ class EditProjectFactorsViewModel @Inject constructor(
         if (s.dealPosition.isBlank() || s.previousSolution.isBlank() ||
             s.counterpartyType.isBlank() || s.responseSpeed.isBlank()
         ) {
-            _uiState.update { it.copy(error = "กรุณาเลือกปัจจัยข้อ 4-7 ให้ครบ") }
+            _uiState.update { it.copy(error = "กรุณาเลือกปัจจัยของดีลให้ครบ") }
             return
         }
         if (s.isProposalSent && s.proposalDate.isNullOrBlank()) {

@@ -94,7 +94,7 @@ fun EditProjectFactorsScreen(
                 fontSize = 12.sp, color = TextGray
             )
 
-            FormField(label = "4. สถานะการแข่งขันของดีล", required = true) {
+            FormField(label = "สถานะการแข่งขันของดีล", required = true) {
                 DropdownField(
                     value = state.dealPosition,
                     placeholder = "เลือกสถานะการแข่งขัน",
@@ -103,7 +103,7 @@ fun EditProjectFactorsScreen(
                 )
             }
 
-            FormField(label = "5. โซลูชันเดิมของลูกค้า", required = true) {
+            FormField(label = "โซลูชันเดิมของลูกค้า", required = true) {
                 DropdownField(
                     value = state.previousSolution,
                     placeholder = "เลือกโซลูชันเดิม",
@@ -112,7 +112,7 @@ fun EditProjectFactorsScreen(
                 )
             }
 
-            FormField(label = "6. ลักษณะคู่สัญญา", required = true) {
+            FormField(label = "ลักษณะคู่สัญญา", required = true) {
                 DropdownField(
                     value = state.counterpartyType,
                     placeholder = "เลือกลักษณะคู่สัญญา",
@@ -121,7 +121,7 @@ fun EditProjectFactorsScreen(
                 )
             }
 
-            FormField(label = "7. ความเร็วในการตอบสนองของลูกค้า", required = true) {
+            FormField(label = "ความเร็วในการตอบสนองของลูกค้า", required = true) {
                 DropdownField(
                     value = state.responseSpeed,
                     placeholder = "เลือกความเร็วการตอบสนอง",
@@ -132,7 +132,7 @@ fun EditProjectFactorsScreen(
 
             HorizontalDivider(color = BorderGray)
 
-            FormField(label = "8. การส่งใบเสนอราคา") {
+            FormField(label = "การส่งใบเสนอราคา") {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -158,7 +158,7 @@ fun EditProjectFactorsScreen(
                 }
             }
 
-            FormField(label = "9. จำนวนคู่แข่ง") {
+            FormField(label = "จำนวนคู่แข่ง") {
                 FormTextField(
                     value = state.competitorCount,
                     onValueChange = viewModel::onCompetitorCountChange,
@@ -225,15 +225,15 @@ private fun FactorLogCard(entry: FactorHistoryEntry) {
     }
 }
 
-// field_key จาก DB -> ชื่อหัวข้อที่ผู้ใช้เห็นในฟอร์ม (เลขข้อตรงกับหน้าบันทึกผล)
+// field_key จาก DB -> ชื่อหัวข้อที่ผู้ใช้เห็นในฟอร์ม (ต้องตรงกับ label ของฟิลด์ด้านบน)
 private fun factorFieldLabel(fieldKey: String): String = when (fieldKey) {
-    "deal_position"     -> "4. สถานะการแข่งขันของดีล"
-    "current_solution"  -> "5. โซลูชันเดิมของลูกค้า"
-    "counterparty_type" -> "6. ลักษณะคู่สัญญา"
-    "response_speed"    -> "7. ความเร็วในการตอบสนอง"
-    "is_proposal_sent"  -> "8. การส่งใบเสนอราคา"
-    "proposal_date"     -> "8. วันที่ส่งใบเสนอราคา"
-    "competitor_count"  -> "9. จำนวนคู่แข่ง"
+    "deal_position"     -> "สถานะการแข่งขันของดีล"
+    "current_solution"  -> "โซลูชันเดิมของลูกค้า"
+    "counterparty_type" -> "ลักษณะคู่สัญญา"
+    "response_speed"    -> "ความเร็วในการตอบสนอง"
+    "is_proposal_sent"  -> "การส่งใบเสนอราคา"
+    "proposal_date"     -> "วันที่ส่งใบเสนอราคา"
+    "competitor_count"  -> "จำนวนคู่แข่ง"
     else                -> fieldKey
 }
 

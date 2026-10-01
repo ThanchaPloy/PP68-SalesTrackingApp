@@ -141,7 +141,7 @@ class EditProjectFactorsViewModelTest {
         viewModel.save()
         advanceUntilIdle()
 
-        assertEquals("กรุณาเลือกปัจจัยข้อ 4-7 ให้ครบ", viewModel.uiState.value.error)
+        assertEquals("กรุณาเลือกปัจจัยของดีลให้ครบ", viewModel.uiState.value.error)
         coVerify(exactly = 0) { projectRepo.updateProjectFields(any(), any()) }
     }
 

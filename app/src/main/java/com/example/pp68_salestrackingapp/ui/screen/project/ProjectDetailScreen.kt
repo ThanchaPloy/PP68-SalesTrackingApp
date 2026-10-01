@@ -274,7 +274,7 @@ fun ProjectDetailContent(
                     ) {
                         Icon(Icons.Default.Tune, null, tint = RedPrimary, modifier = Modifier.size(18.dp))
                         Spacer(Modifier.width(8.dp))
-                        Text("แก้ไขปัจจัยของดีล (ข้อ 4-9)", color = RedPrimary, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                        Text("แก้ไขปัจจัยของดีล", color = RedPrimary, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
                     }
                     Spacer(Modifier.height(8.dp))
                 }
