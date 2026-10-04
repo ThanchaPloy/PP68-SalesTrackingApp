@@ -2,23 +2,33 @@ package com.example.pp68_salestrackingapp.utils
 
 import android.content.Context
 import com.example.pp68_salestrackingapp.data.local.*
+import com.example.pp68_salestrackingapp.data.model.ActivityResult
 import com.example.pp68_salestrackingapp.data.model.Customer
 import com.example.pp68_salestrackingapp.data.model.Project
+import com.example.pp68_salestrackingapp.data.model.AttachmentOutbox
 import com.example.pp68_salestrackingapp.data.remote.ApiService
+import com.example.pp68_salestrackingapp.data.remote.UploadApiService
+import com.example.pp68_salestrackingapp.data.remote.UploadPhotoResponse
 import com.example.pp68_salestrackingapp.di.TokenManager
 import io.mockk.*
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.runTest
 import okhttp3.ResponseBody.Companion.toResponseBody
 import org.junit.Before
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
+import org.junit.Assert.assertFalse
 import org.junit.Test
 import retrofit2.Response
+import java.io.File
+import java.security.MessageDigest
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class SyncManagerTest {
 
     private val context: Context = mockk(relaxed = true)
     private val apiService: ApiService = mockk(relaxed = true)
+    private val uploadApiService: UploadApiService = mockk(relaxed = true)
     private val tokenManager: TokenManager = mockk(relaxed = true)
     private val customerDao: CustomerDao = mockk(relaxed = true)
     private val projectDao: ProjectDao = mockk(relaxed = true)
@@ -30,21 +40,28 @@ class SyncManagerTest {
     private val planItemDao: ActivityPlanItemDao = mockk(relaxed = true)
     private val projectContactDao: ProjectContactDao = mockk(relaxed = true)
     private val syncRejectionDao: SyncRejectionDao = mockk(relaxed = true)
+    private val attachmentOutboxDao: AttachmentOutboxDao = mockk(relaxed = true)
 
     private lateinit var sync: SyncManager
 
     @Before
     fun setUp() {
         sync = SyncManager(
-            context, apiService, tokenManager, customerDao, projectDao, contactDao,
+            context, apiService, uploadApiService, tokenManager, customerDao, projectDao, contactDao,
             activityDao, resultDao, photoDao, appointmentContactDao, planItemDao, projectContactDao,
-            syncRejectionDao
+            syncRejectionDao, attachmentOutboxDao
         )
         coEvery { customerDao.getUnsyncedCustomers() } returns emptyList()
         coEvery { contactDao.getUnsyncedContacts() } returns emptyList()
         coEvery { projectDao.getUnsyncedProjects() } returns emptyList()
         coEvery { activityDao.getUnsyncedActivities() } returns emptyList()
         coEvery { resultDao.getUnsyncedResults() } returns emptyList()
+        coEvery { planItemDao.getUnsyncedAppointmentIds() } returns emptyList()
+        coEvery { syncRejectionDao.getAll() } returns emptyList()
+        coEvery { syncRejectionDao.idsOfType(any()) } returns emptyList()
+        every { tokenManager.getLocalDataOwner() } returns null
+        coEvery { apiService.deleteProjectContacts(any()) } returns Response.success(Unit)
+        coEvery { apiService.addProjectContacts(any()) } returns Response.success(Unit)
     }
 
     // โปรเจคที่สร้างออฟไลน์ผูกกับลูกค้า TEMP- อยู่ ถ้าไม่ชี้ custId ใหม่ตอนลูกค้าได้ id จริง
@@ -53,15 +70,18 @@ class SyncManagerTest {
     fun `a temp customer getting a real id remaps the projects that referenced it`() = runTest {
         val temp = Customer(custId = "TEMP-ABC123", companyName = "ลูกค้าใหม่", isSynced = false)
         coEvery { customerDao.getUnsyncedCustomers() } returns listOf(temp)
-        coEvery { apiService.addCustomer(any()) } returns Response.success(
+        coEvery { apiService.addCustomer(any(), any()) } returns Response.success(
             listOf(Customer(custId = "C00123", companyName = "ลูกค้าใหม่"))
         )
 
         sync.doSync()
 
-        coVerify(exactly = 1) { projectDao.updateCustIdForProjects("TEMP-ABC123", "C00123") }
-        coVerify(exactly = 1) { contactDao.updateCustIdForContacts("TEMP-ABC123", "C00123") }
-        coVerify(exactly = 1) { activityDao.updateCustIdForActivities("TEMP-ABC123", "C00123") }
+        coVerify(exactly = 1) {
+            customerDao.replaceTemporaryCustomer(
+                "TEMP-ABC123",
+                match { it.custId == "C00123" && it.isSynced }
+            )
+        }
     }
 
     // ลบผู้ติดต่อออกจนหมดคือการเปลี่ยนแปลงที่ต้องส่งขึ้น server เหมือนกัน — ถ้าข้ามคำสั่งลบ
@@ -94,6 +114,23 @@ class SyncManagerTest {
         }
     }
 
+    @Test
+    fun `a project remains unsynced when its contact relation fails`() = runTest {
+        val project = Project(projectId = "PRJ-1", projectName = "Project A", isSynced = false)
+        coEvery { projectDao.getUnsyncedProjects() } returns listOf(project)
+        coEvery { apiService.updateProject(any(), any()) } returns Response.success(listOf(project))
+        coEvery { projectContactDao.getContactIdsByProject("PRJ-1") } returns emptyList()
+        coEvery { apiService.deleteProjectContacts("eq.PRJ-1") } returns
+            Response.error(500, "".toResponseBody(null))
+
+        val result = sync.doSync()
+
+        coVerify(exactly = 1) { projectDao.updateSyncStatus("PRJ-1", false) }
+        coVerify(exactly = 0) { projectDao.updateSyncStatus("PRJ-1", true) }
+        assertEquals(1, result.failureTypes[SyncFailureType.SERVER])
+        assertTrue(result.shouldRetry)
+    }
+
     // หัวใจของการแยก "ปฏิเสธถาวร" ออกจาก "เน็ตไม่ดี" — ถ้าแยกผิดทางใดทางหนึ่งจะพังคนละแบบ:
     // นับ 5xx เป็นถาวร = ข้อมูลผู้ใช้ถูกทิ้งเงียบ ๆ, ไม่นับ 4xx = logout ค้างตลอดกาลเหมือนเดิม
     @Test
@@ -106,10 +143,34 @@ class SyncManagerTest {
         coEvery { apiService.updateCustomer("eq.C-500", any()) } returns
             Response.error(500, "".toResponseBody(null))
 
-        sync.doSync()
+        val result = sync.doSync()
 
         coVerify(exactly = 1) { syncRejectionDao.upsert(match { it.entityId == "C-403" && it.httpCode == 403 }) }
         coVerify(exactly = 0) { syncRejectionDao.upsert(match { it.entityId == "C-500" }) }
+        assertEquals(2, result.attempted)
+        assertEquals(1, result.permanentFailures)
+        assertEquals(1, result.temporaryFailures)
+        assertEquals(1, result.failureTypes[SyncFailureType.PERMANENT])
+        assertEquals(1, result.failureTypes[SyncFailureType.SERVER])
+        assertTrue(result.shouldRetry)
+    }
+
+    @Test
+    fun `one run uploads at most one hundred rows per entity and reports the rest as skipped`() = runTest {
+        val customers = (1..101).map {
+            Customer(custId = "C-$it", companyName = "Customer $it", isSynced = false)
+        }
+        coEvery { customerDao.getUnsyncedCustomers() } returns customers
+        coEvery { apiService.updateCustomer(any(), any()) } answers {
+            Response.success(listOf(customers.first { it.custId == firstArg<String>().removePrefix("eq.") }))
+        }
+
+        val result = sync.doSync()
+
+        coVerify(exactly = 100) { apiService.updateCustomer(any(), any()) }
+        assertEquals(100, result.attempted)
+        assertEquals(1, result.skipped)
+        assertTrue(result.shouldRetry)
     }
 
     private fun appointment(id: String) = com.example.pp68_salestrackingapp.data.model.SalesActivity(
@@ -128,10 +189,12 @@ class SyncManagerTest {
         coEvery { apiService.deleteAppointmentContacts("eq.APT-1") } returns
             Response.error(500, "".toResponseBody(null))
 
-        sync.doSync()
+        val result = sync.doSync()
 
         coVerify(exactly = 1) { activityDao.updateSyncStatus("APT-1", false) }
         coVerify(exactly = 0) { activityDao.updateSyncStatus("APT-1", true) }
+        assertEquals(1, result.failureTypes[SyncFailureType.SERVER])
+        assertTrue(result.shouldRetry)
     }
 
     // แก้รายชื่อผู้เข้าร่วมตอนออฟไลน์ เดิมเส้น PATCH ไม่ส่ง appointment_contact เลยสักครั้ง
@@ -179,5 +242,115 @@ class SyncManagerTest {
         sync.doSync()
 
         coVerify(exactly = 1) { syncRejectionDao.clear("customer", "C-1") }
+    }
+
+    @Test
+    fun `a successful result response without a real id stays pending and retries`() = runTest {
+        val pending = ActivityResult(
+            resultId = "TEMP-RESULT-1",
+            projectId = "PRJ-1",
+            createdBy = "U1",
+            isSynced = false,
+            operationId = "result-operation-1"
+        )
+        coEvery { resultDao.getUnsyncedResults() } returns listOf(pending)
+        coEvery { apiService.insertActivityResultMap(any(), "result-operation-1") } returns
+            Response.success(emptyList())
+
+        val result = sync.doSync()
+
+        coVerify(exactly = 0) { resultDao.updateSyncStatus("TEMP-RESULT-1", true) }
+        coVerify(exactly = 0) { resultDao.replaceTemporaryResult(any(), any()) }
+        assertEquals(1, result.failureTypes[SyncFailureType.SERVER])
+        assertTrue(result.shouldRetry)
+    }
+
+    @Test
+    fun `uploaded attachment is persisted as pending bind before metadata call`() = runTest {
+        val file = kotlin.io.path.createTempFile("phase2d", ".jpg").toFile().apply {
+            writeBytes("camera-photo".toByteArray())
+        }
+        val item = attachment(file)
+        every { tokenManager.getLocalDataOwner() } returns "U1"
+        coEvery { attachmentOutboxDao.getPending("U1", any()) } returns listOf(item)
+        coEvery { uploadApiService.uploadVisitPhoto(any(), any(), any(), any()) } returns
+            Response.success(UploadPhotoResponse("/uploads/photo.jpg"))
+        coEvery { apiService.addResultPhotos(any()) } returns
+            Response.error(500, "".toResponseBody(null))
+
+        sync.doSync()
+
+        coVerifyOrder {
+            uploadApiService.uploadVisitPhoto("attachment-op", item.sha256, any(), any())
+            attachmentOutboxDao.markUploaded(
+                "attachment-op",
+                AttachmentOutbox.STATE_PENDING_BIND,
+                "/uploads/photo.jpg",
+                any()
+            )
+            apiService.addResultPhotos(any())
+        }
+        coVerify(exactly = 0) { attachmentOutboxDao.finalizeBinding(any(), any()) }
+        assertTrue(file.exists())
+        file.delete()
+    }
+
+    @Test
+    fun `pending bind retry does not upload binary again and removes file only after bind`() = runTest {
+        val file = kotlin.io.path.createTempFile("phase2d", ".jpg").toFile().apply {
+            writeBytes("camera-photo".toByteArray())
+        }
+        val item = attachment(file).copy(
+            state = AttachmentOutbox.STATE_PENDING_BIND,
+            remoteUrl = "/uploads/photo.jpg"
+        )
+        every { tokenManager.getLocalDataOwner() } returns "U1"
+        coEvery { attachmentOutboxDao.getPending("U1", any()) } returns listOf(item)
+        coEvery { apiService.addResultPhotos(any()) } returns Response.success(emptyList())
+        coEvery { apiService.updateActivityResult(any(), any()) } returns Response.success(Unit)
+
+        sync.doSync()
+
+        coVerify(exactly = 0) { uploadApiService.uploadVisitPhoto(any(), any(), any(), any()) }
+        coVerifyOrder {
+            apiService.addResultPhotos(match { it.single().photoUrl == "/uploads/photo.jpg" })
+            apiService.updateActivityResult("eq.R1", match { it["photo_url"] == "/uploads/photo.jpg" })
+            attachmentOutboxDao.finalizeBinding(item, "/uploads/photo.jpg")
+        }
+        assertFalse(file.exists())
+    }
+
+    @Test
+    fun `missing pending file is recorded as a local rejection`() = runTest {
+        val missing = File(System.getProperty("java.io.tmpdir"), "missing-${System.nanoTime()}.jpg")
+        val item = attachment(missing, knownBytes = "missing".toByteArray())
+        every { tokenManager.getLocalDataOwner() } returns "U1"
+        coEvery { attachmentOutboxDao.getPending("U1", any()) } returns listOf(item)
+
+        sync.doSync()
+
+        coVerify(exactly = 0) { uploadApiService.uploadVisitPhoto(any(), any(), any(), any()) }
+        coVerify {
+            syncRejectionDao.upsert(match {
+                it.entityType == "attachment" && it.entityId == "attachment-op" && it.httpCode == 0
+            })
+        }
+    }
+
+    private fun attachment(file: File, knownBytes: ByteArray = file.readBytes()): AttachmentOutbox {
+        val sha = MessageDigest.getInstance("SHA-256").digest(knownBytes)
+            .joinToString("") { "%02x".format(it) }
+        return AttachmentOutbox(
+            operationId = "attachment-op",
+            ownerId = "U1",
+            resultId = "R1",
+            photoOrder = 0,
+            localPath = file.absolutePath,
+            mimeType = "image/jpeg",
+            sha256 = sha,
+            sizeBytes = knownBytes.size.toLong(),
+            createdAt = "2026-10-05T00:00:00Z",
+            updatedAt = "2026-10-05T00:00:00Z"
+        )
     }
 }

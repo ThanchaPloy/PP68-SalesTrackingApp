@@ -12,12 +12,16 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.YearMonth
 import java.time.format.DateTimeFormatter
 import javax.inject.Inject
+import com.example.pp68_salestrackingapp.utils.SyncRuntime
+import com.example.pp68_salestrackingapp.utils.SyncStatus
+import com.example.pp68_salestrackingapp.utils.SyncTrigger
 
 data class ActivityCard(
     val activityId:    String,
@@ -52,9 +56,13 @@ data class HomeUiState(
 
     // ส่วนที่ซิงค์ตอน login ไม่สำเร็จ (ว่าง = ครบดี) — เดิมล้มแล้วเงียบ ผู้ใช้เห็นหน้าจอว่าง
     // แล้วเข้าใจว่าข้อมูลหาย ทั้งที่แค่โหลดไม่สำเร็จรอบนั้นและกดใหม่ก็ได้
-    val syncFailures: List<String> = emptyList()
+    val syncFailures: List<String> = emptyList(),
+    val pendingSummary: List<Pair<String, Int>> = emptyList(),
+    val rejectedCount: Int = 0,
+    val syncStatus: SyncStatus = SyncStatus.Idle
 )
 
+@OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
 class HomeViewModel @Inject constructor(
     private val activityRepo: ActivityRepository,
@@ -63,20 +71,36 @@ class HomeViewModel @Inject constructor(
     private val projectRepo:  ProjectRepository,
     private val apiService:   ApiService,
     // ตัวดาวน์โหลดข้อมูลหลัง login (data.repository) — คนละตัวกับ outbox ใน utils ที่ชื่อซ้ำกัน
-    private val downloadSync: com.example.pp68_salestrackingapp.data.repository.SyncManager
+    private val downloadSync: com.example.pp68_salestrackingapp.data.repository.SyncManager,
+    private val outboxSync: com.example.pp68_salestrackingapp.utils.SyncManager
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(HomeUiState(authUser = authRepo.currentUser()))
     val uiState: StateFlow<HomeUiState> = _uiState
+    private val _selectedMonth = MutableStateFlow(YearMonth.now())
+    private val _activityReload = MutableStateFlow(0L)
 
     init {
-        if (authRepo.currentUser()?.userId != null) {
-            refreshData()
-        } else {
-            loadActivities()
-        }
+        // แสดง Room ก่อนเสมอ งาน network ถูกเข้าคิวและไม่ขวางการเปิดหน้าหลัก
         observeActivities()
+        if (authRepo.currentUser()?.userId != null) {
+            outboxSync.scheduleSync(SyncTrigger.APP_FOREGROUND)
+            outboxSync.scheduleDownload()
+        }
         observeSyncFailures()
+        observeSyncStatus()
+    }
+
+    private fun observeSyncStatus() {
+        viewModelScope.launch {
+            SyncRuntime.status.collect { status ->
+                val pending = runCatching { outboxSync.pendingSummary() }.getOrDefault(emptyList())
+                val rejected = runCatching { outboxSync.rejectedSummary().size }.getOrDefault(0)
+                _uiState.update {
+                    it.copy(syncStatus = status, pendingSummary = pending, rejectedCount = rejected)
+                }
+            }
+        }
     }
 
     private fun observeSyncFailures() {
@@ -111,13 +135,9 @@ class HomeViewModel @Inject constructor(
 
     /** กด "ลองใหม่" บนแถบเตือน — ซิงค์ใหม่ทั้งชุดเหมือนตอน login ไม่ใช่แค่ refresh หน้านี้ */
     fun retrySync() {
-        val user = authRepo.currentUser() ?: return
-        viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true) }
-            downloadSync.syncAll(userId = user.userId, branchId = user.teamId ?: "")
-            loadActivities()
-            _uiState.update { it.copy(isLoading = false) }
-        }
+        if (authRepo.currentUser() == null) return
+        outboxSync.scheduleSync(SyncTrigger.MANUAL)
+        outboxSync.scheduleDownload()
     }
 
     /** ปิดแถบเตือนทิ้ง — ผู้ใช้รับรู้แล้วและเลือกทำงานต่อ */
@@ -127,58 +147,42 @@ class HomeViewModel @Inject constructor(
 
     private fun observeActivities() {
         viewModelScope.launch {
-            // ✅ Observe ทั้งการเปลี่ยนแปลงของนัดหมายและบันทึกผล
             combine(
-                activityRepo.getAllActivitiesFlow(),
-                activityRepo.getAllResultIdsFlow(),
-                customerRepo.getAllCustomersFlow(),
-                projectRepo.getAllProjectsFlow()
-            ) { _, _, _, _ -> 
-                loadActivities()
-            }.collect()
+                _selectedMonth,
+                _activityReload
+            ) { month, _ -> month }
+                .flatMapLatest { month ->
+                    val userId = authRepo.currentUser()?.userId
+                    if (userId.isNullOrBlank()) {
+                        flowOf(Result.success(emptyList()))
+                    } else {
+                        activityRepo.getActivityCardsForMonthFlow(
+                            userId = userId.removePrefix("eq."),
+                            startDate = month.atDay(1).toString(),
+                            endDateExclusive = month.plusMonths(1).atDay(1).toString()
+                        )
+                            .map<List<ActivityCard>, Result<List<ActivityCard>>> { Result.success(it) }
+                            .catch { emit(Result.failure(it)) }
+                    }
+                }
+                .collect { result ->
+                    result.fold(
+                        onSuccess = { cards ->
+                            val grouped = cards.groupBy { card ->
+                                card.plannedDate?.let { formatGroupHeader(it) } ?: "ไม่ระบุวันที่"
+                            }
+                            _uiState.update { it.copy(groupedCards = grouped) }
+                        },
+                        onFailure = { error ->
+                            _uiState.update { it.copy(error = error.message) }
+                        }
+                    )
+                }
         }
     }
 
     fun loadActivities() {
-        viewModelScope.launch {
-            val currentMonth = _uiState.value.selectedMonth
-
-            // ✅ ดึง Result IDs ล่าสุดจาก Local DB เพื่อเช็คว่าอันไหนบันทึกผลแล้ว
-            val resultIds = activityRepo.getAllResultIdsFlow().first().toSet()
-
-            activityRepo.getMyActivitiesWithDetails().fold(
-                onSuccess = { cards ->
-                    val filteredCards = cards.map { card ->
-                        card.copy(hasResult = card.activityId in resultIds)
-                    }.filter { card ->
-                        try {
-                            if (card.plannedDate.isNullOrBlank()) true
-                            else {
-                                val dateStr = card.plannedDate.take(10)
-                                val date = LocalDate.parse(dateStr)
-                                YearMonth.from(date) == currentMonth
-                            }
-                        } catch (e: Exception) {
-                            true // Don't hide activity cards with unparseable dates
-                        }
-                    }
-
-                    // Sort by plannedDate ascending, then by plannedTime ascending
-                    val grouped = filteredCards
-                        .sortedWith(compareBy({ it.plannedDate }, { it.plannedTime }))
-                        .groupBy { card ->
-                            card.plannedDate?.let { formatGroupHeader(it) } ?: "ไม่ระบุวันที่"
-                        }
-
-                    _uiState.update {
-                        it.copy(groupedCards = grouped)
-                    }
-                },
-                onFailure = { e ->
-                    _uiState.update { it.copy(error = e.message) }
-                }
-            )
-        }
+        _activityReload.update { it + 1 }
     }
 
     fun refreshData() {
@@ -217,7 +221,7 @@ class HomeViewModel @Inject constructor(
 
     fun selectMonth(month: YearMonth) {
         _uiState.update { it.copy(selectedMonth = month) }
-        loadActivities()
+        _selectedMonth.value = month
     }
 
 

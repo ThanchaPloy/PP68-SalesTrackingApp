@@ -3,6 +3,7 @@ package com.example.pp68_salestrackingapp.ui.viewmodels.activity
 import androidx.arch.core.executor.testing.InstantTaskExecutorRule
 import androidx.lifecycle.SavedStateHandle
 import com.example.pp68_salestrackingapp.data.model.ActivityResult
+import com.example.pp68_salestrackingapp.data.model.ActivityResultPhoto
 import com.example.pp68_salestrackingapp.data.model.AuthUser
 import com.example.pp68_salestrackingapp.data.model.Project
 import com.example.pp68_salestrackingapp.data.model.SalesActivity
@@ -49,6 +50,8 @@ class SalesResultViewModelTest {
         // relaxed mockk ไม่รู้วิธีสังเคราะห์ kotlin.Result ที่ยังไม่ได้ stub ไว้ให้ (คืน Object เปล่ามาแทน
         // แล้ว cast เป็น List พังเป็น ClassCastException) ต้อง stub ไว้ล่วงหน้าเหมือน getActivityById ข้างบน
         coEvery { activityRepo.getPlanItems(any()) } returns Result.success(emptyList())
+        coEvery { activityRepo.getResultPhotoEntries(any()) } returns emptyList()
+        coEvery { activityRepo.getPendingResultAttachments(any()) } returns emptyList()
         // ผูกโครงการเพิ่มตอนบันทึกผล: FROM_APPOINTMENT ที่ยังไม่มี projectId จะโหลดตัวเลือกโครงการ
         // ตอน init เสมอ ต้อง stub ไว้ล่วงหน้าเหมือน getActivityById ไม่งั้น relaxed mock คืน null ให้
         // Flow แล้ว .collect{} พังทุกเทสต์ที่ FROM_APPOINTMENT ไม่มีโครงการผูกอยู่
@@ -168,10 +171,9 @@ class SalesResultViewModelTest {
         coVerify(exactly = 1) { activityRepo.saveActivityResult(any(), any()) }
     }
 
-    // รูปที่ไม่มี url (อัปโหลดไม่ผ่าน / แถวรูปเสีย) เดิมถูก mapNotNull ทิ้งเงียบ ๆ ตอนประกอบ
-    // photoUrls — ผู้ใช้เห็นรูปครบบนจอ กดบันทึกแล้วได้บันทึกที่แนบรูปน้อยกว่าที่เห็น และไม่มีใครรู้
+    // แถวรูปเสียที่ไม่มีทั้ง URL และไฟล์ durable ห้ามถูกทิ้งเงียบ ๆ ตอนประกอบคิว
     @Test
-    fun `save refuses while a photo has no uploaded url instead of dropping it silently`() = runTest {
+    fun `save refuses while a photo has neither remote url nor durable file`() = runTest {
         coEvery { projectRepo.getProjectById("PRJ-1") } returns Result.success(
             Project(
                 projectId = "PRJ-1", custId = "C1", projectName = "Project A", projectStatus = "Lead",
@@ -191,7 +193,8 @@ class SalesResultViewModelTest {
         coEvery { activityRepo.getActivityResult("A1") } returns ActivityResult(
             resultId = "RES-1", activityId = "A1", projectId = "PRJ-1", summary = "เดิม"
         )
-        coEvery { activityRepo.getResultPhotos("RES-1") } returns listOf("")
+        coEvery { activityRepo.getResultPhotoEntries("RES-1") } returns
+            listOf(ActivityResultPhoto("RES-1", 0, ""))
         coEvery { activityRepo.saveActivityResult(any(), any()) } returns Result.success(Unit)
 
         val vm = SalesResultViewModel(
@@ -205,7 +208,7 @@ class SalesResultViewModelTest {
         advanceUntilIdle()
 
         assertFalse(vm.uiState.value.isSaved)
-        assertTrue(vm.uiState.value.error!!.contains("อัปโหลดไม่สำเร็จ"))
+        assertTrue(vm.uiState.value.error!!.contains("เก็บลงเครื่องไม่สำเร็จ"))
         coVerify(exactly = 0) { activityRepo.saveActivityResult(any(), any()) }
     }
 

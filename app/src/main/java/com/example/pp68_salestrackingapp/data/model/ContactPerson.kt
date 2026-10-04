@@ -2,10 +2,17 @@ package com.example.pp68_salestrackingapp.data.model
 
 import androidx.room.ColumnInfo
 import androidx.room.Entity
+import androidx.room.Index
 import androidx.room.PrimaryKey
 import com.google.gson.annotations.SerializedName
 
-@Entity(tableName = "contact_person")
+@Entity(
+    tableName = "contact_person",
+    indices = [
+        Index(value = ["custId"], name = "index_contact_customer_id"),
+        Index(value = ["is_synced"], name = "index_contact_is_synced")
+    ]
+)
 data class ContactPerson(
     @PrimaryKey
     @ColumnInfo(name = "contactId")

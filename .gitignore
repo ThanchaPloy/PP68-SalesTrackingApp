@@ -33,3 +33,5 @@ backend/.env
 ui*.xml
 backend/run_*.txt
 app/debug/
+/.gradle-user-home/
+/.android-user-home/

@@ -10,15 +10,21 @@ import com.example.pp68_salestrackingapp.data.model.ProjectFactorLog
 import com.example.pp68_salestrackingapp.data.remote.ApiService
 import com.example.pp68_salestrackingapp.utils.SyncManager
 import android.util.Log
+import androidx.paging.Pager
+import androidx.paging.PagingConfig
+import androidx.paging.PagingData
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import java.io.IOException
+import kotlinx.coroutines.CancellationException
 import java.time.LocalDate
 import javax.inject.Inject
 import com.example.pp68_salestrackingapp.utils.queuedOrFailed
 import com.example.pp68_salestrackingapp.utils.retrySend
+import com.example.pp68_salestrackingapp.utils.ProjectStages
+import com.example.pp68_salestrackingapp.data.remote.CreateRequestPayloads
 
 class ProjectRepository @Inject constructor(
     private val apiService: ApiService,
@@ -32,7 +38,46 @@ class ProjectRepository @Inject constructor(
     fun searchProjectsFlow(query: String): Flow<List<Project>> =
         projectDao.searchProjects("%$query%")
 
+    /**
+     * Paged query for the main project list only. Other callers such as export intentionally keep
+     * using [getAllProjectsFlow] because they require a complete dataset.
+     */
+    fun getProjectsPagingFlow(
+        searchQuery: String,
+        tabIndex: Int,
+        selectedStatuses: Set<String>,
+        selectedScores: Set<String>
+    ): Flow<PagingData<Project>> = Pager(
+        config = PagingConfig(
+            pageSize = PROJECT_PAGE_SIZE,
+            initialLoadSize = PROJECT_INITIAL_LOAD_SIZE,
+            prefetchDistance = PROJECT_PREFETCH_DISTANCE,
+            maxSize = PROJECT_MAX_LOADED_ROWS,
+            enablePlaceholders = false
+        ),
+        pagingSourceFactory = {
+            projectDao.getProjectsPaging(
+                searchQuery = searchQuery.trim(),
+                tabIndex = tabIndex,
+                closedStatuses = ProjectStages.CLOSED.sorted(),
+                wonStatuses = ProjectStages.WON.sorted(),
+                lostStatuses = ProjectStages.LOST.sorted(),
+                applyStatusFilter = selectedStatuses.isNotEmpty(),
+                selectedStatuses = selectedStatuses.sorted(),
+                applyScoreFilter = selectedScores.isNotEmpty(),
+                selectedScores = selectedScores.map { it.uppercase() }.sorted()
+            )
+        }
+    ).flow
+
     fun getProjectByIdFlow(projectId: String): Flow<Project?> = projectDao.getProjectByIdFlow(projectId)
+
+    private companion object {
+        const val PROJECT_PAGE_SIZE = 30
+        const val PROJECT_INITIAL_LOAD_SIZE = 60
+        const val PROJECT_PREFETCH_DISTANCE = 10
+        const val PROJECT_MAX_LOADED_ROWS = 150
+    }
 
     suspend fun refreshProjects(userId: String): Result<Unit> {
         return withContext(Dispatchers.IO) {
@@ -40,7 +85,10 @@ class ProjectRepository @Inject constructor(
                 val cleanUserId = userId.removePrefix("eq.")
                 // ✅ 1 โครงการมีเจ้าของคนเดียว (create_by) — ไม่มีตาราง membership แยกแล้ว
                 val creatorResp = apiService.getProjectsByCreator(userId = cleanUserId)
-                val creatorProjects = if (creatorResp.isSuccessful) creatorResp.body() ?: emptyList() else emptyList()
+                if (!creatorResp.isSuccessful || creatorResp.body() == null) {
+                    return@withContext Result.failure(Exception("HTTP ${creatorResp.code()}"))
+                }
+                val creatorProjects = creatorResp.body()!!
 
                 // ponytail: never clear local cache on empty — missing records would silently wipe all local data
                 if (creatorProjects.isEmpty()) return@withContext Result.success(Unit)
@@ -49,8 +97,9 @@ class ProjectRepository @Inject constructor(
                 projectDao.clearAndInsert(merged)
                 Result.success(Unit)
             } catch (e: IOException) {
-                Result.success(Unit) // offline — Room data still valid
+                Result.failure(e) // local cache ยังใช้ได้ แต่ download รอบนี้ไม่สำเร็จ
             } catch (e: Exception) {
+                if (e is CancellationException) throw e
                 Result.failure(e)
             }
         }
@@ -60,47 +109,41 @@ class ProjectRepository @Inject constructor(
         return withContext(Dispatchers.IO) {
             val today = java.time.LocalDate.now().toString()
             val tempId = "TEMP-${java.util.UUID.randomUUID().toString().take(8).uppercase()}"
-            val tempProject = project.copy(projectId = tempId, isSynced = false, createdAt = project.createdAt ?: today)
+            val tempProject = project.copy(
+                projectId = tempId,
+                isSynced = false,
+                createdAt = project.createdAt ?: today,
+                operationId = project.operationId ?: java.util.UUID.randomUUID().toString()
+            )
             projectDao.insertProject(tempProject)
             try {
-                val body = mutableMapOf<String, Any?>(
-                    "customer_code"           to project.custId,
-                    "customer_name"           to project.customerName,
-                    "project_name"            to project.projectName,
-                    "branch_code"             to project.branchId,
-                    "billing_branch_id"       to project.billingBranchId,
-                    "expected_value"          to project.expectedValue,
-                    "project_status"          to project.projectStatus,
-                    "start_date"              to project.startDate,
-                    "closing_date"            to project.closingDate,
-                    "desired_completion_date" to project.desiredCompletionDate,
-                    "project_lat"             to project.projectLat,
-                    "project_long"            to project.projectLong,
-                    "opportunity_score"       to project.opportunityScore,
-                    "remark"                  to project.remark,
-                    "create_by"               to project.createBy,
-                    "created_at"              to (project.createdAt ?: today)
-                ).filterValues { it != null }
+                val body = CreateRequestPayloads.project(tempProject)
                 // ไม่ log ตัว body — มันมีชื่อลูกค้า มูลค่าโครงการ วันที่ปิดดีล ครบชุด และ
                 // minifyEnabled = false จึงไม่มี ProGuard มาตัด Log.d ออกตอน build release
                 // แปลว่าข้อมูลลูกค้าจริงถูกพิมพ์ลง logcat ของเครื่องผู้ใช้ทุกครั้งที่สร้างโครงการ
                 Log.d("ProjectRepo", "POST project (${body.size} fields)")
-                val response = retrySend(idempotent = false, tag = "createProject") { apiService.addProject(body) }
+                val response = retrySend(idempotent = false, tag = "createProject") {
+                    apiService.addProject(body, tempProject.operationId)
+                }
                 Log.d("ProjectRepo", "POST project → HTTP ${response.code()}")
                 if (response.isSuccessful) {
                     val realId = response.body()?.firstOrNull()?.projectId
                     Log.d("ProjectRepo", "realId=$realId tempId=$tempId")
                     val finalProject = if (realId != null && realId != tempId) {
                         val returnedProject = response.body()?.first()
-                        val real = (returnedProject ?: tempProject.copy(projectId = realId)).copy(isSynced = true)
-                        projectDao.insertProject(real)
-                        projectContactDao.updateProjectId(tempId, realId)
-                        projectDao.deleteProjectById(tempId)
+                        val real = (returnedProject ?: tempProject.copy(projectId = realId)).copy(
+                            isSynced = true,
+                            operationId = tempProject.operationId
+                        )
+                        projectDao.replaceTemporaryProject(tempId, real)
                         real
                     } else {
                         val returnedProject = response.body()?.firstOrNull()
                         if (returnedProject != null) {
-                            projectDao.insertProject(returnedProject.copy(isSynced = true))
+                            projectDao.insertProject(returnedProject.copy(
+                                isSynced = true,
+                                operationId = tempProject.operationId
+                            ))
                         } else {
                             projectDao.updateSyncStatus(tempId, true)
                         }

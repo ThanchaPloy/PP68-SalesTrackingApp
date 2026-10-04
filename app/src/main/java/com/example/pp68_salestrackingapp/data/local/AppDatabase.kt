@@ -18,10 +18,11 @@ import com.example.pp68_salestrackingapp.data.model.*
         ProjectContact::class,
         AppointmentContact::class,
         ActivityResultPhoto::class,
-        SyncRejection::class
+        SyncRejection::class,
+        AttachmentOutbox::class
     ],
-    version = 53,
-    exportSchema = false
+    version = 56,
+    exportSchema = true
 )
 abstract class AppDatabase : RoomDatabase() {
 
@@ -36,6 +37,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun projectContactDao(): ProjectContactDao
     abstract fun activityResultPhotoDao(): ActivityResultPhotoDao
     abstract fun syncRejectionDao(): SyncRejectionDao
+    abstract fun attachmentOutboxDao(): AttachmentOutboxDao
 
     // clearAllData() ถูกลบออก — เป็น wrapper บาง ๆ ของ clearAllTables() ที่ไม่มีใครเรียกเลย
     // ตัวที่ใช้งานจริงคือ clearAllTables() ที่ AuthRepository เรียกตอน login คนละคน/logout ซึ่งมี
@@ -412,6 +414,77 @@ abstract class AppDatabase : RoomDatabase() {
                     )
                     """.trimIndent()
                 )
+            }
+        }
+
+        // Phase 2A: เพิ่มเฉพาะ index ที่ baseline 5,000 แถวพบว่าเป็น full scan หรือใช้ temp B-tree
+        // migration นี้ไม่แก้หรือลบ business row จึงรักษา pending/TEMP data เดิมทั้งหมด
+        val MIGRATION_53_54 = object : Migration(53, 54) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_customer_company_name ON customer(company_name)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_customer_is_synced ON customer(is_synced)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_customer_user_id ON customer(user_id)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_contact_customer_id ON contact_person(custId)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_contact_is_synced ON contact_person(is_synced)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_project_start_date_id ON project(startDate DESC, projectId ASC)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_project_status_start_date_id ON project(projectStatus ASC, startDate DESC, projectId ASC)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_project_is_synced ON project(is_synced)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_activity_user_date_id ON activity_table(user_id, planned_date, planned_time, appointment_id)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_activity_is_synced ON activity_table(is_synced)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_result_project_latest_date_id ON activity_result(project_id, is_latest, report_date, result_id)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_result_group_version_id ON activity_result(result_group_id ASC, version DESC, result_id ASC)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_result_is_synced ON activity_result(is_synced)")
+            }
+        }
+
+        // Phase 2C: operation ID ต้องอยู่กับแถว TEMP เพื่อให้ retry หลัง process death/reboot
+        // ใช้ key เดิมเสมอ ทุกคอลัมน์ nullable เพื่อรักษา compatibility กับข้อมูลที่ sync แล้วเดิม
+        val MIGRATION_54_55 = object : Migration(54, 55) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE customer ADD COLUMN operation_id TEXT")
+                db.execSQL("ALTER TABLE project ADD COLUMN operation_id TEXT")
+                db.execSQL("ALTER TABLE activity_table ADD COLUMN operation_id TEXT")
+                db.execSQL("ALTER TABLE activity_result ADD COLUMN operation_id TEXT")
+                val uuidExpression = """
+                    lower(
+                        hex(randomblob(4)) || '-' || hex(randomblob(2)) || '-' ||
+                        hex(randomblob(2)) || '-' || hex(randomblob(2)) || '-' ||
+                        hex(randomblob(6))
+                    )
+                """.trimIndent()
+                db.execSQL("UPDATE customer SET operation_id = $uuidExpression WHERE is_synced = 0 AND cust_id LIKE 'TEMP-%'")
+                db.execSQL("UPDATE project SET operation_id = $uuidExpression WHERE is_synced = 0 AND projectId LIKE 'TEMP-%'")
+                db.execSQL("UPDATE activity_table SET operation_id = $uuidExpression WHERE is_synced = 0 AND appointment_id LIKE 'TEMP-%'")
+                db.execSQL("UPDATE activity_result SET operation_id = $uuidExpression WHERE is_synced = 0 AND result_id LIKE 'TEMP-%'")
+            }
+        }
+
+        // Phase 2D: รูปเก่าคงอ่านจาก URL เดิม เฉพาะรูปใหม่เท่านั้นที่เข้าคิวถาวรนี้
+        val MIGRATION_55_56 = object : Migration(55, 56) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS `attachment_outbox` (
+                        `operation_id` TEXT NOT NULL,
+                        `owner_id` TEXT NOT NULL,
+                        `result_id` TEXT NOT NULL,
+                        `photo_order` INTEGER NOT NULL,
+                        `local_path` TEXT NOT NULL,
+                        `mime_type` TEXT NOT NULL,
+                        `sha256` TEXT NOT NULL,
+                        `size_bytes` INTEGER NOT NULL,
+                        `state` TEXT NOT NULL,
+                        `remote_url` TEXT,
+                        `attempt_count` INTEGER NOT NULL,
+                        `last_error` TEXT,
+                        `created_at` TEXT NOT NULL,
+                        `updated_at` TEXT NOT NULL,
+                        PRIMARY KEY(`operation_id`),
+                        FOREIGN KEY(`result_id`) REFERENCES `activity_result`(`result_id`) ON UPDATE NO ACTION ON DELETE CASCADE
+                    )
+                """.trimIndent())
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_attachment_outbox_result_id` ON `attachment_outbox` (`result_id`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_attachment_outbox_owner_id_state` ON `attachment_outbox` (`owner_id`, `state`)")
+                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_attachment_outbox_result_id_photo_order` ON `attachment_outbox` (`result_id`, `photo_order`)")
             }
         }
     }

@@ -9,10 +9,15 @@ import com.example.pp68_salestrackingapp.data.model.ActivityResult
 import com.example.pp68_salestrackingapp.data.model.ChecklistInsertDto
 import com.example.pp68_salestrackingapp.data.model.ProjectContact
 import com.example.pp68_salestrackingapp.data.remote.ApiService
+import com.example.pp68_salestrackingapp.data.remote.CreateRequestPayloads
+import com.example.pp68_salestrackingapp.data.remote.UploadApiService
 import com.example.pp68_salestrackingapp.di.TokenManager
 import com.example.pp68_salestrackingapp.worker.SyncWorker
+import com.example.pp68_salestrackingapp.worker.DownloadSyncWorker
+import com.example.pp68_salestrackingapp.worker.EndOfDaySyncReminderWorker
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
@@ -20,6 +25,12 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.util.Collections
 import java.util.concurrent.TimeUnit
+import java.io.File
+import java.security.MessageDigest
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.MultipartBody
+import okhttp3.RequestBody.Companion.asRequestBody
+import okhttp3.RequestBody.Companion.toRequestBody
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -27,6 +38,7 @@ import javax.inject.Singleton
 class SyncManager @Inject constructor(
     @ApplicationContext private val context: Context,
     private val apiService: ApiService,
+    private val uploadApiService: UploadApiService,
     private val tokenManager: TokenManager,
     private val customerDao: CustomerDao,
     private val projectDao: ProjectDao,
@@ -37,8 +49,172 @@ class SyncManager @Inject constructor(
     private val appointmentContactDao: AppointmentContactDao,
     private val planItemDao: ActivityPlanItemDao,
     private val projectContactDao: ProjectContactDao,
-    private val syncRejectionDao: SyncRejectionDao
+    private val syncRejectionDao: SyncRejectionDao,
+    private val attachmentOutboxDao: AttachmentOutboxDao
 ) {
+    private companion object {
+        // จำกัดเวลาของ worker หนึ่งรอบ; ถ้าเหลือ Room จะทำให้ผลเป็น retry และทำต่อด้วย backoff
+        const val MAX_ROWS_PER_ENTITY_PER_RUN = 100
+    }
+
+    private class RunTracker {
+        var attempted: Int = 0
+        var skipped: Int = 0
+        private val failures = mutableMapOf<SyncFailureType, Int>()
+
+        fun attempted() { attempted++ }
+        fun skipped(count: Int = 1) { skipped += count }
+        fun failed(type: SyncFailureType) {
+            val normalized = if (type == SyncFailureType.UNKNOWN) SyncFailureType.LOCAL_FATAL else type
+            failures[normalized] = (failures[normalized] ?: 0) + 1
+        }
+        fun httpFailed(code: Int) { failed(classifyHttpCode(code)) }
+        fun exception(error: Throwable) { failed(classifySyncFailure(error)) }
+        fun snapshot(): Map<SyncFailureType, Int> = failures.toMap()
+        fun retryableFailureCount(): Int = failures.filterKeys {
+            it in setOf(
+                SyncFailureType.NETWORK, SyncFailureType.TIMEOUT, SyncFailureType.RATE_LIMITED,
+                SyncFailureType.SERVER, SyncFailureType.DEPENDENCY
+            )
+        }.values.sum()
+    }
+
+    private fun <T> bounded(items: List<T>, tracker: RunTracker): List<T> {
+        tracker.skipped((items.size - MAX_ROWS_PER_ENTITY_PER_RUN).coerceAtLeast(0))
+        return items.take(MAX_ROWS_PER_ENTITY_PER_RUN)
+    }
+
+    private fun sha256(file: File): String {
+        val digest = MessageDigest.getInstance("SHA-256")
+        file.inputStream().buffered().use { input ->
+            val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+            while (true) {
+                val read = input.read(buffer)
+                if (read < 0) break
+                digest.update(buffer, 0, read)
+            }
+        }
+        return digest.digest().joinToString("") { "%02x".format(it) }
+    }
+
+    private suspend fun syncAttachments(tracker: RunTracker) {
+        val ownerId = tokenManager.getLocalDataOwner() ?: return
+        val items = attachmentOutboxDao.getPending(ownerId, MAX_ROWS_PER_ENTITY_PER_RUN)
+        for (original in items) {
+            if (shouldSkip("attachment", original.operationId)) {
+                tracker.skipped()
+                continue
+            }
+            if (original.resultId.startsWith("TEMP-")) {
+                tracker.skipped()
+                tracker.failed(SyncFailureType.DEPENDENCY)
+                continue
+            }
+            tracker.attempted()
+            var item = original
+            try {
+                var remoteUrl = item.remoteUrl
+                if (remoteUrl.isNullOrBlank()) {
+                    val file = File(item.localPath)
+                    check(file.isFile && file.length() == item.sizeBytes && sha256(file) == item.sha256) {
+                        "ไฟล์รูปที่รอซิงค์สูญหายหรือถูกเปลี่ยนแปลง"
+                    }
+                    val fileBody = file.asRequestBody(item.mimeType.toMediaType())
+                    val part = MultipartBody.Part.createFormData("photo", file.name, fileBody)
+                    val parent = item.resultId.toRequestBody("text/plain".toMediaType())
+                    val response = uploadApiService.uploadVisitPhoto(
+                        item.operationId,
+                        item.sha256,
+                        parent,
+                        part
+                    )
+                    if (!response.isSuccessful || response.body()?.photoUrl.isNullOrBlank()) {
+                        noteOutcome("attachment", item.operationId, false, response.code(), tracker)
+                        attachmentOutboxDao.markAttemptFailed(
+                            item.operationId,
+                            "upload_http_${response.code()}",
+                            java.time.Instant.now().toString()
+                        )
+                        continue
+                    }
+                    remoteUrl = response.body()!!.photoUrl
+                    val now = java.time.Instant.now().toString()
+                    attachmentOutboxDao.markUploaded(
+                        item.operationId,
+                        com.example.pp68_salestrackingapp.data.model.AttachmentOutbox.STATE_PENDING_BIND,
+                        remoteUrl,
+                        now
+                    )
+                    item = item.copy(
+                        state = com.example.pp68_salestrackingapp.data.model.AttachmentOutbox.STATE_PENDING_BIND,
+                        remoteUrl = remoteUrl,
+                        updatedAt = now
+                    )
+                }
+
+                // Binding is deliberately separate. If it fails, remoteUrl remains in Room and the
+                // next run retries this block without uploading the binary again.
+                val boundUrl = requireNotNull(remoteUrl)
+                val bind = apiService.addResultPhotos(
+                    listOf(com.example.pp68_salestrackingapp.data.model.ActivityResultPhoto(item.resultId, item.photoOrder, boundUrl))
+                )
+                if (!bind.isSuccessful) {
+                    noteOutcome("attachment", item.operationId, false, bind.code(), tracker)
+                    attachmentOutboxDao.markAttemptFailed(item.operationId, "bind_http_${bind.code()}", java.time.Instant.now().toString())
+                    continue
+                }
+                if (item.photoOrder == 0) {
+                    val cover = apiService.updateActivityResult("eq.${item.resultId}", mapOf("photo_url" to boundUrl))
+                    if (!cover.isSuccessful) {
+                        noteOutcome("attachment", item.operationId, false, cover.code(), tracker)
+                        attachmentOutboxDao.markAttemptFailed(item.operationId, "cover_http_${cover.code()}", java.time.Instant.now().toString())
+                        continue
+                    }
+                }
+                clearRejection("attachment", item.operationId)
+                attachmentOutboxDao.finalizeBinding(item, boundUrl)
+                AttachmentFileStore.delete(item.localPath)
+            } catch (error: Exception) {
+                if (error is CancellationException) throw error
+                val classified = classifySyncFailure(error)
+                val failureType = if (classified == SyncFailureType.UNKNOWN) SyncFailureType.LOCAL_FATAL else classified
+                tracker.failed(failureType)
+                attachmentOutboxDao.markAttemptFailed(
+                    item.operationId,
+                    error::class.java.simpleName.take(80),
+                    java.time.Instant.now().toString()
+                )
+                if (failureType == SyncFailureType.LOCAL_FATAL) {
+                    recordRejection(
+                        "attachment",
+                        item.operationId,
+                        0,
+                        "ไฟล์รูปในเครื่องสูญหาย เสียหาย หรืออ่านไม่ได้"
+                    )
+                }
+            }
+        }
+    }
+
+    private data class ChildSyncOutcome(
+        val success: Boolean,
+        val httpCode: Int? = null,
+        val error: Throwable? = null
+    )
+
+    private suspend fun applyChildOutcome(
+        entityType: String,
+        id: String,
+        outcome: ChildSyncOutcome,
+        tracker: RunTracker
+    ) {
+        when {
+            outcome.success -> Unit
+            outcome.error != null -> tracker.exception(outcome.error)
+            outcome.httpCode != null -> noteOutcome(entityType, id, false, outcome.httpCode, tracker)
+            else -> tracker.failed(SyncFailureType.LOCAL_FATAL)
+        }
+    }
     // ── แถวที่ server ปฏิเสธถาวร (ไม่ใช่ออฟไลน์) ────────────────────
     // แคชในหน่วยความจำของสิ่งที่อยู่ในตาราง sync_rejection อยู่แล้ว — กันไม่ให้ต้องถาม DB
     // ทุกครั้งที่ repository เรียก markBlocked แบบ fire-and-forget ตัวจริงที่ถืออยู่คือ Room
@@ -88,14 +264,23 @@ class SyncManager @Inject constructor(
             409 -> "ข้อมูลชนกับรายการที่มีอยู่แล้ว"
             else -> "เซิร์ฟเวอร์ปฏิเสธข้อมูลนี้ (HTTP $code)"
         }
-        Log.w("SyncManager", "$entityType:$id ถูกปฏิเสธถาวร — $reason")
+        Log.w("SyncManager", "$entityType ถูกปฏิเสธถาวร: HTTP $code")
         recordRejection(entityType, id, code, reason)
     }
 
     // เรียกทุกครั้งที่ได้คำตอบจาก server: สำเร็จ = ล้างประวัติการถูกปฏิเสธทิ้ง (ต้นเหตุถูกแก้แล้ว)
     // ไม่สำเร็จ = บันทึกไว้ถ้าเป็นการปฏิเสธถาวร ส่วน 5xx/ขาดเน็ตปล่อยผ่านให้ลองรอบหน้า
-    private suspend fun noteOutcome(entityType: String, id: String, success: Boolean, code: Int) {
-        if (success) clearRejection(entityType, id) else recordIfPermanent(entityType, id, code)
+    private suspend fun noteOutcome(
+        entityType: String,
+        id: String,
+        success: Boolean,
+        code: Int,
+        tracker: RunTracker
+    ) {
+        if (success) clearRejection(entityType, id) else {
+            tracker.httpFailed(code)
+            recordIfPermanent(entityType, id, code)
+        }
     }
 
     // ข้ามเฉพาะแถวที่เคยถูกปฏิเสธถาวร "และลองซ้ำไปแล้วในรอบเปิดแอปนี้"
@@ -107,7 +292,7 @@ class SyncManager @Inject constructor(
         return true
     }
 
-    fun scheduleSync() {
+    fun scheduleSync(trigger: SyncTrigger = SyncTrigger.SAVE) {
         val constraints = Constraints.Builder()
             .setRequiredNetworkType(NetworkType.CONNECTED)
             .build()
@@ -115,6 +300,7 @@ class SyncManager @Inject constructor(
         val syncRequest = OneTimeWorkRequestBuilder<SyncWorker>()
             .setConstraints(constraints)
             .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 10L, TimeUnit.SECONDS)
+            .setInputData(workDataOf(SyncWorker.KEY_TRIGGER to trigger.name))
             .addTag("data_sync_tag")
             .build()
 
@@ -127,14 +313,43 @@ class SyncManager @Inject constructor(
             ExistingWorkPolicy.KEEP,
             syncRequest
         )
+        SyncRuntime.queued(trigger)
     }
 
+    /** คง method เดิมไว้ไม่ให้ caller เก่าพัง แต่ไม่รัน network ผูกกับ lifecycle อีกแล้ว */
     fun runSyncNow(scope: CoroutineScope) {
-        scope.launch(Dispatchers.IO) {
-            try { doSync() } catch (e: Exception) {
-                Log.e("SyncManager", "Foreground sync error: ${e.message}")
-            }
-        }
+        scheduleSync(SyncTrigger.APP_FOREGROUND)
+    }
+
+    fun scheduleDownload() {
+        val request = OneTimeWorkRequestBuilder<DownloadSyncWorker>()
+            .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
+            .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 10L, TimeUnit.SECONDS)
+            .addTag("download_sync_tag")
+            .build()
+        WorkManager.getInstance(context).enqueueUniqueWork(
+            "InitialDownloadWorkName",
+            ExistingWorkPolicy.KEEP,
+            request
+        )
+    }
+
+    fun scheduleEndOfDayReminder() {
+        val bangkok = java.time.ZoneId.of("Asia/Bangkok")
+        val now = java.time.ZonedDateTime.now(bangkok)
+        val todayAtTen = now.toLocalDate().atTime(22, 0).atZone(bangkok)
+        // ถ้าเปิดแอปหลัง 22:00 ให้ตรวจทันที ไม่เลื่อนการเตือนของวันนี้ไปวันพรุ่งนี้
+        val initialDelay = if (now.isBefore(todayAtTen)) {
+            java.time.Duration.between(now, todayAtTen)
+        } else java.time.Duration.ZERO
+        val request = PeriodicWorkRequestBuilder<EndOfDaySyncReminderWorker>(24, TimeUnit.HOURS)
+            .setInitialDelay(initialDelay)
+            .build()
+        WorkManager.getInstance(context).enqueueUniquePeriodicWork(
+            "EndOfDaySyncReminder",
+            ExistingPeriodicWorkPolicy.UPDATE,
+            request
+        )
     }
 
     suspend fun hasPendingChanges(): Boolean = withContext(Dispatchers.IO) {
@@ -157,6 +372,8 @@ class SyncManager @Inject constructor(
         val rejectedActivities = rejectedIds("activity")
         val rejectedResults   = rejectedIds("result")
         val rejectedChecklist = rejectedIds("checklist")
+        val rejectedAttachments = rejectedIds("attachment")
+        val ownerId = tokenManager.getLocalDataOwner()
 
         listOf(
             "ลูกค้า" to customerDao.getUnsyncedCustomers().count { it.custId !in rejectedCustomers },
@@ -164,8 +381,20 @@ class SyncManager @Inject constructor(
             "โครงการ" to projectDao.getUnsyncedProjects().count { it.projectId !in rejectedProjects },
             "นัดหมาย" to activityDao.getUnsyncedActivities().count { it.activityId !in rejectedActivities },
             "บันทึกผล" to resultDao.getUnsyncedResults().count { it.resultId !in rejectedResults },
-            "เช็คลิสต์" to planItemDao.getUnsyncedAppointmentIds().count { it !in rejectedChecklist }
+            "เช็คลิสต์" to planItemDao.getUnsyncedAppointmentIds().count { it !in rejectedChecklist },
+            "รูป" to (ownerId?.let {
+                attachmentOutboxDao.getPending(it, Int.MAX_VALUE)
+                    .count { item -> item.operationId !in rejectedAttachments }
+            } ?: 0)
         ).filter { it.second > 0 }
+    }
+
+    /** Called only immediately before the owning Room data is explicitly discarded. */
+    suspend fun discardPendingAttachmentFiles() = withContext(Dispatchers.IO) {
+        val ownerId = tokenManager.getLocalDataOwner() ?: return@withContext
+        attachmentOutboxDao.getPending(ownerId, Int.MAX_VALUE).forEach { item ->
+            AttachmentFileStore.delete(item.localPath)
+        }
     }
 
     // รายการที่เซิร์ฟเวอร์ปฏิเสธถาวร พร้อมเหตุผล — ใช้บอกผู้ใช้ตอน logout ว่าจะทิ้งอะไรไว้บ้าง
@@ -178,47 +407,48 @@ class SyncManager @Inject constructor(
     // ใช้ withLock ไม่ใช่ tryLock เพราะ AuthRepository เรียกแล้วต้องได้ผลจริงก่อน logout
     private val syncMutex = kotlinx.coroutines.sync.Mutex()
 
-    internal suspend fun doSync() = syncMutex.withLock { doSyncLocked() }
+    internal suspend fun doSync(): SyncRunResult = syncMutex.withLock { doSyncLocked() }
 
-    private suspend fun doSyncLocked() {
+    private suspend fun doSyncLocked(): SyncRunResult {
+        val runId = java.util.UUID.randomUUID().toString()
+        val startedAt = java.time.Instant.now().toString()
+        val tracker = RunTracker()
+        runCatching {
+            AttachmentFileStore.cleanupOrphans(
+                context,
+                attachmentOutboxDao.getAllReferencedPaths().toSet()
+            )
+        }
+        val pendingBefore = pendingSummary().sumOf { it.second }
+        val rejectedBefore = rejectedSummary().size
         Log.d("SyncManager", "Starting sync...")
         tokenManager.getUserData()?.userId?.let { userId ->
-            try { apiService.setAppContext(mapOf("user_id" to userId)) } catch (_: Exception) {}
+            try {
+                apiService.setAppContext(mapOf("user_id" to userId))
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
+            }
         }
 
-        val unsyncedCustomers = customerDao.getUnsyncedCustomers()
+        val unsyncedCustomers = bounded(customerDao.getUnsyncedCustomers(), tracker)
         for (customer in unsyncedCustomers) {
-            if (shouldSkip("customer", customer.custId)) continue
+            if (shouldSkip("customer", customer.custId)) { tracker.skipped(); continue }
+            tracker.attempted()
             try {
-                val body = mutableMapOf<String, Any?>(
-                    "customer_name"         to customer.companyName,
-                    "gen_bus_posting_group" to customer.bizPostingGroup,
-                    "cust_type"             to customer.custType,
-                    "address"               to customer.companyAddr,
-                    "latitude"              to customer.companyLat,
-                    "longitude"             to customer.companyLong,
-                    "customer_status"       to customer.companyStatus,
-                    "create_date"           to customer.createdAt,
-                    "created_at"            to customer.createdAt,
-                    "create_by"             to customer.createdBy,
-                    "salesperson_code"      to customer.createdBy,
-                    "grade"                 to customer.grade,
-                    "vat_registration_no"   to customer.vatRegistrationNo
-                ).filterValues { it != null }
+                val body = CreateRequestPayloads.customer(customer)
 
                 if (customer.custId.startsWith("TEMP-")) {
-                    val response = apiService.addCustomer(body)
-                    noteOutcome("customer", customer.custId, response.isSuccessful, response.code())
+                    val response = apiService.addCustomer(body, customer.operationId)
+                    noteOutcome("customer", customer.custId, response.isSuccessful, response.code(), tracker)
                     if (response.isSuccessful) {
                         val realCustId = response.body()?.firstOrNull()?.custId
                         if (realCustId != null && realCustId != customer.custId) {
                             // ทุกตารางที่อ้าง custId ต้องถูกชี้ใหม่ให้ครบ — project ไม่มี FK ฝั่ง server
                             // ถ้าตกหล่น มันจะ insert สำเร็จโดยชี้ไปหาลูกค้าที่ไม่มีอยู่จริง แบบเงียบ ๆ
-                            contactDao.updateCustIdForContacts(customer.custId, realCustId)
-                            activityDao.updateCustIdForActivities(customer.custId, realCustId)
-                            projectDao.updateCustIdForProjects(customer.custId, realCustId)
-                            customerDao.deleteCustomerById(customer.custId)
-                            customerDao.insertCustomer(customer.copy(custId = realCustId, isSynced = true))
+                            customerDao.replaceTemporaryCustomer(
+                                customer.custId,
+                                customer.copy(custId = realCustId, isSynced = true)
+                            )
                         } else {
                             customerDao.updateSyncStatus(customer.custId, true)
                         }
@@ -229,19 +459,22 @@ class SyncManager @Inject constructor(
                     } else {
                         apiService.updateCustomer("eq.${customer.custId}", body)
                     }
-                    noteOutcome("customer", customer.custId, response.isSuccessful, response.code())
+                    noteOutcome("customer", customer.custId, response.isSuccessful, response.code(), tracker)
                     if (response.isSuccessful && response.body()?.isNotEmpty() == true) {
                         customerDao.updateSyncStatus(customer.custId, true)
                     }
                 }
             } catch (e: Exception) {
-                Log.e("SyncManager", "Failed to sync customer ${customer.custId}: ${e.message}")
+                if (e is CancellationException) throw e
+                tracker.exception(e)
+                Log.e("SyncManager", "Customer sync failed: ${e::class.java.simpleName}")
             }
         }
 
-        val unsyncedContacts = contactDao.getUnsyncedContacts()
+        val unsyncedContacts = bounded(contactDao.getUnsyncedContacts(), tracker)
         for (contact in unsyncedContacts) {
-            if (shouldSkip("contact", contact.contactId)) continue
+            if (shouldSkip("contact", contact.contactId)) { tracker.skipped(); continue }
+            tracker.attempted()
             try {
                 val fields = buildMap<String, Any?> {
                     put("customer_code", contact.custId)
@@ -259,7 +492,7 @@ class SyncManager @Inject constructor(
                 } else {
                     apiService.updateContact("eq.${contact.contactId}", fields)
                 }
-                noteOutcome("contact", contact.contactId, response.isSuccessful, response.code())
+                noteOutcome("contact", contact.contactId, response.isSuccessful, response.code(), tracker)
 
                 if (response.isSuccessful) {
                     val serverContact = response.body()?.firstOrNull()
@@ -271,121 +504,118 @@ class SyncManager @Inject constructor(
                     }
                 }
             } catch (e: Exception) {
-                Log.e("SyncManager", "Failed to sync contact ${contact.contactId}: ${e.message}")
+                if (e is CancellationException) throw e
+                tracker.exception(e)
+                Log.e("SyncManager", "Contact sync failed: ${e::class.java.simpleName}")
             }
         }
 
-        val unsyncedProjects = projectDao.getUnsyncedProjects()
+        val unsyncedProjects = bounded(projectDao.getUnsyncedProjects(), tracker)
         for (project in unsyncedProjects) {
-            if (shouldSkip("project", project.projectId)) continue
+            if (shouldSkip("project", project.projectId)) { tracker.skipped(); continue }
+            tracker.attempted()
             try {
                 val isUpdate = !project.projectId.startsWith("TEMP-")
-                val body = mutableMapOf<String, Any?>(
-                    "customer_code"     to project.custId,
-                    "customer_name"     to project.customerName,
-                    "project_name"      to project.projectName,
-                    "branch_code"       to project.branchId,
-                    "billing_branch_id" to project.billingBranchId,
-                    "expected_value"    to project.expectedValue,
-                    "project_status"    to project.projectStatus,
-                    "start_date"        to project.startDate,
-                    "closing_date"      to project.closingDate,
-                    "project_lat"       to project.projectLat,
-                    "project_long"      to project.projectLong,
-                    "opportunity_score" to project.opportunityScore,
-                    "remark"            to project.remark,
-                    "loss_reason"       to project.lossReason,
-                    "loss_reason_note"  to project.lossReasonNote
-                ).filterValues { it != null }.toMutableMap()
-
-                if (!isUpdate) {
-                    body["create_by"] = project.createBy
-                    body["created_at"] = project.createdAt
+                val body = if (isUpdate) {
+                    mutableMapOf<String, Any?>(
+                        "customer_code"     to project.custId,
+                        "customer_name"     to project.customerName,
+                        "project_name"      to project.projectName,
+                        "branch_code"       to project.branchId,
+                        "billing_branch_id" to project.billingBranchId,
+                        "expected_value"    to project.expectedValue,
+                        "project_status"    to project.projectStatus,
+                        "start_date"        to project.startDate,
+                        "closing_date"      to project.closingDate,
+                        "project_lat"       to project.projectLat,
+                        "project_long"      to project.projectLong,
+                        "opportunity_score" to project.opportunityScore,
+                        "remark"            to project.remark,
+                        "loss_reason"       to project.lossReason,
+                        "loss_reason_note"  to project.lossReasonNote
+                    ).filterValues { it != null }.toMutableMap()
                 } else {
+                    CreateRequestPayloads.project(project).toMutableMap()
+                }
+
+                if (isUpdate) {
                     body["updated_at"] = java.time.Instant.now().toString()
                 }
 
                 val response = if (isUpdate) {
                     apiService.updateProject("eq.${project.projectId}", body)
                 } else {
-                    apiService.addProject(body)
+                    apiService.addProject(body, project.operationId)
                 }
 
                 if (!response.isSuccessful) {
-                    Log.e("SyncManager", "Project sync failed ${response.code()}: custId=${project.custId} err=${response.errorBody()?.string()}")
+                    Log.e("SyncManager", "Project sync failed: HTTP ${response.code()}")
                 }
-                noteOutcome("project", project.projectId, response.isSuccessful, response.code())
+                noteOutcome("project", project.projectId, response.isSuccessful, response.code(), tracker)
 
 
                 if (response.isSuccessful) {
                     val finalId = if (isUpdate) {
-                        projectDao.updateSyncStatus(project.projectId, true)
                         project.projectId
                     } else {
                         val realId = response.body()?.firstOrNull()?.projectId
                         if (realId != null && realId != project.projectId) {
                             val oldId = project.projectId
-                            activityDao.updateProjectIdForActivities(oldId, realId)
-                            projectDao.insertProject(project.copy(projectId = realId, isSynced = true))
-                            projectContactDao.updateProjectId(oldId, realId)
-                            projectDao.deleteProjectById(oldId)
+                            projectDao.replaceTemporaryProject(
+                                oldId,
+                                project.copy(projectId = realId, isSynced = false)
+                            )
                             realId
                         } else {
-                            projectDao.updateSyncStatus(project.projectId, true)
                             project.projectId
                         }
                     }
 
                     // Sync contacts to remote
-                    try {
+                    val contactOutcome = try {
                         // ลบฝั่ง server ก่อนเสมอ แม้ในเครื่องจะไม่เหลือผู้ติดต่อแล้ว — ไม่งั้นการลบ
                         // ออกจนหมดจะไม่ถูกส่งขึ้นไป แล้ว sync รอบถัดไปจะดึงของเก่ากลับลงมา
                         val localContacts = projectContactDao.getContactIdsByProject(finalId)
-                        apiService.deleteProjectContacts("eq.$finalId")
-                        if (localContacts.isNotEmpty()) {
+                        val deleted = apiService.deleteProjectContacts("eq.$finalId")
+                        if (!deleted.isSuccessful) {
+                            ChildSyncOutcome(false, httpCode = deleted.code())
+                        } else if (localContacts.isNotEmpty()) {
                             val rows = localContacts.map { ProjectContact(finalId, it.trim()) }
-                            apiService.addProjectContacts(rows)
-                        }
+                            val added = apiService.addProjectContacts(rows)
+                            ChildSyncOutcome(added.isSuccessful, httpCode = added.code())
+                        } else ChildSyncOutcome(true)
                     } catch (e: Exception) {
-                        Log.e("SyncManager", "Failed to sync project contacts for $finalId: ${e.message}")
+                        if (e is CancellationException) throw e
+                        Log.e("SyncManager", "Project-contact sync failed: ${e::class.java.simpleName}")
+                        ChildSyncOutcome(false, error = e)
                     }
+                    applyChildOutcome("project", finalId, contactOutcome, tracker)
+                    projectDao.updateSyncStatus(finalId, contactOutcome.success)
                 }
             } catch (e: Exception) {
-                Log.e("SyncManager", "Failed to sync project ${project.projectId}: ${e.message}")
+                if (e is CancellationException) throw e
+                tracker.exception(e)
+                Log.e("SyncManager", "Project sync failed: ${e::class.java.simpleName}")
             }
         }
 
-        val unsyncedActivities = activityDao.getUnsyncedActivities()
+        val unsyncedActivities = bounded(activityDao.getUnsyncedActivities(), tracker)
         for (activity in unsyncedActivities) {
-            if (shouldSkip("activity", activity.activityId)) continue
+            if (shouldSkip("activity", activity.activityId)) { tracker.skipped(); continue }
+            tracker.attempted()
             try {
                 if (activity.activityId.startsWith("TEMP-")) {
-                    val custCode = if (activity.customerId == "CST-UNKNOWN") null else activity.customerId
-                    val body = mutableMapOf<String, Any?>(
-                        "emp_code"         to activity.userId,
-                        "cust_code"        to custCode,
-                        "project_code"     to activity.projectId,
-                        "type"             to activity.activityType,
-                        "is_appointment"   to activity.isAppointment,
-                        "topic"            to activity.detail,
-                        "planned_date"     to activity.activityDate,
-                        "planned_time"     to activity.plannedTime,
-                        "planned_end_time" to activity.plannedEndTime,
-                        "planned_lat"      to activity.plannedLat,
-                        "planned_long"     to activity.plannedLong,
-                        "plan_status"      to activity.status,
-                        "created_at"       to activity.createdAt
-                    ).filterValues { it != null }
-                    val response = apiService.addActivityMap(body)
-                    noteOutcome("activity", activity.activityId, response.isSuccessful, response.code())
+                    val body = CreateRequestPayloads.activity(activity)
+                    val response = apiService.addActivityMap(body, activity.operationId)
+                    noteOutcome("activity", activity.activityId, response.isSuccessful, response.code(), tracker)
                     // ✅ ถ้าไม่ได้ realId กลับมา ห้าม mark synced เด็ดขาด ปล่อยให้ลองใหม่รอบถัดไป
                     val realId = if (response.isSuccessful) response.body()?.firstOrNull()?.activityId else null
                     if (realId != null) {
                         if (realId != activity.activityId) {
-                            activityDao.insertActivity(activity.copy(activityId = realId, isSynced = false))
-                            appointmentContactDao.updateAppointmentId(activity.activityId, realId)
-                            planItemDao.updateAppointmentId(activity.activityId, realId)
-                            activityDao.deleteActivityById(activity.activityId)
+                            activityDao.replaceTemporaryActivity(
+                                activity.activityId,
+                                activity.copy(activityId = realId, isSynced = false)
+                            )
                             // alarm ถูกตั้งไว้ด้วย requestCode ที่คำนวณจาก TEMP- id — ถ้าไม่ย้ายมาที่ id จริง
                             // จะยกเลิกไม่ได้อีกเลย (เตือนต่อแม้ลบนัดหมายไปแล้ว) และกดแจ้งเตือนจะ deep link
                             // ไปหา id ที่ไม่มีอยู่ ส่วนการแก้เวลานัดก็จะไปตั้งซ้ำใต้ id ใหม่ กลายเป็นเตือนสองครั้ง
@@ -393,7 +623,9 @@ class SyncManager @Inject constructor(
                         }
                         // ผู้เข้าร่วมต้อง "ขึ้นสำเร็จด้วย" ถึงจะนับว่านัดหมายนี้ซิงค์แล้ว ไม่งั้นรายชื่อหายเงียบ
                         // ตอนนี้แถวมี id จริงแล้ว รอบหน้าจะเข้าเส้น PATCH ไม่ใช่ POST ซ้ำ
-                        activityDao.updateSyncStatus(realId, pushAppointmentContacts(realId))
+                        val contactOutcome = pushAppointmentContacts(realId)
+                        applyChildOutcome("activity", realId, contactOutcome, tracker)
+                        activityDao.updateSyncStatus(realId, contactOutcome.success)
                     }
                 } else {
                     val patchBody = buildMap<String, Any> {
@@ -421,88 +653,141 @@ class SyncManager @Inject constructor(
                         activity.distanceDeviation?.let { put("distance_deviation", it) }
                     }
                     val response = apiService.updateActivity("eq.${activity.activityId}", patchBody)
-                    noteOutcome("activity", activity.activityId, response.isSuccessful, response.code())
+                    noteOutcome("activity", activity.activityId, response.isSuccessful, response.code(), tracker)
                     if (response.isSuccessful && response.body()?.isNotEmpty() == true) {
                         // ✅ เส้นนี้เดิมไม่ส่งผู้เข้าร่วมเลย — แก้รายชื่อผู้เข้าร่วมตอนออฟไลน์แล้วรอบนี้
                         // PATCH ผ่านแค่ฟิลด์อื่น จะถูก mark synced ทั้งที่ appointment_contact
                         // ไม่เคยถูกส่งขึ้นไป (ตารางนี้ไม่มี is_synced ของตัวเอง จึงไม่มีใครมาเก็บให้ทีหลัง)
-                        activityDao.updateSyncStatus(activity.activityId, pushAppointmentContacts(activity.activityId))
+                        val contactOutcome = pushAppointmentContacts(activity.activityId)
+                        applyChildOutcome("activity", activity.activityId, contactOutcome, tracker)
+                        activityDao.updateSyncStatus(activity.activityId, contactOutcome.success)
                     }
                 }
             } catch (e: Exception) {
-                Log.e("SyncManager", "Failed to sync activity ${activity.activityId}: ${e.message}")
+                if (e is CancellationException) throw e
+                tracker.exception(e)
+                Log.e("SyncManager", "Activity sync failed: ${e::class.java.simpleName}")
             }
         }
 
-        val unsyncedResults = resultDao.getUnsyncedResults()
+        val unsyncedResults = bounded(resultDao.getUnsyncedResults(), tracker)
         for (res in unsyncedResults) {
-            if (shouldSkip("result", res.resultId)) continue
+            if (shouldSkip("result", res.resultId)) { tracker.skipped(); continue }
+            tracker.attempted()
             try {
                 if (res.resultId.startsWith("TEMP-")) {
                     // ✅ ถ้ายังไม่เคยมี version ก่อนหน้า group id จะผูกกับ tempId ของตัวเองไปก่อน ต้องแก้เป็น realId ทีหลัง
                     val wasSelfGroup = res.resultGroupId == res.resultId
-                    val body = buildResultBody(res).filterKeys { it != "result_id" }
-                    val response = apiService.insertActivityResultMap(body)
-                    noteOutcome("result", res.resultId, response.isSuccessful, response.code())
-                    if (response.isSuccessful) {
-                        val serverRow = response.body()?.firstOrNull()
-                        val realId = serverRow?.resultId
-                        if (realId != null && realId != res.resultId) {
+                    val body = CreateRequestPayloads.result(res, includeResultId = false)
+                    val response = apiService.insertActivityResultMap(body, res.operationId)
+                    val serverRow = if (response.isSuccessful) response.body()?.firstOrNull() else null
+                    val realId = serverRow?.resultId
+                    val accepted = response.isSuccessful && !realId.isNullOrBlank() && realId != res.resultId
+                    // 2xx ที่ไม่คืน id จริงถือเป็น server failure แบบ retry ได้ ไม่ใช่ความผิดถาวรของข้อมูลผู้ใช้
+                    noteOutcome(
+                        "result",
+                        res.resultId,
+                        accepted,
+                        if (response.isSuccessful && !accepted) 502 else response.code(),
+                        tracker
+                    )
+                    if (accepted) {
+                            val acceptedRow = requireNotNull(serverRow)
+                            val acceptedId = requireNotNull(realId)
                             // server เป็นเจ้าของ version/result_group_id แล้ว (trigger generate_result_id)
                             // เอาค่าที่คืนมา ไม่งั้นแถวในเครื่องจะต่างจากบน server ถาวร
-                            val finalGroupId = serverRow.resultGroupId
-                                ?: if (wasSelfGroup) realId else res.resultGroupId
+                            val finalGroupId = acceptedRow.resultGroupId
+                                ?: if (wasSelfGroup) acceptedId else res.resultGroupId
                             // ✅ ต้อง insert แถว realId ก่อน แล้วค่อยย้ายรูปมาที่ realId แล้วค่อยลบ tempId ทีหลัง
                             // เพราะ activity_result_photo มี FK CASCADE ไปยัง activity_result — ถ้าลบ tempId ก่อน รูปที่ยังผูกกับ tempId จะโดนลบไปด้วย
-                            resultDao.insertResult(res.copy(resultId = realId, version = serverRow.version, resultGroupId = finalGroupId, isSynced = true))
-                            photoDao.updateResultId(res.resultId, realId)
-                            resultDao.deleteResultById(res.resultId)
-                            val pendingPhotos = photoDao.getPhotosByResultId(realId)
+                            resultDao.replaceTemporaryResult(
+                                res.resultId,
+                                res.copy(
+                                    resultId = acceptedId,
+                                    version = acceptedRow.version,
+                                    resultGroupId = finalGroupId,
+                                    isSynced = true
+                                )
+                            )
+                            val pendingPhotos = photoDao.getPhotosByResultId(acceptedId)
                             if (pendingPhotos.isNotEmpty()) {
-                                try { apiService.addResultPhotos(pendingPhotos) } catch (_: Exception) {}
+                                try {
+                                    apiService.addResultPhotos(pendingPhotos)
+                                } catch (e: Exception) {
+                                    if (e is CancellationException) throw e
+                                    tracker.exception(e)
+                                }
                             }
-                        } else {
-                            resultDao.updateSyncStatus(res.resultId, true)
-                        }
                     }
                 } else {
-                    val body = buildResultBody(res)
+                    val body = CreateRequestPayloads.result(res, includeResultId = true)
                     val response = apiService.upsertActivityResult(body)
-                    noteOutcome("result", res.resultId, response.isSuccessful, response.code())
+                    noteOutcome("result", res.resultId, response.isSuccessful, response.code(), tracker)
                     if (response.isSuccessful && response.body()?.isNotEmpty() == true) resultDao.updateSyncStatus(res.resultId, true)
                 }
             } catch (e: Exception) {
-                Log.e("SyncManager", "Failed to sync result ${res.resultId}: ${e.message}")
+                if (e is CancellationException) throw e
+                tracker.exception(e)
+                Log.e("SyncManager", "Result sync failed: ${e::class.java.simpleName}")
             }
         }
 
+        // Parent result must have a real server ID first. Binary upload and metadata binding then
+        // progress independently so a binding failure never causes the image to be uploaded twice.
+        syncAttachments(tracker)
+
         // checklist ต้องมาหลังนัดหมาย เพราะรายการที่ผูกกับ TEMP- id ต้องรอให้นัดหมายได้ id จริงก่อน
         // (updateAppointmentId ด้านบนย้าย appointmentId ให้แล้ว) ไม่งั้นจะส่งขึ้นไปผูกกับ id ที่ไม่มีจริง
-        for (appointmentId in planItemDao.getUnsyncedAppointmentIds()) {
+        for (appointmentId in bounded(planItemDao.getUnsyncedAppointmentIds(), tracker)) {
             // ✅ แถว checklist กำพร้า (นัดหมายแม่ถูกลบไปแล้ว) ต้องลบทิ้ง ไม่ใช่ปล่อยค้าง:
             //   - id เป็น TEMP-: เดิม continue เฉยๆ ทุกรอบ = ไม่เคยพยายามส่ง และ is_synced ไม่เคยเป็น 1
             //   - id จริง: ส่งขึ้นไปก็ได้ 404 เพราะ server ไม่มีนัดหมายนั้นแล้ว
             // ทั้งสองกรณีทำให้ hasPendingChanges() เป็น true ตลอดกาล = logout ไม่ได้ทั้งที่เน็ตดี
             if (activityDao.getActivityById(appointmentId) == null) {
-                Log.w("SyncManager", "ลบ checklist กำพร้าของนัดหมายที่ไม่มีอยู่แล้ว: $appointmentId")
+                Log.w("SyncManager", "ลบ checklist กำพร้าของนัดหมายที่ไม่มีอยู่แล้ว")
                 planItemDao.deletePlanItemsByAppointmentId(appointmentId)
+                tracker.attempted()
                 continue
             }
             // นัดหมายแม่ยังอยู่แต่ยังไม่ได้ id จริง — รอรอบหน้าหลังนัดหมายซิงค์สำเร็จ (ปกติ)
-            if (appointmentId.startsWith("TEMP-")) continue
+            if (appointmentId.startsWith("TEMP-")) {
+                tracker.skipped()
+                tracker.failed(SyncFailureType.DEPENDENCY)
+                continue
+            }
+            tracker.attempted()
             try {
                 val items = planItemDao.getPlanItemsByAppointmentId(appointmentId)
                 val code = activityRepositoryPush(appointmentId, items)
-                noteOutcome("checklist", appointmentId, code == 200, code)
+                noteOutcome("checklist", appointmentId, code == 200, code, tracker)
                 if (code == 200) {
                     planItemDao.updateSyncStatusByAppointment(appointmentId, true)
                 }
             } catch (e: Exception) {
-                Log.e("SyncManager", "Failed to sync checklist for $appointmentId: ${e.message}")
+                if (e is CancellationException) throw e
+                tracker.exception(e)
+                Log.e("SyncManager", "Checklist sync failed: ${e::class.java.simpleName}")
             }
         }
 
-        Log.d("SyncManager", "Sync finished")
+        val pendingAfter = pendingSummary().sumOf { it.second }
+        val rejectedAfter = rejectedSummary().size
+        val succeeded = ((pendingBefore + rejectedBefore) - (pendingAfter + rejectedAfter)).coerceAtLeast(0)
+        val failureTypes = tracker.snapshot()
+        Log.d("SyncManager", "Sync finished run=$runId pending=$pendingAfter rejected=$rejectedAfter")
+        return SyncRunResult(
+            runId = runId,
+            attempted = tracker.attempted,
+            succeeded = succeeded,
+            temporaryFailures = tracker.retryableFailureCount(),
+            permanentFailures = failureTypes[SyncFailureType.PERMANENT] ?: 0,
+            rejectedPending = rejectedAfter,
+            skipped = tracker.skipped,
+            stillPending = pendingAfter,
+            failureTypes = failureTypes,
+            startedAt = startedAt,
+            finishedAt = java.time.Instant.now().toString()
+        )
     }
 
     /**
@@ -511,16 +796,18 @@ class SyncManager @Inject constructor(
      * ต้องยิง delete เสมอแม้ในเครื่องไม่เหลือผู้เข้าร่วมแล้ว ไม่งั้นการลบออกจนหมดจะไม่ถูกส่งขึ้นไป
      * แล้ว sync รอบถัดไปจะดึงรายชื่อเก่ากลับลงมา (บั๊กเดียวกับที่ saveAppointmentContacts เคยมี)
      */
-    private suspend fun pushAppointmentContacts(appointmentId: String): Boolean {
+    private suspend fun pushAppointmentContacts(appointmentId: String): ChildSyncOutcome {
         return try {
             val contacts = appointmentContactDao.getContactsByAppointmentId(appointmentId)
             val deleted = apiService.deleteAppointmentContacts("eq.$appointmentId")
-            if (!deleted.isSuccessful) return false
-            if (contacts.isEmpty()) return true
-            apiService.addAppointmentContacts(contacts).isSuccessful
+            if (!deleted.isSuccessful) return ChildSyncOutcome(false, httpCode = deleted.code())
+            if (contacts.isEmpty()) return ChildSyncOutcome(true)
+            val added = apiService.addAppointmentContacts(contacts)
+            ChildSyncOutcome(added.isSuccessful, httpCode = added.code())
         } catch (e: Exception) {
-            Log.e("SyncManager", "Failed to sync appointment contacts for $appointmentId: ${e.message}")
-            false
+            if (e is CancellationException) throw e
+            Log.e("SyncManager", "Failed to sync appointment contacts: ${e::class.java.simpleName}")
+            ChildSyncOutcome(false, error = e)
         }
     }
 
@@ -560,36 +847,9 @@ class SyncManager @Inject constructor(
             val inserted = apiService.insertChecklist(dtos)
             if (inserted.isSuccessful) 200 else inserted.code()
         } catch (e: Exception) {
+            if (e is CancellationException) throw e
             0
         }
     }
 
-    private fun buildResultBody(result: ActivityResult): Map<String, Any?> {
-        val body = mutableMapOf<String, Any?>()
-        body["result_id"]          = result.resultId
-        body["appointment_id"]     = result.activityId
-        body["project_code"]       = result.projectId
-        body["created_by"]         = result.createdBy
-        body["report_date"]        = result.reportDate
-        body["new_status"]         = result.newStatus
-        body["opportunity_score"]  = result.opportunityScore
-        body["dm_involved"]        = result.dmInvolved
-        body["is_proposal_sent"]   = result.isProposalSent
-        body["proposal_date"]      = result.proposalDate
-        body["competitor_count"]   = result.competitorCount
-        body["response_speed"]     = result.responseSpeed
-        body["deal_position"]      = result.dealPosition
-        body["current_solution"]   = result.previousSolution
-        body["counterparty_type"]  = result.counterpartyMultiplier
-        body["note_summary"]       = result.summary
-        body["photo_url"]          = result.photoUrl
-        body["photo_taken_at"]     = result.photoTakenAt
-        body["photo_lat"]          = result.photoLat
-        body["photo_lng"]          = result.photoLng
-        body["photo_device_model"] = result.photoDeviceModel
-        body["version"]         = result.version
-        body["is_latest"]       = result.isLatest
-        body["result_group_id"] = result.resultGroupId
-        return body.filterValues { it != null }
-    }
 }

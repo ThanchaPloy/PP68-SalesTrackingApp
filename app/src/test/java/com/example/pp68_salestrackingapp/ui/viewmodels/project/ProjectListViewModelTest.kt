@@ -1,9 +1,10 @@
 package com.example.pp68_salestrackingapp.ui.viewmodels.project
 
 import androidx.arch.core.executor.testing.InstantTaskExecutorRule
+import androidx.lifecycle.viewModelScope
+import androidx.paging.PagingData
 import app.cash.turbine.test
 import com.example.pp68_salestrackingapp.data.model.AuthUser
-import com.example.pp68_salestrackingapp.data.model.Project
 import com.example.pp68_salestrackingapp.data.repository.AuthRepository
 import com.example.pp68_salestrackingapp.data.repository.ProjectRepository
 import io.mockk.Runs
@@ -13,15 +14,18 @@ import io.mockk.every
 import io.mockk.just
 import io.mockk.mockk
 import io.mockk.unmockkAll
+import io.mockk.verify
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.StandardTestDispatcher
-import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
-import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.After
@@ -32,7 +36,6 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
-import java.time.LocalDate
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class ProjectListViewModelTest {
@@ -46,39 +49,33 @@ class ProjectListViewModelTest {
 
     private lateinit var viewModel: ProjectListViewModel
 
-    private val pastDate = LocalDate.now().minusDays(1).toString()
-    private val futureDate = LocalDate.now().plusDays(1).toString()
-
-    private val allProjects = listOf(
-        Project(projectId = "P1", projectName = "Active Quotation", projectStatus = "Quotation", custId = "C1"),
-        Project(projectId = "P3", projectName = "PO Closed", projectStatus = "PO", closingDate = pastDate, custId = "C1"),
-        Project(projectId = "P4", projectName = "PO Active", projectStatus = "PO", closingDate = futureDate, custId = "C1"),
-        Project(projectId = "P5", projectName = "Lost", projectStatus = "Lost", custId = "C1"),
-        Project(projectId = "P6", projectName = "Failed", projectStatus = "Failed", custId = "C1"),
-        Project(projectId = "P7", projectName = "Hot Quotation", projectStatus = "Quotation", opportunityScore = "hot", custId = "C1"),
-        Project(projectId = "P8", projectName = "No Score Quotation", projectStatus = "Quotation", opportunityScore = null, custId = "C1")
-    )
-
     @Before
     fun setUp() {
         Dispatchers.setMain(dispatcher)
         every { authRepo.currentUser() } returns AuthUser("U1", "u@test.com", "sale", "T1")
-        every { projectRepo.getAllProjectsFlow() } returns flowOf(allProjects)
-        every { projectRepo.searchProjectsFlow(any()) } answers {
-            val q = firstArg<String>()
-            flowOf(allProjects.filter { it.projectName.contains(q, ignoreCase = true) })
-        }
+        every { projectRepo.getProjectsPagingFlow(any(), any(), any(), any()) } returns
+            flowOf(PagingData.empty())
         coEvery { projectRepo.refreshProjects(any()) } returns Result.success(Unit)
     }
 
     @After
     fun tearDown() {
+        if (::viewModel.isInitialized) viewModel.viewModelScope.cancel()
         Dispatchers.resetMain()
         unmockkAll()
     }
 
     private fun initVm() {
         viewModel = ProjectListViewModel(projectRepo, authRepo)
+    }
+
+    private suspend fun collectPagingGeneration() {
+        viewModel.projects.test {
+            delay(305)
+            awaitItem()
+            cancelAndIgnoreRemainingEvents()
+        }
+        viewModel.viewModelScope.coroutineContext[Job]?.cancelAndJoin()
     }
 
     @Test
@@ -113,21 +110,12 @@ class ProjectListViewModelTest {
     }
 
     @Test
-    fun givenActiveTabDefault_whenProjectsCollected_thenReturnsOnlyActiveItems() = runTest {
+    fun givenActiveTabDefault_whenProjectsCollected_thenRequestsActivePage() = runTest {
         initVm()
+        collectPagingGeneration()
 
-        viewModel.projects.test {
-            assertEquals(emptyList<Project>(), awaitItem())
-            advanceTimeBy(305)
-            val result = awaitItem()
-
-            assertTrue(result.any { it.projectId == "P1" })
-            assertTrue(result.any { it.projectId == "P7" })
-            assertTrue(result.any { it.projectId == "P8" })
-            // PO = ปิดการขายได้แล้ว จึงไม่อยู่แท็บ Active ไม่ว่าวันปิดจะถึงกำหนดหรือยัง (P3 อดีต, P4 อนาคต)
-            assertFalse(result.any { it.projectId == "P3" || it.projectId == "P4" })
-            assertFalse(result.any { it.projectId == "P5" || it.projectId == "P6" })
-            cancelAndIgnoreRemainingEvents()
+        verify(exactly = 1) {
+            projectRepo.getProjectsPagingFlow("", 0, emptySet(), emptySet())
         }
     }
 
@@ -135,48 +123,35 @@ class ProjectListViewModelTest {
     // เดิมเงื่อนไขคือ PO && closingDate <= today ทำให้ใบที่ยังไม่ถึงวันส่งมอบ (P4) ค้างในแท็บ Active
     // ส่วน Lost/Failed แยกไปแท็บ inactive ต่างหาก เพราะแพ้ ≠ ขายได้
     @Test
-    fun givenClosedTab_whenSelected_thenReturnsEveryWonProject() = runTest {
+    fun givenClosedTab_whenSelected_thenRequestsWonPage() = runTest {
         initVm()
         viewModel.onSelectTab(1)
+        collectPagingGeneration()
 
-        viewModel.projects.test {
-            awaitItem()
-            advanceTimeBy(305)
-            val result = awaitItem()
-
-            assertEquals(setOf("P3", "P4"), result.map { it.projectId }.toSet())
-            cancelAndIgnoreRemainingEvents()
+        verify(exactly = 1) {
+            projectRepo.getProjectsPagingFlow("", 1, emptySet(), emptySet())
         }
     }
 
     @Test
-    fun givenInactiveTab_whenSelected_thenReturnsLostAndFailedOnly() = runTest {
+    fun givenInactiveTab_whenSelected_thenRequestsLostPage() = runTest {
         initVm()
         viewModel.onSelectTab(2)
+        collectPagingGeneration()
 
-        viewModel.projects.test {
-            awaitItem()
-            advanceTimeBy(305)
-            val result = awaitItem()
-
-            assertEquals(setOf("P5", "P6"), result.map { it.projectId }.toSet())
-            cancelAndIgnoreRemainingEvents()
+        verify(exactly = 1) {
+            projectRepo.getProjectsPagingFlow("", 2, emptySet(), emptySet())
         }
     }
 
     @Test
-    fun givenSearchQuery_whenChanged_thenUsesSearchFlowAndReturnsMatchedItems() = runTest {
+    fun givenSearchQuery_whenChanged_thenPassesQueryToPagingRepository() = runTest {
         initVm()
         viewModel.onSearchChange("Hot")
+        collectPagingGeneration()
 
-        viewModel.projects.test {
-            awaitItem()
-            advanceTimeBy(305)
-            val result = awaitItem()
-
-            assertEquals(1, result.size)
-            assertEquals("P7", result.first().projectId)
-            cancelAndIgnoreRemainingEvents()
+        verify(exactly = 1) {
+            projectRepo.getProjectsPagingFlow("Hot", 0, emptySet(), emptySet())
         }
     }
 
@@ -193,21 +168,16 @@ class ProjectListViewModelTest {
     }
 
     @Test
-    fun givenScoreFilterLowercase_whenToggled_thenStoresUppercaseAndFiltersCorrectly() = runTest {
+    fun givenScoreFilterLowercase_whenToggled_thenStoresUppercaseAndPassesFiltersToRepository() = runTest {
         initVm()
         viewModel.toggleStatusFilter("Quotation")
         viewModel.toggleScoreFilter("hot")
 
         assertEquals(setOf("HOT"), viewModel.selectedScores.value)
 
-        viewModel.projects.test {
-            awaitItem()
-            advanceTimeBy(305)
-            val result = awaitItem()
-
-            assertEquals(1, result.size)
-            assertEquals("P7", result.first().projectId)
-            cancelAndIgnoreRemainingEvents()
+        collectPagingGeneration()
+        verify(exactly = 1) {
+            projectRepo.getProjectsPagingFlow("", 0, setOf("Quotation"), setOf("HOT"))
         }
 
         viewModel.toggleScoreFilter("HOT")
@@ -229,18 +199,14 @@ class ProjectListViewModelTest {
     }
 
     @Test
-    fun givenFlowThrows_whenProjectsCollected_thenEmitsEmptyAndSetsError() = runTest {
-        every { projectRepo.getAllProjectsFlow() } returns flow { throw IllegalStateException("db fail") }
+    fun givenFlowThrows_whenProjectsCollected_thenSetsError() = runTest {
+        every { projectRepo.getProjectsPagingFlow(any(), any(), any(), any()) } returns
+            flow { throw IllegalStateException("db fail") }
         initVm()
+        collectPagingGeneration()
 
-        viewModel.projects.test {
-            assertEquals(emptyList<Project>(), awaitItem())
-            advanceUntilIdle()
-            assertEquals(emptyList<Project>(), viewModel.projects.value)
-            assertEquals("db fail", viewModel.error.value)
-            assertFalse(viewModel.isLoading.value)
-            cancelAndIgnoreRemainingEvents()
-        }
+        assertEquals("db fail", viewModel.error.value)
+        assertFalse(viewModel.isLoading.value)
     }
 
     @Test

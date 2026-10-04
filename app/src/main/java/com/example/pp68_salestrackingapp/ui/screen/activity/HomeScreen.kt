@@ -189,6 +189,35 @@ private fun HomeScreenContent(
                 modifier  = Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp)
             )
         }
+        if (uiState.pendingSummary.isNotEmpty() || uiState.rejectedCount > 0 ||
+            uiState.syncStatus is com.example.pp68_salestrackingapp.utils.SyncStatus.Running ||
+            uiState.syncStatus is com.example.pp68_salestrackingapp.utils.SyncStatus.Queued
+        ) {
+            val pendingCount = uiState.pendingSummary.sumOf { it.second }
+            val message = when {
+                uiState.syncStatus is com.example.pp68_salestrackingapp.utils.SyncStatus.Running ->
+                    "กำลังส่งข้อมูลเบื้องหลัง คุณใช้งานต่อได้"
+                uiState.syncStatus is com.example.pp68_salestrackingapp.utils.SyncStatus.Queued ->
+                    "รอส่งข้อมูล $pendingCount รายการ คุณใช้งานต่อได้"
+                uiState.rejectedCount > 0 ->
+                    "มี ${uiState.rejectedCount} รายการที่ต้องตรวจสอบ และ $pendingCount รายการรอส่ง"
+                else -> "มีข้อมูล $pendingCount รายการรอส่ง"
+            }
+            Surface(
+                color = Color(0xFFFFF3CD),
+                shape = RoundedCornerShape(10.dp),
+                modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp).fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier.padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Default.Sync, contentDescription = null, tint = Color(0xFF7A5900))
+                    Spacer(Modifier.width(8.dp))
+                    Text(message, color = Color(0xFF5F4500), fontSize = 13.sp)
+                }
+            }
+        }
         // อยู่นอก when โดยตั้งใจ — คนที่ยังไม่มีเบอร์มักเป็นบัญชีใหม่ที่ยังไม่มีนัดหมายเลย
         // ถ้าวางไว้ในสาขา LazyColumn การ์ดจะไม่โผล่ให้คนที่ต้องเห็นมากที่สุด
         if (uiState.needsPhoneNumber) {

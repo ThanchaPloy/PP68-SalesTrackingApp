@@ -27,7 +27,7 @@ import com.example.pp68_salestrackingapp.ui.screen.contact.*
 import com.example.pp68_salestrackingapp.ui.screen.activity.SalesResultScreen
 
 @Composable
-fun SalesTrackingApp() {
+fun SalesTrackingApp(initialSettingsScreen: String? = null) {
     val navController = rememberNavController()
     
     val navBackStackEntry by navController.currentBackStackEntryAsState()
@@ -38,6 +38,12 @@ fun SalesTrackingApp() {
     val isLoggedIn = remember { appViewModel.isLoggedIn() }
 
     val context = LocalContext.current
+
+    LaunchedEffect(initialSettingsScreen, isLoggedIn) {
+        if (isLoggedIn && initialSettingsScreen != null) {
+            navController.navigate(Route.Settings.createRoute(initialSettingsScreen))
+        }
+    }
 
     val navigateToLogin = {
         navController.navigate(Route.Login.path) {
@@ -443,4 +449,3 @@ private fun navigateToTab(navController: NavHostController, tabIndex: Int) {
         restoreState = true
     }
 }
-

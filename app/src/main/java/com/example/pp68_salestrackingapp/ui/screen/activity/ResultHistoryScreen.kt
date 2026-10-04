@@ -4,7 +4,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -12,8 +11,6 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -21,6 +18,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.paging.LoadState
+import androidx.paging.compose.collectAsLazyPagingItems
+import androidx.paging.compose.itemKey
 import com.example.pp68_salestrackingapp.ui.viewmodels.activity.ResultHistoryViewModel
 import com.example.pp68_salestrackingapp.ui.viewmodels.activity.ResultVersionItem
 
@@ -37,7 +37,7 @@ fun ResultHistoryScreen(
     onSelectVersion: (String) -> Unit,
     viewModel: ResultHistoryViewModel = hiltViewModel()
 ) {
-    val s by viewModel.uiState.collectAsState()
+    val versions = viewModel.versions.collectAsLazyPagingItems()
 
     Scaffold(
         topBar = {
@@ -53,11 +53,18 @@ fun ResultHistoryScreen(
         },
         containerColor = BgLight
     ) { padding ->
-        if (s.isLoading) {
+        if (versions.itemCount == 0 && versions.loadState.refresh is LoadState.Loading) {
             Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
                 CircularProgressIndicator(color = RedPrimary)
             }
-        } else if (s.versions.isEmpty()) {
+        } else if (versions.itemCount == 0 && versions.loadState.refresh is LoadState.Error) {
+            Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text("โหลดประวัติไม่สำเร็จ", color = RedPrimary, fontSize = 14.sp)
+                    TextButton(onClick = versions::retry) { Text("ลองอีกครั้ง") }
+                }
+            }
+        } else if (versions.itemCount == 0) {
             Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
                 Text("ไม่พบประวัติการแก้ไข", color = TextGray, fontSize = 14.sp)
             }
@@ -67,8 +74,26 @@ fun ResultHistoryScreen(
                 contentPadding = PaddingValues(16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                items(s.versions) { item ->
-                    VersionCard(item = item, onClick = { onSelectVersion(item.resultId) })
+                items(
+                    count = versions.itemCount,
+                    key = versions.itemKey { it.resultId }
+                ) { index ->
+                    versions[index]?.let { item ->
+                        VersionCard(item = item, onClick = { onSelectVersion(item.resultId) })
+                    }
+                }
+                when (versions.loadState.append) {
+                    is LoadState.Loading -> item {
+                        Box(Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
+                            CircularProgressIndicator(Modifier.size(24.dp), color = RedPrimary)
+                        }
+                    }
+                    is LoadState.Error -> item {
+                        TextButton(onClick = versions::retry, modifier = Modifier.fillMaxWidth()) {
+                            Text("โหลดประวัติต่อไม่สำเร็จ — แตะเพื่อลองอีกครั้ง")
+                        }
+                    }
+                    else -> Unit
                 }
             }
         }

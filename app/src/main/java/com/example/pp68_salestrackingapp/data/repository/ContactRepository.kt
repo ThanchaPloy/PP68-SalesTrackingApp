@@ -10,8 +10,12 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.withContext
 import android.util.Log
+import androidx.paging.Pager
+import androidx.paging.PagingConfig
+import androidx.paging.PagingData
 import javax.inject.Inject
 import java.io.IOException
+import kotlinx.coroutines.CancellationException
 import com.example.pp68_salestrackingapp.utils.queuedOrFailed
 import com.example.pp68_salestrackingapp.utils.retrySend
 
@@ -23,6 +27,22 @@ class ContactRepository @Inject constructor(
     private val syncManager: SyncManager,
     private val networkMonitor: com.example.pp68_salestrackingapp.utils.NetworkMonitor
 ) {
+    fun getContactsPagingFlow(
+        searchQuery: String,
+        initial: String?
+    ): Flow<PagingData<ContactPerson>> = Pager(
+        config = PagingConfig(
+            pageSize = 30,
+            initialLoadSize = 60,
+            prefetchDistance = 10,
+            maxSize = 150,
+            enablePlaceholders = false
+        ),
+        pagingSourceFactory = {
+            contactDao.getContactsPaging(searchQuery.trim(), initial)
+        }
+    ).flow
+
     fun getAllContactsFlow(): Flow<List<ContactPerson>> = contactDao.getAllContacts()
     fun searchContactsFlow(query: String): Flow<List<ContactPerson>> = contactDao.searchContactsWithCompany("%$query%")
 
@@ -40,6 +60,7 @@ class ContactRepository @Inject constructor(
                 val allContacts = mutableListOf<ContactPerson>()
                 val chunks = customerIds.chunked(50)
                 var allChunksSucceeded = true
+                var firstFailure: Throwable? = null
                 for (chunk in chunks) {
                     try {
                         val batchQuery = "in.(" + chunk.joinToString(",") + ")"
@@ -48,10 +69,13 @@ class ContactRepository @Inject constructor(
                             allContacts.addAll(resp.body()!!)
                         } else {
                             allChunksSucceeded = false
+                            firstFailure = firstFailure ?: Exception("HTTP ${resp.code()}")
                             Log.e("ContactRepo", "Batch contact fetch failed: HTTP ${resp.code()}")
                         }
                     } catch (e: Exception) {
+                        if (e is CancellationException) throw e
                         allChunksSucceeded = false
+                        firstFailure = firstFailure ?: e
                         Log.e("ContactRepo", "Batch contact fetch error: ${e.message}")
                     }
                 }
@@ -65,9 +89,10 @@ class ContactRepository @Inject constructor(
                     kotlin.Result.success(Unit)
                 } else {
                     if (deduped.isNotEmpty()) contactDao.insertAll(deduped)
-                    kotlin.Result.failure(Exception("ดึงผู้ติดต่อได้ไม่ครบ กรุณาลองใหม่"))
+                    kotlin.Result.failure(firstFailure ?: Exception("ดึงผู้ติดต่อได้ไม่ครบ กรุณาลองใหม่"))
                 }
             } catch (e: Exception) {
+                if (e is CancellationException) throw e
                 Log.e("ContactRepo", "refreshContacts error: ${e.message}", e)
                 kotlin.Result.failure(e)
             }

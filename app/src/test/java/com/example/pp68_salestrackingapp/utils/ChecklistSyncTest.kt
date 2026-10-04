@@ -4,6 +4,7 @@ import android.content.Context
 import com.example.pp68_salestrackingapp.data.local.*
 import com.example.pp68_salestrackingapp.data.model.ActivityPlanItem
 import com.example.pp68_salestrackingapp.data.remote.ApiService
+import com.example.pp68_salestrackingapp.data.remote.UploadApiService
 import com.example.pp68_salestrackingapp.di.TokenManager
 import io.mockk.*
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -20,6 +21,7 @@ class ChecklistSyncTest {
 
     private val context: Context = mockk(relaxed = true)
     private val apiService: ApiService = mockk(relaxed = true)
+    private val uploadApiService: UploadApiService = mockk(relaxed = true)
     private val tokenManager: TokenManager = mockk(relaxed = true)
     private val customerDao: CustomerDao = mockk(relaxed = true)
     private val projectDao: ProjectDao = mockk(relaxed = true)
@@ -31,6 +33,7 @@ class ChecklistSyncTest {
     private val planItemDao: ActivityPlanItemDao = mockk(relaxed = true)
     private val projectContactDao: ProjectContactDao = mockk(relaxed = true)
     private val syncRejectionDao: SyncRejectionDao = mockk(relaxed = true)
+    private val attachmentOutboxDao: AttachmentOutboxDao = mockk(relaxed = true)
 
     private lateinit var sync: SyncManager
 
@@ -41,10 +44,11 @@ class ChecklistSyncTest {
     @Before
     fun setUp() {
         sync = SyncManager(
-            context, apiService, tokenManager, customerDao, projectDao, contactDao,
+            context, apiService, uploadApiService, tokenManager, customerDao, projectDao, contactDao,
             activityDao, resultDao, photoDao, appointmentContactDao, planItemDao, projectContactDao,
-            syncRejectionDao
+            syncRejectionDao, attachmentOutboxDao
         )
+        every { tokenManager.getLocalDataOwner() } returns null
         coEvery { customerDao.getUnsyncedCustomers() } returns emptyList()
         coEvery { contactDao.getUnsyncedContacts() } returns emptyList()
         coEvery { projectDao.getUnsyncedProjects() } returns emptyList()

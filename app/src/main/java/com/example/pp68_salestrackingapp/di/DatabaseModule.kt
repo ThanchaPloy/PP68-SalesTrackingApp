@@ -6,6 +6,7 @@ import com.example.pp68_salestrackingapp.data.local.ActivityDao
 import com.example.pp68_salestrackingapp.data.local.ActivityPlanItemDao
 import com.example.pp68_salestrackingapp.data.local.ActivityResultDao
 import com.example.pp68_salestrackingapp.data.local.ActivityResultPhotoDao
+import com.example.pp68_salestrackingapp.data.local.AttachmentOutboxDao
 import com.example.pp68_salestrackingapp.data.local.AppDatabase
 import com.example.pp68_salestrackingapp.data.local.AppointmentContactDao
 import com.example.pp68_salestrackingapp.data.local.ProjectContactDao
@@ -64,7 +65,10 @@ object DatabaseModule {
                 AppDatabase.MIGRATION_49_50,
                 AppDatabase.MIGRATION_50_51,
                 AppDatabase.MIGRATION_51_52,
-                AppDatabase.MIGRATION_52_53
+                AppDatabase.MIGRATION_52_53,
+                AppDatabase.MIGRATION_53_54,
+                AppDatabase.MIGRATION_54_55,
+                AppDatabase.MIGRATION_55_56
             )
             .build()
     }
@@ -124,4 +128,8 @@ object DatabaseModule {
     @Provides
     @Singleton
     fun provideSyncRejectionDao(db: AppDatabase): SyncRejectionDao = db.syncRejectionDao()
+
+    @Provides
+    @Singleton
+    fun provideAttachmentOutboxDao(db: AppDatabase): AttachmentOutboxDao = db.attachmentOutboxDao()
 }

@@ -1,5 +1,6 @@
 package com.example.pp68_salestrackingapp.ui.screen.activity
 
+import android.content.Intent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -15,6 +16,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -23,6 +25,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.core.content.FileProvider
 import com.example.pp68_salestrackingapp.BuildConfig
 import com.example.pp68_salestrackingapp.data.model.AuthUser
 import com.example.pp68_salestrackingapp.ui.theme.SalesTrackingTheme
@@ -47,6 +50,7 @@ fun SettingScreen(
     viewModel: SettingsViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val context = LocalContext.current
 
     LaunchedEffect(uiState.isLoggedOut) {
         if (uiState.isLoggedOut) onLogout()
@@ -59,7 +63,17 @@ fun SettingScreen(
         onLogout = { viewModel.logout() },
         onForceLogout = { viewModel.logout(force = true) },
         onRefreshUser = { viewModel.refreshUser() },
-        onDismissLogoutError = { viewModel.dismissLogoutError() }
+        onDismissLogoutError = { viewModel.dismissLogoutError() },
+        onRetrySync = { viewModel.retrySync() },
+        onExportDiagnostics = {
+            val file = viewModel.exportDiagnostics()
+            val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+            context.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply {
+                type = "application/json"
+                putExtra(Intent.EXTRA_STREAM, uri)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }, "ส่งไฟล์วิเคราะห์ปัญหา"))
+        }
     )
 }
 
@@ -72,7 +86,9 @@ fun SettingScreenContent(
     onLogout: () -> Unit,
     onForceLogout: () -> Unit = {},
     onRefreshUser: () -> Unit = {},
-    onDismissLogoutError: () -> Unit = {}
+    onDismissLogoutError: () -> Unit = {},
+    onRetrySync: () -> Unit = {},
+    onExportDiagnostics: () -> Unit = {}
 ) {
     // State สำหรับควบคุมว่ากำลังแสดงหน้าย่อยไหน
     var activeSubScreen by remember { mutableStateOf(initialSubScreen) }
@@ -117,6 +133,12 @@ fun SettingScreenContent(
         )
         "notification_settings" -> NotificationSettingsScreen(
             onBack = { activeSubScreen = null }
+        )
+        "sync_status" -> SyncStatusScreen(
+            uiState = uiState,
+            onBack = { activeSubScreen = null },
+            onRetry = onRetrySync,
+            onExport = onExportDiagnostics
         )
         "change_password" -> ChangePasswordScreen(
             onBack = { activeSubScreen = null },
@@ -237,6 +259,21 @@ fun SettingScreenContent(
                         SettingItem(icon = Icons.Default.Notifications, label = "ตั้งค่าการแจ้งเตือน", onClick = { activeSubScreen = "notification_settings" })
                     }
 
+                    SettingGroup(title = "ข้อมูลและการซิงค์") {
+                        val pendingCount = uiState.pendingSummary.sumOf { it.second }
+                        val value = when {
+                            uiState.rejected.isNotEmpty() -> "ต้องตรวจสอบ ${uiState.rejected.size}"
+                            pendingCount > 0 -> "รอส่ง $pendingCount"
+                            else -> "ส่งครบแล้ว"
+                        }
+                        SettingItem(
+                            icon = Icons.Default.Sync,
+                            label = "สถานะการซิงค์",
+                            value = value,
+                            onClick = { activeSubScreen = "sync_status" }
+                        )
+                    }
+
                     SettingGroup(title = "ช่วยเหลือและข้อมูล") {
                         SettingItem(icon = Icons.Default.Help, label = "ศูนย์ช่วยเหลือ", onClick = { activeSubScreen = "help" })
                         SettingItem(icon = Icons.Default.Info, label = "เกี่ยวกับแอป", value = "v${BuildConfig.VERSION_NAME}", onClick = { activeSubScreen = "about" })
@@ -263,6 +300,87 @@ fun SettingScreenContent(
             onDismiss = { showLanguageDialog = false },
             onSelect = { showLanguageDialog = false }
         )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SyncStatusScreen(
+    uiState: SettingsUiState,
+    onBack: () -> Unit,
+    onRetry: () -> Unit,
+    onExport: () -> Unit
+) {
+    val pendingCount = uiState.pendingSummary.sumOf { it.second }
+    Scaffold(
+        topBar = {
+            CenterAlignedTopAppBar(
+                title = { Text("สถานะการซิงค์", fontWeight = FontWeight.Bold) },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "ย้อนกลับ")
+                    }
+                }
+            )
+        },
+        containerColor = BgLight
+    ) { padding ->
+        Column(
+            Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Card(colors = CardDefaults.cardColors(containerColor = White)) {
+                Column(Modifier.fillMaxWidth().padding(16.dp)) {
+                    Text(
+                        when (uiState.syncStatus) {
+                            is com.example.pp68_salestrackingapp.utils.SyncStatus.Running -> "กำลังส่งข้อมูลเบื้องหลัง"
+                            is com.example.pp68_salestrackingapp.utils.SyncStatus.Queued -> "อยู่ในคิว รอเครือข่าย"
+                            is com.example.pp68_salestrackingapp.utils.SyncStatus.WaitingForNetwork -> "รอการเชื่อมต่อหรือลองใหม่"
+                            is com.example.pp68_salestrackingapp.utils.SyncStatus.NeedsAttention -> "มีรายการที่ต้องตรวจสอบ"
+                            is com.example.pp68_salestrackingapp.utils.SyncStatus.Failed -> "การซิงค์ล่าสุดมีปัญหา"
+                            else -> if (pendingCount == 0 && uiState.rejected.isEmpty()) "ข้อมูลส่งครบแล้ว" else "มีข้อมูลค้างส่ง"
+                        },
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 17.sp
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Text("รอส่ง $pendingCount รายการ • ต้องตรวจสอบ ${uiState.rejected.size} รายการ", color = TextGray)
+                    uiState.lastSuccessfulSync?.let {
+                        Spacer(Modifier.height(4.dp))
+                        Text("ส่งครบล่าสุด: $it", color = TextGray, fontSize = 12.sp)
+                    }
+                }
+            }
+
+            if (uiState.pendingSummary.isNotEmpty()) {
+                Text("รายการรอส่ง", fontWeight = FontWeight.Bold)
+                uiState.pendingSummary.forEach { (name, count) ->
+                    Text("• $name $count รายการ")
+                }
+            }
+            if (uiState.rejected.isNotEmpty()) {
+                Text("รายการที่ต้องตรวจสอบ", fontWeight = FontWeight.Bold, color = RedPrimary)
+                uiState.rejected.groupingBy { it.reason ?: "ไม่ทราบสาเหตุ" }.eachCount().forEach { (reason, count) ->
+                    Text("• $reason ($count รายการ)")
+                }
+            }
+
+            Button(onClick = onRetry, modifier = Modifier.fillMaxWidth()) {
+                Icon(Icons.Default.Sync, contentDescription = null)
+                Spacer(Modifier.width(8.dp))
+                Text("ลองส่งอีกครั้ง")
+            }
+            OutlinedButton(onClick = onExport, modifier = Modifier.fillMaxWidth()) {
+                Icon(Icons.Default.Share, contentDescription = null)
+                Spacer(Modifier.width(8.dp))
+                Text("ส่งไฟล์วิเคราะห์ปัญหา (JSON)")
+            }
+            Text(
+                "ไฟล์มีเฉพาะเวลา ประเภทเหตุการณ์ จำนวนรายการ และชนิดข้อผิดพลาด ไม่รวมรหัสผ่าน token payload ชื่อลูกค้า เบอร์โทร หรือพิกัด",
+                fontSize = 12.sp,
+                color = TextGray
+            )
+        }
     }
 }
 

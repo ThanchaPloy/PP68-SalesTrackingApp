@@ -11,6 +11,11 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+import com.example.pp68_salestrackingapp.utils.SyncDiagnostics
+import com.example.pp68_salestrackingapp.utils.SyncRuntime
+import com.example.pp68_salestrackingapp.utils.SyncStatus
+import com.example.pp68_salestrackingapp.utils.SyncTrigger
+import java.io.File
 
 data class SettingsUiState(
     val user: AuthUser? = null,
@@ -18,12 +23,18 @@ data class SettingsUiState(
     val isLoggedOut: Boolean = false,
     val logoutError: String? = null,
     // ต่างจาก logoutError: ออกจากระบบได้ แต่จะเสียข้อมูลที่เซิร์ฟเวอร์ไม่รับ ต้องให้ยืนยันก่อน
-    val logoutWarning: String? = null
+    val logoutWarning: String? = null,
+    val pendingSummary: List<Pair<String, Int>> = emptyList(),
+    val rejected: List<com.example.pp68_salestrackingapp.data.model.SyncRejection> = emptyList(),
+    val syncStatus: SyncStatus = SyncStatus.Idle,
+    val lastSuccessfulSync: String? = null
 )
 
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
-    private val authRepo: AuthRepository
+    private val authRepo: AuthRepository,
+    private val syncManager: com.example.pp68_salestrackingapp.utils.SyncManager,
+    private val diagnostics: SyncDiagnostics
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(SettingsUiState())
@@ -31,6 +42,13 @@ class SettingsViewModel @Inject constructor(
 
     init {
         loadUser()
+        refreshSyncStatus()
+        viewModelScope.launch {
+            SyncRuntime.status.collect { status ->
+                _uiState.update { it.copy(syncStatus = status) }
+                refreshSyncStatus()
+            }
+        }
     }
 
     private fun loadUser() {
@@ -41,6 +59,24 @@ class SettingsViewModel @Inject constructor(
     fun refreshUser() {
         loadUser()
     }
+
+    fun refreshSyncStatus() {
+        viewModelScope.launch {
+            val pending = runCatching { syncManager.pendingSummary() }.getOrDefault(emptyList())
+            val rejected = runCatching { syncManager.rejectedSummary() }.getOrDefault(emptyList())
+            _uiState.update {
+                it.copy(
+                    pendingSummary = pending,
+                    rejected = rejected,
+                    lastSuccessfulSync = diagnostics.lastSuccessfulSync()
+                )
+            }
+        }
+    }
+
+    fun retrySync() = syncManager.scheduleSync(SyncTrigger.MANUAL)
+
+    fun exportDiagnostics(): File = diagnostics.exportFile()
 
     fun logout(force: Boolean = false) {
         viewModelScope.launch {

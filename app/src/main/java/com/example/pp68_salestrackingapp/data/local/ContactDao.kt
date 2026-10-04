@@ -6,11 +6,52 @@ import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Transaction
 import androidx.room.Update
+import androidx.paging.PagingSource
 import com.example.pp68_salestrackingapp.data.model.ContactPerson
 import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface ContactDao {
+    @Query("""
+        WITH contact_rows AS (
+            SELECT cp.contactId, cp.custId,
+                   COALESCE(cp.fullName, c.company_name) AS fullName,
+                   cp.nickname, cp.position, cp.phoneNumber, cp.email,
+                   cp.line, cp.isActive, cp.isDmConfirmed, cp.createdBy, cp.is_synced,
+                   c.company_name AS companyName,
+                   CASE
+                       WHEN TRIM(COALESCE(cp.fullName, c.company_name, '')) LIKE 'นางสาว %' THEN SUBSTR(TRIM(COALESCE(cp.fullName, c.company_name, '')), LENGTH('นางสาว ') + 1)
+                       WHEN TRIM(COALESCE(cp.fullName, c.company_name, '')) LIKE 'ห้างหุ้นส่วนจำกัด %' THEN SUBSTR(TRIM(COALESCE(cp.fullName, c.company_name, '')), LENGTH('ห้างหุ้นส่วนจำกัด ') + 1)
+                       WHEN TRIM(COALESCE(cp.fullName, c.company_name, '')) LIKE 'ห้างหุ้นส่วน %' THEN SUBSTR(TRIM(COALESCE(cp.fullName, c.company_name, '')), LENGTH('ห้างหุ้นส่วน ') + 1)
+                       WHEN TRIM(COALESCE(cp.fullName, c.company_name, '')) LIKE 'กิจการร่วมค้า %' THEN SUBSTR(TRIM(COALESCE(cp.fullName, c.company_name, '')), LENGTH('กิจการร่วมค้า ') + 1)
+                       WHEN TRIM(COALESCE(cp.fullName, c.company_name, '')) LIKE 'บริษัท %' THEN SUBSTR(TRIM(COALESCE(cp.fullName, c.company_name, '')), LENGTH('บริษัท ') + 1)
+                       WHEN TRIM(COALESCE(cp.fullName, c.company_name, '')) LIKE 'หจก. %' THEN SUBSTR(TRIM(COALESCE(cp.fullName, c.company_name, '')), LENGTH('หจก. ') + 1)
+                       WHEN TRIM(COALESCE(cp.fullName, c.company_name, '')) LIKE 'บจก. %' THEN SUBSTR(TRIM(COALESCE(cp.fullName, c.company_name, '')), LENGTH('บจก. ') + 1)
+                       WHEN TRIM(COALESCE(cp.fullName, c.company_name, '')) LIKE 'นาง %' THEN SUBSTR(TRIM(COALESCE(cp.fullName, c.company_name, '')), LENGTH('นาง ') + 1)
+                       WHEN TRIM(COALESCE(cp.fullName, c.company_name, '')) LIKE 'นาย %' THEN SUBSTR(TRIM(COALESCE(cp.fullName, c.company_name, '')), LENGTH('นาย ') + 1)
+                       WHEN TRIM(COALESCE(cp.fullName, c.company_name, '')) LIKE 'ด.ช. %' THEN SUBSTR(TRIM(COALESCE(cp.fullName, c.company_name, '')), LENGTH('ด.ช. ') + 1)
+                       WHEN TRIM(COALESCE(cp.fullName, c.company_name, '')) LIKE 'ด.ญ. %' THEN SUBSTR(TRIM(COALESCE(cp.fullName, c.company_name, '')), LENGTH('ด.ญ. ') + 1)
+                       WHEN TRIM(COALESCE(cp.fullName, c.company_name, '')) LIKE 'คุณ %' THEN SUBSTR(TRIM(COALESCE(cp.fullName, c.company_name, '')), LENGTH('คุณ ') + 1)
+                       ELSE TRIM(COALESCE(cp.fullName, c.company_name, ''))
+                   END AS sortName
+            FROM contact_person cp
+            LEFT JOIN customer c ON cp.custId = c.cust_id
+        )
+        SELECT contactId, custId, fullName, nickname, position, phoneNumber, email,
+               line, isActive, isDmConfirmed, createdBy, is_synced
+        FROM contact_rows
+        WHERE (:searchQuery = ''
+               OR fullName LIKE '%' || :searchQuery || '%'
+               OR nickname LIKE '%' || :searchQuery || '%'
+               OR companyName LIKE '%' || :searchQuery || '%')
+          AND (:initial IS NULL OR SUBSTR(sortName, 1, 1) = :initial COLLATE NOCASE)
+        ORDER BY sortName COLLATE NOCASE ASC, contactId ASC
+    """)
+    fun getContactsPaging(
+        searchQuery: String,
+        initial: String?
+    ): PagingSource<Int, ContactPerson>
+
     @Query("""
         SELECT cp.contactId, cp.custId,
                COALESCE(cp.fullName, c.company_name) AS fullName,
@@ -18,7 +59,7 @@ interface ContactDao {
                cp.line, cp.isActive, cp.isDmConfirmed, cp.createdBy, cp.is_synced
         FROM contact_person cp
         LEFT JOIN customer c ON cp.custId = c.cust_id
-        ORDER BY fullName ASC
+        ORDER BY fullName ASC, cp.contactId ASC
     """)
     fun getAllContacts(): Flow<List<ContactPerson>>
 
@@ -32,7 +73,7 @@ interface ContactDao {
         WHERE COALESCE(cp.fullName, c.company_name) LIKE :query
            OR cp.nickname LIKE :query
            OR c.company_name LIKE :query
-        ORDER BY fullName ASC
+        ORDER BY fullName ASC, cp.contactId ASC
     """)
     fun searchContactsWithCompany(query: String): Flow<List<ContactPerson>>
 

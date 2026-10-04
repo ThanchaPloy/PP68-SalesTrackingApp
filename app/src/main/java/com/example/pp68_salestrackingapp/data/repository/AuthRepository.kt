@@ -7,6 +7,7 @@ import com.example.pp68_salestrackingapp.data.remote.ApiService
 import com.example.pp68_salestrackingapp.data.remote.AuthService
 import com.example.pp68_salestrackingapp.di.TokenManager
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import com.example.pp68_salestrackingapp.utils.SyncManager as OutboxSyncManager
@@ -16,68 +17,43 @@ class AuthRepository @Inject constructor(
     private val authService: AuthService,
     private val tokenManager: TokenManager,
     private val database: AppDatabase,
-    private val syncManager: SyncManager,
     private val outboxSyncManager: OutboxSyncManager
 ) {
-    suspend fun login(username: String, password: String): kotlin.Result<LoginResponse> {
+    suspend fun login(
+        username: String,
+        password: String,
+        discardPreviousData: Boolean = false
+    ): kotlin.Result<LoginResponse> {
         return withContext(Dispatchers.IO) {
             try {
                 val response = authService.login(LoginRequest(username, password))
                 if (response.isSuccessful && response.body() != null) {
                     val loginResp = response.body()!!
-
-                    // ต้องรู้ก่อนว่าผู้ login รอบนี้เป็นคนเดิมหรือคนละคนกับ session ก่อนหน้า ก่อนตัดสินใจ
-                    // ดันงานค้างขึ้น server — ทำก่อนเซฟ token ใหม่ เพราะ tokenManager.getUserData()
-                    // จะคืนข้อมูลของผู้ใช้เดิมได้ก็ต่อเมื่อยังไม่ถูกทับด้วยข้อมูลผู้ใช้ใหม่
-                    // ✅ ถอยไปอ่าน local_data_owner ด้วย — session หมดอายุจะเรียก clearToken() ซึ่งลบ
-                    // user_id ทิ้ง ทำให้ previousUserId เป็น null แล้วเงื่อนไขข้างล่างตีเป็น "คนเดิม
-                    // login ซ้ำ" ทุกครั้ง ซึ่งเป็นช่องที่คอมเมนต์ข้างล่างตั้งใจจะกันไว้พอดี:
-                    // เซลส์ A ทำงานออฟไลน์ค้างไว้ → session หมดอายุ → B มา login บนเครื่องเดียวกัน
-                    // → งานของ A ถูกดันขึ้นด้วย token ของ B และ backend บังคับเจ้าของจาก JWT
-                    // = งานของ A ไปติดชื่อ B (คีย์นี้ไม่ถูก clearToken ลบ จึงยังบอกได้ว่าใครเป็นเจ้าของ)
                     val previousUserId = tokenManager.getUserData()?.userId
                         ?: tokenManager.getLocalDataOwner()
-
-                    // ดึงข้อมูลผู้ใช้ (รองรับทั้ง Ktor/PostgREST backend และ Node.js backend)
                     val finalUserId = loginResp.employee?.empCode ?: loginResp.userId ?: ""
                     val finalFullName = loginResp.employee?.empName ?: loginResp.fullName
                     val finalRole = loginResp.employee?.empPost ?: loginResp.role ?: ""
                     val finalBranchId = loginResp.employee?.empBrchCode ?: loginResp.branchId ?: ""
                     val finalEmpType = loginResp.employee?.empPost ?: loginResp.empType
+                    val pending = outboxSyncManager.pendingSummary()
+                    val rejected = outboxSyncManager.rejectedSummary()
+                    val hasProtectedLocalData = pending.isNotEmpty() || rejected.isNotEmpty()
+                    val isSameUser = previousUserId == finalUserId ||
+                        (previousUserId.isNullOrBlank() && !hasProtectedLocalData)
 
-                    // 1. บันทึก Token แล้วพยายามดันงานที่ยังค้างขึ้นเซิร์ฟเวอร์ก่อนล้างเครื่อง
-                    tokenManager.saveToken(loginResp.token)
-                    // session หมดอายุจะลบแค่ token ไม่ลบ Room — เช็คอิน/บันทึกผลที่ทำตอนออฟไลน์
-                    // จึงยังค้างอยู่ ถ้าล้างเลยโดยไม่ดันขึ้นก่อน งานนั้นหายถาวรเงียบ ๆ
-                    // (logout กันเรื่องนี้ไว้แล้ว แต่ทางเข้า login ไม่เคยกัน)
-                    // ตอนนี้มี token ใหม่ที่ใช้ได้แล้ว จึงมีโอกาสส่งสำเร็จ — แต่ต้องเป็นงานค้างของ "คนเดิม"
-                    // ที่กำลัง login ซ้ำเท่านั้น ถ้าเป็นคนละคน (เครื่องเดียวกันส่งต่อให้เซลส์อีกคน) ห้ามดันขึ้น
-                    // เพราะ backend บังคับ owner จาก JWT เสมอ (ดู W1) จะกลายเป็นงานของคน A ไปติดชื่อคน B แทน
-                    val isSameUserReLogin = previousUserId.isNullOrBlank() || previousUserId == finalUserId
-                    var keepLocalData = false
-                    if (isSameUserReLogin) {
-                        try {
-                            if (outboxSyncManager.hasPendingChanges()) outboxSyncManager.doSync()
-                        } catch (_: Exception) {
-                            // ดันขึ้นไม่สำเร็จ ไม่เป็นไร ข้างล่างจะตรวจอีกทีว่าเหลืออะไรค้าง
-                        }
-                        // ดันขึ้นไม่หมด = ห้ามล้าง — clearAllTables ลบจริงและกู้คืนไม่ได้
-                        // ทางนี้เคยข้ามด่าน logout ทั้งหมด เช็คอิน/บันทึกผลที่ทำตอนออฟไลน์จึงหายเงียบ ๆ
-                        // ทั้งที่ logout มี dialog ให้ยืนยันก่อน แต่ตรงนี้ไม่มีจังหวะถาม
-                        // เก็บไว้กู้คืนได้เสมอ ลบทิ้งแล้วจบ — จึงเลือกเก็บ แล้วไปจัดการตอน logout ที่ถามได้
-                        // (ดาวน์โหลดหลัง login ใช้ clearAndInsert รายตารางอยู่แล้ว แถวเก่าจึงไม่ค้าง)
-                        val pending  = runCatching { outboxSyncManager.pendingSummary() }.getOrDefault(emptyList())
-                        val rejected = runCatching { outboxSyncManager.rejectedSummary() }.getOrDefault(emptyList())
-                        if (pending.isNotEmpty() || rejected.isNotEmpty()) {
-                            keepLocalData = true
-                            Log.w(
-                                "AuthRepository",
-                                "login: ไม่ล้างฐานข้อมูลในเครื่อง — ยังค้าง ${pending.size} ชนิด, ถูกปฏิเสธถาวร ${rejected.size} รายการ"
-                            )
-                        }
+                    // สำคัญ: ตรวจและบล็อกก่อนเขียน token ใหม่ เพื่อไม่ให้งานของ A ถูกส่งด้วยสิทธิ์ของ B
+                    if (!isSameUser && hasProtectedLocalData && !discardPreviousData) {
+                        return@withContext kotlin.Result.failure(
+                            AccountSwitchBlockedException(pending, rejected)
+                        )
                     }
-                    // คนละคน = ต้องล้างเสมอ ข้อมูลคนก่อนจะไปโผล่ในบัญชีคนใหม่ไม่ได้
-                    if (!keepLocalData) database.clearAllTables()
+                    if (!isSameUser) {
+                        outboxSyncManager.discardPendingAttachmentFiles()
+                        database.clearAllTables()
+                    }
+
+                    tokenManager.saveToken(loginResp.token)
 
                     val authUser = AuthUser(
                         userId     = finalUserId,
@@ -89,25 +65,38 @@ class AuthRepository @Inject constructor(
                         empType    = finalEmpType
                     )
                     tokenManager.saveUserData(authUser)
-                    // จำไว้ว่าข้อมูลใน Room ตั้งแต่นี้เป็นของใคร — ใช้ตอน login รอบหน้าถ้า session
-                    // หมดอายุไปก่อนแล้ว user_id ถูกลบทิ้ง (ดู previousUserId ด้านบน)
                     tokenManager.saveLocalDataOwner(finalUserId)
 
-                    // 3. Sync ข้อมูลทั้งหมดตามสาขาของผู้ใช้
-                    syncManager.syncAll(
-                        userId   = finalUserId,
-                        branchId = finalBranchId
-                    )
+                    // Login จบตรงนี้ ไม่รอจำนวนข้อมูล/ความเร็วเครือข่าย งานจริงทำใน WorkManager
+                    outboxSyncManager.scheduleSync(com.example.pp68_salestrackingapp.utils.SyncTrigger.LOGIN)
+                    outboxSyncManager.scheduleDownload()
 
                     kotlin.Result.success(loginResp)
                 } else {
                     kotlin.Result.failure(Exception("รหัสพนักงานหรือรหัสผ่านไม่ถูกต้อง"))
                 }
             } catch (e: Exception) {
+                if (e is CancellationException) throw e
                 kotlin.Result.failure(e)
             }
         }
     }
+
+    class AccountSwitchBlockedException(
+        val pending: List<Pair<String, Int>>,
+        val rejected: List<com.example.pp68_salestrackingapp.data.model.SyncRejection>
+    ) : Exception(
+        buildString {
+            append("มีข้อมูลของบัญชีก่อนหน้าค้างอยู่ในเครื่อง")
+            if (pending.isNotEmpty()) append("\nรอส่ง: " + pending.joinToString { "${it.first} ${it.second}" })
+            if (rejected.isNotEmpty()) {
+                val groups = rejected.groupingBy { it.entityType to (it.reason ?: "ไม่ทราบสาเหตุ") }.eachCount()
+                append("\nต้องตรวจสอบ:\n")
+                append(groups.entries.joinToString("\n") { (key, count) -> "• ${key.first}: ${key.second} ($count รายการ)" })
+            }
+            append("\nหากลบ ข้อมูลเหล่านี้จะกู้คืนไม่ได้")
+        }
+    )
 
     suspend fun register(
         email:    String,
@@ -128,6 +117,7 @@ class AuthRepository @Inject constructor(
                     val loginResp = response.body()!!
                     
                     tokenManager.saveToken(loginResp.token)
+                    outboxSyncManager.discardPendingAttachmentFiles()
                     database.clearAllTables()
 
                     val finalUserId = loginResp.employee?.empCode ?: loginResp.userId ?: ""
@@ -144,11 +134,8 @@ class AuthRepository @Inject constructor(
                     )
                     tokenManager.saveUserData(authUser)
 
-                    // Sync ข้อมูลเริ่มต้นหลังสมัครสมาชิก
-                    syncManager.syncAll(
-                        userId   = finalUserId,
-                        branchId = userDetail?.branchId ?: branchId
-                    )
+                    tokenManager.saveLocalDataOwner(finalUserId)
+                    outboxSyncManager.scheduleDownload()
 
                     kotlin.Result.success(loginResp)
                 } else {
@@ -161,6 +148,7 @@ class AuthRepository @Inject constructor(
                     kotlin.Result.failure(Exception(errMsg))
                 }
             } catch (e: Exception) {
+                if (e is CancellationException) throw e
                 kotlin.Result.failure(e)
             }
         }
@@ -233,6 +221,7 @@ class AuthRepository @Inject constructor(
                     )
                 }
 
+                outboxSyncManager.discardPendingAttachmentFiles()
                 database.clearAllTables()
                 tokenManager.clearToken()
                 // Room ว่างแล้ว จึงไม่มีเจ้าของข้อมูลในเครื่องให้จำอีก
@@ -242,6 +231,7 @@ class AuthRepository @Inject constructor(
                 com.example.pp68_salestrackingapp.utils.DealFactors.clearServerData()
                 kotlin.Result.success(Unit)
             } catch (e: Exception) {
+                if (e is CancellationException) throw e
                 kotlin.Result.failure(e)
             }
         }
@@ -283,6 +273,7 @@ class AuthRepository @Inject constructor(
                     kotlin.Result.failure(Exception(errMsg))
                 }
             } catch (e: Exception) {
+                if (e is CancellationException) throw e
                 kotlin.Result.failure(e)
             }
         }

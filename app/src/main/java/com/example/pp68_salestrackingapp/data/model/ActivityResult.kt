@@ -10,7 +10,17 @@ import com.google.gson.annotations.SerializedName
     tableName = "activity_result",
     indices = [
         Index("appointment_id"),
-        Index("project_id")
+        Index("project_id"),
+        Index(
+            value = ["project_id", "is_latest", "report_date", "result_id"],
+            name = "index_result_project_latest_date_id"
+        ),
+        Index(
+            value = ["result_group_id", "version", "result_id"],
+            orders = [Index.Order.ASC, Index.Order.DESC, Index.Order.ASC],
+            name = "index_result_group_version_id"
+        ),
+        Index(value = ["is_synced"], name = "index_result_is_synced")
     ]
 )
 data class ActivityResult(
@@ -121,5 +131,9 @@ data class ActivityResult(
     val resultGroupId: String? = null,
 
     @ColumnInfo(name = "is_synced")
-    val isSynced: Boolean = true
+    val isSynced: Boolean = true,
+
+    @ColumnInfo(name = "operation_id")
+    @SerializedName("operation_id")
+    val operationId: String? = null
 )

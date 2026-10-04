@@ -85,12 +85,20 @@ android {
             isReturnDefaultValues = true
         }
     }
+    sourceSets {
+        getByName("androidTest").assets.srcDir("$projectDir/schemas")
+    }
     lint {
         checkReleaseBuilds = false
         abortOnError = false
         checkDependencies = false
         ignoreTestSources = true
     }
+}
+
+ksp {
+    // เก็บ schema snapshot ไว้ตรวจ migration ทุกครั้งตั้งแต่ฐานข้อมูล v53 เป็นต้นไป
+    arg("room.schemaLocation", "$projectDir/schemas")
 }
 
 dependencies {
@@ -136,7 +144,12 @@ dependencies {
     // Room
     implementation(libs.room.runtime)
     implementation(libs.room.ktx)
+    implementation(libs.room.paging)
     ksp(libs.room.compiler)
+
+    // Paging 3 — list screens load only the rows currently needed by the UI.
+    implementation(libs.androidx.paging.runtime)
+    implementation(libs.androidx.paging.compose)
 
     // Coroutines
     implementation(libs.kotlinx.coroutines.android)
@@ -166,6 +179,7 @@ dependencies {
     testImplementation("app.cash.turbine:turbine:1.0.0")
     testImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
     androidTestImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
+    androidTestImplementation("androidx.room:room-testing:2.6.1")
 
     //photo
     implementation("io.coil-kt:coil-compose:2.5.0")

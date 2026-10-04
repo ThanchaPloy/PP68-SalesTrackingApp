@@ -15,10 +15,15 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import android.util.Log
+import androidx.paging.Pager
+import androidx.paging.PagingConfig
+import androidx.paging.PagingData
 import javax.inject.Inject
 import java.io.IOException
+import kotlinx.coroutines.CancellationException
 import com.example.pp68_salestrackingapp.utils.queuedOrFailed
 import com.example.pp68_salestrackingapp.utils.retrySend
+import com.example.pp68_salestrackingapp.data.remote.CreateRequestPayloads
 
 class CustomerRepository @Inject constructor(
     private val apiService: ApiService,
@@ -31,6 +36,31 @@ class CustomerRepository @Inject constructor(
     private val syncManager: SyncManager,
     private val networkMonitor: com.example.pp68_salestrackingapp.utils.NetworkMonitor
 ) {
+    fun getCustomersPagingFlow(
+        searchQuery: String,
+        bizGroup: String?,
+        custType: String?,
+        tabIndex: Int,
+        initial: String?
+    ): Flow<PagingData<Customer>> = Pager(
+        config = PagingConfig(
+            pageSize = 30,
+            initialLoadSize = 60,
+            prefetchDistance = 10,
+            maxSize = 150,
+            enablePlaceholders = false
+        ),
+        pagingSourceFactory = {
+            customerDao.getCustomersPaging(
+                searchQuery = searchQuery.trim(),
+                bizGroup = bizGroup,
+                custType = custType,
+                tabIndex = tabIndex.coerceIn(0, 2),
+                initial = initial
+            )
+        }
+    ).flow
+
     fun getAllCustomersFlow(): Flow<List<Customer>> = customerDao.getAllCustomers()
     fun searchCustomersFlow(query: String): Flow<List<Customer>> = customerDao.searchCustomers("%$query%")
     fun getAllContacts(): Flow<List<ContactPerson>> = contactDao.getAllContacts()
@@ -52,6 +82,7 @@ class CustomerRepository @Inject constructor(
             try {
                 val currentUserId = tokenManager.getUserData()?.userId ?: ""
                 val customers = mutableListOf<Customer>()
+                var refreshFailure: Throwable? = null
 
                 // 1. Fetch current user's own customers FIRST & insert into Room immediately
                 if (currentUserId.isNotBlank()) {
@@ -69,6 +100,8 @@ class CustomerRepository @Inject constructor(
                             // ด้านล่างบอกว่า "Room data still valid" ซึ่งจะเป็นเท็จทันทีถ้าใช้ clearAndInsert ที่นี่
                             customerDao.insertCustomers(ownCustomers)
                         }
+                    } else {
+                        refreshFailure = Exception("HTTP ${ownCustResp.code()}")
                     }
                 }
 
@@ -79,6 +112,8 @@ class CustomerRepository @Inject constructor(
                     if (custResp.isSuccessful && custResp.body() != null) {
                         customers.addAll(custResp.body()!!.map { it.copy(isSynced = true) })
                         branchFetchOk = true
+                    } else {
+                        refreshFailure = refreshFailure ?: Exception("HTTP ${custResp.code()}")
                     }
                 }
 
@@ -91,10 +126,11 @@ class CustomerRepository @Inject constructor(
                     if (branchFetchOk) customerDao.clearAndInsert(deduped)
                     else customerDao.insertCustomers(deduped)
                 }
-                kotlin.Result.success(Unit)
+                refreshFailure?.let { kotlin.Result.failure(it) } ?: kotlin.Result.success(Unit)
             } catch (e: IOException) {
-                kotlin.Result.success(Unit) // offline — Room data still valid
+                kotlin.Result.failure(e) // local cache ยังใช้ได้ แต่ download รอบนี้ไม่สำเร็จ
             } catch (e: Exception) {
+                if (e is CancellationException) throw e
                 Log.e("CustomerRepo", "refreshCustomers error: ${e.message}", e)
                 kotlin.Result.failure(e)
             }
@@ -136,34 +172,27 @@ class CustomerRepository @Inject constructor(
         return withContext(Dispatchers.IO) {
             val today = java.time.LocalDate.now().toString()
             val tempId = customer.custId
-            val localCustomer = customer.copy(isSynced = false, createdAt = customer.createdAt ?: today)
+            val localCustomer = customer.copy(
+                isSynced = false,
+                createdAt = customer.createdAt ?: today,
+                operationId = customer.operationId ?: java.util.UUID.randomUUID().toString()
+            )
             customerDao.insertCustomer(localCustomer)
             try {
-                val body = mutableMapOf<String, Any?>(
-                    "customer_name"         to localCustomer.companyName,
-                    "gen_bus_posting_group" to localCustomer.bizPostingGroup,
-                    "cust_type"             to localCustomer.custType,
-                    "address"               to localCustomer.companyAddr,
-                    "latitude"              to localCustomer.companyLat,
-                    "longitude"             to localCustomer.companyLong,
-                    "customer_status"       to localCustomer.companyStatus,
-                    "create_date"           to localCustomer.createdAt,
-                    "created_at"            to localCustomer.createdAt,
-                    "create_by"             to localCustomer.createdBy,
-                    "salesperson_code"      to localCustomer.createdBy,
-                    "grade"                 to localCustomer.grade,
-                    "vat_registration_no"   to localCustomer.vatRegistrationNo
-                ).filterValues { it != null }
-                val response = retrySend(idempotent = false, tag = "addCustomer") { apiService.addCustomer(body) }
+                val body = CreateRequestPayloads.customer(localCustomer)
+                val response = retrySend(idempotent = false, tag = "addCustomer") {
+                    apiService.addCustomer(body, localCustomer.operationId)
+                }
                 Log.d("CustomerRepo", "POST customer → HTTP ${response.code()}")
                 if (response.isSuccessful) {
                     val realCustId = response.body()?.firstOrNull()?.custId
                     Log.d("CustomerRepo", "realCustId=$realCustId tempId=$tempId")
                     if (realCustId != null && realCustId != tempId) {
                         // server generated a new ID — replace TEMP record in Room
-                        contactDao.updateCustIdForContacts(tempId, realCustId)
-                        customerDao.deleteCustomerById(tempId)
-                        customerDao.insertCustomer(localCustomer.copy(custId = realCustId, isSynced = true, isLead = true))
+                        customerDao.replaceTemporaryCustomer(
+                            tempId,
+                            localCustomer.copy(custId = realCustId, isSynced = true, isLead = true)
+                        )
                     } else {
                         customerDao.updateSyncStatus(tempId, true)
                         customerDao.updateLeadStatus(tempId, true)

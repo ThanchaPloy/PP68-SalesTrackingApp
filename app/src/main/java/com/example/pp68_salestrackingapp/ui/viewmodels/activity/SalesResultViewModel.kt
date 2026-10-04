@@ -10,14 +10,18 @@ import androidx.lifecycle.viewModelScope
 import com.example.pp68_salestrackingapp.data.model.ActivityResult
 import com.example.pp68_salestrackingapp.data.model.PlanItemDto
 import com.example.pp68_salestrackingapp.data.model.Project
+import com.example.pp68_salestrackingapp.data.model.ResultPhotoInput
+import com.example.pp68_salestrackingapp.data.model.StagedAttachment
 import com.example.pp68_salestrackingapp.data.repository.ActivityRepository
 import com.example.pp68_salestrackingapp.data.repository.AuthRepository
 import com.example.pp68_salestrackingapp.data.repository.ProjectRepository
 import com.example.pp68_salestrackingapp.utils.DraftStore
+import com.example.pp68_salestrackingapp.utils.AttachmentFileStore
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 import javax.inject.Inject
@@ -111,6 +115,8 @@ data class ResultPhoto(
     val localUri: Uri? = null,
     val url: String? = null,
     val isUploading: Boolean = false,
+    val staged: StagedAttachment? = null,
+    val isPersistedAttachment: Boolean = false,
     val takenAt: String? = null,
     val lat: Double? = null,
     val lng: Double? = null,
@@ -428,10 +434,11 @@ class SalesResultViewModel @Inject constructor(
 
     // ✅ โหลดรูปทั้งหมดจากตาราง activity_result_photo; รูปเก่าก่อนมี feature นี้จะมีแค่ photo_url เดียวบน activity_result
     private suspend fun loadPhotosForResult(result: ActivityResult) {
-        val childUrls = activityRepo.getResultPhotos(result.resultId)
-        val urls = childUrls.ifEmpty { listOfNotNull(result.photoUrl.takeUnless { it.isNullOrBlank() }) }
-        val photos = urls.mapIndexed { index, url ->
-            if (index == 0) {
+        val remote = activityRepo.getResultPhotoEntries(result.resultId).associateBy { it.photoOrder }
+        val pending = activityRepo.getPendingResultAttachments(result.resultId).associateBy { it.photoOrder }
+        val orders = (remote.keys + pending.keys).sorted()
+        val photos = if (orders.isEmpty()) {
+            listOfNotNull(result.photoUrl.takeUnless { it.isNullOrBlank() }).map { url ->
                 ResultPhoto(
                     url = url,
                     takenAt = result.photoTakenAt,
@@ -439,8 +446,32 @@ class SalesResultViewModel @Inject constructor(
                     lng = result.photoLng,
                     deviceModel = result.photoDeviceModel
                 )
+            }
+        } else orders.map { index ->
+            val queued = pending[index]
+            val url = remote[index]?.photoUrl
+            if (index == 0) {
+                ResultPhoto(
+                    url = url,
+                    localUri = queued?.let { Uri.fromFile(java.io.File(it.localPath)) },
+                    staged = queued?.let {
+                        StagedAttachment(it.operationId, it.localPath, it.mimeType, it.sha256, it.sizeBytes)
+                    },
+                    isPersistedAttachment = queued != null,
+                    takenAt = result.photoTakenAt,
+                    lat = result.photoLat,
+                    lng = result.photoLng,
+                    deviceModel = result.photoDeviceModel
+                )
             } else {
-                ResultPhoto(url = url)
+                ResultPhoto(
+                    url = url,
+                    localUri = queued?.let { Uri.fromFile(java.io.File(it.localPath)) },
+                    staged = queued?.let {
+                        StagedAttachment(it.operationId, it.localPath, it.mimeType, it.sha256, it.sizeBytes)
+                    },
+                    isPersistedAttachment = queued != null
+                )
             }
         }
         _uiState.update { it.copy(photos = photos) }
@@ -593,7 +624,7 @@ class SalesResultViewModel @Inject constructor(
     fun onLossReasonChanged(value: String)        { _uiState.update { it.copy(lossReason = value, lossReasonError = null) } }
     fun onOtherLossReasonChanged(value: String)   { _uiState.update { it.copy(otherLossReason = value, lossReasonError = null) } }
 
-    // ✅ ถ่ายรูปใหม่จากกล้อง — เพิ่มเข้า slot ถัดไป (สูงสุด MAX_PHOTOS รูป) แล้วอัปโหลดทันที
+    // คัดลอกเข้า filesDir ก่อนเสมอ เพื่อให้รูปที่รอซิงค์ไม่หายเมื่อ process ตายหรือ cache ถูกล้าง
     fun onPhotoCaptured(context: Context, uri: Uri) {
         if (_uiState.value.photos.size >= MAX_PHOTOS) return
         addPhoto(context, uri, extractExifData(context, uri))
@@ -633,11 +664,38 @@ class SalesResultViewModel @Inject constructor(
                 isLocationValid = exif.isLocationValid
             ))
         }
-        uploadPhoto(context, uri)
+        viewModelScope.launch {
+            runCatching { AttachmentFileStore.stage(context.applicationContext, uri) }
+                .onSuccess { staged ->
+                    if (_uiState.value.photos.none { it.localUri == uri }) {
+                        AttachmentFileStore.delete(staged.localPath)
+                    } else {
+                        updatePhoto(uri) {
+                            it.copy(
+                                localUri = Uri.fromFile(java.io.File(staged.localPath)),
+                                staged = staged,
+                                isUploading = false
+                            )
+                        }
+                    }
+                }
+                .onFailure { error ->
+                    _uiState.update { state ->
+                        state.copy(
+                            photos = state.photos.filterNot { it.localUri == uri },
+                            error = error.message ?: "ไม่สามารถเตรียมรูปสำหรับซิงค์ได้"
+                        )
+                    }
+                }
+        }
     }
 
     fun onRemovePhoto(index: Int) {
+        val removed = _uiState.value.photos.getOrNull(index)
         _uiState.update { s -> s.copy(photos = s.photos.filterIndexed { i, _ -> i != index }) }
+        if (removed?.isPersistedAttachment == false) {
+            removed.staged?.localPath?.let { path -> viewModelScope.launch(Dispatchers.IO) { AttachmentFileStore.delete(path) } }
+        }
     }
 
     private data class ExifData(
@@ -687,33 +745,6 @@ class SalesResultViewModel @Inject constructor(
     fun onCompetitorCountChanged(delta: Int)      { _uiState.update { it.copy(competitorCount = (it.competitorCount + delta).coerceAtLeast(0)) } }
     fun onSummaryChanged(text: String)            { _uiState.update { it.copy(visitSummary = text) } }
 
-    // ✅ ตามหารูปด้วย localUri ไม่ใช่ตำแหน่งในลิสต์ — เดิมจับ index ไว้ก่อนเข้า coroutine ถ้าผู้ใช้
-    // ลบรูปก่อนหน้าออกระหว่างที่ยังอัปโหลดไม่เสร็จ ตำแหน่งจะเลื่อน แล้ว url ที่ได้กลับมาจะไปทับ
-    // รูปผิดใบ = บันทึกผลแนบรูปผิดรูปโดยไม่มีใครเห็น (และรูปที่กำลังอัปโหลดจริงจะค้างหมุนตลอด)
-    private fun uploadPhoto(context: Context, uri: Uri) {
-        val s = _uiState.value
-        val uploadId = s.activityId ?: s.projectId
-        if (uploadId == null) {
-            updatePhoto(uri) { it.copy(isUploading = false) }
-            return
-        }
-        viewModelScope.launch {
-            val bytes = try { context.contentResolver.openInputStream(uri)?.use { it.readBytes() } } catch (e: Exception) { null }
-            if (bytes == null) {
-                updatePhoto(uri) { it.copy(isUploading = false) }
-                _uiState.update { it.copy(error = "ไม่สามารถอ่านไฟล์รูปภาพได้") }
-                return@launch
-            }
-
-            activityRepo.uploadVisitPhoto(uploadId, bytes).onSuccess { url ->
-                updatePhoto(uri) { it.copy(url = url, isUploading = false) }
-            }.onFailure { e ->
-                updatePhoto(uri) { it.copy(isUploading = false) }
-                _uiState.update { it.copy(error = "อัปโหลดรูปไม่สำเร็จ: ${e.message}") }
-            }
-        }
-    }
-
     private fun updatePhoto(uri: Uri, transform: (ResultPhoto) -> ResultPhoto) {
         _uiState.update { s ->
             s.copy(photos = s.photos.map { if (it.localUri == uri) transform(it) else it })
@@ -730,14 +761,11 @@ class SalesResultViewModel @Inject constructor(
         }
         if (s.isReadOnlyVersion) { _uiState.update { it.copy(error = "กำลังดูเวอร์ชันเก่า ไม่สามารถแก้ไขได้") }; return }
         if (s.visitSummary.isBlank()) { _uiState.update { it.copy(error = "กรุณากรอกสรุปการเข้าพบ") }; return }
-        if (s.photos.any { it.isUploading }) { _uiState.update { it.copy(error = "กรุณารอให้อัปโหลดรูปให้เสร็จก่อนบันทึก") }; return }
-        // ✅ รูปที่อัปโหลดไม่ผ่าน (isUploading = false แต่ยังไม่มี url) เดิมถูก mapNotNull ทิ้งเงียบ ๆ
-        // ตอนประกอบ photoUrls — ผู้ใช้เห็นรูปครบบนจอ กดบันทึกแล้วได้บันทึกที่มีรูปน้อยกว่าที่เห็น
-        // ข้อความ error ตอนอัปโหลดพลาดก็หายไปแล้วตั้งแต่กดอย่างอื่นต่อ จึงไม่มีใครรู้ว่าตกไป
-        val failedCount = s.photos.count { it.url.isNullOrBlank() }
+        if (s.photos.any { it.isUploading }) { _uiState.update { it.copy(error = "กรุณารอให้เตรียมรูปลงเครื่องเสร็จก่อนบันทึก") }; return }
+        val failedCount = s.photos.count { it.url.isNullOrBlank() && it.staged == null }
         if (failedCount > 0) {
             _uiState.update {
-                it.copy(error = "มี $failedCount รูปที่อัปโหลดไม่สำเร็จ ลบรูปนั้นออกหรือถ่าย/เลือกใหม่ก่อนบันทึก")
+                it.copy(error = "มี $failedCount รูปที่ยังเก็บลงเครื่องไม่สำเร็จ กรุณาลบแล้วเลือกใหม่")
             }
             return
         }
@@ -794,7 +822,12 @@ class SalesResultViewModel @Inject constructor(
                 } else null
 
                 val finalResultId = s.resultId ?: ""
-                val photoUrls = s.photos.mapNotNull { it.url }
+                val photoInputs = s.photos.mapIndexed { index, photo ->
+                    val staged = if (photo.isPersistedAttachment && photo.staged != null) {
+                        AttachmentFileStore.duplicate(photo.staged)
+                    } else photo.staged
+                    ResultPhotoInput(index, remoteUrl = photo.url, staged = staged)
+                }
                 val cover = s.photos.firstOrNull()
 
                 // ✅ ปัจจัยข้อ 4-9 ของจริงอยู่ที่ project — อ่านสดตรงนี้ก่อนประกอบแถวผลลัพธ์ ไม่ใช้ค่า
@@ -836,8 +869,8 @@ class SalesResultViewModel @Inject constructor(
                 )
 
                 val saveResult = when (s.mode) {
-                    ResultMode.FROM_APPOINTMENT -> activityRepo.saveActivityResult(resultToSave, photoUrls)
-                    ResultMode.STANDALONE -> activityRepo.saveStandaloneResult(s.projectId!!, resultToSave, photoUrls)
+                    ResultMode.FROM_APPOINTMENT -> activityRepo.saveActivityResult(resultToSave, photoInputs)
+                    ResultMode.STANDALONE -> activityRepo.saveStandaloneResult(s.projectId!!, resultToSave, photoInputs)
                 }
 
                 if (saveResult.isSuccess) {

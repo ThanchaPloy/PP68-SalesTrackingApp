@@ -1,107 +1,128 @@
 package com.example.pp68_salestrackingapp.ui.viewmodels.customer
 
 import androidx.arch.core.executor.testing.InstantTaskExecutorRule
+import androidx.lifecycle.viewModelScope
+import androidx.paging.PagingData
 import app.cash.turbine.test
-import com.example.pp68_salestrackingapp.data.model.*
-import com.example.pp68_salestrackingapp.data.repository.*
-import io.mockk.*
+import com.example.pp68_salestrackingapp.data.model.AuthUser
+import com.example.pp68_salestrackingapp.data.repository.AuthRepository
+import com.example.pp68_salestrackingapp.data.repository.CustomerRepository
+import io.mockk.clearAllMocks
+import io.mockk.coEvery
+import io.mockk.coVerify
+import io.mockk.every
+import io.mockk.mockk
+import io.mockk.verify
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.flowOf
-import kotlinx.coroutines.test.*
-import org.junit.*
-import org.junit.Assert.*
+import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.test.setMain
+import org.junit.After
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
+import org.junit.Before
+import org.junit.Rule
+import org.junit.Test
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class CustomerListViewModelTest {
+    @get:Rule
+    val instantTaskExecutorRule = InstantTaskExecutorRule()
 
-    @get:Rule val instantTaskExecutorRule = InstantTaskExecutorRule()
-
-    private val testDispatcher = StandardTestDispatcher()
-
-    private val customerRepo = mockk<CustomerRepository>(relaxed = true)
-    private val authRepo = mockk<AuthRepository>(relaxed = true)
+    private val dispatcher = StandardTestDispatcher()
+    private val customerRepo = mockk<CustomerRepository>()
+    private val authRepo = mockk<AuthRepository>()
     private lateinit var viewModel: CustomerListViewModel
 
     @Before
     fun setup() {
-        Dispatchers.setMain(testDispatcher)
-
+        Dispatchers.setMain(dispatcher)
         every { authRepo.currentUser() } returns AuthUser("U1", "t@t.com", "sale", "T1")
-        every { customerRepo.getAllCustomersFlow() } returns flowOf(emptyList())
-        every { customerRepo.searchCustomersFlow(any()) } returns flowOf(emptyList())
+        every { customerRepo.getCustomersPagingFlow(any(), any(), any(), any(), any()) } returns
+            flowOf(PagingData.empty())
         coEvery { customerRepo.refreshCustomers(any()) } returns Result.success(Unit)
     }
 
     @After
     fun tearDown() {
+        if (::viewModel.isInitialized) viewModel.viewModelScope.cancel()
         clearAllMocks()
         Dispatchers.resetMain()
     }
 
-    @Test
-    fun `onSearchChange should update flow after debounce`() = runTest {
-        val query = "Sansiri"
-        val result = listOf(Customer("C1", "Sansiri", null, null, null, null, null, null, null))
-
-        every { customerRepo.searchCustomersFlow(query) } returns flowOf(result)
-
+    private fun initVm() {
         viewModel = CustomerListViewModel(customerRepo, authRepo)
-        advanceUntilIdle()
-
-        viewModel.customers.test {
-            awaitItem()
-            viewModel.onSearchChange(query)
-            advanceUntilIdle()
-            assertEquals(result, awaitItem())
-            cancelAndIgnoreRemainingEvents()
-        }
     }
 
-    // ปุ่มกรอง R/W/I/P (BizGroupBadge โชว์จาก customer.bizPostingGroup) เคยรับค่ามาแต่ไม่เคยกรองจริง
-    @Test
-    fun `onBizGroupFilter narrows the list by customer bizPostingGroup`() = runTest {
-        val retail = Customer(custId = "C1", companyName = "Retail Co", bizPostingGroup = "R")
-        val wholesale = Customer(custId = "C2", companyName = "Wholesale Co", bizPostingGroup = "W")
-        every { customerRepo.getAllCustomersFlow() } returns flowOf(listOf(retail, wholesale))
-
-        viewModel = CustomerListViewModel(customerRepo, authRepo)
-        advanceUntilIdle()
-
+    private suspend fun collectPagingGeneration() {
         viewModel.customers.test {
+            delay(305)
             awaitItem()
-            viewModel.onBizGroupFilter("R")
-            advanceUntilIdle()
-            assertEquals(listOf(retail), awaitItem())
             cancelAndIgnoreRemainingEvents()
+        }
+        viewModel.viewModelScope.coroutineContext[Job]?.cancelAndJoin()
+    }
+
+    @Test
+    fun defaultFiltersRequestUnfilteredPage() = runTest {
+        initVm()
+        collectPagingGeneration()
+
+        verify(exactly = 1) {
+            customerRepo.getCustomersPagingFlow("", null, null, 0, null)
         }
     }
 
     @Test
-    fun `onBizGroupFilter toggles off when the same group is tapped again`() = runTest {
-        val retail = Customer(custId = "C1", companyName = "Retail Co", bizPostingGroup = "R")
-        val wholesale = Customer(custId = "C2", companyName = "Wholesale Co", bizPostingGroup = "W")
-        every { customerRepo.getAllCustomersFlow() } returns flowOf(listOf(retail, wholesale))
+    fun searchAndFiltersAreDelegatedToPagingRepository() = runTest {
+        initVm()
+        viewModel.onSearchChange("Alpha")
+        viewModel.onBizGroupFilter("R")
+        viewModel.onCustTypeFilter("Dealer")
+        viewModel.onTabSelected(1)
+        collectPagingGeneration()
 
-        viewModel = CustomerListViewModel(customerRepo, authRepo)
-        advanceUntilIdle()
-
-        viewModel.customers.test {
-            awaitItem()
-            viewModel.onBizGroupFilter("R")
-            advanceUntilIdle()
-            awaitItem()
-            viewModel.onBizGroupFilter("R")
-            advanceUntilIdle()
-            assertEquals(listOf(retail, wholesale), awaitItem())
-            cancelAndIgnoreRemainingEvents()
+        verify(exactly = 1) {
+            customerRepo.getCustomersPagingFlow("Alpha", "R", "Dealer", 1, null)
         }
     }
 
     @Test
-    fun `init should refresh by current user and clear loading`() = runTest {
-        coEvery { customerRepo.refreshCustomers("T1") } returns Result.success(Unit)
-        viewModel = CustomerListViewModel(customerRepo, authRepo)
+    fun selectingInitialDelegatesFilterAndSearchClearsIt() = runTest {
+        initVm()
+        viewModel.onInitialSelected("ก")
+        assertEquals("ก", viewModel.selectedInitial.value)
+
+        viewModel.onSearchChange("บริษัท")
+        assertNull(viewModel.selectedInitial.value)
+        collectPagingGeneration()
+
+        verify(exactly = 1) {
+            customerRepo.getCustomersPagingFlow("บริษัท", null, null, 0, null)
+        }
+    }
+
+    @Test
+    fun sameBizGroupTappedTwiceClearsFilter() = runTest {
+        initVm()
+        viewModel.onBizGroupFilter("R")
+        assertEquals("R", viewModel.selectedBizGroup.value)
+        viewModel.onBizGroupFilter("R")
+        assertNull(viewModel.selectedBizGroup.value)
+    }
+
+    @Test
+    fun initRefreshesBranchAndClearsLoading() = runTest {
+        initVm()
         advanceUntilIdle()
 
         assertFalse(viewModel.isLoading.value)
@@ -110,9 +131,9 @@ class CustomerListViewModelTest {
     }
 
     @Test
-    fun `refresh failure should set error`() = runTest {
+    fun refreshFailureSetsError() = runTest {
         coEvery { customerRepo.refreshCustomers("T1") } returns Result.failure(Exception("network down"))
-        viewModel = CustomerListViewModel(customerRepo, authRepo)
+        initVm()
         advanceUntilIdle()
 
         assertEquals("network down", viewModel.error.value)
@@ -120,40 +141,13 @@ class CustomerListViewModelTest {
     }
 
     @Test
-    fun `clearError should set error to null`() = runTest {
-        coEvery { customerRepo.refreshCustomers("T1") } returns Result.failure(Exception("boom"))
-        viewModel = CustomerListViewModel(customerRepo, authRepo)
-        advanceUntilIdle()
-        assertEquals("boom", viewModel.error.value)
-
-        viewModel.clearError()
-        assertNull(viewModel.error.value)
-    }
-
-    @Test
-    fun `blank search should use all customers flow`() = runTest {
-        val all = listOf(Customer("C1", "Alpha Co", null, null, null, null, null, null, null))
-        every { customerRepo.getAllCustomersFlow() } returns flowOf(all)
-
-        viewModel = CustomerListViewModel(customerRepo, authRepo)
-        advanceUntilIdle()
-
-        viewModel.customers.test {
-            assertEquals(emptyList<Customer>(), awaitItem())
-            advanceUntilIdle()
-            assertEquals(all, awaitItem())
-            cancelAndIgnoreRemainingEvents()
-        }
-    }
-
-    @Test
-    fun `refresh should return early when current user is null`() = runTest {
+    fun missingUserSkipsRefresh() = runTest {
         every { authRepo.currentUser() } returns null
-
-        viewModel = CustomerListViewModel(customerRepo, authRepo)
+        initVm()
         advanceUntilIdle()
 
         coVerify(exactly = 0) { customerRepo.refreshCustomers(any()) }
         assertFalse(viewModel.isLoading.value)
+        assertEquals("ไม่พบรหัสสาขาของผู้ใช้", viewModel.error.value)
     }
 }

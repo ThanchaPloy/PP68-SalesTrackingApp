@@ -6,8 +6,6 @@ import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -28,7 +26,11 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
-import kotlinx.coroutines.launch
+import androidx.paging.LoadState
+import androidx.paging.PagingData
+import androidx.paging.compose.LazyPagingItems
+import androidx.paging.compose.collectAsLazyPagingItems
+import androidx.paging.compose.itemKey
 import com.example.pp68_salestrackingapp.data.model.AuthUser
 import com.example.pp68_salestrackingapp.data.model.Customer
 import com.example.pp68_salestrackingapp.ui.components.AddFloatingActionButton
@@ -36,6 +38,7 @@ import com.example.pp68_salestrackingapp.ui.components.AppTopBar
 import com.example.pp68_salestrackingapp.ui.components.BottomNavBar
 import com.example.pp68_salestrackingapp.ui.theme.SalesTrackingTheme
 import com.example.pp68_salestrackingapp.ui.viewmodels.customer.CustomerListViewModel
+import kotlinx.coroutines.flow.flowOf
 
 private fun String.stripThaiPrefix(): String {
     val prefixes = listOf(
@@ -66,7 +69,7 @@ fun CustomerListScreen(
     onTabChange: (Int) -> Unit = {},
     viewModel: CustomerListViewModel = hiltViewModel()
 ) {
-    val customers: List<Customer> by viewModel.customers.collectAsState(initial = emptyList())
+    val customers = viewModel.customers.collectAsLazyPagingItems()
     val isLoading        by viewModel.isLoading.collectAsState(initial = false)
     val searchQuery      by viewModel.searchQuery.collectAsState(initial = "")
     val error            by viewModel.error.collectAsState(initial = null)
@@ -74,6 +77,7 @@ fun CustomerListScreen(
     val selectedBizGroup by viewModel.selectedBizGroup.collectAsState(initial = null)
     val selectedCustType by viewModel.selectedCustType.collectAsState(initial = null)
     val selectedListTab  by viewModel.selectedTab.collectAsState()
+    val selectedInitial  by viewModel.selectedInitial.collectAsState()
 
     var showFilterModal by remember { mutableStateOf(false) }
 
@@ -85,6 +89,8 @@ fun CustomerListScreen(
         authUser = authUser,
         hasActiveFilter = selectedBizGroup != null || selectedCustType != null,
         selectedListTab = selectedListTab,
+        selectedInitial = selectedInitial,
+        onInitialSelected = viewModel::onInitialSelected,
         onListTabChange = viewModel::onTabSelected,
         onSearchChange = viewModel::onSearchChange,
         onFilterClick = { showFilterModal = true },
@@ -113,13 +119,15 @@ fun CustomerListScreen(
 
 @Composable
 fun CustomerListContent(
-    customers: List<Customer>,
+    customers: LazyPagingItems<Customer>,
     isLoading: Boolean,
     searchQuery: String,
     error: String?,
     authUser: AuthUser?,
     hasActiveFilter: Boolean,
     selectedListTab: Int,
+    selectedInitial: String?,
+    onInitialSelected: (String?) -> Unit,
     onListTabChange: (Int) -> Unit,
     onSearchChange: (String) -> Unit,
     onFilterClick: () -> Unit,
@@ -131,19 +139,6 @@ fun CustomerListContent(
     currentTab: Int,
     onTabChange: (Int) -> Unit
 ) {
-    val listState = rememberLazyListState()
-    val scope = rememberCoroutineScope()
-    val sortedCustomers = remember(customers) {
-        customers.sortedBy { it.companyName.stripThaiPrefix() }
-    }
-    val letterIndex = remember(sortedCustomers) {
-        val map = linkedMapOf<String, Int>()
-        sortedCustomers.forEachIndexed { i, c ->
-            val ch = c.companyName.stripThaiPrefix().firstOrNull()?.toString() ?: "#"
-            if (!map.containsKey(ch)) map[ch] = i
-        }
-        map
-    }
     var activeLetter by remember { mutableStateOf<String?>(null) }
 
     Scaffold(
@@ -260,11 +255,21 @@ fun CustomerListContent(
                 Text(it, color = Color.Red, fontSize = 13.sp,
                     modifier = Modifier.padding(bottom = 8.dp))
             }
-            if (isLoading) {
+            val pagingError = (customers.loadState.refresh as? LoadState.Error)?.error?.message
+            val isInitialLoad = customers.itemCount == 0 &&
+                (isLoading || customers.loadState.refresh is LoadState.Loading)
+            if (isInitialLoad) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     CircularProgressIndicator(color = Color(0xFF3F51B5))
                 }
-            } else if (customers.isEmpty()) {
+            } else if (customers.itemCount == 0 && customers.loadState.refresh is LoadState.Error) {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(pagingError ?: "โหลดข้อมูลไม่สำเร็จ", color = Color.Red)
+                        TextButton(onClick = customers::retry) { Text("ลองอีกครั้ง") }
+                    }
+                }
+            } else if (customers.itemCount == 0) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Icon(Icons.Default.Business, null, tint = Color.Gray,
@@ -276,13 +281,30 @@ fun CustomerListContent(
             } else {
                 Box(modifier = Modifier.fillMaxSize()) {
                     LazyColumn(
-                        state = listState,
                         verticalArrangement = Arrangement.spacedBy(12.dp),
                         modifier = Modifier.fillMaxSize().padding(end = 20.dp)
                     ) {
-                        items(sortedCustomers, key = { it.custId }) { customer ->
-                            CustomerListItem(customer = customer,
-                                onClick = { onCustomerClick(customer.custId) })
+                        items(
+                            count = customers.itemCount,
+                            key = customers.itemKey { it.custId }
+                        ) { index ->
+                            customers[index]?.let { customer ->
+                                CustomerListItem(customer = customer,
+                                    onClick = { onCustomerClick(customer.custId) })
+                            }
+                        }
+                        when (customers.loadState.append) {
+                            is LoadState.Loading -> item {
+                                Box(Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
+                                    CircularProgressIndicator(Modifier.size(24.dp))
+                                }
+                            }
+                            is LoadState.Error -> item {
+                                TextButton(onClick = customers::retry, modifier = Modifier.fillMaxWidth()) {
+                                    Text("โหลดรายการต่อไม่สำเร็จ — แตะเพื่อลองอีกครั้ง")
+                                }
+                            }
+                            else -> Unit
                         }
                         item { Spacer(Modifier.height(80.dp)) }
                     }
@@ -318,9 +340,7 @@ fun CustomerListContent(
                                             val letter = CUST_ALL_SIDEBAR.getOrNull(idx)
                                             if (letter != null && letter != activeLetter) {
                                                 activeLetter = letter
-                                                letterIndex[letter]?.let { itemIdx ->
-                                                    scope.launch { listState.scrollToItem(itemIdx) }
-                                                }
+                                                onInitialSelected(letter.takeUnless { it == "#" })
                                             }
                                         } while (event.changes.any { it.pressed })
                                         activeLetter = null
@@ -336,8 +356,8 @@ fun CustomerListContent(
                                     fontWeight = if (letter == activeLetter) FontWeight.Bold else FontWeight.Normal,
                                     color = when {
                                         letter == activeLetter -> CustAccent
-                                        letterIndex.containsKey(letter) -> CustTextGray
-                                        else -> CustTextGray.copy(alpha = 0.3f)
+                                        (letter == "#" && selectedInitial == null) || letter == selectedInitial -> CustAccent
+                                        else -> CustTextGray
                                     },
                                     textAlign = TextAlign.Center,
                                     lineHeight = 14.sp,
@@ -442,11 +462,14 @@ fun CustomerListScreenPreview() {
         )
     )
     SalesTrackingTheme {
+        val previewCustomers = flowOf(PagingData.from(sampleCustomers)).collectAsLazyPagingItems()
         CustomerListContent(
-            customers = sampleCustomers, isLoading = false,
+            customers = previewCustomers, isLoading = false,
             searchQuery = "", error = null, authUser = null,
             hasActiveFilter = false,
             selectedListTab = 0,
+            selectedInitial = null,
+            onInitialSelected = {},
             onListTabChange = {},
             onSearchChange = {}, onFilterClick = {},
             onCustomerClick = {}, onAddClick = {}, onNotificationClick = {},

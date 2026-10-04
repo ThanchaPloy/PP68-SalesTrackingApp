@@ -77,7 +77,10 @@ interface ApiService {
 
     @POST("lead_customer")
     @Headers("Prefer: return=representation", "Content-Profile: public")
-    suspend fun addCustomer(@Body fields: @JvmSuppressWildcards Map<String, Any?>): Response<List<Customer>>
+    suspend fun addCustomer(
+        @Body fields: @JvmSuppressWildcards Map<String, Any?>,
+        @Header("Idempotency-Key") operationId: String? = null
+    ): Response<List<Customer>>
 
     @PATCH("customer")
     @Headers("Prefer: return=representation", "Content-Profile: public")
@@ -147,7 +150,10 @@ interface ApiService {
 
     @POST("project")
     @Headers("Prefer: return=representation", "Content-Profile: public")
-    suspend fun addProject(@Body fields: @JvmSuppressWildcards Map<String, Any?>): Response<List<Project>>
+    suspend fun addProject(
+        @Body fields: @JvmSuppressWildcards Map<String, Any?>,
+        @Header("Idempotency-Key") operationId: String? = null
+    ): Response<List<Project>>
 
     @PATCH("project")
     @Headers("Prefer: return=representation", "Content-Profile: public")
@@ -221,11 +227,17 @@ interface ApiService {
 
     @POST("appointment")
     @Headers("Prefer: return=representation", "Content-Profile: public")
-    suspend fun addActivity(@Body activity: SalesActivity): Response<List<SalesActivity>>
+    suspend fun addActivity(
+        @Body activity: SalesActivity,
+        @Header("Idempotency-Key") operationId: String? = null
+    ): Response<List<SalesActivity>>
 
     @POST("appointment")
     @Headers("Prefer: return=representation", "Content-Profile: public")
-    suspend fun addActivityMap(@Body fields: @JvmSuppressWildcards Map<String, Any?>): Response<List<SalesActivity>>
+    suspend fun addActivityMap(
+        @Body fields: @JvmSuppressWildcards Map<String, Any?>,
+        @Header("Idempotency-Key") operationId: String? = null
+    ): Response<List<SalesActivity>>
 
     @PATCH("appointment")
     @Headers("Prefer: return=representation", "Content-Profile: public")
@@ -257,11 +269,17 @@ interface ApiService {
     // ── Activity Result ──────────────────────────────────────────
     @POST("activity_result")
     @Headers("Prefer: return=representation", "Content-Profile: public")
-    suspend fun insertActivityResult(@Body result: ActivityResult): Response<List<ActivityResult>>
+    suspend fun insertActivityResult(
+        @Body result: ActivityResult,
+        @Header("Idempotency-Key") operationId: String? = null
+    ): Response<List<ActivityResult>>
 
     @POST("activity_result")
     @Headers("Prefer: return=representation", "Content-Profile: public")
-    suspend fun insertActivityResultMap(@Body body: @JvmSuppressWildcards Map<String, Any?>): Response<List<ActivityResult>>
+    suspend fun insertActivityResultMap(
+        @Body body: @JvmSuppressWildcards Map<String, Any?>,
+        @Header("Idempotency-Key") operationId: String? = null
+    ): Response<List<ActivityResult>>
 
     @POST("activity_result")
     @Headers("Prefer: return=representation,resolution=merge-duplicates", "Content-Profile: public")
@@ -364,6 +382,8 @@ interface UploadApiService {
     @Multipart
     @POST("upload-visit-photo")
     suspend fun uploadVisitPhoto(
+        @Header("Idempotency-Key") operationId: String,
+        @Header("X-Content-SHA256") sha256: String,
         @Part("appointment_id") appointmentId: RequestBody,
         @Part photo: MultipartBody.Part
     ): Response<UploadPhotoResponse>
@@ -376,4 +396,3 @@ data class ProductGroupDxDto(@SerializedName("product_group_no") val code: Strin
 data class ProductSubgroupDxDto(@SerializedName("product_subgroup_no") val code: String, @SerializedName("name") val name: String)
 data class ProductColorDxDto(@SerializedName("product_color_no") val code: String, @SerializedName("name") val name: String)
 data class UnitOfMeasureDto(@SerializedName("base_unit_of_measure") val code: String?)
-

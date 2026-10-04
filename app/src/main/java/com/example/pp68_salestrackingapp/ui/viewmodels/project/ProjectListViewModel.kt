@@ -2,17 +2,17 @@ package com.example.pp68_salestrackingapp.ui.viewmodels.project
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.paging.PagingData
+import androidx.paging.cachedIn
 import com.example.pp68_salestrackingapp.data.repository.ProjectRepository
 import com.example.pp68_salestrackingapp.data.repository.AuthRepository
 import com.example.pp68_salestrackingapp.data.model.Project
 import com.example.pp68_salestrackingapp.data.model.AuthUser
-import com.example.pp68_salestrackingapp.utils.ProjectStages
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
-import java.time.LocalDate
 import javax.inject.Inject
 
 @OptIn(FlowPreview::class, ExperimentalCoroutinesApi::class)
@@ -42,7 +42,7 @@ class ProjectListViewModel @Inject constructor(
     val selectedStatuses: StateFlow<Set<String>> = _selectedStatuses.asStateFlow()
     val selectedScores:   StateFlow<Set<String>> = _selectedScores.asStateFlow()
 
-    val projects: StateFlow<List<Project>> = combine(
+    val projects: Flow<PagingData<Project>> = combine(
         _searchQuery.debounce(300),
         _selectedTabIndex,
         _selectedStatuses,
@@ -50,50 +50,21 @@ class ProjectListViewModel @Inject constructor(
     ) { query, tabIndex, statuses, scores ->
         FilterCriteria(query, tabIndex, statuses, scores)
     }
+        .distinctUntilChanged()
         .flatMapLatest { criteria ->
-            _isLoading.value = true
-
-            val sourceFlow = if (criteria.query.isBlank()) {
-                repo.getAllProjectsFlow()
-            } else {
-                repo.searchProjectsFlow(criteria.query)
-            }
-
-            sourceFlow.map { all ->
-                // ✅ จัดแท็บด้วย "สถานะ" อย่างเดียว ไม่เอาวันปิดมาร่วมตัดสิน
-                //
-                // เดิมแท็บ Closed คือ PO && closingDate <= today ซึ่งพลาดสองทาง: โครงการที่ปิด
-                // การขายได้แล้วแต่ยังไม่ถึงวันส่งมอบ (หรือไม่เคยกรอกวันปิด) ค้างอยู่แท็บ Active
-                // และการเทียบสตริงยาวไม่เท่ากัน ("2026-04-06T00:00:00" > "2026-04-06") ทำให้
-                // โครงการที่ปิดวันนี้ถูกตีว่ายังไม่ถึงกำหนด — PO แปลว่าขายได้แล้ว จบดีลแล้ว
-                // จึงอยู่แท็บ "ปิดแล้ว" ตั้งแต่ตอนที่สถานะเป็น PO ไม่ต้องรอวันไหน
-                //
-                // WON กับ LOST แยกกันคนละแท็บโดยตั้งใจ: ปิดได้ = ผลงาน, แพ้/ล้มเลิก = inactive
-                var filtered = all.filter { p ->
-                    when (criteria.tabIndex) {
-                        1 -> p.projectStatus in ProjectStages.WON   // ปิดแล้ว (ขายได้)
-                        2 -> p.projectStatus in ProjectStages.LOST  // inactive (แพ้/ล้มเลิก)
-                        else -> p.projectStatus !in ProjectStages.CLOSED
-                    }
-                }
-
-                if (criteria.statuses.isNotEmpty()) {
-                    filtered = filtered.filter { it.projectStatus in criteria.statuses }
-                }
-                if (criteria.scores.isNotEmpty()) {
-                    filtered = filtered.filter { it.opportunityScore?.uppercase() in criteria.scores }
-                }
-
-                filtered
-            }
+            // Tab/search/status/score filtering is performed by Room, not on an in-memory full list.
+            repo.getProjectsPagingFlow(
+                searchQuery = criteria.query,
+                tabIndex = criteria.tabIndex,
+                selectedStatuses = criteria.statuses,
+                selectedScores = criteria.scores
+            )
         }
-        .onEach { _isLoading.value = false }
         .catch { e ->
             _error.value = e.message
-            _isLoading.value = false
-            emit(emptyList())
+            emit(PagingData.empty())
         }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+        .cachedIn(viewModelScope)
 
     fun refreshDataFromApi() {
         val userId = authRepo.currentUser()?.userId
@@ -111,7 +82,7 @@ class ProjectListViewModel @Inject constructor(
 
     fun onSearchChange(query: String) { _searchQuery.value = query }
     
-    fun onSelectTab(index: Int) { _selectedTabIndex.value = index }
+    fun onSelectTab(index: Int) { _selectedTabIndex.value = index.coerceIn(0, 2) }
 
     fun toggleStatusFilter(status: String) {
         _selectedStatuses.update { current ->

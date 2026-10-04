@@ -9,6 +9,7 @@ object NotificationChannels {
     const val SALES_TRACKING_CHANNEL_ID = "sales_tracking_channel"
     const val LOCATION_ALERT_CHANNEL_ID = "location_alert_channel"
     const val APPOINTMENT_TIME_CHANNEL_ID = "appointment_time_channel"
+    const val PENDING_SYNC_CHANNEL_ID = "pending_sync_channel"
 
     fun ensureCreated(context: Context) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
@@ -44,8 +45,18 @@ object NotificationChannels {
             lockscreenVisibility = android.app.Notification.VISIBILITY_PUBLIC
         }
 
+        val pendingSyncChannel = NotificationChannel(
+            PENDING_SYNC_CHANNEL_ID,
+            "ข้อมูลที่ยังไม่ได้ส่ง",
+            NotificationManager.IMPORTANCE_DEFAULT
+        ).apply {
+            description = "แจ้งเตือนเมื่อมีข้อมูลค้างส่งหลัง 22:00 น."
+            lockscreenVisibility = android.app.Notification.VISIBILITY_PRIVATE
+        }
+
         manager.createNotificationChannel(salesChannel)
         manager.createNotificationChannel(locationChannel)
         manager.createNotificationChannel(appointmentChannel)
+        manager.createNotificationChannel(pendingSyncChannel)
     }
 }

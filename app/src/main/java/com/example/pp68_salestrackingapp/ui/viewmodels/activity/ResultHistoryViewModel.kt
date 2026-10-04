@@ -3,13 +3,14 @@ package com.example.pp68_salestrackingapp.ui.viewmodels.activity
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.paging.PagingData
+import androidx.paging.cachedIn
+import androidx.paging.map
 import com.example.pp68_salestrackingapp.data.repository.ActivityRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.flow.SharingStarted
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.stateIn
 import javax.inject.Inject
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.map
 
 data class ResultVersionItem(
     val resultId: String,
@@ -20,35 +21,27 @@ data class ResultVersionItem(
     val summary: String?
 )
 
-data class ResultHistoryUiState(
-    val versions: List<ResultVersionItem> = emptyList(),
-    val isLoading: Boolean = true
-)
-
 @HiltViewModel
 class ResultHistoryViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     activityRepo: ActivityRepository
 ) : ViewModel() {
 
-    private val resultGroupId: String = savedStateHandle.get<String>("resultGroupId") ?: ""
+    private val resultGroupId: String = savedStateHandle.get<String>("resultGroupId").orEmpty()
 
-    val uiState: StateFlow<ResultHistoryUiState> = activityRepo
-        .getResultVersionHistory(resultGroupId)
-        .map { list ->
-            ResultHistoryUiState(
-                versions = list.map {
-                    ResultVersionItem(
-                        resultId   = it.resultId,
-                        version    = it.version,
-                        isLatest   = it.isLatest,
-                        reportDate = it.reportDate,
-                        newStatus  = it.newStatus,
-                        summary    = it.summary
-                    )
-                },
-                isLoading = false
-            )
+    val versions: Flow<PagingData<ResultVersionItem>> = activityRepo
+        .getResultVersionHistoryPaging(resultGroupId)
+        .map { pagingData ->
+            pagingData.map {
+                ResultVersionItem(
+                    resultId = it.resultId,
+                    version = it.version,
+                    isLatest = it.isLatest,
+                    reportDate = it.reportDate,
+                    newStatus = it.newStatus,
+                    summary = it.summary
+                )
+            }
         }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ResultHistoryUiState())
+        .cachedIn(viewModelScope)
 }

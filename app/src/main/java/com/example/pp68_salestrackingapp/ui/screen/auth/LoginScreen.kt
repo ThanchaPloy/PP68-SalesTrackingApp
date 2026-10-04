@@ -56,7 +56,9 @@ fun LoginScreen(
         password         = password,
         onUsernameChange = viewModel::onUsernameChange,
         onPasswordChange = viewModel::onPasswordChange,
-        onLoginClick     = viewModel::login,
+        onLoginClick     = { viewModel.login() },
+        onDiscardPreviousData = viewModel::discardPreviousDataAndLogin,
+        onCancelAccountSwitch = viewModel::cancelAccountSwitch,
         onRegisterClick  = onRegisterClick,
         onLoginSuccess   = {
             onLoginSuccess(it)
@@ -73,11 +75,27 @@ fun LoginScreenContent(
     onUsernameChange: (String) -> Unit,
     onPasswordChange: (String) -> Unit,
     onLoginClick: () -> Unit,
+    onDiscardPreviousData: () -> Unit = {},
+    onCancelAccountSwitch: () -> Unit = {},
     onRegisterClick: () -> Unit = {},
     onLoginSuccess: (AuthUser) -> Unit
 ) {
     var showPassword by remember { mutableStateOf(false) }
     val focusManager = LocalFocusManager.current
+
+    if (uiState is LoginUiState.AccountSwitchBlocked) {
+        AlertDialog(
+            onDismissRequest = onCancelAccountSwitch,
+            title = { Text("มีข้อมูลของบัญชีก่อนหน้าค้างอยู่") },
+            text = { Text(uiState.message) },
+            confirmButton = {
+                TextButton(onClick = onDiscardPreviousData) { Text("ลบข้อมูลและเข้าสู่ระบบ") }
+            },
+            dismissButton = {
+                TextButton(onClick = onCancelAccountSwitch) { Text("ยกเลิก") }
+            }
+        )
+    }
 
     LaunchedEffect(uiState) {
         if (uiState is LoginUiState.Success) {
@@ -281,6 +299,8 @@ fun LoginScreenPreview() {
             onUsernameChange = {},
             onPasswordChange = {},
             onLoginClick     = {},
+            onDiscardPreviousData = {},
+            onCancelAccountSwitch = {},
             onRegisterClick  = {},
             onLoginSuccess   = {}
         )

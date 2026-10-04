@@ -904,15 +904,29 @@ private fun PhotoUploadSection(
         LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             itemsIndexed(photos) { index, photo ->
                 Box(modifier = Modifier.size(96.dp)) {
+                    val imageModel = photo.url?.let { formatPhotoUrl(it) } ?: photo.localUri
+                    var imageLoadFailed by remember(imageModel) { mutableStateOf(false) }
                     AsyncImage(
-                        model = photo.url?.let { formatPhotoUrl(it) } ?: photo.localUri,
+                        model = imageModel,
                         contentDescription = null,
                         modifier = Modifier
                             .fillMaxSize()
                             .clip(RoundedCornerShape(10.dp))
                             .border(1.dp, BorderGray, RoundedCornerShape(10.dp)),
-                        contentScale = ContentScale.Crop
+                        contentScale = ContentScale.Crop,
+                        onError = { imageLoadFailed = true },
+                        onSuccess = { imageLoadFailed = false }
                     )
+                    if (imageLoadFailed && photo.url != null) {
+                        Column(
+                            modifier = Modifier.fillMaxSize().background(BgLight).padding(8.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center
+                        ) {
+                            Icon(Icons.Default.CloudOff, contentDescription = null, tint = TextGray)
+                            Text("ออฟไลน์\nยังดูรูปไม่ได้", fontSize = 9.sp, color = TextGray)
+                        }
+                    }
                     if (photo.isUploading) {
                         Box(
                             modifier = Modifier
@@ -923,6 +937,16 @@ private fun PhotoUploadSection(
                         ) {
                             CircularProgressIndicator(color = White, modifier = Modifier.size(22.dp), strokeWidth = 2.dp)
                         }
+                    }
+                    if (!photo.isUploading && photo.staged != null) {
+                        Text(
+                            "รอซิงค์",
+                            modifier = Modifier.align(Alignment.BottomStart)
+                                .background(Color.Black.copy(alpha = 0.65f), RoundedCornerShape(4.dp))
+                                .padding(horizontal = 4.dp, vertical = 2.dp),
+                            color = White,
+                            fontSize = 9.sp
+                        )
                     }
                     IconButton(
                         onClick = { onRemovePhoto(index) },

@@ -20,6 +20,11 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.paging.LoadState
+import androidx.paging.PagingData
+import androidx.paging.compose.LazyPagingItems
+import androidx.paging.compose.collectAsLazyPagingItems
+import androidx.paging.compose.itemKey
 import com.example.pp68_salestrackingapp.data.model.AuthUser
 import com.example.pp68_salestrackingapp.data.model.Project
 import com.example.pp68_salestrackingapp.ui.components.AddFloatingActionButton
@@ -31,6 +36,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.tooling.preview.Preview
 import com.example.pp68_salestrackingapp.ui.theme.SalesTrackingTheme
+import kotlinx.coroutines.flow.flowOf
 
 private val BgLight    = Color(0xFFF5F5F5)
 private val White      = Color.White
@@ -128,7 +134,7 @@ fun ProjectListScreen(
     onTabChange: (Int) -> Unit = {},
     viewModel: ProjectListViewModel = hiltViewModel()
 ) {
-    val projects         by viewModel.projects.collectAsState()
+    val projects         = viewModel.projects.collectAsLazyPagingItems()
     val isLoading        by viewModel.isLoading.collectAsState()
     val searchQuery      by viewModel.searchQuery.collectAsState()
     val selectedTabIndex by viewModel.selectedTabIndex.collectAsState()
@@ -170,7 +176,7 @@ fun ProjectListScreen(
 
 @Composable
 fun ProjectListContent(
-    projects: List<Project>, isLoading: Boolean,
+    projects: LazyPagingItems<Project>, isLoading: Boolean,
     searchQuery: String, selectedTabIndex: Int, error: String?,
     authUser: AuthUser?,
     selectedStatuses: Set<String>, selectedScores: Set<String>,
@@ -277,12 +283,36 @@ fun ProjectListContent(
                 }
             }
             Spacer(Modifier.height(12.dp))
-            error?.let { Text(it, color = RedFab, fontSize = 13.sp, modifier = Modifier.padding(bottom = 8.dp)) }
-            if (isLoading) {
+            val pagingError = (projects.loadState.refresh as? LoadState.Error)?.error?.message
+            val isInitialLoad = projects.itemCount == 0 &&
+                (isLoading || projects.loadState.refresh is LoadState.Loading)
+
+            (error ?: pagingError)?.let {
+                Text(it, color = RedFab, fontSize = 13.sp, modifier = Modifier.padding(bottom = 8.dp))
+            }
+            // Keep cached rows usable while an API refresh or Room invalidation is running.
+            if (projects.itemCount > 0 &&
+                (isLoading || projects.loadState.refresh is LoadState.Loading)) {
+                LinearProgressIndicator(
+                    color = RedPrimary,
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)
+                )
+            }
+
+            if (isInitialLoad) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     CircularProgressIndicator(color = RedPrimary)
                 }
-            } else if (projects.isEmpty()) {
+            } else if (projects.itemCount == 0 && projects.loadState.refresh is LoadState.Error) {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Icon(Icons.Default.CloudOff, null, tint = TextGray, modifier = Modifier.size(48.dp))
+                        Spacer(Modifier.height(8.dp))
+                        Text("โหลดรายการโครงการไม่สำเร็จ", color = TextGray, fontSize = 14.sp)
+                        TextButton(onClick = projects::retry) { Text("ลองใหม่") }
+                    }
+                }
+            } else if (projects.itemCount == 0) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Icon(Icons.Default.WorkOff, null, tint = TextGray, modifier = Modifier.size(48.dp))
@@ -297,8 +327,29 @@ fun ProjectListContent(
                 }
             } else {
                 LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    items(projects, key = { it.projectId }) { project ->
-                        ProjectListItem(project = project, onClick = { onProjectClick(project.projectId) })
+                    items(
+                        count = projects.itemCount,
+                        key = projects.itemKey { it.projectId }
+                    ) { index ->
+                        projects[index]?.let { project ->
+                            ProjectListItem(
+                                project = project,
+                                onClick = { onProjectClick(project.projectId) }
+                            )
+                        }
+                    }
+                    when (projects.loadState.append) {
+                        is LoadState.Loading -> item {
+                            Box(Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
+                                CircularProgressIndicator(color = RedPrimary, modifier = Modifier.size(28.dp))
+                            }
+                        }
+                        is LoadState.Error -> item {
+                            Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                                TextButton(onClick = projects::retry) { Text("โหลดรายการต่อไม่สำเร็จ — ลองใหม่") }
+                            }
+                        }
+                        else -> Unit
                     }
                     item { Spacer(Modifier.height(80.dp)) }
                 }
@@ -554,8 +605,11 @@ fun ProjectListScreenPreview() {
     )
 
     SalesTrackingTheme {
+        val pagedProjects = remember(sampleProjects) {
+            flowOf(PagingData.from(sampleProjects))
+        }.collectAsLazyPagingItems()
         ProjectListContent(
-            projects = sampleProjects,
+            projects = pagedProjects,
             isLoading = false,
             searchQuery = "",
             selectedTabIndex = 0,

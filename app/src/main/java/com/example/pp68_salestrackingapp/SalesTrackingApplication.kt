@@ -10,6 +10,7 @@ import coil.ImageLoaderFactory
 import com.example.pp68_salestrackingapp.di.TokenManager
 import com.example.pp68_salestrackingapp.service.ProximityMonitorService
 import com.example.pp68_salestrackingapp.utils.NotificationChannels
+import com.example.pp68_salestrackingapp.utils.SyncManager
 import dagger.hilt.android.HiltAndroidApp
 import okhttp3.OkHttpClient
 import javax.inject.Inject
@@ -27,6 +28,9 @@ class SalesTrackingApplication : Application(), Configuration.Provider, ImageLoa
     @Inject
     lateinit var tokenManager: TokenManager
 
+    @Inject
+    lateinit var syncManager: SyncManager
+
     override val workManagerConfiguration: Configuration
         get() = Configuration.Builder()
             .setWorkerFactory(workerFactory)
@@ -42,6 +46,7 @@ class SalesTrackingApplication : Application(), Configuration.Provider, ImageLoa
     override fun onCreate() {
         super.onCreate()
         NotificationChannels.ensureCreated(this)
+        syncManager.scheduleEndOfDayReminder()
 
         // MapLibre เริ่มต้นเองตอนสร้าง MapView (ดู MapLibreMapView) ไม่ต้องตั้งค่าอะไรตรงนี้
         // และ OpenFreeMap ไม่ต้องใช้ API key หรือ User-Agent เฉพาะแบบ tile server ของ OSM

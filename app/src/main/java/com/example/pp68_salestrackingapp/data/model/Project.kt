@@ -2,10 +2,26 @@ package com.example.pp68_salestrackingapp.data.model
 
 import androidx.room.ColumnInfo
 import androidx.room.Entity
+import androidx.room.Index
 import androidx.room.PrimaryKey
 import com.google.gson.annotations.SerializedName
 
-@Entity(tableName = "project")
+@Entity(
+    tableName = "project",
+    indices = [
+        Index(
+            value = ["startDate", "projectId"],
+            orders = [Index.Order.DESC, Index.Order.ASC],
+            name = "index_project_start_date_id"
+        ),
+        Index(
+            value = ["projectStatus", "startDate", "projectId"],
+            orders = [Index.Order.ASC, Index.Order.DESC, Index.Order.ASC],
+            name = "index_project_status_start_date_id"
+        ),
+        Index(value = ["is_synced"], name = "index_project_is_synced")
+    ]
+)
 data class Project(
     @PrimaryKey
     @ColumnInfo(name = "projectId")
@@ -130,5 +146,9 @@ data class Project(
     val createBy: String? = null,
 
     @ColumnInfo(name = "is_synced")
-    val isSynced: Boolean = true
+    val isSynced: Boolean = true,
+
+    @ColumnInfo(name = "operation_id")
+    @SerializedName("operation_id")
+    val operationId: String? = null
 )

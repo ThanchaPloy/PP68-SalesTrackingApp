@@ -7,8 +7,6 @@ import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -32,6 +30,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.paging.LoadState
+import androidx.paging.PagingData
+import androidx.paging.compose.LazyPagingItems
+import androidx.paging.compose.collectAsLazyPagingItems
+import androidx.paging.compose.itemKey
 import com.example.pp68_salestrackingapp.data.model.AuthUser
 import com.example.pp68_salestrackingapp.data.model.ContactPerson
 import com.example.pp68_salestrackingapp.ui.components.AddFloatingActionButton
@@ -39,7 +42,7 @@ import com.example.pp68_salestrackingapp.ui.components.AppTopBar
 import com.example.pp68_salestrackingapp.ui.components.BottomNavBar
 import com.example.pp68_salestrackingapp.ui.theme.SalesTrackingTheme
 import com.example.pp68_salestrackingapp.ui.viewmodels.contact.ContactListViewModel
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.flowOf
 
 private val BgLight      = Color(0xFFF5F5F5)
 private val TextDark     = Color(0xFF1A1A1A)
@@ -75,14 +78,18 @@ fun ContactListScreen(
     viewModel: ContactListViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val contacts = viewModel.contacts.collectAsLazyPagingItems()
+    val selectedInitial by viewModel.selectedInitial.collectAsState()
     var selectedContact by remember { mutableStateOf<ContactPerson?>(null) }
 
     ContactListScreenContent(
-        contacts = uiState.contacts,
+        contacts = contacts,
         isLoading = uiState.isLoading,
         searchQuery = uiState.searchQuery,
         error = uiState.error,
         authUser = uiState.authUser,
+        selectedInitial = selectedInitial,
+        onInitialSelected = viewModel::onInitialSelected,
         onSearchChange = viewModel::onSearchChange,
         onContactClick = { contact -> selectedContact = contact },
         onAddClick = onAddClick,
@@ -103,11 +110,13 @@ fun ContactListScreen(
 
 @Composable
 fun ContactListScreenContent(
-    contacts: List<ContactPerson>,
+    contacts: LazyPagingItems<ContactPerson>,
     isLoading: Boolean,
     searchQuery: String,
     error: String?,
     authUser: AuthUser?,
+    selectedInitial: String?,
+    onInitialSelected: (String?) -> Unit,
     onSearchChange: (String) -> Unit,
     onContactClick: (ContactPerson) -> Unit,
     onAddClick: () -> Unit,
@@ -118,21 +127,6 @@ fun ContactListScreenContent(
     currentTab: Int,
     onTabChange: (Int) -> Unit
 ) {
-    val listState = rememberLazyListState()
-    val scope = rememberCoroutineScope()
-
-    val sortedContacts = remember(contacts) {
-        contacts.sortedBy { (it.fullName ?: "").stripThaiPrefix() }
-    }
-    val letterIndex = remember(sortedContacts) {
-        val map = linkedMapOf<String, Int>()
-        sortedContacts.forEachIndexed { i, c ->
-            val ch = (c.fullName ?: "").stripThaiPrefix().firstOrNull()?.toString() ?: "#"
-            if (!map.containsKey(ch)) map[ch] = i
-        }
-        map
-    }
-
     var activeLetter by remember { mutableStateOf<String?>(null) }
 
     Scaffold(
@@ -185,23 +179,54 @@ fun ContactListScreenContent(
             )
             Spacer(Modifier.height(16.dp))
 
-            if (isLoading) {
+            val pagingError = (contacts.loadState.refresh as? LoadState.Error)?.error?.message
+            val isInitialLoad = contacts.itemCount == 0 &&
+                (isLoading || contacts.loadState.refresh is LoadState.Loading)
+            if (isInitialLoad) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     CircularProgressIndicator()
+                }
+            } else if (contacts.itemCount == 0 && contacts.loadState.refresh is LoadState.Error) {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(pagingError ?: "โหลดข้อมูลไม่สำเร็จ", color = Color.Red)
+                        TextButton(onClick = contacts::retry) { Text("ลองอีกครั้ง") }
+                    }
+                }
+            } else if (contacts.itemCount == 0) {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text("ไม่พบข้อมูลผู้ติดต่อ", color = TextGray)
                 }
             } else {
                 Box(modifier = Modifier.fillMaxSize()) {
                     LazyColumn(
-                        state = listState,
                         verticalArrangement = Arrangement.spacedBy(10.dp),
                         modifier = Modifier.fillMaxSize().padding(end = 20.dp)
                     ) {
-                        items(sortedContacts, key = { it.contactId }) { contact ->
-                            ContactCard(
-                                contact = contact,
-                                onClick = { onContactClick(contact) },
-                                onEdit = { onEditClick(contact.contactId) }
-                            )
+                        items(
+                            count = contacts.itemCount,
+                            key = contacts.itemKey { it.contactId }
+                        ) { index ->
+                            contacts[index]?.let { contact ->
+                                ContactCard(
+                                    contact = contact,
+                                    onClick = { onContactClick(contact) },
+                                    onEdit = { onEditClick(contact.contactId) }
+                                )
+                            }
+                        }
+                        when (contacts.loadState.append) {
+                            is LoadState.Loading -> item {
+                                Box(Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
+                                    CircularProgressIndicator(Modifier.size(24.dp))
+                                }
+                            }
+                            is LoadState.Error -> item {
+                                TextButton(onClick = contacts::retry, modifier = Modifier.fillMaxWidth()) {
+                                    Text("โหลดรายการต่อไม่สำเร็จ — แตะเพื่อลองอีกครั้ง")
+                                }
+                            }
+                            else -> Unit
                         }
                         item { Spacer(Modifier.height(80.dp)) }
                     }
@@ -244,9 +269,7 @@ fun ContactListScreenContent(
                                             val letter = ALL_SIDEBAR_LETTERS.getOrNull(idx)
                                             if (letter != null && letter != activeLetter) {
                                                 activeLetter = letter
-                                                letterIndex[letter]?.let { itemIdx ->
-                                                    scope.launch { listState.scrollToItem(itemIdx) }
-                                                }
+                                                onInitialSelected(letter.takeUnless { it == "#" })
                                             }
                                         } while (event.changes.any { it.pressed })
                                         activeLetter = null
@@ -262,8 +285,8 @@ fun ContactListScreenContent(
                                     fontWeight = if (letter == activeLetter) FontWeight.Bold else FontWeight.Normal,
                                     color = when {
                                         letter == activeLetter -> AccentIndigo
-                                        letterIndex.containsKey(letter) -> TextGray
-                                        else -> TextGray.copy(alpha = 0.3f)
+                                        (letter == "#" && selectedInitial == null) || letter == selectedInitial -> AccentIndigo
+                                        else -> TextGray
                                     },
                                     textAlign = TextAlign.Center,
                                     lineHeight = 14.sp,
@@ -423,13 +446,15 @@ private fun DetailRow(icon: ImageVector, label: String, value: String, onCopy: (
 @Composable
 fun ContactListScreenPreview() {
     SalesTrackingTheme {
+        val previewContacts = flowOf(PagingData.from(listOf(
+            ContactPerson(contactId = "1", custId = "C001", fullName = "กิจการร่วมค้า ABC", phoneNumber = "081-234-5678"),
+            ContactPerson(contactId = "2", custId = "C002", fullName = "คุณสมชาย ใจดี", email = "somchai@example.com"),
+            ContactPerson(contactId = "3", custId = "C003", fullName = "นายบพิตร ธนสาร", phoneNumber = "089-123-4567")
+        ))).collectAsLazyPagingItems()
         ContactListScreenContent(
-            contacts = listOf(
-                ContactPerson(contactId = "1", custId = "C001", fullName = "กิจการร่วมค้า ABC", phoneNumber = "081-234-5678"),
-                ContactPerson(contactId = "2", custId = "C002", fullName = "คุณสมชาย ใจดี", email = "somchai@example.com"),
-                ContactPerson(contactId = "3", custId = "C003", fullName = "นายบพิตร ธนสาร", phoneNumber = "089-123-4567")
-            ),
+            contacts = previewContacts,
             isLoading = false, searchQuery = "", error = null, authUser = null,
+            selectedInitial = null, onInitialSelected = {},
             onSearchChange = {}, onContactClick = {}, onAddClick = {}, onEditClick = {},
             onNotificationClick = {}, onSettingsClick = {}, onLogoutClick = {},
             currentTab = 2, onTabChange = {}

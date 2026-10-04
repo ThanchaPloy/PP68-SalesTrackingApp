@@ -15,6 +15,7 @@ sealed interface LoginUiState {
     object Idle : LoginUiState
     object Loading : LoginUiState
     data class Error(val message: String) : LoginUiState
+    data class AccountSwitchBlocked(val message: String) : LoginUiState
     data class Success(val user: AuthUser) : LoginUiState
 }
 
@@ -42,7 +43,7 @@ class LoginViewModel @Inject constructor(
         clearError()
     }
 
-    fun login() {
+    fun login(discardPreviousData: Boolean = false) {
         val currentUsername = _username.value.trim()
         val currentPassword = _password.value
 
@@ -53,7 +54,7 @@ class LoginViewModel @Inject constructor(
 
         viewModelScope.launch {
             _uiState.value = LoginUiState.Loading
-            val result = authRepository.login(currentUsername, currentPassword)
+            val result = authRepository.login(currentUsername, currentPassword, discardPreviousData)
             result.onSuccess { response ->
                 val finalUserId = response.employee?.empCode ?: response.userId ?: ""
                 val finalRole = response.employee?.empPost ?: response.role ?: ""
@@ -73,10 +74,18 @@ class LoginViewModel @Inject constructor(
                 )
             }
             result.onFailure { exception ->
-                _uiState.value = LoginUiState.Error(exception.message ?: "เกิดข้อผิดพลาดในการเข้าสู่ระบบ")
+                _uiState.value = if (exception is AuthRepository.AccountSwitchBlockedException) {
+                    LoginUiState.AccountSwitchBlocked(exception.message.orEmpty())
+                } else {
+                    LoginUiState.Error(exception.message ?: "เกิดข้อผิดพลาดในการเข้าสู่ระบบ")
+                }
             }
         }
     }
+
+    fun discardPreviousDataAndLogin() = login(discardPreviousData = true)
+
+    fun cancelAccountSwitch() { _uiState.value = LoginUiState.Idle }
 
     fun resetState() {
         _uiState.value = LoginUiState.Idle
@@ -85,6 +94,8 @@ class LoginViewModel @Inject constructor(
     }
 
     private fun clearError() {
-        if (_uiState.value is LoginUiState.Error) _uiState.value = LoginUiState.Idle
+        if (_uiState.value is LoginUiState.Error || _uiState.value is LoginUiState.AccountSwitchBlocked) {
+            _uiState.value = LoginUiState.Idle
+        }
     }
 }

@@ -2,10 +2,18 @@ package com.example.pp68_salestrackingapp.data.model
 
 import androidx.room.ColumnInfo
 import androidx.room.Entity
+import androidx.room.Index
 import androidx.room.PrimaryKey
 import com.google.gson.annotations.SerializedName
 
-@Entity(tableName = "customer")
+@Entity(
+    tableName = "customer",
+    indices = [
+        Index(value = ["company_name"], name = "index_customer_company_name"),
+        Index(value = ["is_synced"], name = "index_customer_is_synced"),
+        Index(value = ["user_id"], name = "index_customer_user_id")
+    ]
+)
 data class Customer(
     @PrimaryKey
     @ColumnInfo(name = "cust_id")
@@ -58,5 +66,9 @@ data class Customer(
 
     @ColumnInfo(name = "is_lead")
     @SerializedName("is_lead")
-    val isLead: Boolean = false
+    val isLead: Boolean = false,
+
+    @ColumnInfo(name = "operation_id")
+    @SerializedName("operation_id")
+    val operationId: String? = null
 )

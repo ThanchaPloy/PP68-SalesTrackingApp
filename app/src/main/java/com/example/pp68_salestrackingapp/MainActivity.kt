@@ -13,10 +13,10 @@ import android.content.pm.PackageManager
 import android.os.Build
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
-import androidx.lifecycle.lifecycleScope
 import com.example.pp68_salestrackingapp.data.remote.ApiService
 import com.example.pp68_salestrackingapp.di.TokenManager
 import com.example.pp68_salestrackingapp.utils.SyncManager
+import com.example.pp68_salestrackingapp.utils.SyncStatusNavigation
 import javax.inject.Inject
 
 @AndroidEntryPoint
@@ -41,7 +41,7 @@ class MainActivity : ComponentActivity() {
         val now = System.currentTimeMillis()
         if (tokenManager.getToken() != null && now - lastSyncMs > 60_000) {
             lastSyncMs = now
-            syncManager.runSyncNow(lifecycleScope)
+            syncManager.scheduleSync(com.example.pp68_salestrackingapp.utils.SyncTrigger.APP_FOREGROUND)
         }
     }
 
@@ -54,7 +54,11 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             SalesTrackingTheme {
-                SalesTrackingApp()
+                SalesTrackingApp(
+                    initialSettingsScreen = SyncStatusNavigation.destination(
+                        intent.getBooleanExtra(SyncStatusNavigation.EXTRA_OPEN_SYNC_STATUS, false)
+                    )
+                )
             }
         }
     }

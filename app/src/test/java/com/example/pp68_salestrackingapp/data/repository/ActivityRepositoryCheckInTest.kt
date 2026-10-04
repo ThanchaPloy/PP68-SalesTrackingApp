@@ -3,7 +3,6 @@ package com.example.pp68_salestrackingapp.data.repository
 import com.example.pp68_salestrackingapp.data.local.*
 import com.example.pp68_salestrackingapp.data.model.SalesActivity
 import com.example.pp68_salestrackingapp.data.remote.ApiService
-import com.example.pp68_salestrackingapp.data.remote.UploadApiService
 import com.example.pp68_salestrackingapp.utils.SyncManager
 import io.mockk.*
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -20,7 +19,6 @@ import retrofit2.Response
 class ActivityRepositoryCheckInTest {
 
     private val apiService: ApiService = mockk(relaxed = true)
-    private val uploadApiService: UploadApiService = mockk(relaxed = true)
     private val activityDao: ActivityDao = mockk(relaxed = true)
     private val projectDao: ProjectDao = mockk(relaxed = true)
     private val customerDao: CustomerDao = mockk(relaxed = true)
@@ -49,7 +47,7 @@ class ActivityRepositoryCheckInTest {
     @Before
     fun setUp() {
         repo = ActivityRepository(
-            apiService, uploadApiService, activityDao, projectDao, customerDao, contactDao,
+            apiService, activityDao, projectDao, customerDao, contactDao,
             planItemDao, resultDao, photoDao, appointmentContactDao, projectRepo, syncManager,
             networkMonitor, context
         )
