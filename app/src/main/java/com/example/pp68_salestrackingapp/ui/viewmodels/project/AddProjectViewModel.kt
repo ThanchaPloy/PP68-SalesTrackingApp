@@ -479,11 +479,11 @@ class AddProjectViewModel @Inject constructor(
                         )
                     }
                 },
-                onFailure = {
+                onFailure = { err ->
                     _uiState.update {
                         it.copy(
                             customerOptions = leadCustomerOptions,
-                            customerSearchMessage = "ค้นหา ERP ไม่ได้ กรุณาตรวจสอบอินเทอร์เน็ต (Lead ในเครื่องยังเลือกได้)"
+                            customerSearchMessage = err.message ?: "ค้นหา ERP ไม่ได้ (Lead ในเครื่องยังเลือกได้)"
                         )
                     }
                 }

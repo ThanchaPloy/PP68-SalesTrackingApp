@@ -251,11 +251,11 @@ class AddContactViewModel @Inject constructor(
                         )
                     }
                 },
-                onFailure = {
+                onFailure = { err ->
                     _uiState.update {
                         it.copy(
                             companyOptions = leadCompanyOptions,
-                            companySearchMessage = "ค้นหา ERP ไม่ได้ กรุณาตรวจสอบอินเทอร์เน็ต (Lead ในเครื่องยังเลือกได้)"
+                            companySearchMessage = err.message ?: "ค้นหา ERP ไม่ได้ (Lead ในเครื่องยังเลือกได้)"
                         )
                     }
                 }
