@@ -13,6 +13,8 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import com.example.pp68_salestrackingapp.data.model.Customer
 import com.example.pp68_salestrackingapp.utils.DraftStore
@@ -37,6 +39,7 @@ data class AddProjectUiState(
     val selectedCustomerId:     String? = null,
     val selectedCustomerName:   String? = null,
     val isLoadingCustomers:     Boolean = false,
+    val customerSearchMessage:  String? = null,
     val contactOptions:         List<Pair<String, String>> = emptyList(),
     val selectedContactIds:     Set<String> = emptySet(),
     val isLoadingContacts:      Boolean = false,
@@ -106,6 +109,7 @@ sealed class AddProjectEvent {
     data class ProjectNameChanged(val value: String)              : AddProjectEvent()
     data class BranchChanged(val value: String)                   : AddProjectEvent()
     data class CustomerSelected(val id: String, val name: String) : AddProjectEvent()
+    data class CustomerQueryChanged(val value: String)            : AddProjectEvent()
     data class ContactToggled(val id: String)                     : AddProjectEvent()
     data class ExpectedValueChanged(val value: String)            : AddProjectEvent()
     data class StartDateChanged(val value: String)                : AddProjectEvent()
@@ -149,6 +153,8 @@ class AddProjectViewModel @Inject constructor(
 
     private val _uiState = MutableStateFlow(AddProjectUiState())
     val uiState: StateFlow<AddProjectUiState> = _uiState
+    private var leadCustomerOptions: List<Pair<String, String>> = emptyList()
+    private var customerSearchJob: Job? = null
 
     private val draft = com.example.pp68_salestrackingapp.utils.DraftController(
         store = draftStore,
@@ -433,14 +439,54 @@ class AddProjectViewModel @Inject constructor(
             _uiState.update { it.copy(isLoadingCustomers = true) }
             customerRepo.getLocalCustomers().fold(
                 onSuccess = { list ->
+                    leadCustomerOptions = list.map { c -> c.custId.trim() to c.companyName }.withUniqueLabels()
                     _uiState.update {
                         it.copy(
-                            customerOptions    = list.map { c -> c.custId.trim() to c.companyName }.withUniqueLabels(),
+                            customerOptions    = leadCustomerOptions,
                             isLoadingCustomers = false
                         )
                     }
                 },
                 onFailure = { _uiState.update { it.copy(isLoadingCustomers = false) } }
+            )
+        }
+    }
+
+    private fun searchCustomers(query: String) {
+        customerSearchJob?.cancel()
+        val normalized = query.trim()
+        if (normalized.length < 2) {
+            _uiState.update {
+                it.copy(
+                    customerOptions = leadCustomerOptions,
+                    customerSearchMessage = if (normalized.isEmpty()) null else "พิมพ์อย่างน้อย 2 ตัวอักษรเพื่อค้นหาลูกค้า ERP"
+                )
+            }
+            return
+        }
+        customerSearchJob = viewModelScope.launch {
+            delay(400)
+            _uiState.update { it.copy(customerSearchMessage = "กำลังค้นหาลูกค้า ERP…") }
+            customerRepo.searchErpCustomers(normalized).fold(
+                onSuccess = { remote ->
+                    val remoteOptions = remote.map { it.customerCode to it.customerName }
+                    _uiState.update {
+                        it.copy(
+                            customerOptions = (leadCustomerOptions + remoteOptions)
+                                .distinctBy { option -> option.first }
+                                .withUniqueLabels(),
+                            customerSearchMessage = if (remote.isEmpty()) "ไม่พบลูกค้า ERP จากคำค้นนี้" else null
+                        )
+                    }
+                },
+                onFailure = {
+                    _uiState.update {
+                        it.copy(
+                            customerOptions = leadCustomerOptions,
+                            customerSearchMessage = "ค้นหา ERP ไม่ได้ กรุณาตรวจสอบอินเทอร์เน็ต (Lead ในเครื่องยังเลือกได้)"
+                        )
+                    }
+                }
             )
         }
     }
@@ -472,6 +518,7 @@ class AddProjectViewModel @Inject constructor(
                 }
                 loadContacts(event.id.trim())
             }
+            is AddProjectEvent.CustomerQueryChanged -> searchCustomers(event.value)
             is AddProjectEvent.ContactToggled -> {
                 val current  = _uiState.value.selectedContactIds.toMutableSet()
                 val targetId = event.id.trim()
@@ -575,6 +622,7 @@ class AddProjectViewModel @Inject constructor(
                 // TEMP- จำเป็น — outbox ใช้คำนำหน้านี้ตัดสินว่าจะ POST หรือ PATCH
                 contactId = "TEMP-" + UUID.randomUUID().toString().take(8).uppercase(),
                 custId = custId,
+                customerName = st.selectedCustomerName,
                 fullName = st.quickAddContactName.trim(),
                 phoneNumber = st.quickAddContactPhone.trim(),
                 // เจ้าของผู้ติดต่อ = คนที่สร้าง (เหตุผลเดียวกับใน CreateAppointmentViewModel)

@@ -50,6 +50,22 @@ class SyncManager @Inject constructor(
 
     fun clearFailedParts() { _failedParts.value = emptyList() }
 
+    fun reportFailedParts(parts: List<String>) {
+        _failedParts.value = parts.distinct()
+    }
+
+    /** Master data is independent from the business snapshot/delta stream and has APK fallbacks. */
+    suspend fun refreshOptionalMasterData() {
+        runCatching {
+            ProjectStages.applyServerData(masterDataRepo.getProjectStages())
+            LossReasons.applyServerData(masterDataRepo.getLossReasons())
+            DealFactors.applyServerData(masterDataRepo.getDealFactorQuestions())
+        }.onFailure { error ->
+            if (error is CancellationException) throw error
+            Log.w("DownloadSync", "optional_master_data_failed type=${error::class.java.simpleName}")
+        }
+    }
+
     suspend fun syncAll(userId: String, branchId: String): DownloadSyncResult = supervisorScope {
         suspend fun step(label: String, block: suspend () -> Result<Unit>): DownloadPartResult {
             return try {
@@ -96,14 +112,7 @@ class SyncManager @Inject constructor(
         }
 
         // Master data มี fallback ใน APK จึงไม่ทำให้ initial download ทั้งก้อนล้มเหลว
-        runCatching {
-            ProjectStages.applyServerData(masterDataRepo.getProjectStages())
-            LossReasons.applyServerData(masterDataRepo.getLossReasons())
-            DealFactors.applyServerData(masterDataRepo.getDealFactorQuestions())
-        }.onFailure { error ->
-            if (error is CancellationException) throw error
-            Log.w("DownloadSync", "optional_master_data_failed type=${error::class.java.simpleName}")
-        }
+        refreshOptionalMasterData()
 
         val outcome = DownloadSyncResult(requiredParts)
         _failedParts.value = outcome.failedParts.map { it.label }

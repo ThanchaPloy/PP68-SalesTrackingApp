@@ -34,4 +34,7 @@ ui*.xml
 backend/run_*.txt
 app/debug/
 /.gradle-user-home/
+/.gradle-backend-home/
+/.gradle-workspace/
+/.android-workspace/
 /.android-user-home/

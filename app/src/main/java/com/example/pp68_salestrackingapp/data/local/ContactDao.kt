@@ -18,7 +18,8 @@ interface ContactDao {
                    COALESCE(cp.fullName, c.company_name) AS fullName,
                    cp.nickname, cp.position, cp.phoneNumber, cp.email,
                    cp.line, cp.isActive, cp.isDmConfirmed, cp.createdBy, cp.is_synced,
-                   c.company_name AS companyName,
+                   COALESCE(cp.customer_name, c.company_name) AS customer_name,
+                   COALESCE(cp.customer_name, c.company_name) AS companyName,
                    CASE
                        WHEN TRIM(COALESCE(cp.fullName, c.company_name, '')) LIKE 'นางสาว %' THEN SUBSTR(TRIM(COALESCE(cp.fullName, c.company_name, '')), LENGTH('นางสาว ') + 1)
                        WHEN TRIM(COALESCE(cp.fullName, c.company_name, '')) LIKE 'ห้างหุ้นส่วนจำกัด %' THEN SUBSTR(TRIM(COALESCE(cp.fullName, c.company_name, '')), LENGTH('ห้างหุ้นส่วนจำกัด ') + 1)
@@ -38,7 +39,7 @@ interface ContactDao {
             LEFT JOIN customer c ON cp.custId = c.cust_id
         )
         SELECT contactId, custId, fullName, nickname, position, phoneNumber, email,
-               line, isActive, isDmConfirmed, createdBy, is_synced
+               line, isActive, isDmConfirmed, createdBy, is_synced, customer_name
         FROM contact_rows
         WHERE (:searchQuery = ''
                OR fullName LIKE '%' || :searchQuery || '%'
@@ -56,7 +57,8 @@ interface ContactDao {
         SELECT cp.contactId, cp.custId,
                COALESCE(cp.fullName, c.company_name) AS fullName,
                cp.nickname, cp.position, cp.phoneNumber, cp.email,
-               cp.line, cp.isActive, cp.isDmConfirmed, cp.createdBy, cp.is_synced
+               cp.line, cp.isActive, cp.isDmConfirmed, cp.createdBy, cp.is_synced,
+               COALESCE(cp.customer_name, c.company_name) AS customer_name
         FROM contact_person cp
         LEFT JOIN customer c ON cp.custId = c.cust_id
         ORDER BY fullName ASC, cp.contactId ASC
@@ -67,12 +69,13 @@ interface ContactDao {
         SELECT cp.contactId, cp.custId,
                COALESCE(cp.fullName, c.company_name) AS fullName,
                cp.nickname, cp.position, cp.phoneNumber, cp.email,
-               cp.line, cp.isActive, cp.isDmConfirmed, cp.createdBy, cp.is_synced
+               cp.line, cp.isActive, cp.isDmConfirmed, cp.createdBy, cp.is_synced,
+               COALESCE(cp.customer_name, c.company_name) AS customer_name
         FROM contact_person cp
         LEFT JOIN customer c ON cp.custId = c.cust_id
         WHERE COALESCE(cp.fullName, c.company_name) LIKE :query
            OR cp.nickname LIKE :query
-           OR c.company_name LIKE :query
+           OR COALESCE(cp.customer_name, c.company_name) LIKE :query
         ORDER BY fullName ASC, cp.contactId ASC
     """)
     fun searchContactsWithCompany(query: String): Flow<List<ContactPerson>>

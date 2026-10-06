@@ -15,6 +15,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -25,10 +27,12 @@ import com.example.pp68_salestrackingapp.utils.retrySend
 import com.example.pp68_salestrackingapp.data.remote.CreateRequestPayloads
 
 @Singleton
+@OptIn(ExperimentalCoroutinesApi::class)
 class ActivityRepository @Inject constructor(
     private val apiService: ApiService,
     private val activityDao: ActivityDao,
     private val projectDao: ProjectDao,
+    private val localIdMappingDao: LocalIdMappingDao,
     private val customerDao: CustomerDao,
     private val contactDao: ContactDao,
     private val planItemDao: ActivityPlanItemDao,
@@ -43,24 +47,42 @@ class ActivityRepository @Inject constructor(
     fun getAllActivitiesFlow(): Flow<List<SalesActivity>> = activityDao.getAllActivities()
 
     fun getActivitiesByProjectFlow(projectId: String): Flow<List<SalesActivity>> =
-        activityDao.getActivitiesByProject(projectId).map { list ->
-            list.map { enrichActivity(it) }
+        resolvedIdFlow(LocalIdMapping.ENTITY_PROJECT, projectId).flatMapLatest { resolvedId ->
+            activityDao.getActivitiesByProject(resolvedId).map { list ->
+                list.map { enrichActivity(it) }
+            }
         }
 
     fun getAllResultIdsFlow(): Flow<List<String>> = resultDao.getAllResultIdsFlow()
     fun getAllResultsFlow(): Flow<List<ActivityResult>> = resultDao.getAllResultsFlow()
-    fun getResultsByProjectFlow(projectId: String): Flow<List<ActivityResult>> = resultDao.getAllResultsByProject(projectId)
-    fun getResultVersionHistory(resultGroupId: String): Flow<List<ActivityResult>> = resultDao.getVersionHistory(resultGroupId)
-    fun getResultVersionHistoryPaging(resultGroupId: String): Flow<PagingData<ActivityResult>> = Pager(
-        config = PagingConfig(
-            pageSize = 20,
-            initialLoadSize = 40,
-            prefetchDistance = 5,
-            maxSize = 100,
-            enablePlaceholders = false
-        ),
-        pagingSourceFactory = { resultDao.getVersionHistoryPaging(resultGroupId) }
-    ).flow
+    fun getResultsByProjectFlow(projectId: String): Flow<List<ActivityResult>> =
+        resolvedIdFlow(LocalIdMapping.ENTITY_PROJECT, projectId)
+            .flatMapLatest(resultDao::getAllResultsByProject)
+
+    fun getResultVersionHistory(resultGroupId: String): Flow<List<ActivityResult>> =
+        resolvedIdFlow(LocalIdMapping.ENTITY_RESULT, resultGroupId)
+            .flatMapLatest(resultDao::getVersionHistory)
+
+    fun getResultVersionHistoryPaging(resultGroupId: String): Flow<PagingData<ActivityResult>> =
+        resolvedIdFlow(LocalIdMapping.ENTITY_RESULT, resultGroupId).flatMapLatest { resolvedId ->
+            Pager(
+                config = PagingConfig(
+                    pageSize = 20,
+                    initialLoadSize = 40,
+                    prefetchDistance = 5,
+                    maxSize = 100,
+                    enablePlaceholders = false
+                ),
+                pagingSourceFactory = { resultDao.getVersionHistoryPaging(resolvedId) }
+            ).flow
+        }
+
+    private fun resolvedIdFlow(entityType: String, id: String): Flow<String> =
+        if (id.startsWith("TEMP-")) {
+            localIdMappingDao.observeRealId(entityType, id).map { it ?: id }
+        } else {
+            kotlinx.coroutines.flow.flowOf(id)
+        }
 
     fun getActivityCardsForMonthFlow(
         userId: String,
@@ -180,17 +202,24 @@ class ActivityRepository @Inject constructor(
         return withContext(Dispatchers.IO) {
             val tempId = "TEMP-${java.util.UUID.randomUUID().toString().take(8).uppercase()}"
             val now = java.time.Instant.now().toString()
-            val localActivity = activity.copy(
+            val preparedActivity = activity.copy(
                 activityId = tempId,
                 isSynced = false,
                 createdAt = activity.createdAt ?: now,
                 operationId = activity.operationId ?: java.util.UUID.randomUUID().toString()
             )
+            val localActivity: SalesActivity
             try {
-                activityDao.insertActivity(localActivity)
+                localActivity = localIdMappingDao.insertActivityResolvingProject(preparedActivity)
             } catch (e: Exception) {
                 Log.e("ActivityRepository", "addActivity: เขียนลงเครื่องไม่สำเร็จ", e)
                 return@withContext kotlin.Result.failure(Exception("สร้างนัดหมายไม่สำเร็จ: ${e.message}"))
+            }
+            // A TEMP parent is an expected dependency, not a failed appointment. Keep the local
+            // save successful and let the worker upload the project before this appointment.
+            if (localActivity.projectId?.startsWith("TEMP-") == true) {
+                syncManager.scheduleSync()
+                return@withContext kotlin.Result.success(tempId)
             }
             try {
                 val body = CreateRequestPayloads.activity(localActivity)
@@ -200,7 +229,7 @@ class ActivityRepository @Inject constructor(
                 if (response.isSuccessful) {
                     val realId = response.body()?.firstOrNull()?.activityId
                     if (realId != null && realId != tempId) {
-                        activityDao.replaceTemporaryActivity(
+                        localIdMappingDao.replaceTemporaryActivity(
                             tempId,
                             localActivity.copy(activityId = realId, isSynced = true)
                         )
@@ -250,9 +279,22 @@ class ActivityRepository @Inject constructor(
         isPlanEdit: Boolean = true
     ): kotlin.Result<Unit> {
         return withContext(Dispatchers.IO) {
+            val resolvedActivityId = try {
+                localIdMappingDao.resolveExistingId(LocalIdMapping.ENTITY_ACTIVITY, activityId)
+            } catch (e: Exception) {
+                return@withContext kotlin.Result.failure(e)
+            }
+            val resolvedUpdates = updates.toMutableMap().apply {
+                (this["project_code"] as? String)?.let {
+                    this["project_code"] = localIdMappingDao.resolveMappedId(LocalIdMapping.ENTITY_PROJECT, it)
+                }
+                (this["cust_code"] as? String)?.let {
+                    this["cust_code"] = localIdMappingDao.resolveMappedId(LocalIdMapping.ENTITY_CUSTOMER, it)
+                }
+            }
             // กติกาเดียวกับที่ UI ใช้ซ่อนปุ่มดินสอ — entry point อื่นที่เรียก repository ตรง ๆ จึงข้ามไม่ได้
             if (isPlanEdit) {
-                val existing = activityDao.getActivityById(activityId)
+                val existing = activityDao.getActivityById(resolvedActivityId)
                 if (existing != null && com.example.pp68_salestrackingapp.utils.AppointmentStatus
                         .isEditLocked(existing.status, existing.activityDate, existing.activityType)
                 ) {
@@ -265,22 +307,25 @@ class ActivityRepository @Inject constructor(
             // เดิม catch ครอบทั้งฟังก์ชันแล้วคืน success(Unit) เสมอ ทำให้ cast พลาด (as String
             // ด้านล่างไม่มีอะไรการันตีชนิด) หรือ Room พังตรงนี้ กลายเป็น "บันทึกสำเร็จ" ทั้งที่
             // ไม่มีอะไรถูกเขียนลงเครื่องเลย และ outbox ก็ไม่มีแถวอะไรให้ตามส่ง = หายถาวรแบบเงียบ
+            var hasPendingParent = false
             try {
-                activityDao.getActivityById(activityId)?.let { local ->
+                activityDao.getActivityById(resolvedActivityId)?.let { local ->
                     var updated = local.copy(isSynced = false)
-                    if (updates.containsKey("plan_status"))    updated = updated.copy(status        = updates["plan_status"] as String)
-                    if (updates.containsKey("note"))           updated = updated.copy(weeklyNote    = updates["note"] as? String)
-                    if (updates.containsKey("topic"))          updated = updated.copy(detail        = updates["topic"] as? String)
-                    if (updates.containsKey("type"))           updated = updated.copy(activityType  = updates["type"] as String)
-                    if (updates.containsKey("planned_date"))   updated = updated.copy(activityDate  = updates["planned_date"] as String)
-                    if (updates.containsKey("planned_time"))   updated = updated.copy(plannedTime   = updates["planned_time"] as? String)
-                    if (updates.containsKey("planned_end_time")) updated = updated.copy(plannedEndTime = updates["planned_end_time"] as? String)
-                    if (updates.containsKey("planned_lat"))    updated = updated.copy(plannedLat    = updates["planned_lat"] as? Double)
-                    if (updates.containsKey("planned_long"))   updated = updated.copy(plannedLong   = updates["planned_long"] as? Double)
-                    if (updates.containsKey("is_appointment")) updated = updated.copy(isAppointment = updates["is_appointment"] as Boolean)
-                    if (updates.containsKey("project_code"))  updated = updated.copy(projectId  = updates["project_code"] as? String)
-                    if (updates.containsKey("cust_code"))     updated = updated.copy(customerId = (updates["cust_code"] as? String) ?: updated.customerId)
-                    activityDao.insertActivity(updated)
+                    if (resolvedUpdates.containsKey("plan_status"))    updated = updated.copy(status        = resolvedUpdates["plan_status"] as String)
+                    if (resolvedUpdates.containsKey("note"))           updated = updated.copy(weeklyNote    = resolvedUpdates["note"] as? String)
+                    if (resolvedUpdates.containsKey("topic"))          updated = updated.copy(detail        = resolvedUpdates["topic"] as? String)
+                    if (resolvedUpdates.containsKey("type"))           updated = updated.copy(activityType  = resolvedUpdates["type"] as String)
+                    if (resolvedUpdates.containsKey("planned_date"))   updated = updated.copy(activityDate  = resolvedUpdates["planned_date"] as String)
+                    if (resolvedUpdates.containsKey("planned_time"))   updated = updated.copy(plannedTime   = resolvedUpdates["planned_time"] as? String)
+                    if (resolvedUpdates.containsKey("planned_end_time")) updated = updated.copy(plannedEndTime = resolvedUpdates["planned_end_time"] as? String)
+                    if (resolvedUpdates.containsKey("planned_lat"))    updated = updated.copy(plannedLat    = resolvedUpdates["planned_lat"] as? Double)
+                    if (resolvedUpdates.containsKey("planned_long"))   updated = updated.copy(plannedLong   = resolvedUpdates["planned_long"] as? Double)
+                    if (resolvedUpdates.containsKey("is_appointment")) updated = updated.copy(isAppointment = resolvedUpdates["is_appointment"] as Boolean)
+                    if (resolvedUpdates.containsKey("project_code"))  updated = updated.copy(projectId  = resolvedUpdates["project_code"] as? String)
+                    if (resolvedUpdates.containsKey("cust_code"))     updated = updated.copy(customerId = (resolvedUpdates["cust_code"] as? String) ?: updated.customerId)
+                    val persisted = localIdMappingDao.insertActivityResolvingProject(updated)
+                    hasPendingParent = persisted.projectId?.startsWith("TEMP-") == true ||
+                        persisted.customerId?.startsWith("TEMP-") == true
                 }
             } catch (e: Exception) {
                 Log.e("ActivityRepository", "updateActivity: เขียนลงเครื่องไม่สำเร็จ $activityId", e)
@@ -289,7 +334,7 @@ class ActivityRepository @Inject constructor(
                 )
             }
 
-            if (activityId.startsWith("TEMP-")) {
+            if (resolvedActivityId.startsWith("TEMP-") || hasPendingParent) {
                 syncManager.scheduleSync()
                 return@withContext kotlin.Result.success(Unit)
             }
@@ -297,14 +342,14 @@ class ActivityRepository @Inject constructor(
             // ── ชั้น server: จากจุดนี้ข้อมูลอยู่ในเครื่องแล้วและ is_synced = false ──────────
             // ส่งไม่ขึ้นจึงไม่ใช่การสูญหาย outbox ตามส่งให้เอง ยกเว้น 403 ที่ปฏิเสธถาวร
             try {
-                val response = retrySend(idempotent = true, tag = "updateActivity") { apiService.updateActivity("eq.$activityId", updates) }
+                val response = retrySend(idempotent = true, tag = "updateActivity") { apiService.updateActivity("eq.$resolvedActivityId", resolvedUpdates) }
                 when {
                     response.isSuccessful && response.body()?.isNotEmpty() == true -> {
-                        activityDao.updateSyncStatus(activityId, true)
+                        activityDao.updateSyncStatus(resolvedActivityId, true)
                         kotlin.Result.success(Unit)
                     }
                     response.code() == 403 -> {
-                        syncManager.markBlocked("activity", activityId)
+                        syncManager.markBlocked("activity", resolvedActivityId)
                         kotlin.Result.failure(Exception("แก้ไขนัดหมายไม่สำเร็จ: ไม่มีสิทธิ์ทำรายการนี้"))
                     }
                     else -> {
@@ -322,18 +367,20 @@ class ActivityRepository @Inject constructor(
 
     suspend fun savePlanItems(appointmentId: String, items: List<ActivityPlanItem>) {
         withContext(Dispatchers.IO) {
-            planItemDao.deletePlanItemsByAppointmentId(appointmentId)
             // เก็บลงเครื่องแบบยังไม่ซิงค์ไว้ก่อน แล้วค่อยปลดธงเมื่อส่งขึ้น server สำเร็จ
             // ถ้าพลาด outbox จะเห็นและลองใหม่ให้ — เดิมกลืน error เงียบ ๆ แล้วติ๊กหายถาวร
-            planItemDao.insertPlanItems(items.map { it.copy(isSynced = false) })
-            if (appointmentId.startsWith("TEMP-")) {
+            val (resolvedAppointmentId, resolvedItems) = localIdMappingDao.replacePlanItemsResolvingAppointment(
+                appointmentId,
+                items.map { it.copy(isSynced = false) }
+            )
+            if (resolvedAppointmentId.startsWith("TEMP-")) {
                 // นัดหมายยังไม่มี id จริง ต้องรอให้มันซิงค์ก่อน checklist ถึงจะผูกถูกแถว
                 syncManager.scheduleSync()
                 return@withContext
             }
-            val pushed = pushChecklist(appointmentId, items)
+            val pushed = pushChecklist(resolvedAppointmentId, resolvedItems)
             if (pushed) {
-                planItemDao.updateSyncStatusByAppointment(appointmentId, true)
+                planItemDao.updateSyncStatusByAppointment(resolvedAppointmentId, true)
             } else {
                 syncManager.scheduleSync()
             }
@@ -358,12 +405,14 @@ class ActivityRepository @Inject constructor(
     suspend fun getPlanItems(activityId: String): kotlin.Result<List<PlanItemDto>> {
         return withContext(Dispatchers.IO) {
             try {
-                val localItems = planItemDao.getPlanItemsByAppointmentId(activityId)
+                val resolvedId = localIdMappingDao.resolveMappedId(LocalIdMapping.ENTITY_ACTIVITY, activityId)
+                val localItems = planItemDao.getPlanItemsByAppointmentId(resolvedId)
                 if (localItems.isNotEmpty()) {
                     val dtos = localItems.map { PlanItemDto(masterId = it.masterId, masterDetails = MasterActDto(it.actName ?: ""), isDone = it.isDone) }
                     return@withContext kotlin.Result.success(dtos)
                 }
-                val checklistResp = apiService.getChecklistByAppointment("eq.$activityId")
+                if (resolvedId.startsWith("TEMP-")) return@withContext kotlin.Result.success(emptyList())
+                val checklistResp = apiService.getChecklistByAppointment("eq.$resolvedId")
                 if (checklistResp.isSuccessful && !checklistResp.body().isNullOrEmpty()) {
                     val checklist = checklistResp.body()!!
                     val masterResp = apiService.getMasterActivities()
@@ -372,7 +421,7 @@ class ActivityRepository @Inject constructor(
                         val master = masters.find { it.masterId == item.masterId }
                         PlanItemDto(masterId = item.masterId, masterDetails = MasterActDto(item.actName ?: master?.actName ?: "Activity ${item.masterId}"), isDone = item.isDone)
                     }
-                    val planItems = dtos.map { dto -> ActivityPlanItem(appointmentId = activityId, masterId = dto.masterId, actName = dto.masterDetails?.actName, isDone = dto.isDone) }
+                    val planItems = dtos.map { dto -> ActivityPlanItem(appointmentId = resolvedId, masterId = dto.masterId, actName = dto.masterDetails?.actName, isDone = dto.isDone) }
                     planItemDao.insertPlanItems(planItems)
                     kotlin.Result.success(dtos)
                 } else {
@@ -385,22 +434,31 @@ class ActivityRepository @Inject constructor(
     }
 
     suspend fun updatePlanItemStatus(activityId: String, masterId: Int, isDone: Boolean) {
-        withContext(Dispatchers.IO) { planItemDao.updateItemStatus(activityId, masterId, isDone) }
+        withContext(Dispatchers.IO) {
+            val resolvedId = localIdMappingDao.resolveExistingId(LocalIdMapping.ENTITY_ACTIVITY, activityId)
+            planItemDao.updateItemStatus(resolvedId, masterId, isDone)
+        }
     }
 
     suspend fun updateChecklistItem(appointmentId: String, masterId: Int, isDone: Boolean) {
         withContext(Dispatchers.IO) {
-            planItemDao.updateItemStatus(appointmentId, masterId, isDone)
+            val resolvedId = localIdMappingDao.resolveExistingId(LocalIdMapping.ENTITY_ACTIVITY, appointmentId)
+            planItemDao.updateItemStatus(resolvedId, masterId, isDone)
+            if (resolvedId.startsWith("TEMP-")) {
+                planItemDao.markItemUnsynced(resolvedId, masterId)
+                syncManager.scheduleSync()
+                return@withContext
+            }
             val landed = try {
                 val updates = mapOf<String, Any>("is_checked" to isDone)
-                apiService.updateChecklist(appointmentId = "eq.$appointmentId", masterId = "eq.$masterId", updates = updates)
+                apiService.updateChecklist(appointmentId = "eq.$resolvedId", masterId = "eq.$masterId", updates = updates)
                     .isSuccessful
             } catch (e: Exception) {
                 false
             }
             // ปักธงไว้ให้ outbox เก็บไปส่งใหม่ — เดิมกลืน error แล้วติ๊กนั้นหายจาก server ถาวร
             if (!landed) {
-                planItemDao.markItemUnsynced(appointmentId, masterId)
+                planItemDao.markItemUnsynced(resolvedId, masterId)
                 syncManager.scheduleSync()
             }
         }
@@ -408,19 +466,19 @@ class ActivityRepository @Inject constructor(
 
     suspend fun getActivityById(id: String): kotlin.Result<List<SalesActivity>> {
         return withContext(Dispatchers.IO) {
+            val resolvedId = localIdMappingDao.resolveMappedId(LocalIdMapping.ENTITY_ACTIVITY, id)
             try {
-                val local = activityDao.getActivityById(id)
+                val local = activityDao.getActivityById(resolvedId)
                 if (local != null) return@withContext kotlin.Result.success(listOf(enrichActivity(local)))
-                val resp = apiService.getAppointmentById("eq.$id")
+                if (resolvedId.startsWith("TEMP-")) return@withContext kotlin.Result.success(emptyList())
+                val resp = apiService.getAppointmentById("eq.$resolvedId")
                 if (resp.isSuccessful && resp.body() != null) {
                     val data = resp.body()!!.map { it.copy(isSynced = true) }
                     if (data.isNotEmpty()) activityDao.insertActivities(data)
                     kotlin.Result.success(data.map { enrichActivity(it) })
-                } else {
-                    if (local != null) kotlin.Result.success(listOf(enrichActivity(local))) else kotlin.Result.success(emptyList())
-                }
+                } else kotlin.Result.success(emptyList())
             } catch (e: Exception) {
-                val local = activityDao.getActivityById(id)
+                val local = activityDao.getActivityById(resolvedId)
                 if (local != null) kotlin.Result.success(listOf(enrichActivity(local))) else kotlin.Result.failure(e)
             }
         }
@@ -428,6 +486,11 @@ class ActivityRepository @Inject constructor(
 
     suspend fun checkIn(activityId: String, lat: Double, lng: Double, isVerified: Boolean, distanceDeviation: Double? = null): kotlin.Result<Unit> {
         return withContext(Dispatchers.IO) {
+            val resolvedId = try {
+                localIdMappingDao.resolveExistingId(LocalIdMapping.ENTITY_ACTIVITY, activityId)
+            } catch (e: Exception) {
+                return@withContext kotlin.Result.failure(e)
+            }
             val nowStr = java.time.Instant.now().toString()
             val updates = mutableMapOf<String, Any>("check_in_lat" to lat, "check_in_long" to lng, "check_in_time" to nowStr, "plan_status" to "checked_in", "is_location_verified" to isVerified)
             distanceDeviation?.let { updates["distance_deviation"] = it }
@@ -438,7 +501,7 @@ class ActivityRepository @Inject constructor(
             try {
                 // ✅ W6 เดิมเช็คแค่ชั้น UI (CheckInScreen's navigation guard) — entry point อื่นที่
                 // เรียก repository ตรงๆ เช็คอินซ้ำ/เช็คอินนัดที่ขาดนัดไปแล้วได้เลย ย้ายมาเช็คที่นี่แทน
-                val existing = activityDao.getActivityById(activityId)
+                val existing = activityDao.getActivityById(resolvedId)
                     ?: return@withContext kotlin.Result.failure(Exception("ไม่พบนัดหมายนี้ในเครื่อง"))
                 if (com.example.pp68_salestrackingapp.utils.AppointmentStatus.effective(existing.status, existing.activityDate, existing.activityType) != "planned") {
                     return@withContext kotlin.Result.failure(Exception("นัดหมายนี้เช็คอินไม่ได้แล้ว (เช็คอินไปแล้ว/ขาดนัด/เสร็จสิ้นแล้ว)"))
@@ -449,20 +512,25 @@ class ActivityRepository @Inject constructor(
                 return@withContext kotlin.Result.failure(Exception("บันทึกเช็คอินไม่สำเร็จ: ${e.message}"))
             }
 
+            if (resolvedId.startsWith("TEMP-")) {
+                syncManager.scheduleSync()
+                return@withContext kotlin.Result.success(Unit)
+            }
+
             // ── ชั้น server ──────────────────────────────────────────────────────────────
             // HTTP error ไม่โยน exception — ถ้าไม่ตรวจผลแล้วปัก is_synced = true ไว้เลย
             // outbox จะข้ามแถวนี้ตลอดไป แล้วการเช็คอินจะหายจาก server อย่างถาวร
             try {
-                val response = retrySend(idempotent = true, tag = "updateActivity") { apiService.updateActivity("eq.$activityId", updates) }
+                val response = retrySend(idempotent = true, tag = "updateActivity") { apiService.updateActivity("eq.$resolvedId", updates) }
                 when {
                     response.isSuccessful && response.body()?.isNotEmpty() == true -> {
-                        activityDao.updateSyncStatus(activityId, true)
+                        activityDao.updateSyncStatus(resolvedId, true)
                         kotlin.Result.success(Unit)
                     }
                     response.code() == 403 -> {
                         // ❌ server ปฏิเสธถาวร (ไม่ใช่เคส "ไม่ตรวจผล" ที่คอมเมนต์ข้างบนพูดถึง — ตรงนั้นคือ
                         // ตอบ 2xx แต่ body ว่าง) ต้องบอกผู้ใช้ตรง ๆ ว่าเช็คอินไม่สำเร็จ ไม่ใช่เงียบไว้แล้วลองซ้ำ
-                        syncManager.markBlocked("activity", activityId)
+                        syncManager.markBlocked("activity", resolvedId)
                         // ✅ ViewModel เติม "เช็คอินไม่สำเร็จ: " นำหน้าเองแล้ว (ActivityDetailViewModel.confirmCheckin)
                         // ข้อความตรงนี้จึงมีแค่เหตุผล ไม่งั้นจะซ้ำเป็น "เช็คอินไม่สำเร็จ: เช็คอินไม่สำเร็จ: ..."
                         kotlin.Result.failure(Exception("ไม่มีสิทธิ์ทำรายการนี้"))
@@ -482,18 +550,28 @@ class ActivityRepository @Inject constructor(
 
     suspend fun finishActivity(activityId: String, doneMasterIds: List<Int>, note: String?): kotlin.Result<Unit> {
         return withContext(Dispatchers.IO) {
+            val resolvedId = try {
+                localIdMappingDao.resolveExistingId(LocalIdMapping.ENTITY_ACTIVITY, activityId)
+            } catch (e: Exception) {
+                return@withContext kotlin.Result.failure(e)
+            }
             // ── ชั้นในเครื่อง: ต้องเขียนทั้ง checklist และสถานะให้ครบก่อน ────────────────────
             // เดิมถ้า planItemDao พังกลางทาง catch จะเขียนแค่สถานะ (และเขียน weeklyNote แต่ลืม note)
             // แล้วคืน success(Unit) — ติ๊ก checklist หายเงียบ ๆ ทั้งที่ผู้ใช้เห็นว่าบันทึกสำเร็จ
             try {
-                val currentItems = planItemDao.getPlanItemsByAppointmentId(activityId)
+                val currentItems = planItemDao.getPlanItemsByAppointmentId(resolvedId)
                 planItemDao.insertPlanItems(currentItems.map { it.copy(isDone = it.masterId in doneMasterIds) })
-                val local = activityDao.getActivityById(activityId)
+                val local = activityDao.getActivityById(resolvedId)
                     ?: return@withContext kotlin.Result.failure(Exception("ไม่พบนัดหมายนี้ในเครื่อง"))
                 activityDao.insertActivity(local.copy(status = "completed", note = note, weeklyNote = note, isSynced = false))
             } catch (e: Exception) {
                 Log.e("ActivityRepository", "finishActivity: เขียนลงเครื่องไม่สำเร็จ $activityId", e)
                 return@withContext kotlin.Result.failure(Exception("บันทึกสถานะเสร็จสิ้นไม่สำเร็จ: ${e.message}"))
+            }
+
+            if (resolvedId.startsWith("TEMP-")) {
+                syncManager.scheduleSync()
+                return@withContext kotlin.Result.success(Unit)
             }
 
             // ── ชั้น server ──────────────────────────────────────────────────────────────
@@ -503,14 +581,14 @@ class ActivityRepository @Inject constructor(
             val updates = mutableMapOf<String, Any>("plan_status" to "completed")
             note?.let { updates["note"] = it }
             try {
-                val response = retrySend(idempotent = true, tag = "updateActivity") { apiService.updateActivity("eq.$activityId", updates) }
+                val response = retrySend(idempotent = true, tag = "updateActivity") { apiService.updateActivity("eq.$resolvedId", updates) }
                 when {
                     response.isSuccessful && response.body()?.isNotEmpty() == true -> {
-                        activityDao.updateSyncStatus(activityId, true)
+                        activityDao.updateSyncStatus(resolvedId, true)
                         kotlin.Result.success(Unit)
                     }
                     response.code() == 403 -> {
-                        syncManager.markBlocked("activity", activityId)
+                        syncManager.markBlocked("activity", resolvedId)
                         kotlin.Result.failure(Exception("บันทึกสถานะเสร็จสิ้นไม่สำเร็จ: ไม่มีสิทธิ์ทำรายการนี้"))
                     }
                     else -> {
@@ -574,12 +652,14 @@ class ActivityRepository @Inject constructor(
 
     suspend fun deleteActivity(activityId: String): kotlin.Result<Unit> {
         return withContext(Dispatchers.IO) {
+            var resolvedId = activityId
             try {
+                resolvedId = localIdMappingDao.resolveExistingId(LocalIdMapping.ENTITY_ACTIVITY, activityId)
                 // ✅ W6 เดิมเช็คแค่ชั้น UI (HomeScreen.canDelete) — entry point อื่นที่เรียก
                 // repository ตรงๆ ข้ามกฎห้ามลบไปได้เลย จุดนี้คือจุดบล็อกจริงที่ทุกทางต้องผ่าน
                 // ตัดสินด้วย isDeleteLocked ตัวเดียวกับที่ UI ใช้ซ่อนปุ่ม แล้วค่อยเลือกข้อความ
                 // ตามเหตุผลที่โดนบล็อก เพื่อไม่ให้สองที่นิยามกฎต่างกัน
-                val existing = activityDao.getActivityById(activityId)
+                val existing = activityDao.getActivityById(resolvedId)
                 val status = com.example.pp68_salestrackingapp.utils.AppointmentStatus
                 if (existing != null &&
                     status.isDeleteLocked(existing.status, existing.activityDate, existing.activityType)
@@ -592,26 +672,27 @@ class ActivityRepository @Inject constructor(
                     }
                     return@withContext kotlin.Result.failure(Exception(message))
                 }
-                if (activityId.startsWith("TEMP-")) {
-                    activityDao.deleteActivityById(activityId)
-                    deleteChildRowsOf(activityId)
-                    cancelAlarmSafely(activityId)
+                if (resolvedId.startsWith("TEMP-")) {
+                    activityDao.deleteActivityById(resolvedId)
+                    deleteChildRowsOf(resolvedId)
+                    cancelAlarmSafely(resolvedId)
                     return@withContext kotlin.Result.success(Unit)
                 }
-                val response = apiService.deleteActivity("eq.$activityId")
+                val response = apiService.deleteActivity("eq.$resolvedId")
                 if (response.isSuccessful) {
-                    activityDao.deleteActivityById(activityId)
-                    deleteChildRowsOf(activityId)
-                    cancelAlarmSafely(activityId)
+                    activityDao.deleteActivityById(resolvedId)
+                    deleteChildRowsOf(resolvedId)
+                    cancelAlarmSafely(resolvedId)
+                    if (activityId != resolvedId) cancelAlarmSafely(activityId)
                     kotlin.Result.success(Unit)
                 } else {
                     kotlin.Result.failure(Exception("ลบนัดหมายบนเซิร์ฟเวอร์ไม่สำเร็จ"))
                 }
             } catch (e: Exception) {
-                if (activityId.startsWith("TEMP-")) {
-                    activityDao.deleteActivityById(activityId)
-                    deleteChildRowsOf(activityId)
-                    cancelAlarmSafely(activityId)
+                if (resolvedId.startsWith("TEMP-")) {
+                    activityDao.deleteActivityById(resolvedId)
+                    deleteChildRowsOf(resolvedId)
+                    cancelAlarmSafely(resolvedId)
                     kotlin.Result.success(Unit)
                 } else {
                     // หากออฟไลน์ ห้ามลบข้อมูลที่ซิงค์แล้วในเครื่อง ไม่งั้นจะเป็น Zombie Data (ดึงกลับมาใหม่เมื่อออนไลน์)
@@ -623,8 +704,12 @@ class ActivityRepository @Inject constructor(
 
     suspend fun getActivityResult(activityId: String): ActivityResult? {
         return withContext(Dispatchers.IO) {
+            val resolvedActivityId = localIdMappingDao.resolveMappedId(LocalIdMapping.ENTITY_ACTIVITY, activityId)
             try {
-                val resp = apiService.getActivityResult("eq.$activityId")
+                if (resolvedActivityId.startsWith("TEMP-")) {
+                    return@withContext resultDao.getResultByActivityId(resolvedActivityId)
+                }
+                val resp = apiService.getActivityResult("eq.$resolvedActivityId")
                 if (resp.isSuccessful && !resp.body().isNullOrEmpty()) {
                     val result = resp.body()!!.first().copy(isSynced = true)
                     // ✅ insertResult ใช้ OnConflictStrategy.REPLACE — ถ้า result_id นี้มีอยู่แล้วในเครื่อง
@@ -634,8 +719,8 @@ class ActivityRepository @Inject constructor(
                     refreshPhotosForResult(result.resultId)
                     return@withContext result
                 }
-                resultDao.getResultByActivityId(activityId)
-            } catch (e: Exception) { resultDao.getResultByActivityId(activityId) }
+                resultDao.getResultByActivityId(resolvedActivityId)
+            } catch (e: Exception) { resultDao.getResultByActivityId(resolvedActivityId) }
         }
     }
 
@@ -648,10 +733,12 @@ class ActivityRepository @Inject constructor(
 
     suspend fun getResultById(resultId: String): ActivityResult? {
         return withContext(Dispatchers.IO) {
+            val resolvedId = localIdMappingDao.resolveMappedId(LocalIdMapping.ENTITY_RESULT, resultId)
             try {
-                val local = resultDao.getResultById(resultId)
+                val local = resultDao.getResultById(resolvedId)
                 if (local != null) return@withContext local
-                val resp = apiService.getResultById("eq.$resultId")
+                if (resolvedId.startsWith("TEMP-")) return@withContext null
+                val resp = apiService.getResultById("eq.$resolvedId")
                 if (resp.isSuccessful && !resp.body().isNullOrEmpty()) {
                     val result = resp.body()!!.first().copy(isSynced = true)
                     resultDao.insertResult(result)
@@ -715,16 +802,28 @@ class ActivityRepository @Inject constructor(
         }
         // เขียน result, URL เดิม และคิวไฟล์ใหม่ใน transaction เดียวกัน
         // exception จะหลุดออกไปถึง ViewModel เป็น crash แทนที่จะเป็น failure ที่แสดงให้ผู้ใช้เห็นได้
+        val persistedResult: ActivityResult
         try {
-            resultDao.insertResultWithAttachments(previous?.resultId, localResult, remotePhotos, attachments)
+            persistedResult = localIdMappingDao.insertResultWithAttachmentsResolvingParents(
+                previous?.resultId,
+                localResult,
+                remotePhotos,
+                attachments
+            )
         } catch (e: Exception) {
             Log.e("ActivityRepository", "saveResultAsNewVersion: เขียนลงเครื่องไม่สำเร็จ", e)
             return kotlin.Result.failure(Exception("บันทึกผลการขายไม่สำเร็จ: ${e.message}"))
         }
+        if (persistedResult.activityId?.startsWith("TEMP-") == true ||
+            persistedResult.projectId?.startsWith("TEMP-") == true
+        ) {
+            syncManager.scheduleSync()
+            return kotlin.Result.success(Unit)
+        }
         return try {
-            val body = CreateRequestPayloads.result(localResult, includeResultId = false)
+            val body = CreateRequestPayloads.result(persistedResult, includeResultId = false)
             val apiResp = retrySend(idempotent = false, tag = "saveResult") {
-                apiService.insertActivityResultMap(body, localResult.operationId)
+                apiService.insertActivityResultMap(body, persistedResult.operationId)
             }
             if (apiResp.isSuccessful) {
                 val serverRow = apiResp.body()?.firstOrNull()
@@ -746,12 +845,12 @@ class ActivityRepository @Inject constructor(
                 val finalGroupId = acceptedRow.resultGroupId ?: previous?.resultGroupId ?: previous?.resultId ?: realId
                 // ✅ ต้อง insert แถว realId ก่อน แล้วค่อยย้ายรูปมาที่ realId แล้วค่อยลบ tempId ทีหลัง
                 // เพราะ activity_result_photo มี FK CASCADE ไปยัง activity_result — ถ้าลบ tempId ก่อน รูปที่ยังผูกกับ tempId จะโดนลบไปด้วย
-                resultDao.replaceTemporaryResult(tempId, localResult.copy(
+                localIdMappingDao.replaceTemporaryResult(tempId, persistedResult.copy(
                     resultId = realId,
                     version = acceptedRow.version,
                     resultGroupId = finalGroupId,
                     isSynced = true,
-                    operationId = localResult.operationId
+                    operationId = persistedResult.operationId
                 ))
                 if (remotePhotos.isNotEmpty()) {
                     try { apiService.addResultPhotos(photoDao.getPhotosByResultId(realId)) } catch (_: Exception) {}
@@ -769,7 +868,7 @@ class ActivityRepository @Inject constructor(
                         syncManager.scheduleSync()
                     }
                 }
-                syncProjectStatus(localResult)
+                syncProjectStatus(persistedResult)
                 if (attachments.isNotEmpty()) syncManager.scheduleSync()
                 kotlin.Result.success(Unit)
             } else if (apiResp.code() == 403) {
@@ -789,14 +888,23 @@ class ActivityRepository @Inject constructor(
     }
 
     suspend fun getResultPhotos(resultId: String): List<String> {
-        return withContext(Dispatchers.IO) { photoDao.getPhotosByResultId(resultId).map { it.photoUrl } }
+        return withContext(Dispatchers.IO) {
+            val resolvedId = localIdMappingDao.resolveMappedId(LocalIdMapping.ENTITY_RESULT, resultId)
+            photoDao.getPhotosByResultId(resolvedId).map { it.photoUrl }
+        }
     }
 
     suspend fun getResultPhotoEntries(resultId: String): List<ActivityResultPhoto> =
-        withContext(Dispatchers.IO) { photoDao.getPhotosByResultId(resultId) }
+        withContext(Dispatchers.IO) {
+            val resolvedId = localIdMappingDao.resolveMappedId(LocalIdMapping.ENTITY_RESULT, resultId)
+            photoDao.getPhotosByResultId(resolvedId)
+        }
 
     suspend fun getPendingResultAttachments(resultId: String): List<AttachmentOutbox> =
-        withContext(Dispatchers.IO) { resultDao.getAttachmentOutboxByResultId(resultId) }
+        withContext(Dispatchers.IO) {
+            val resolvedId = localIdMappingDao.resolveMappedId(LocalIdMapping.ENTITY_RESULT, resultId)
+            resultDao.getAttachmentOutboxByResultId(resolvedId)
+        }
 
     // ✅ ให้ export รายงานดึงรูปของหลาย result ทีเดียวแทนที่จะ query ทีละตัวต่อ activity/result
     // (เดิม O(N) query ต่อการ export หนึ่งครั้ง ตอนนี้เหลือ 1 query)
@@ -810,7 +918,10 @@ class ActivityRepository @Inject constructor(
     // เก็บชื่อสถานที่ที่ reverse geocode มาแล้วไว้ใน Room — เป็น local-only field
     // ไม่ต้องตั้ง is_synced = false เพราะไม่ได้ส่งขึ้น server (ไม่มี @SerializedName)
     suspend fun cacheLocationName(activityId: String, locationName: String) {
-        withContext(Dispatchers.IO) { activityDao.updateLocationName(activityId, locationName) }
+        withContext(Dispatchers.IO) {
+            val resolvedId = localIdMappingDao.resolveMappedId(LocalIdMapping.ENTITY_ACTIVITY, activityId)
+            activityDao.updateLocationName(resolvedId, locationName)
+        }
     }
 
     private suspend fun syncProjectStatus(result: ActivityResult) {
@@ -846,29 +957,29 @@ class ActivityRepository @Inject constructor(
 
     suspend fun getActivitiesByProjectId(projectId: String): List<SalesActivity> {
         return withContext(Dispatchers.IO) {
-            try { activityDao.getActivitiesByProject(projectId).first().map { enrichActivity(it) } }
+            val resolvedId = localIdMappingDao.resolveMappedId(LocalIdMapping.ENTITY_PROJECT, projectId)
+            try { activityDao.getActivitiesByProject(resolvedId).first().map { enrichActivity(it) } }
             catch (e: Exception) { emptyList() }
         }
     }
 
     suspend fun saveAppointmentContacts(appointmentId: String, contactIds: List<String>) {
         withContext(Dispatchers.IO) {
-            appointmentContactDao.deleteContactsByAppointmentId(appointmentId)
-            val items = contactIds.map { AppointmentContact(appointmentId, it) }
-            if (items.isNotEmpty()) {
-                appointmentContactDao.insertAppointmentContacts(items)
-            }
+            val (resolvedAppointmentId, items) = localIdMappingDao.replaceAppointmentContactsResolvingIds(
+                appointmentId,
+                contactIds
+            )
             // ✅ ต้องยิง delete เสมอแม้ items ว่างเปล่า (ลบผู้เข้าร่วมออกหมด) ไม่งั้น server จะเหลือ
             // รายชื่อเดิมค้างอยู่ตลอดไปเพราะ if (items.isNotEmpty()) เดิมครอบ delete ไว้ด้วย
-            if (!appointmentId.startsWith("TEMP-")) {
+            if (!resolvedAppointmentId.startsWith("TEMP-") && items.none { it.contactId.startsWith("TEMP-") }) {
                 try {
                     // ✅ ต้องดูผลด้วย — เซิร์ฟเวอร์ตอบ 4xx/5xx ไม่ได้โยน exception ออกมา จึงตกไปที่
                     // "ถือว่าสำเร็จ" เงียบ ๆ ทั้งที่รายชื่อไม่เคยขึ้นไปถึง (เดิมจับแค่ IOException
                     // ซึ่งครอบแค่กรณีเน็ตหลุด) ปักธงให้ outbox ตามส่งด้วยกลไกเดียวกับตอนออฟไลน์
-                    val deleted = apiService.deleteAppointmentContacts("eq.$appointmentId")
+                    val deleted = apiService.deleteAppointmentContacts("eq.$resolvedAppointmentId")
                     val added = if (items.isNotEmpty()) apiService.addAppointmentContacts(items) else null
                     if (!deleted.isSuccessful || added?.isSuccessful == false) {
-                        activityDao.updateSyncStatus(appointmentId, false)
+                        activityDao.updateSyncStatus(resolvedAppointmentId, false)
                         syncManager.scheduleSync()
                     }
                 } catch (_: IOException) {
@@ -876,14 +987,20 @@ class ActivityRepository @Inject constructor(
                     // และ outbox วนเฉพาะนัดหมายที่ is_synced = 0 — ถ้าไม่ปักธงตรงนี้ การแก้ผู้เข้าร่วม
                     // ตอนออฟไลน์จะไม่มีวันถูกอัปขึ้น server เลย แล้วหายถาวรตอน login รอบหน้าที่ล้าง DB
                     // (saveProjectContacts กันไว้แบบเดียวกันอยู่แล้ว ฝั่งนัดหมายเดิมตกไป)
-                    activityDao.updateSyncStatus(appointmentId, false)
+                    activityDao.updateSyncStatus(resolvedAppointmentId, false)
                     syncManager.scheduleSync()
                 }
+            } else {
+                activityDao.updateSyncStatus(resolvedAppointmentId, false)
+                syncManager.scheduleSync()
             }
         }
     }
 
     suspend fun getAppointmentContacts(appointmentId: String): List<String> {
-        return withContext(Dispatchers.IO) { appointmentContactDao.getContactsByAppointmentId(appointmentId).map { it.contactId } }
+        return withContext(Dispatchers.IO) {
+            val resolvedId = localIdMappingDao.resolveMappedId(LocalIdMapping.ENTITY_ACTIVITY, appointmentId)
+            appointmentContactDao.getContactsByAppointmentId(resolvedId).map { it.contactId }
+        }
     }
 }

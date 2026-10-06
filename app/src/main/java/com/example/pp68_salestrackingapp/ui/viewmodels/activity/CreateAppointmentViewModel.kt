@@ -16,6 +16,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
@@ -59,6 +61,7 @@ data class CreateAppointmentUiState(
     val isLoadingContacts: Boolean = false,
     val isLoadingMasters:  Boolean = false,
     val isLoadingCompanies: Boolean = false,
+    val companySearchMessage: String? = null,
     val isSaved:           Boolean = false,
 
     val projectError: String? = null,
@@ -119,6 +122,7 @@ sealed class CreateAppointmentEvent {
     object DismissDraftPrompt : CreateAppointmentEvent()
     data class ProjectSelected(val id: String?, val name: String?, val status: String?) : CreateAppointmentEvent()
     data class CompanySelected(val id: String, val name: String) : CreateAppointmentEvent()
+    data class CompanyQueryChanged(val value: String)           : CreateAppointmentEvent()
     data class ToggleQuickAddCustomer(val isOpen: Boolean)   : CreateAppointmentEvent()
     data class QuickAddCustomerChanged(val name: String, val type: String) : CreateAppointmentEvent()
     object SaveQuickAddCustomer                             : CreateAppointmentEvent()
@@ -159,6 +163,8 @@ class CreateAppointmentViewModel @Inject constructor(
 
     private val _uiState = MutableStateFlow(CreateAppointmentUiState())
     val uiState: StateFlow<CreateAppointmentUiState> = _uiState
+    private var leadCompanyOptions: List<Pair<String, String>> = emptyList()
+    private var companySearchJob: Job? = null
 
     private val draft = com.example.pp68_salestrackingapp.utils.DraftController(
         store = draftStore,
@@ -238,15 +244,55 @@ class CreateAppointmentViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.update { it.copy(isLoadingCompanies = true) }
             customerRepo.getCustomers().onSuccess { customers ->
+                leadCompanyOptions = customers.map { c -> c.custId to c.companyName }.withUniqueLabels()
                 _uiState.update {
                     it.copy(
-                        companyOptions    = customers.map { c -> c.custId to c.companyName }.withUniqueLabels(),
+                        companyOptions    = leadCompanyOptions,
                         isLoadingCompanies = false
                     )
                 }
             }.onFailure {
                 _uiState.update { it.copy(isLoadingCompanies = false) }
             }
+        }
+    }
+
+    private fun searchCompanies(query: String) {
+        companySearchJob?.cancel()
+        val normalized = query.trim()
+        if (normalized.length < 2) {
+            _uiState.update {
+                it.copy(
+                    companyOptions = leadCompanyOptions,
+                    companySearchMessage = if (normalized.isEmpty()) null else "พิมพ์อย่างน้อย 2 ตัวอักษรเพื่อค้นหาลูกค้า ERP"
+                )
+            }
+            return
+        }
+        companySearchJob = viewModelScope.launch {
+            delay(400)
+            _uiState.update { it.copy(companySearchMessage = "กำลังค้นหาลูกค้า ERP…") }
+            customerRepo.searchErpCustomers(normalized).fold(
+                onSuccess = { remote ->
+                    val remoteOptions = remote.map { it.customerCode to it.customerName }
+                    _uiState.update {
+                        it.copy(
+                            companyOptions = (leadCompanyOptions + remoteOptions)
+                                .distinctBy { option -> option.first }
+                                .withUniqueLabels(),
+                            companySearchMessage = if (remote.isEmpty()) "ไม่พบลูกค้า ERP จากคำค้นนี้" else null
+                        )
+                    }
+                },
+                onFailure = {
+                    _uiState.update {
+                        it.copy(
+                            companyOptions = leadCompanyOptions,
+                            companySearchMessage = "ค้นหา ERP ไม่ได้ กรุณาตรวจสอบอินเทอร์เน็ต (Lead ในเครื่องยังเลือกได้)"
+                        )
+                    }
+                }
+            )
         }
     }
 
@@ -358,6 +404,7 @@ class CreateAppointmentViewModel @Inject constructor(
                 // TEMP- จำเป็น — outbox ใช้คำนำหน้านี้ตัดสินว่าจะ POST หรือ PATCH
                 contactId = "TEMP-" + java.util.UUID.randomUUID().toString().take(8).uppercase(),
                 custId = custId,
+                customerName = s.selectedCompanyName,
                 fullName = s.quickAddContactName.trim(),
                 phoneNumber = s.quickAddContactPhone.trim(),
                 // เจ้าของผู้ติดต่อ = คนที่สร้าง ใช้กรองการมองเห็น (บริษัทเห็นร่วมกันทั้งสาขา แต่
@@ -704,6 +751,7 @@ class CreateAppointmentViewModel @Inject constructor(
                     loadContactsForCustomer(custId)
                 }
             }
+            is CreateAppointmentEvent.CompanyQueryChanged -> searchCompanies(event.value)
 
             is CreateAppointmentEvent.ToggleQuickAddCustomer ->
                 _uiState.update {

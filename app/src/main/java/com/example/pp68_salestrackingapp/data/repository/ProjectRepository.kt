@@ -3,6 +3,8 @@ package com.example.pp68_salestrackingapp.data.repository
 import com.example.pp68_salestrackingapp.data.local.ContactDao
 import com.example.pp68_salestrackingapp.data.local.ProjectContactDao
 import com.example.pp68_salestrackingapp.data.local.ProjectDao
+import com.example.pp68_salestrackingapp.data.local.LocalIdMappingDao
+import com.example.pp68_salestrackingapp.data.model.LocalIdMapping
 import com.example.pp68_salestrackingapp.data.model.ContactPerson
 import com.example.pp68_salestrackingapp.data.model.Project
 import com.example.pp68_salestrackingapp.data.model.ProjectContact
@@ -15,6 +17,8 @@ import androidx.paging.PagingConfig
 import androidx.paging.PagingData
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import java.io.IOException
@@ -26,9 +30,11 @@ import com.example.pp68_salestrackingapp.utils.retrySend
 import com.example.pp68_salestrackingapp.utils.ProjectStages
 import com.example.pp68_salestrackingapp.data.remote.CreateRequestPayloads
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class ProjectRepository @Inject constructor(
     private val apiService: ApiService,
     private val projectDao: ProjectDao,
+    private val localIdMappingDao: LocalIdMappingDao,
     private val projectContactDao: ProjectContactDao,
     private val contactDao: ContactDao,
     private val syncManager: SyncManager,
@@ -70,7 +76,13 @@ class ProjectRepository @Inject constructor(
         }
     ).flow
 
-    fun getProjectByIdFlow(projectId: String): Flow<Project?> = projectDao.getProjectByIdFlow(projectId)
+    fun getProjectByIdFlow(projectId: String): Flow<Project?> =
+        if (projectId.startsWith("TEMP-")) {
+            localIdMappingDao.observeRealId(LocalIdMapping.ENTITY_PROJECT, projectId)
+                .flatMapLatest { projectDao.getProjectByIdFlow(it ?: projectId) }
+        } else {
+            projectDao.getProjectByIdFlow(projectId)
+        }
 
     private companion object {
         const val PROJECT_PAGE_SIZE = 30
@@ -115,15 +127,19 @@ class ProjectRepository @Inject constructor(
                 createdAt = project.createdAt ?: today,
                 operationId = project.operationId ?: java.util.UUID.randomUUID().toString()
             )
-            projectDao.insertProject(tempProject)
+            val localProject = localIdMappingDao.insertProjectResolvingCustomer(tempProject)
+            if (localProject.custId?.startsWith("TEMP-") == true) {
+                syncManager.scheduleSync()
+                return@withContext Result.success(localProject)
+            }
             try {
-                val body = CreateRequestPayloads.project(tempProject)
+                val body = CreateRequestPayloads.project(localProject)
                 // ไม่ log ตัว body — มันมีชื่อลูกค้า มูลค่าโครงการ วันที่ปิดดีล ครบชุด และ
                 // minifyEnabled = false จึงไม่มี ProGuard มาตัด Log.d ออกตอน build release
                 // แปลว่าข้อมูลลูกค้าจริงถูกพิมพ์ลง logcat ของเครื่องผู้ใช้ทุกครั้งที่สร้างโครงการ
                 Log.d("ProjectRepo", "POST project (${body.size} fields)")
                 val response = retrySend(idempotent = false, tag = "createProject") {
-                    apiService.addProject(body, tempProject.operationId)
+                    apiService.addProject(body, localProject.operationId)
                 }
                 Log.d("ProjectRepo", "POST project → HTTP ${response.code()}")
                 if (response.isSuccessful) {
@@ -131,23 +147,23 @@ class ProjectRepository @Inject constructor(
                     Log.d("ProjectRepo", "realId=$realId tempId=$tempId")
                     val finalProject = if (realId != null && realId != tempId) {
                         val returnedProject = response.body()?.first()
-                        val real = (returnedProject ?: tempProject.copy(projectId = realId)).copy(
+                        val real = (returnedProject ?: localProject.copy(projectId = realId)).copy(
                             isSynced = true,
-                            operationId = tempProject.operationId
+                            operationId = localProject.operationId
                         )
-                        projectDao.replaceTemporaryProject(tempId, real)
+                        localIdMappingDao.replaceTemporaryProject(tempId, real)
                         real
                     } else {
                         val returnedProject = response.body()?.firstOrNull()
                         if (returnedProject != null) {
                             projectDao.insertProject(returnedProject.copy(
                                 isSynced = true,
-                                operationId = tempProject.operationId
+                                operationId = localProject.operationId
                             ))
                         } else {
                             projectDao.updateSyncStatus(tempId, true)
                         }
-                        returnedProject?.copy(isSynced = true) ?: tempProject
+                        returnedProject?.copy(isSynced = true) ?: localProject
                     }
                     Result.success(finalProject)
                 } else {
@@ -167,7 +183,7 @@ class ProjectRepository @Inject constructor(
                 // ไม่มีเน็ต — เก็บไว้ใน Room รอ retry ตาม offline-first แต่ถ้าเน็ตดีอยู่แล้ว
                 // ยังส่งไม่ขึ้น ต้องบอกผู้ใช้ ไม่ใช่ปล่อยให้เข้าใจว่าโครงการถูกสร้างบน server แล้ว
                 syncManager.scheduleSync()
-                networkMonitor.queuedOrFailed(tempProject, e.message)
+                networkMonitor.queuedOrFailed(localProject, e.message)
             } catch (e: Exception) { Result.failure(e) }
         }
     }
@@ -177,30 +193,47 @@ class ProjectRepository @Inject constructor(
     // ไม่มีการเดาจากวันที่ใกล้เคียงฝั่ง backend แล้ว เพราะนัดหมายใกล้วันที่สุดอาจไม่ใช่ของโครงการนี้เลย
     suspend fun updateProject(project: Project, resultAppointmentId: String? = null): kotlin.Result<Unit> {
         return withContext(Dispatchers.IO) {
-            val localProject = project.copy(isSynced = false)
-            projectDao.insertProject(localProject)
+            val resolvedProjectId = try {
+                localIdMappingDao.resolveExistingId(LocalIdMapping.ENTITY_PROJECT, project.projectId)
+            } catch (e: Exception) {
+                return@withContext kotlin.Result.failure(e)
+            }
+            val localProject = try {
+                localIdMappingDao.insertProjectResolvingCustomer(
+                    project.copy(projectId = resolvedProjectId, isSynced = false)
+                )
+            } catch (e: Exception) {
+                return@withContext kotlin.Result.failure(e)
+            }
+            val resolvedAppointmentId = resultAppointmentId?.let {
+                localIdMappingDao.resolveMappedId(LocalIdMapping.ENTITY_ACTIVITY, it)
+            }
+            if (resolvedProjectId.startsWith("TEMP-") || localProject.custId?.startsWith("TEMP-") == true) {
+                syncManager.scheduleSync()
+                return@withContext kotlin.Result.success(Unit)
+            }
             try {
                 val updates = mutableMapOf<String, Any?>(
-                    "customer_code" to project.custId,
-                    "customer_name" to project.customerName,
-                    "project_name" to project.projectName,
-                    "project_status" to project.projectStatus,
-                    "expected_value" to project.expectedValue,
-                    "branch_code" to project.branchId,
-                    "billing_branch_id" to project.billingBranchId,
-                    "opportunity_score" to project.opportunityScore,
-                    "loss_reason" to project.lossReason,
-                    "loss_reason_note" to project.lossReasonNote,
-                    "deal_position" to project.dealPosition,
-                    "current_solution" to project.previousSolution,
-                    "counterparty_type" to project.counterpartyType,
-                    "response_speed" to project.responseSpeed,
-                    "is_proposal_sent" to project.isProposalSent,
-                    "proposal_date" to project.proposalDate,
-                    "competitor_count" to project.competitorCount,
-                    "start_date" to project.startDate,
-                    "closing_date" to project.closingDate,
-                    "progress_pct" to project.progressPct,
+                    "customer_code" to localProject.custId,
+                    "customer_name" to localProject.customerName,
+                    "project_name" to localProject.projectName,
+                    "project_status" to localProject.projectStatus,
+                    "expected_value" to localProject.expectedValue,
+                    "branch_code" to localProject.branchId,
+                    "billing_branch_id" to localProject.billingBranchId,
+                    "opportunity_score" to localProject.opportunityScore,
+                    "loss_reason" to localProject.lossReason,
+                    "loss_reason_note" to localProject.lossReasonNote,
+                    "deal_position" to localProject.dealPosition,
+                    "current_solution" to localProject.previousSolution,
+                    "counterparty_type" to localProject.counterpartyType,
+                    "response_speed" to localProject.responseSpeed,
+                    "is_proposal_sent" to localProject.isProposalSent,
+                    "proposal_date" to localProject.proposalDate,
+                    "competitor_count" to localProject.competitorCount,
+                    "start_date" to localProject.startDate,
+                    "closing_date" to localProject.closingDate,
+                    "progress_pct" to localProject.progressPct,
                     "updated_at" to java.time.Instant.now().toString()
                 ).filterValues { it != null }.toMutableMap()
                 // ✅ filterValues ข้างบนจำเป็น — มันกันฟิลด์ที่ผู้เรียกไม่ได้ดูแล (progress_pct,
@@ -209,27 +242,28 @@ class ProjectRepository @Inject constructor(
                 // (ฟอร์มแก้โครงการ และ syncProjectStatus ตอนสถานะออกจาก Lost/Failed) ตั้งใจให้ล้าง
                 // ถ้าปล่อยให้ถูกกรองทิ้ง โครงการที่กลับมาเดินต่อจะยังติดเหตุผลที่ไม่ได้งานค้างบน server
                 // แล้วแถวที่ตอบกลับมาก็เขียนทับ Room ให้ค่าเก่าเด้งกลับมาให้ผู้ใช้เห็นว่า "แก้ไม่ติด"
-                updates["loss_reason"] = project.lossReason
-                updates["loss_reason_note"] = project.lossReasonNote
+                updates["loss_reason"] = localProject.lossReason
+                updates["loss_reason_note"] = localProject.lossReasonNote
                 // ✅ สามช่องนี้ฟอร์มแก้โครงการเป็นเจ้าของเต็มและลบทิ้งได้จริง (AddProjectViewModel
                 // ส่ง toDoubleOrNull() / ifBlank { null }) ถ้าปล่อยให้ filterValues ตัดทิ้งตอนเป็น null
                 // = ลบมูลค่าหรือวันที่แล้วบันทึก ค่าเก่ายังอยู่บน server แล้ว refresh ดึงกลับมาทับ
                 // ส่ง "" แทน null เพราะ Gson ไม่ได้เปิด serializeNulls — backend แปลง "" เป็น NULL ให้
                 // (ผู้เรียกอีกทางคือ syncProjectStatus ซึ่งส่งแถวเต็มจาก Room จึงไม่กระทบ)
-                updates["expected_value"] = project.expectedValue?.toString() ?: ""
-                updates["start_date"] = project.startDate.orEmpty()
-                updates["closing_date"] = project.closingDate.orEmpty()
-                project.projectLat?.let { updates["project_lat"] = it }
-                project.projectLong?.let { updates["project_long"] = it }
-                resultAppointmentId?.let { updates["stage_appointment_id"] = it }
+                updates["expected_value"] = localProject.expectedValue?.toString() ?: ""
+                updates["start_date"] = localProject.startDate.orEmpty()
+                updates["closing_date"] = localProject.closingDate.orEmpty()
+                localProject.projectLat?.let { updates["project_lat"] = it }
+                localProject.projectLong?.let { updates["project_long"] = it }
+                resolvedAppointmentId?.takeUnless { it.startsWith("TEMP-") }
+                    ?.let { updates["stage_appointment_id"] = it }
 
-                val response = retrySend(idempotent = true, tag = "updateProject") { apiService.updateProject("eq.${project.projectId}", updates) }
+                val response = retrySend(idempotent = true, tag = "updateProject") { apiService.updateProject("eq.$resolvedProjectId", updates) }
                 if (response.isSuccessful && response.body()?.isNotEmpty() == true) {
                     val returnedProject = response.body()!!.first().copy(isSynced = true)
                     projectDao.insertProject(returnedProject)
                     kotlin.Result.success(Unit)
                 } else if (response.code() == 403) {
-                    syncManager.markBlocked("project", project.projectId)
+                    syncManager.markBlocked("project", resolvedProjectId)
                     kotlin.Result.failure(Exception("แก้ไขโครงการไม่สำเร็จ: ไม่มีสิทธิ์ทำรายการนี้"))
                 } else {
                     syncManager.scheduleSync()
@@ -246,27 +280,28 @@ class ProjectRepository @Inject constructor(
     suspend fun deleteProject(projectId: String): Result<Unit> {
         return withContext(Dispatchers.IO) {
             try {
-                if (projectId.startsWith("TEMP-")) {
-                    projectDao.deleteProjectById(projectId)
+                val resolvedId = localIdMappingDao.resolveExistingId(LocalIdMapping.ENTITY_PROJECT, projectId)
+                if (resolvedId.startsWith("TEMP-")) {
+                    projectDao.deleteProjectById(resolvedId)
                     // โครงการที่ยังไม่เคยขึ้น server ก็มีผู้ติดต่อผูกไว้ในเครื่องได้เหมือนกัน
-                    projectContactDao.deleteByProject(projectId)
+                    projectContactDao.deleteByProject(resolvedId)
                     return@withContext Result.success(Unit)
                 }
                 // ✅ ต้องเช็คผลของขั้นแรกก่อนไปขั้นสอง (เหมือนที่ deleteCustomer ทำ) — เดิมยิงลบ
                 // ผู้ติดต่อทิ้งแล้วไม่ดูผลเลย ถ้าลบตัวโครงการต่อไม่สำเร็จ (เช่น 403) จะเหลือโครงการ
                 // ที่ผู้ติดต่อถูกลบไปแล้วบน server โดยผู้ใช้ไม่รู้ว่าเสียอะไรไป
-                val contactsResp = apiService.deleteProjectContacts("eq.$projectId")
+                val contactsResp = apiService.deleteProjectContacts("eq.$resolvedId")
                 if (!contactsResp.isSuccessful) {
                     return@withContext Result.failure(
                         Exception("ลบผู้ติดต่อของโครงการไม่สำเร็จ (HTTP ${contactsResp.code()}) จึงยังไม่ลบโครงการ")
                     )
                 }
-                val response = apiService.deleteProject("eq.$projectId")
+                val response = apiService.deleteProject("eq.$resolvedId")
                 if (response.isSuccessful) {
-                    projectDao.deleteProjectById(projectId)
+                    projectDao.deleteProjectById(resolvedId)
                     // Room ไม่มี FK CASCADE — ลบแถวผูกผู้ติดต่อในเครื่องเองด้วย ไม่งั้นค้างเป็นแถวกำพร้า
                     // ที่ชี้ไปหาโครงการที่ไม่มีแล้ว (และจะถูกส่งขึ้น server อีกตอน saveProjectContacts)
-                    projectContactDao.deleteByProject(projectId)
+                    projectContactDao.deleteByProject(resolvedId)
                     Result.success(Unit)
                 } else Result.failure(Exception("HTTP ${response.code()}"))
             } catch (e: Exception) { Result.failure(e) }
@@ -276,26 +311,26 @@ class ProjectRepository @Inject constructor(
     suspend fun saveProjectContacts(projectId: String, contactIds: List<String>): Result<Unit> {
         return withContext(Dispatchers.IO) {
             Log.d("ProjectRepo", "saveProjectContacts started. projectId=$projectId, ${contactIds.size} contacts")
-            // บันทึก Room ก่อนเสมอ
-            projectContactDao.deleteByProject(projectId)
-            if (contactIds.isNotEmpty()) {
-                val rows = contactIds.map { ProjectContact(projectId, it.trim()) }
-                projectContactDao.insertAll(rows)
-                Log.d("ProjectRepo", "Inserted local contacts: ${rows.size} rows")
-            }
-            if (projectId.startsWith("TEMP-")) {
+            // Resolve stale IDs and replace the relation set in one transaction.
+            val (resolvedProjectId, rows) = localIdMappingDao.replaceProjectContactsResolvingIds(
+                projectId,
+                contactIds.map { it.trim() }
+            )
+            Log.d("ProjectRepo", "Inserted local contacts: ${rows.size} rows")
+            if (resolvedProjectId.startsWith("TEMP-") || rows.any { it.contact_id.startsWith("TEMP-") }) {
+                projectDao.updateSyncStatus(resolvedProjectId, false)
+                syncManager.scheduleSync()
                 return@withContext Result.success(Unit)
             }
             // sync API
             try {
-                val delResp = apiService.deleteProjectContacts("eq.$projectId")
+                val delResp = apiService.deleteProjectContacts("eq.$resolvedProjectId")
                 Log.d("ProjectRepo", "deleteProjectContacts API status: ${delResp.code()}")
                 if (!delResp.isSuccessful) {
                     val errMsg = delResp.errorBody()?.string() ?: ""
                     return@withContext Result.failure(Exception("ลบผู้ติดต่อเก่าล้มเหลว: HTTP ${delResp.code()} $errMsg"))
                 }
-                if (contactIds.isNotEmpty()) {
-                    val rows = contactIds.map { ProjectContact(projectId, it.trim()) }
+                if (rows.isNotEmpty()) {
                     val addResp = apiService.addProjectContacts(rows)
                     Log.d("ProjectRepo", "addProjectContacts API status: ${addResp.code()}")
                     if (!addResp.isSuccessful) {
@@ -308,7 +343,7 @@ class ProjectRepository @Inject constructor(
                 Log.w("ProjectRepo", "saveProjectContacts offline: ${e.message}")
                 // Room เก็บรายชื่อใหม่ไว้แล้ว แต่ outbox วนเฉพาะโปรเจคที่ is_synced = 0 — ถ้าไม่ปักธง
                 // ตรงนี้ การแก้ผู้ติดต่อตอนออฟไลน์จะไม่มีวันถูกอัปขึ้น server เลย
-                projectDao.updateSyncStatus(projectId, false)
+                projectDao.updateSyncStatus(resolvedProjectId, false)
                 syncManager.scheduleSync()
                 networkMonitor.queuedOrFailed(Unit, e.message)
             } catch (e: Exception) {
@@ -320,13 +355,14 @@ class ProjectRepository @Inject constructor(
 
     suspend fun getProjectContacts(projectId: String): Result<List<ContactPerson>> {
         return withContext(Dispatchers.IO) {
+            val resolvedProjectId = localIdMappingDao.resolveMappedId(LocalIdMapping.ENTITY_PROJECT, projectId)
             // อัพเดท Room จาก API ก่อน (ถ้าทำได้)
-            if (!projectId.startsWith("TEMP-")) {
+            if (!resolvedProjectId.startsWith("TEMP-")) {
                 try {
-                    val response = apiService.getProjectContacts("eq.$projectId")
+                    val response = apiService.getProjectContacts("eq.$resolvedProjectId")
                     if (response.isSuccessful && response.body() != null) {
-                        val rows = response.body()!!.map { ProjectContact(projectId, it.contactId) }
-                        projectContactDao.deleteByProject(projectId)
+                        val rows = response.body()!!.map { ProjectContact(resolvedProjectId, it.contactId) }
+                        projectContactDao.deleteByProject(resolvedProjectId)
                         if (rows.isNotEmpty()) {
                             val contactIds = rows.map { it.contact_id }.distinct()
                             if (contactIds.isNotEmpty()) {
@@ -341,7 +377,7 @@ class ProjectRepository @Inject constructor(
                 } catch (_: Exception) { /* offline */ }
             }
             // อ่านจาก Room เสมอ — ดึงรายละเอียดผู้ติดต่อเต็มๆ ไม่ใช่แค่ id
-            val ids = projectContactDao.getContactIdsByProject(projectId)
+            val ids = projectContactDao.getContactIdsByProject(resolvedProjectId)
             Result.success(ids.mapNotNull { contactDao.getContactById(it) })
         }
     }
@@ -362,7 +398,9 @@ class ProjectRepository @Inject constructor(
     suspend fun getFactorHistory(projectId: String): Result<List<ProjectFactorLog>> {
         return withContext(Dispatchers.IO) {
             try {
-                val response = apiService.getProjectFactorLog("eq.$projectId")
+                val resolvedId = localIdMappingDao.resolveMappedId(LocalIdMapping.ENTITY_PROJECT, projectId)
+                if (resolvedId.startsWith("TEMP-")) return@withContext Result.success(emptyList())
+                val response = apiService.getProjectFactorLog("eq.$resolvedId")
                 if (response.isSuccessful) Result.success(response.body() ?: emptyList())
                 else Result.failure(Exception("โหลดประวัติไม่สำเร็จ (HTTP ${response.code()})"))
             } catch (e: Exception) {
@@ -373,12 +411,41 @@ class ProjectRepository @Inject constructor(
 
     suspend fun updateProjectFields(projectId: String, fields: Map<String, Any?>): Result<Unit> {
         return try {
-            val response = retrySend(idempotent = true, tag = "updateProjectFields") { apiService.updateProject("eq.$projectId", fields) }
+            val resolvedId = localIdMappingDao.resolveExistingId(LocalIdMapping.ENTITY_PROJECT, projectId)
+            val local = projectDao.getProjectById(resolvedId)
+                ?: return Result.failure(Exception("ไม่พบโครงการนี้ในเครื่อง"))
+            val updated = local.copy(
+                dealPosition = fields["deal_position"] as? String ?: local.dealPosition,
+                previousSolution = fields["current_solution"] as? String ?: local.previousSolution,
+                counterpartyType = fields["counterparty_type"] as? String ?: local.counterpartyType,
+                responseSpeed = fields["response_speed"] as? String ?: local.responseSpeed,
+                isProposalSent = fields["is_proposal_sent"] as? Boolean ?: local.isProposalSent,
+                proposalDate = if (fields.containsKey("proposal_date")) {
+                    (fields["proposal_date"] as? String)?.ifBlank { null }
+                } else local.proposalDate,
+                competitorCount = (fields["competitor_count"] as? Number)?.toInt() ?: local.competitorCount,
+                isSynced = false
+            )
+            projectDao.insertProject(updated)
+            if (resolvedId.startsWith("TEMP-")) {
+                syncManager.scheduleSync()
+                return Result.success(Unit)
+            }
+            val response = retrySend(idempotent = true, tag = "updateProjectFields") { apiService.updateProject("eq.$resolvedId", fields) }
             if (response.isSuccessful && response.body()?.isNotEmpty() == true) {
                 val returnedProject = response.body()!!.first().copy(isSynced = true)
                 projectDao.insertProject(returnedProject)
                 Result.success(Unit)
-            } else Result.failure(Exception("API Error: ${response.code()}"))
+            } else if (response.code() == 403) {
+                syncManager.markBlocked("project", resolvedId)
+                Result.failure(Exception("แก้ไขปัจจัยโครงการไม่สำเร็จ: ไม่มีสิทธิ์ทำรายการนี้"))
+            } else {
+                syncManager.scheduleSync()
+                networkMonitor.queuedOrFailed(Unit, "เซิร์ฟเวอร์ตอบ ${response.code()}")
+            }
+        } catch (e: IOException) {
+            syncManager.scheduleSync()
+            networkMonitor.queuedOrFailed(Unit, e.message)
         } catch (e: Exception) { Result.failure(e) }
     }
 
@@ -412,9 +479,10 @@ class ProjectRepository @Inject constructor(
     suspend fun getProjectById(projectId: String): Result<Project> {
         return withContext(Dispatchers.IO) {
             try {
-                val local = projectDao.getProjectById(projectId)
+                val resolvedId = localIdMappingDao.resolveMappedId(LocalIdMapping.ENTITY_PROJECT, projectId)
+                val local = projectDao.getProjectById(resolvedId)
                 if (local != null) return@withContext Result.success(local)
-                val response = apiService.getProjectById("eq.$projectId")
+                val response = apiService.getProjectById("eq.$resolvedId")
                 if (response.isSuccessful && !response.body().isNullOrEmpty()) {
                     val project = response.body()!!.first().copy(isSynced = true)
                     projectDao.insertProject(project)

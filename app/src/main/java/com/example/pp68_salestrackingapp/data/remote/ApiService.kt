@@ -10,6 +10,23 @@ import retrofit2.http.*
 
 interface ApiService {
 
+    // ── Delta sync v2 ───────────────────────────────────────────
+    @GET("sync/v2/cursor")
+    suspend fun getSyncCursor(): Response<SyncCursorResponse>
+
+    @GET("sync/v2/changes")
+    suspend fun getSyncChanges(
+        @Query("after") after: Long,
+        @Query("limit") limit: Int = 100
+    ): Response<SyncChangePage>
+
+    @GET("sync/v2/snapshot/{entity}")
+    suspend fun getSyncSnapshot(
+        @Path("entity") entity: String,
+        @Query("after") after: String? = null,
+        @Query("limit") limit: Int = 200
+    ): Response<SyncSnapshotPage>
+
     // ── Place search (proxy ไป Geoapify ที่ backend — API key ไม่อยู่ในแอป) ──
     @GET("places/autocomplete")
     suspend fun searchPlaces(@Query("text") text: String): Response<List<PlaceSuggestion>>
@@ -46,6 +63,23 @@ interface ApiService {
     // ── Customer ─────────────────────────────────────────────────
     @GET("customer")
     suspend fun getCustomers(@Query("limit") limit: Int = 5000): Response<List<Customer>>
+
+    /** Phase 3 snapshot source: only app-created leads may be stored in Room. */
+    @GET("lead_customer")
+    suspend fun getLeads(): Response<List<Customer>>
+
+    /** Authenticated, company-wide ERP lookup. Results are display-only and must not enter Room. */
+    @GET("customer/search")
+    suspend fun searchErpCustomers(
+        @Query("q") query: String,
+        @Query("after") after: String? = null,
+        @Query("limit") limit: Int = 20
+    ): Response<CustomerLookupPage>
+
+    @GET("customer/lookup")
+    suspend fun lookupErpCustomer(
+        @Query("customer_code") customerCode: String
+    ): Response<CustomerLookup>
 
     @GET("customer")
     suspend fun getCustomersByIds(@Query("customer_code") custIds: String, @Query("limit") limit: Int = 1000): Response<List<Customer>>

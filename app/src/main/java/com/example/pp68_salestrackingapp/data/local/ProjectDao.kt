@@ -136,18 +136,4 @@ interface ProjectDao {
     @Query("UPDATE project SET custId = :newCustId WHERE custId = :oldCustId")
     suspend fun updateCustIdForProjects(oldCustId: String, newCustId: String)
 
-    @Query("UPDATE activity_table SET project_id = :realId WHERE project_id = :tempId")
-    suspend fun remapActivityProjectIds(tempId: String, realId: String)
-
-    @Query("UPDATE project_contact SET project_id = :realId WHERE project_id = :tempId")
-    suspend fun remapProjectContactIds(tempId: String, realId: String)
-
-    /** Replaces a server-generated project ID and all local references atomically. */
-    @Transaction
-    suspend fun replaceTemporaryProject(tempId: String, replacement: Project) {
-        insertProject(replacement)
-        remapActivityProjectIds(tempId, replacement.projectId)
-        remapProjectContactIds(tempId, replacement.projectId)
-        deleteProjectById(tempId)
-    }
 }

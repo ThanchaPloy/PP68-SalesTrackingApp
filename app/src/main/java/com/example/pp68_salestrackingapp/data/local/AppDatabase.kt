@@ -19,9 +19,13 @@ import com.example.pp68_salestrackingapp.data.model.*
         AppointmentContact::class,
         ActivityResultPhoto::class,
         SyncRejection::class,
-        AttachmentOutbox::class
+        AttachmentOutbox::class,
+        SyncState::class,
+        SyncConflict::class,
+        SyncSnapshotItem::class,
+        LocalIdMapping::class
     ],
-    version = 56,
+    version = 61,
     exportSchema = true
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -38,6 +42,10 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun activityResultPhotoDao(): ActivityResultPhotoDao
     abstract fun syncRejectionDao(): SyncRejectionDao
     abstract fun attachmentOutboxDao(): AttachmentOutboxDao
+    abstract fun syncStateDao(): SyncStateDao
+    abstract fun syncConflictDao(): SyncConflictDao
+    abstract fun syncSnapshotDao(): SyncSnapshotDao
+    abstract fun localIdMappingDao(): LocalIdMappingDao
 
     // clearAllData() ถูกลบออก — เป็น wrapper บาง ๆ ของ clearAllTables() ที่ไม่มีใครเรียกเลย
     // ตัวที่ใช้งานจริงคือ clearAllTables() ที่ AuthRepository เรียกตอน login คนละคน/logout ซึ่งมี
@@ -485,6 +493,101 @@ abstract class AppDatabase : RoomDatabase() {
                 db.execSQL("CREATE INDEX IF NOT EXISTS `index_attachment_outbox_result_id` ON `attachment_outbox` (`result_id`)")
                 db.execSQL("CREATE INDEX IF NOT EXISTS `index_attachment_outbox_owner_id_state` ON `attachment_outbox` (`owner_id`, `state`)")
                 db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_attachment_outbox_result_id_photo_order` ON `attachment_outbox` (`result_id`, `photo_order`)")
+            }
+        }
+
+        // Phase 3: retain only the customer code/name snapshot needed by contact history,
+        // then remove successfully synced ERP customer rows from the local customer table.
+        // Unsynced rows are preserved so offline work cannot be lost during an upgrade.
+        val MIGRATION_56_57 = object : Migration(56, 57) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `contact_person` ADD COLUMN `customer_name` TEXT")
+                db.execSQL(
+                    """
+                    UPDATE `contact_person`
+                    SET `customer_name` = (
+                        SELECT `company_name`
+                        FROM `customer`
+                        WHERE `customer`.`cust_id` = `contact_person`.`custId`
+                    )
+                    WHERE `customer_name` IS NULL
+                    """.trimIndent()
+                )
+                db.execSQL("DELETE FROM `customer` WHERE `is_synced` = 1 AND `is_lead` = 0")
+            }
+        }
+
+        val MIGRATION_57_58 = object : Migration(57, 58) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `sync_state` (
+                        `account_key` TEXT NOT NULL,
+                        `stream` TEXT NOT NULL,
+                        `cursor` INTEGER NOT NULL,
+                        `snapshot_cursor` INTEGER,
+                        `bootstrap_status` TEXT NOT NULL,
+                        `updated_at_epoch_ms` INTEGER NOT NULL,
+                        PRIMARY KEY(`account_key`, `stream`)
+                    )
+                    """.trimIndent()
+                )
+            }
+        }
+
+        val MIGRATION_58_59 = object : Migration(58, 59) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `sync_conflict` (
+                        `account_key` TEXT NOT NULL,
+                        `entity_type` TEXT NOT NULL,
+                        `entity_id` TEXT NOT NULL,
+                        `operation` TEXT NOT NULL,
+                        `server_revision` INTEGER NOT NULL,
+                        `server_seq` INTEGER NOT NULL,
+                        `server_payload_json` TEXT,
+                        `detected_at_epoch_ms` INTEGER NOT NULL,
+                        PRIMARY KEY(`account_key`, `entity_type`, `entity_id`)
+                    )
+                    """.trimIndent()
+                )
+            }
+        }
+
+        val MIGRATION_59_60 = object : Migration(59, 60) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `sync_snapshot_item` (
+                        `account_key` TEXT NOT NULL,
+                        `entity_type` TEXT NOT NULL,
+                        `item_key` TEXT NOT NULL,
+                        `payload_json` TEXT NOT NULL,
+                        PRIMARY KEY(`account_key`, `entity_type`, `item_key`)
+                    )
+                    """.trimIndent()
+                )
+            }
+        }
+
+        val MIGRATION_60_61 = object : Migration(60, 61) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `local_id_mapping` (
+                        `entity_type` TEXT NOT NULL,
+                        `temp_id` TEXT NOT NULL,
+                        `real_id` TEXT NOT NULL,
+                        `created_at_epoch_ms` INTEGER NOT NULL,
+                        PRIMARY KEY(`entity_type`, `temp_id`)
+                    )
+                    """.trimIndent()
+                )
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_local_id_mapping_entity_type_real_id` " +
+                        "ON `local_id_mapping` (`entity_type`, `real_id`)"
+                )
             }
         }
     }

@@ -189,7 +189,7 @@ private fun HomeScreenContent(
                 modifier  = Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp)
             )
         }
-        if (uiState.pendingSummary.isNotEmpty() || uiState.rejectedCount > 0 ||
+        if (uiState.pendingSummary.isNotEmpty() || uiState.rejectedCount > 0 || uiState.conflictCount > 0 ||
             uiState.syncStatus is com.example.pp68_salestrackingapp.utils.SyncStatus.Running ||
             uiState.syncStatus is com.example.pp68_salestrackingapp.utils.SyncStatus.Queued
         ) {
@@ -199,8 +199,8 @@ private fun HomeScreenContent(
                     "กำลังส่งข้อมูลเบื้องหลัง คุณใช้งานต่อได้"
                 uiState.syncStatus is com.example.pp68_salestrackingapp.utils.SyncStatus.Queued ->
                     "รอส่งข้อมูล $pendingCount รายการ คุณใช้งานต่อได้"
-                uiState.rejectedCount > 0 ->
-                    "มี ${uiState.rejectedCount} รายการที่ต้องตรวจสอบ และ $pendingCount รายการรอส่ง"
+                uiState.rejectedCount + uiState.conflictCount > 0 ->
+                    "มี ${uiState.rejectedCount + uiState.conflictCount} รายการที่ต้องตรวจสอบ และ $pendingCount รายการรอส่ง"
                 else -> "มีข้อมูล $pendingCount รายการรอส่ง"
             }
             Surface(

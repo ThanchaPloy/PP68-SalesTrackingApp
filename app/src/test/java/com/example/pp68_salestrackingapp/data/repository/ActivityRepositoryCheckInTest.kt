@@ -21,6 +21,7 @@ class ActivityRepositoryCheckInTest {
     private val apiService: ApiService = mockk(relaxed = true)
     private val activityDao: ActivityDao = mockk(relaxed = true)
     private val projectDao: ProjectDao = mockk(relaxed = true)
+    private val localIdMappingDao: LocalIdMappingDao = mockk(relaxed = true)
     private val customerDao: CustomerDao = mockk(relaxed = true)
     private val contactDao: ContactDao = mockk(relaxed = true)
     private val planItemDao: ActivityPlanItemDao = mockk(relaxed = true)
@@ -47,10 +48,13 @@ class ActivityRepositoryCheckInTest {
     @Before
     fun setUp() {
         repo = ActivityRepository(
-            apiService, activityDao, projectDao, customerDao, contactDao,
+            apiService, activityDao, projectDao, localIdMappingDao, customerDao, contactDao,
             planItemDao, resultDao, photoDao, appointmentContactDao, projectRepo, syncManager,
             networkMonitor, context
         )
+        coEvery { localIdMappingDao.resolveExistingId(any(), any()) } answers { secondArg() }
+        coEvery { localIdMappingDao.resolveMappedId(any(), any()) } answers { secondArg() }
+        coEvery { localIdMappingDao.insertActivityResolvingProject(any()) } answers { firstArg() }
         coEvery { activityDao.getActivityById("A1") } returns activity
     }
 

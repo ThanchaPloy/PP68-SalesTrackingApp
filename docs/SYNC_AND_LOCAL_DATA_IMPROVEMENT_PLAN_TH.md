@@ -1,6 +1,6 @@
 # แผนปรับปรุงการเปิดแอป การซิงค์ และการจัดเก็บข้อมูลในเครื่อง
 
-สถานะเอกสาร: ระยะที่ 1 ผ่าน compile/unit tests และรอ device acceptance; ระยะที่ 2 ปิด checkpoint 2A (baseline + index migration), 2B (Paging/SQL-bounded UI), 2C (create idempotency) และ automated verification ของ 2D (durable attachment outbox) แล้ว โดย 2C/2D ยังไม่ deploy และยังต้องผ่าน staging/production acceptance ที่ระบุไว้ก่อนใช้งานจริง
+สถานะเอกสาร ณ 6 ตุลาคม 2026: ระยะที่ 1 ผ่าน compile/unit tests และรอ device acceptance; ระยะที่ 2 ปิด checkpoint 2A–2D ระดับโค้ด/automated verification แต่ staging scenarios ที่พักไว้ยังเป็น production gate; ระยะที่ 3 ปิด checkpoint 3A และ Phase 3B ระดับโค้ดพร้อม full regression แล้ว รวม snapshot+delta runtime, durable conflict, TEMP ID mapping ครบ dependency graph และการลดรูปไม่เกิน 500 KiB ส่วน backend ระยะที่ 3 เตรียมพร้อมสำหรับ deploy แต่ยังไม่ deploy และยังเหลือ retention (3C), observability/rollout (3D), staging และเครื่องจริงก่อนปิด roadmap ทั้งหมด
 
 ## บันทึกปิดงานระยะที่ 1 — รายการ 1–4 (4 ตุลาคม 2026)
 
@@ -427,7 +427,8 @@ room_write_failed
 - เพิ่ม regression guard สำหรับกรณี create result ได้ HTTP 2xx แต่ server ไม่คืน real result ID: แอปจะไม่ mark TEMP result ว่า synced, คงรูปไว้ใน outbox และจัดเป็น server failure ที่ retry ได้ เพื่อไม่ให้ attachment ค้างโดยไม่มีโอกาสถูกส่ง
 - ผลตรวจล่าสุด: Android JVM 405 tests ผ่าน (failures 0, errors 0, skipped 4), debug และ androidTest APK compile ผ่าน; backend 29/29 tests ผ่านและ compile สำเร็จ
 - หลัง Cold Boot Pixel 9 AVD/API 37 สามารถติดตั้ง APK ได้ตามปกติ และ instrumented suite ผ่าน 19/19 (0 skipped, 0 failed) รวม migration `55 → 56`, TEMP-result attachment remap และ regression suite เดิม ปัญหา `Broken pipe` ก่อนหน้าเป็นสถานะค้างของ package service ใน emulator ไม่ใช่ความผิดพลาดของ test
-- ยังไม่ได้ deploy Android/backend; rollout ต้องลง backend ก่อน Android และต้องทำรายการ acceptance/deployment ของ 2C ที่พักไว้ก่อน production เช่นเดิม
+- Backend commit `f9335ba` ถูก deploy เป็น `pp68-backend.service` บน `192.168.15.177:8080` แล้ว และ startup log ยืนยัน `migration ok: migrations/add_api_idempotency.sql`; PostgreSQL จริงอยู่ที่ `192.168.15.182:5432`
+- staging scenarios ของ 2C/2D ถูกพักไว้ตามการตัดสินใจวันที่ 5 ตุลาคม 2026 จนกว่าจะมี Android build สำหรับ acceptance จึงยังไม่ถือว่าปิด production acceptance ของระยะที่ 2 แม้ automated tests และ migration startup จะผ่านแล้ว
 
 ## 11. เป้าหมายระยะที่ 2
 
@@ -645,6 +646,100 @@ GET /sync/v2/changes?after=<cursor>&limit=<pageSize>
 สำหรับข้อมูลลูกค้าเชิงธุรกิจและความเสี่ยงจาก token ใหม่ส่งงานคนเก่า แนะนำ DB/outbox ต่อ user ส่วน master data ที่ไม่อ่อนไหวอาจแยกเป็น shared cache
 
 ต้องมี account cleanup UI ที่แสดงว่าบัญชีใดมี pending ก่อนลบ local profile
+
+### ข้อกำหนดข้อมูลลูกค้าที่ปรับสำหรับระยะที่ 3 (ยืนยัน 5 ตุลาคม 2026)
+
+- `lead_customer` ยังเข้าร่วม snapshot/delta sync และเก็บใน Room โดยใช้ขอบเขตการมองเห็นเดิม: แชร์ภายในสาขาและรองรับชุดข้อมูลของทีม Project Sales
+- `customer` ซึ่งเป็นลูกค้าที่เคยซื้อกับบริษัทแล้ว ห้าม bulk download หรือเก็บเป็น customer row ใน Room ของ Android รุ่นใหม่
+- เมื่อผู้ใช้ต้องเลือกลูกค้าเดิมเพื่อสร้างแผน โครงการ หรือผู้ติดต่อ ให้ค้น/อ่านแบบ on-demand ผ่าน authenticated API เท่านั้น
+- ผู้ใช้ที่ผ่านการยืนยันตัวตนของบริษัททุกทีมสามารถค้นและอ่าน `customer` ได้ทั่วบริษัท ไม่จำกัดสาขา แต่ API ต้องใช้การค้นหาแบบ paged/minimum query ไม่เปิด endpoint ดาวน์โหลดทั้งตาราง
+- ผู้ติดต่อยังเห็นเฉพาะผู้สร้าง ส่วนโครงการ นัดหมาย และผลการขายใช้ขอบเขตเจ้าของเดิม
+- ต้องมี migration/cleanup ฝั่ง Android เพื่อลบเฉพาะ customer row ที่ `is_lead = 0` ซึ่งแอปรุ่นก่อนเคย cache ไว้ โดยห้ามกระทบ lead, outbox และ business rows ที่อ้าง `customer_code`
+- ยืนยันว่าไม่มีผู้ใช้ถือแอปรุ่นเก่าอยู่ จึงปิด `GET /customer` แบบ full/bulk ได้โดยไม่ต้องคง fallback สำหรับ client เก่า
+- ข้อมูลธุรกรรมที่ต้องอ่านย้อนหลังตอน offline ให้เก็บเพียง snapshot `customer_code + customer_name` ใน parent row เช่น Project, Appointment และ Contact ห้ามเก็บรายละเอียด ERP customer อื่นใน Room
+
+### สถานะดำเนินการ Phase 3A: customer data boundary
+
+- เพิ่ม API ค้น ERP แบบ authenticated, company-wide, minimum query 2 ตัวอักษร และ keyset cursor; response มีเฉพาะรหัสกับชื่อ
+- Android หน้า Project, Appointment และ Contact แสดง Lead จาก Room ได้ทันที และค้น ERP on-demand แบบ debounce โดยไม่ insert ผลค้นลง Room
+- เพิ่ม Room migration 56 -> 57 เพื่อ backfill ชื่อบริษัทลง Contact ก่อนลบเฉพาะ ERP customer row ที่ sync สำเร็จแล้ว; แถวที่ยังไม่ sync จะไม่ถูกลบ
+- backend หา `customer_name` จริงจาก `customer_code` แล้วเก็บ snapshot ใน Contact (ไม่เชื่อชื่อที่ client ส่งมา) และยืนยันสิทธิ์ Contact ตาม `created_by`; การอ้าง ERP customer ใช้ได้ทั้งบริษัท ส่วน Lead ยังใช้ scope เดิม
+- ปิด full ERP customer GET ด้วย HTTP 410 เนื่องจากไม่มี client รุ่นเก่าที่ต้องรองรับ
+- ยืนยันระดับโค้ดแล้ว: Android full unit suite ผ่าน 406 tests (ผ่าน 402, skipped เดิม 4), backend `test` ผ่าน และ Room migration 56 -> 57 ผ่านบน Pixel_9 emulator (Android API 37)
+- งานส่วนนี้ยังไม่ deploy; เหลือ staging scenarios ที่ใช้ backend/migration จริงและการทดสอบหน้าจอค้นหา/สร้างข้อมูลแบบ end-to-end ก่อน production
+
+### สถานะดำเนินการ Phase 3B.1: backend change feed foundation
+
+- เพิ่มตาราง `sync_change` ใช้ `BIGSERIAL seq` จาก PostgreSQL เป็นลำดับกลางและ `server_revision`; มี index ตาม owner/entity + seq
+- เพิ่ม trigger ให้ `lead_customer`, `contact_person`, `project`, `appointment` และ `activity_result` เขียน UPSERT/DELETE ใน transaction เดียวกับ business row
+- เมื่อ owner เปลี่ยน trigger สร้าง DELETE ให้ scope เดิมและ UPSERT ให้ scope ใหม่ ป้องกันข้อมูลเก่าค้างในเครื่องเจ้าของเดิม
+- เพิ่ม authenticated API `GET /sync/v2/cursor` และ `GET /sync/v2/changes?after=&limit=` แบบ keyset cursor
+- change feed กรอง Contact เฉพาะผู้สร้าง, entity ธุรกิจตาม branch/owner scope เดิม และ Lead ตามสาขาหรือชุด Project Sales
+- แถวเก่าที่ `owner_code` เป็น `NULL` ยังไม่ส่งผ่าน change feed เพื่อไม่เปิดข้อมูลไร้เจ้าของให้ทุกบัญชี; ต้อง audit/backfill เจ้าของหรือกำหนดนโยบายก่อนเปิด 3B.2
+- endpoint ส่ง payload สำหรับ UPSERT และ tombstone ที่ไม่มี payload สำหรับ DELETE; Android ยังไม่เปิดใช้จนกว่า Phase 3B.2 จะ apply page กับ cursor ใน Room แบบ transaction ได้
+- backend tests ผ่าน 35 รายการและ `diff --check` ผ่าน แต่ SQL migration ยังต้องรันกับ PostgreSQL staging จริงก่อน deploy
+
+### สถานะดำเนินการ Phase 3B.2: Android cursor และ atomic page apply
+
+- เพิ่ม Room migration 57 -> 58 และตาราง `sync_state` ซึ่งเก็บ cursor/snapshot status แยกบัญชีด้วย SHA-256 account key โดยไม่เก็บรหัสพนักงานตรง ๆ
+- bootstrap ใช้ลำดับ `GET cursor -> mark SNAPSHOT_IN_PROGRESS -> ทำ snapshot -> mark READY`; ถ้า process ตายก่อน READY จะต้องเริ่ม snapshot ใหม่และไม่เชื่อข้อมูลครึ่งชุด
+- เพิ่ม Android client สำหรับ `/sync/v2/cursor` และ `/sync/v2/changes`
+- apply UPSERT/DELETE ของ Lead, Contact, Project, Appointment และ Activity Result พร้อมอัปเดต cursor ใน Room transaction เดียวกัน
+- ตรวจลำดับ `seq`, `server_revision`, `next_cursor`, operation, entity type และ payload ID ก่อนเขียน; protocol ผิดจะ rollback ทั้งหน้า
+- ณ checkpoint 3B.2 ถ้า change ชน local row ที่ `is_synced = false` จะ rollback ทั้งหน้าและไม่เลื่อน cursor; พฤติกรรมนี้ถูกยกระดับเป็น durable conflict ใน Phase 3B.3 แล้ว
+- รักษา local-only fields เช่น operation ID, location name และชื่อประกอบของ Appointment ขณะรับ server UPSERT
+- ยังไม่ต่อ `DeltaSyncRepository` เข้า `DownloadSyncWorker` จนกว่า 3B.3 และ staging migration จะผ่าน จึงยังใช้ full snapshot เดิมใน runtime ปัจจุบัน
+- ทดสอบ Room จริงบน Pixel_9 emulator ผ่าน 5 รายการ (migration, bootstrap state, atomic commit, rollback เมื่อชน pending และ tombstone) และ Android unit suite เดิมผ่าน 406 รายการ (skipped เดิม 4)
+
+### สถานะดำเนินการ Phase 3B.3: durable conflict และ recovery
+
+- เพิ่ม Room migration 58 -> 59 และตาราง `sync_conflict` แยกบัญชีด้วย hashed account key; เก็บ entity, operation, server revision/sequence และ server payload ของเหตุการณ์ที่ชนกัน
+- เมื่อ server change ชน local row ที่ `is_synced = false` แอปจะเก็บ local edit ไว้ ไม่เขียนทับ และบันทึก conflict ใน transaction เดียวกับการ apply รายการอื่นและการเลื่อน cursor จึงไม่วนรับ page เดิมตลอดไป
+- conflict ของ entity เดิมใช้ server event ล่าสุดแทนรายการเดิม และจะถูกล้างเมื่อ server change รุ่นถัดไป apply สำเร็จหลัง local row ไม่ pending แล้ว
+- เมื่อ server ตอบว่า cursor หมดอายุ (`409` หรือ `410`) แอปเปลี่ยน sync state เป็น `NOT_STARTED` เพื่อบังคับทำ snapshot ใหม่ โดยไม่ลบ business rows, outbox หรือ conflict
+- หน้า Home และ Settings > สถานะการซิงค์แสดงจำนวน conflict; การแจ้งเตือนหลัง 22:00 น. รวม conflict ด้วย
+- บล็อกการสลับบัญชี/ออกจากระบบเมื่อยังมี conflict เช่นเดียวกับข้อมูล offline ที่ค้างหรือถูก server ปฏิเสธ เว้นแต่ผู้ใช้ยืนยันลบทิ้งผ่าน flow เดิม
+- ทดสอบ compile ของ app/androidTest ผ่าน, Android unit suite ผ่าน 406 รายการ (failures 0, skipped เดิม 4) และ instrumentation test เฉพาะ 3B.3 ผ่าน 7 รายการบน Pixel_9 emulator รวม migration 58 -> 59, atomic conflict+cursor, disk reopen จำลอง process death และ cursor expiry recovery
+- ยังไม่ต่อ delta เข้า `DownloadSyncWorker`: ต้องทำ keyset pagination ให้ initial snapshot ของ Project/Appointment และ entity ที่เกี่ยวข้องก่อน มิฉะนั้นชุดข้อมูลเกินเพดานอาจ bootstrap ไม่ครบแล้วกลับไปใช้ delta ต่ออย่างผิดพลาด
+
+> หมายเหตุ: ข้อจำกัดข้างต้นเป็นสถานะ ณ checkpoint 3B.3 และได้รับการแก้แล้วใน Phase 3B.4 ด้านล่าง
+
+### สถานะดำเนินการ Phase 3B.4: paged snapshot และเปิดใช้ delta runtime
+
+- เพิ่ม authenticated API `GET /sync/v2/snapshot/{entity}?after=&limit=` แบบ keyset pagination และ stable primary-key order สำหรับ `lead_customer`, `contact_person`, `project`, `appointment`, `activity_result` และ `appointment_contact`; ใช้ scope สิทธิ์เดียวกับ change feed และไม่ใช้ `OFFSET`
+- เพิ่ม trigger/change feed ของ `appointment_contact` และใช้ opaque composite cursor/ID สำหรับคู่ appointment-contact เพื่อรองรับทั้ง initial snapshot, UPSERT และ DELETE
+- เพิ่ม Room migration 59 -> 60 และตาราง staging `sync_snapshot_item` แยกตาม hashed account key; ดาวน์โหลดทุกหน้าลง shadow snapshot ก่อน จึงไม่ล้างข้อมูลที่ผู้ใช้กำลังเห็นระหว่างโหลด
+- เมื่อทุกหน้าครบ แอปเปลี่ยน visible cache และสถานะ `READY` ใน Room transaction เดียว; ถ้า network ล้มเหลวหรือ process ตายก่อนจบ จะคง cache เดิมไว้และเริ่ม bootstrap ใหม่อย่างปลอดภัย โดยไม่ลบ pending row, outbox หรือ conflict
+- ต่อ `DownloadSyncWorker` ให้ทำลำดับ `paged snapshot (เมื่อยังไม่ READY) -> drain delta จนทัน -> optional master data`; เมื่อสำเร็จจะล้าง failed-parts เดิม และเมื่อผิดพลาดจะแสดงส่วนดาวน์โหลดข้อมูลเป็นรายการที่ล้มเหลว
+- Android targeted instrumentation ผ่าน 9 รายการบน Pixel_9 API 37 ครอบคลุม migration 59 -> 60, multi-page atomic swap, snapshot failure, pending/conflict, process-death/cursor recovery; production Kotlin compile รอบสุดท้ายผ่าน (`BUILD SUCCESSFUL`)
+- backend targeted tests ของ snapshot contract และ migration ผ่าน รวมทั้ง full backend suite เคยผ่านก่อนการแก้ index/test รอบสุดท้าย; ตามแนวทางประหยัดเวลาและเครดิต จะรัน full regression อีกครั้งตอนปิด Phase 3/ก่อน deploy แทนการรันซ้ำทุก subphase
+- งานนี้ยังไม่ deploy: ต้อง deploy backend และให้ `migrations/add_sync_change_feed.sql` ทำงานสำเร็จก่อน แล้วตรวจ endpoint snapshot กับ PostgreSQL จริง จึงค่อย build/release Android; staging scenarios และ full regression ยังเป็น production gate
+
+### สถานะดำเนินการ Phase 3B.5: durable TEMP ID mapping
+
+- เพิ่ม Room migration 60 -> 61 และตาราง `local_id_mapping` สำหรับจำคู่รหัสชั่วคราวกับรหัสจริง โดยเก็บเฉพาะ ID ไม่มีข้อมูลลูกค้าหรือรายละเอียดธุรกิจ
+- ขยาย mapping ครบ entity ที่สร้างแบบ offline ได้แก่ Customer, Contact, Project, Appointment และ Activity Result ไม่ได้จำกัดเฉพาะ Project -> Appointment
+- เมื่อ server คืนรหัสจริง แอปบันทึก mapping และย้าย parent, child และ relation ที่เกี่ยวข้องใน Room transaction เดียว เช่น customer reference, project/contact relation, appointment/contact/checklist, result/photo/attachment outbox และ result group ก่อนลบแถว TEMP
+- ทุกเส้นทางสร้างข้อมูลลูกจะ resolve parent ID ภายใน transaction; ถ้า parent ยังไม่มีรหัสจริง การบันทึกในเครื่องยังสำเร็จทันที แต่ Worker จะรอและไม่ส่ง `TEMP-...` ไป backend
+- เพิ่ม guard สำหรับ ID ของรายการเองในคำสั่งอ่าน แก้ไข ลบ เช็กอิน ปิดนัดหมาย checklist และหน้ารายละเอียดที่เปิดค้างไว้ หาก Worker remap ระหว่างใช้งาน repository/Flow จะสลับไปใช้รหัสจริง; ถ้ายังเป็น pending จะเขียน local และรอ Worker
+- เพิ่ม defensive repair สำหรับ pending row จากแอปรุ่นก่อน และ regression test ครอบคลุมทั้งกรณี child บันทึกก่อน/หลัง parent remap, relation/attachment ถูกย้าย และ stale own ID
+- production และ androidTest compile ผ่าน; targeted `IdRemapTransactionTest` ผ่าน 9/9 บน Pixel_9 API 37 วันที่ 6 ตุลาคม 2026 ส่วนชุด migration 60 -> 61 และ photo staging ผ่านใน checkpoint ก่อนหน้า
+- งานนี้เป็น Android-only ไม่ต้องแก้ schema PostgreSQL หรือ deploy backend เพิ่ม แต่ต้องรวม Room schema `61.json` ใน Android release
+
+### สถานะดำเนินการ Phase 3B.6: ลดขนาดรูปก่อนเข้าคิวแบบ durable
+
+- รับไฟล์ต้นฉบับได้ไม่เกิน 15 MiB ตาม guard เดิม แต่ก่อนบันทึกเข้า `pending_attachments` จะ sampled decode, หมุนตาม EXIF, จำกัดด้านยาว 1,600 px และบีบอัด JPEG แบบปรับ quality/มิติให้ไฟล์สุดท้ายไม่เกิน 500 KiB
+- รักษา EXIF กล้องที่ backend ใช้ตรวจ (`Make`, `Model`, `DateTimeOriginal`) และคำนวณ SHA-256 หลังได้ไฟล์สุดท้าย เพื่อให้ idempotency ตรวจ binary ที่อัปโหลดจริง
+- ไฟล์ต้นฉบับชั่วคราวถูกลบหลัง staging; รูปที่ส่งสำเร็จเก็บเพียง URL ตามข้อตกลงเดิม จึงลด disk, memory และปริมาณ network โดยไม่ทำให้ outbox สูญหายเมื่อ process ตาย
+- backend ยังรับเพดาน 15 MiB ไว้เป็น compatibility/defense จึงไม่ต้อง deploy backend เพิ่มสำหรับการลดขนาดฝั่ง Android; `AttachmentFileStoreTest` ยืนยันขนาดไม่เกิน 500 KiB, MIME, EXIF และ SHA-256 แล้ว
+
+### บันทึกปิด Phase 3B: full regression และความพร้อมก่อน deploy
+
+- Android JVM regression ผ่าน 406 tests (failures 0, errors 0, skipped 4)
+- Android instrumented regression ผ่าน 38/38 บน Pixel_9 AVD API 37 ครอบคลุม Room migrations, atomic snapshot/delta, conflict recovery, process-death recovery, durable TEMP ID mapping และ photo staging
+- Android `lintDebug` และ `assembleDebug` ผ่าน; สร้าง `app-debug.apk` สำเร็จ โดย warning ของ Kotlin Analysis API ไม่ทำให้ Lint หรือ build ล้มเหลว
+- Backend `clean build` ผ่านและ test ผ่าน 37/37; migration และ endpoint ของ snapshot/change feed พร้อม commit สำหรับ deploy ก่อน Android รุ่น Phase 3B
+- ปิด Phase 3B ระดับ source code และ automated regression แล้ว แต่ production release ยังต้องทำตามลำดับ: deploy backend -> ยืนยัน `add_contact_customer_snapshot.sql` และ `add_sync_change_feed.sql` บน PostgreSQL จริง -> ทดสอบ staging scenarios ที่พักไว้ -> ทดสอบเครื่องจริง/acceptance -> จึงปล่อย Android
 
 ## 26. Retention policy และ cache eviction
 

@@ -4,8 +4,11 @@ import com.example.pp68_salestrackingapp.data.local.ContactDao
 import com.example.pp68_salestrackingapp.data.local.CustomerDao
 import com.example.pp68_salestrackingapp.data.local.ProjectDao
 import com.example.pp68_salestrackingapp.data.local.ActivityDao
+import com.example.pp68_salestrackingapp.data.local.LocalIdMappingDao
+import com.example.pp68_salestrackingapp.data.model.LocalIdMapping
 import com.example.pp68_salestrackingapp.data.model.ContactPerson
 import com.example.pp68_salestrackingapp.data.model.Customer
+import com.example.pp68_salestrackingapp.data.model.CustomerLookup
 import com.example.pp68_salestrackingapp.data.remote.ApiService
 import com.example.pp68_salestrackingapp.data.remote.AuthService
 import com.example.pp68_salestrackingapp.di.TokenManager
@@ -32,6 +35,7 @@ class CustomerRepository @Inject constructor(
     private val contactDao: ContactDao,
     private val projectDao: ProjectDao,
     private val activityDao: ActivityDao,
+    private val localIdMappingDao: LocalIdMappingDao,
     private val tokenManager: TokenManager,
     private val syncManager: SyncManager,
     private val networkMonitor: com.example.pp68_salestrackingapp.utils.NetworkMonitor
@@ -80,53 +84,14 @@ class CustomerRepository @Inject constructor(
     suspend fun refreshCustomers(branchId: String): kotlin.Result<Unit> {
         return withContext(Dispatchers.IO) {
             try {
-                val currentUserId = tokenManager.getUserData()?.userId ?: ""
-                val customers = mutableListOf<Customer>()
-                var refreshFailure: Throwable? = null
-
-                // 1. Fetch current user's own customers FIRST & insert into Room immediately
-                if (currentUserId.isNotBlank()) {
-                    val ownCustResp = authService.getCustomers(
-                        salespersonCode = "eq.$currentUserId",
-                        limit = 1000
-                    )
-                    if (ownCustResp.isSuccessful && ownCustResp.body() != null) {
-                        val ownCustomers = ownCustResp.body()!!.map { it.copy(isSynced = true) }
-                        customers.addAll(ownCustomers)
-                        if (ownCustomers.isNotEmpty()) {
-                            // ✅ ห้ามใช้ clearAndInsert ตรงนี้ — มันลบลูกค้าสาขาอื่นที่เคยแคชไว้จาก
-                            // การ refresh รอบก่อนทิ้งทันที ถ้า phase 2 (ดึงทั้งสาขา) ด้านล่างพังหรือ
-                            // ออฟไลน์ต่อ จะไม่มีทาง insert กลับมาอีกเลย ทั้งที่ catch (IOException)
-                            // ด้านล่างบอกว่า "Room data still valid" ซึ่งจะเป็นเท็จทันทีถ้าใช้ clearAndInsert ที่นี่
-                            customerDao.insertCustomers(ownCustomers)
-                        }
-                    } else {
-                        refreshFailure = Exception("HTTP ${ownCustResp.code()}")
-                    }
+                // Backend derives branch/project-sales visibility from JWT. Only lead_customer
+                // participates in the mobile snapshot; ERP customer rows are remote-only.
+                val response = apiService.getLeads()
+                if (!response.isSuccessful || response.body() == null) {
+                    return@withContext kotlin.Result.failure(Exception("HTTP ${response.code()}"))
                 }
-
-                // 2. Fetch branch team member customers in background to enrich local database
-                var branchFetchOk = branchId.isBlank() // ไม่มีสาขาให้ดึง = ไม่ถือว่าพลาด
-                if (branchId.isNotBlank()) {
-                    val custResp = authService.getCustomers(branchId = "eq.$branchId", limit = 5000)
-                    if (custResp.isSuccessful && custResp.body() != null) {
-                        customers.addAll(custResp.body()!!.map { it.copy(isSynced = true) })
-                        branchFetchOk = true
-                    } else {
-                        refreshFailure = refreshFailure ?: Exception("HTTP ${custResp.code()}")
-                    }
-                }
-
-                val deduped = customers.distinctBy { it.custId }.map { it.copy(isSynced = true) }
-                if (deduped.isNotEmpty()) {
-                    // ✅ clearAndInsert = "รายการนี้คือทั้งหมดที่มี" ซึ่งจริงเฉพาะตอนที่ดึงครบทั้งสองรอบ
-                    // ถ้ารอบสอง (ทั้งสาขา) พัง เราจะเหลือแค่ลูกค้าของตัวเอง แล้วการล้างทิ้งจะลบลูกค้า
-                    // ของเพื่อนร่วมสาขาที่แคชไว้รอบก่อนหายไปหมด ทั้งที่ไม่มีอะไรบอกว่ามันถูกลบจริง
-                    // — merge แทน แล้วรอให้รอบถัดไปที่สำเร็จครบเป็นคนล้างของที่ไม่มีแล้วออก
-                    if (branchFetchOk) customerDao.clearAndInsert(deduped)
-                    else customerDao.insertCustomers(deduped)
-                }
-                refreshFailure?.let { kotlin.Result.failure(it) } ?: kotlin.Result.success(Unit)
+                customerDao.replaceLeadSnapshot(response.body().orEmpty())
+                kotlin.Result.success(Unit)
             } catch (e: IOException) {
                 kotlin.Result.failure(e) // local cache ยังใช้ได้ แต่ download รอบนี้ไม่สำเร็จ
             } catch (e: Exception) {
@@ -140,14 +105,22 @@ class CustomerRepository @Inject constructor(
     suspend fun getCustomerById(id: String): kotlin.Result<Customer> {
         return withContext(Dispatchers.IO) {
             try {
-                val local = customerDao.getCustomerById(id)
+                val resolvedId = localIdMappingDao.resolveMappedId(LocalIdMapping.ENTITY_CUSTOMER, id)
+                val local = customerDao.getCustomerById(resolvedId)
                 if (local != null) return@withContext kotlin.Result.success(local)
 
-                val resp = apiService.getCustomerById("eq.$id")
-                if (resp.isSuccessful && !resp.body().isNullOrEmpty()) {
-                    val customer = resp.body()!!.first().copy(isSynced = true)
-                    customerDao.insertCustomer(customer)
-                    kotlin.Result.success(customer)
+                val resp = apiService.lookupErpCustomer(resolvedId)
+                if (resp.isSuccessful && resp.body() != null) {
+                    val lookup = requireNotNull(resp.body())
+                    // Display projection only. Never insert an ERP customer into Room.
+                    kotlin.Result.success(
+                        Customer(
+                            custId = lookup.customerCode,
+                            companyName = lookup.customerName,
+                            isLead = false,
+                            isSynced = true
+                        )
+                    )
                 } else {
                     kotlin.Result.failure(Exception("ไม่พบข้อมูลลูกค้า"))
                 }
@@ -160,11 +133,33 @@ class CustomerRepository @Inject constructor(
     suspend fun getCustomers(): kotlin.Result<List<Customer>> {
         return withContext(Dispatchers.IO) {
             try {
-                val local = customerDao.getAllCustomers().first()
+                val local = customerDao.getAllLeads().first()
                 kotlin.Result.success(local)
             } catch (e: Exception) {
                 kotlin.Result.failure(e)
             }
+        }
+    }
+
+    suspend fun searchErpCustomers(
+        query: String,
+        after: String? = null,
+        limit: Int = 20
+    ): kotlin.Result<List<CustomerLookup>> = withContext(Dispatchers.IO) {
+        val normalized = query.trim()
+        if (normalized.length < 2) {
+            return@withContext kotlin.Result.failure(Exception("กรุณาพิมพ์อย่างน้อย 2 ตัวอักษร"))
+        }
+        try {
+            val response = apiService.searchErpCustomers(normalized, after, limit.coerceIn(1, 50))
+            if (response.isSuccessful && response.body() != null) {
+                kotlin.Result.success(requireNotNull(response.body()).items)
+            } else {
+                kotlin.Result.failure(Exception("ค้นหาลูกค้าไม่สำเร็จ: HTTP ${response.code()}"))
+            }
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            kotlin.Result.failure(e)
         }
     }
 
@@ -189,7 +184,7 @@ class CustomerRepository @Inject constructor(
                     Log.d("CustomerRepo", "realCustId=$realCustId tempId=$tempId")
                     if (realCustId != null && realCustId != tempId) {
                         // server generated a new ID — replace TEMP record in Room
-                        customerDao.replaceTemporaryCustomer(
+                        localIdMappingDao.replaceTemporaryCustomer(
                             tempId,
                             localCustomer.copy(custId = realCustId, isSynced = true, isLead = true)
                         )
@@ -228,8 +223,17 @@ class CustomerRepository @Inject constructor(
 
     suspend fun updateCustomer(custId: String, customer: Customer): kotlin.Result<Unit> {
         return withContext(Dispatchers.IO) {
-            val localCustomer = customer.copy(isSynced = false)
+            val resolvedId = try {
+                localIdMappingDao.resolveExistingId(LocalIdMapping.ENTITY_CUSTOMER, custId)
+            } catch (e: Exception) {
+                return@withContext kotlin.Result.failure(e)
+            }
+            val localCustomer = customer.copy(custId = resolvedId, isSynced = false)
             customerDao.insertCustomer(localCustomer)
+            if (resolvedId.startsWith("TEMP-")) {
+                syncManager.scheduleSync()
+                return@withContext kotlin.Result.success(Unit)
+            }
             try {
                 val updates = buildMap<String, Any?> {
                     put("customer_name", customer.companyName)
@@ -260,14 +264,14 @@ class CustomerRepository @Inject constructor(
                     put("vat_registration_no", customer.vatRegistrationNo.orEmpty())
                 }
                 val response = retrySend(idempotent = true, tag = "updateCustomer") {
-                    if (customer.isLead) apiService.updateLeadCustomer("eq.$custId", updates)
-                    else apiService.updateCustomer("eq.$custId", updates)
+                    if (localCustomer.isLead) apiService.updateLeadCustomer("eq.$resolvedId", updates)
+                    else apiService.updateCustomer("eq.$resolvedId", updates)
                 }
                 if (response.isSuccessful && response.body()?.isNotEmpty() == true) {
-                    customerDao.updateSyncStatus(custId, true)
+                    customerDao.updateSyncStatus(resolvedId, true)
                     kotlin.Result.success(Unit)
                 } else if (response.code() == 403) {
-                    syncManager.markBlocked("customer", custId)
+                    syncManager.markBlocked("customer", resolvedId)
                     kotlin.Result.failure(Exception("แก้ไขลูกค้าไม่สำเร็จ: ไม่มีสิทธิ์ทำรายการนี้"))
                 } else {
                     syncManager.scheduleSync()
@@ -285,17 +289,25 @@ class CustomerRepository @Inject constructor(
     suspend fun deleteCustomer(custId: String): kotlin.Result<Unit> {
         return withContext(Dispatchers.IO) {
             try {
+                val resolvedId = localIdMappingDao.resolveExistingId(LocalIdMapping.ENTITY_CUSTOMER, custId)
+                if (resolvedId.startsWith("TEMP-")) {
+                    customerDao.deleteCustomerById(resolvedId)
+                    projectDao.deleteProjectsByCustomerId(resolvedId)
+                    activityDao.deleteActivitiesByCustomerId(resolvedId)
+                    contactDao.deleteContactsByCustomerId(resolvedId)
+                    return@withContext kotlin.Result.success(Unit)
+                }
                 // ทุกขั้นของ cascade ต้องสำเร็จก่อนจะลบลูกค้า — เดิมทิ้งผลลัพธ์ของขั้นก่อนหน้าไว้
                 // ถ้าขั้นไหนพังเงียบ ๆ แล้วลบลูกค้าสำเร็จ จะเหลือนัดหมาย/โปรเจคกำพร้าบน server
                 // ที่ชี้ไปหาลูกค้าที่ไม่มีอยู่แล้ว และ server ไม่มี FK คอยดักให้
                 val cascade = mutableListOf<Pair<String, retrofit2.Response<*>>>()
-                cascade += "นัดหมาย" to apiService.deleteActivitiesByCustomer("eq.$custId")
-                val projects = projectDao.getProjectsByCustomer(custId).first()
+                cascade += "นัดหมาย" to apiService.deleteActivitiesByCustomer("eq.$resolvedId")
+                val projects = projectDao.getProjectsByCustomer(resolvedId).first()
                 projects.forEach {
                     cascade += "ผู้ติดต่อของโครงการ" to apiService.deleteProjectContacts("eq.${it.projectId}")
                 }
-                cascade += "โครงการ" to apiService.deleteProjectsByCustomer("eq.$custId")
-                cascade += "ผู้ติดต่อ" to apiService.deleteContactsByCustomer("eq.$custId")
+                cascade += "โครงการ" to apiService.deleteProjectsByCustomer("eq.$resolvedId")
+                cascade += "ผู้ติดต่อ" to apiService.deleteContactsByCustomer("eq.$resolvedId")
 
                 val failed = cascade.firstOrNull { !it.second.isSuccessful }
                 if (failed != null) {
@@ -304,14 +316,14 @@ class CustomerRepository @Inject constructor(
                     )
                 }
 
-                val response = apiService.deleteCustomer("eq.$custId")
+                val response = apiService.deleteCustomer("eq.$resolvedId")
                 if (response.isSuccessful) {
-                    customerDao.deleteCustomerById(custId)
+                    customerDao.deleteCustomerById(resolvedId)
                     // ✅ Room ไม่มี FK CASCADE ให้ตารางพวกนี้ — ลบลูกค้าเสร็จแล้วต้องเก็บกวาดแถวกำพร้า
                     // ในเครื่องเองด้วย ไม่งั้นโครงการ/นัดหมาย/ผู้ติดต่อของลูกค้าที่ลบไปแล้วยังค้างอยู่
-                    projectDao.deleteProjectsByCustomerId(custId)
-                    activityDao.deleteActivitiesByCustomerId(custId)
-                    contactDao.deleteContactsByCustomerId(custId)
+                    projectDao.deleteProjectsByCustomerId(resolvedId)
+                    activityDao.deleteActivitiesByCustomerId(resolvedId)
+                    contactDao.deleteContactsByCustomerId(resolvedId)
                     kotlin.Result.success(Unit)
                 } else {
                     kotlin.Result.failure(Exception("HTTP ${response.code()}"))
@@ -334,7 +346,10 @@ class CustomerRepository @Inject constructor(
         return withContext(Dispatchers.IO) {
             // ตัดช่องว่างหัวท้ายก่อนใช้ — รหัสที่ส่งมาจากหน้าจอผ่านมือผู้ใช้/ค่าที่ประกอบจากที่อื่นได้
             // (เป็นการกันไว้เฉย ๆ ไม่ได้แก้อาการที่เคยเจอ ซึ่งพิสูจน์แล้วว่ามาจากข้อมูลคนละบริษัท)
-            val cleanId = customerId.trim()
+            val cleanId = localIdMappingDao.resolveMappedId(
+                LocalIdMapping.ENTITY_CUSTOMER,
+                customerId.trim()
+            )
             try {
                 val response = apiService.getContactsByCustomer(custId = "eq.$cleanId")
                 if (response.isSuccessful && response.body() != null) {
@@ -349,9 +364,14 @@ class CustomerRepository @Inject constructor(
     suspend fun deleteContact(contactId: String): kotlin.Result<Unit> {
         return withContext(Dispatchers.IO) {
             try {
-                val response = apiService.deleteContact("eq.$contactId")
+                val resolvedId = localIdMappingDao.resolveExistingId(LocalIdMapping.ENTITY_CONTACT, contactId)
+                if (resolvedId.startsWith("TEMP-")) {
+                    contactDao.deleteContactById(resolvedId)
+                    return@withContext kotlin.Result.success(Unit)
+                }
+                val response = apiService.deleteContact("eq.$resolvedId")
                 if (response.isSuccessful) {
-                    contactDao.deleteContactById(contactId)
+                    contactDao.deleteContactById(resolvedId)
                     kotlin.Result.success(Unit)
                 } else {
                     kotlin.Result.failure(Exception("HTTP ${response.code()}"))

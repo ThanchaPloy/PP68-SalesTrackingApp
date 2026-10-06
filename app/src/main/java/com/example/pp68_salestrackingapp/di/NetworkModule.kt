@@ -75,6 +75,10 @@ object NetworkModule {
 
     @Provides
     @Singleton
+    fun provideGson(): Gson = gson
+
+    @Provides
+    @Singleton
     fun provideAuthInterceptor(tokenManager: TokenManager): Interceptor {
         return Interceptor { chain ->
             val originalRequest = chain.request()

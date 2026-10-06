@@ -42,6 +42,7 @@ class SyncManager @Inject constructor(
     private val tokenManager: TokenManager,
     private val customerDao: CustomerDao,
     private val projectDao: ProjectDao,
+    private val localIdMappingDao: LocalIdMappingDao,
     private val contactDao: ContactDao,
     private val activityDao: ActivityDao,
     private val resultDao: ActivityResultDao,
@@ -445,7 +446,7 @@ class SyncManager @Inject constructor(
                         if (realCustId != null && realCustId != customer.custId) {
                             // ทุกตารางที่อ้าง custId ต้องถูกชี้ใหม่ให้ครบ — project ไม่มี FK ฝั่ง server
                             // ถ้าตกหล่น มันจะ insert สำเร็จโดยชี้ไปหาลูกค้าที่ไม่มีอยู่จริง แบบเงียบ ๆ
-                            customerDao.replaceTemporaryCustomer(
+                            localIdMappingDao.replaceTemporaryCustomer(
                                 customer.custId,
                                 customer.copy(custId = realCustId, isSynced = true)
                             )
@@ -472,12 +473,19 @@ class SyncManager @Inject constructor(
         }
 
         val unsyncedContacts = bounded(contactDao.getUnsyncedContacts(), tracker)
-        for (contact in unsyncedContacts) {
-            if (shouldSkip("contact", contact.contactId)) { tracker.skipped(); continue }
+        for (pendingContact in unsyncedContacts) {
+            if (shouldSkip("contact", pendingContact.contactId)) { tracker.skipped(); continue }
+            val contact = localIdMappingDao.resolvePendingContactCustomer(pendingContact)
+            if (contact == null) {
+                tracker.skipped()
+                tracker.failed(SyncFailureType.DEPENDENCY)
+                continue
+            }
             tracker.attempted()
             try {
                 val fields = buildMap<String, Any?> {
                     put("customer_code", contact.custId)
+                    put("customer_name", contact.customerName)
                     contact.fullName?.let { put("contact_name", it) }
                     contact.phoneNumber?.let { put("mobile_phone", it) }
                     contact.email?.let { put("email", it) }
@@ -497,8 +505,10 @@ class SyncManager @Inject constructor(
                 if (response.isSuccessful) {
                     val serverContact = response.body()?.firstOrNull()
                     if (serverContact != null && serverContact.contactId != contact.contactId) {
-                        contactDao.deleteContactById(contact.contactId)
-                        contactDao.insertContact(serverContact.copy(isSynced = true))
+                        localIdMappingDao.replaceTemporaryContact(
+                            contact.contactId,
+                            serverContact.copy(isSynced = true)
+                        )
                     } else {
                         contactDao.updateSyncStatus(contact.contactId, true)
                     }
@@ -511,8 +521,14 @@ class SyncManager @Inject constructor(
         }
 
         val unsyncedProjects = bounded(projectDao.getUnsyncedProjects(), tracker)
-        for (project in unsyncedProjects) {
-            if (shouldSkip("project", project.projectId)) { tracker.skipped(); continue }
+        for (pendingProject in unsyncedProjects) {
+            if (shouldSkip("project", pendingProject.projectId)) { tracker.skipped(); continue }
+            val project = localIdMappingDao.resolvePendingProjectCustomer(pendingProject)
+            if (project == null) {
+                tracker.skipped()
+                tracker.failed(SyncFailureType.DEPENDENCY)
+                continue
+            }
             tracker.attempted()
             try {
                 val isUpdate = !project.projectId.startsWith("TEMP-")
@@ -561,7 +577,7 @@ class SyncManager @Inject constructor(
                         val realId = response.body()?.firstOrNull()?.projectId
                         if (realId != null && realId != project.projectId) {
                             val oldId = project.projectId
-                            projectDao.replaceTemporaryProject(
+                            localIdMappingDao.replaceTemporaryProject(
                                 oldId,
                                 project.copy(projectId = realId, isSynced = false)
                             )
@@ -576,6 +592,9 @@ class SyncManager @Inject constructor(
                         // ลบฝั่ง server ก่อนเสมอ แม้ในเครื่องจะไม่เหลือผู้ติดต่อแล้ว — ไม่งั้นการลบ
                         // ออกจนหมดจะไม่ถูกส่งขึ้นไป แล้ว sync รอบถัดไปจะดึงของเก่ากลับลงมา
                         val localContacts = projectContactDao.getContactIdsByProject(finalId)
+                        if (localContacts.any { it.startsWith("TEMP-") }) {
+                            ChildSyncOutcome(false, error = IllegalStateException("Waiting for contact dependency"))
+                        } else {
                         val deleted = apiService.deleteProjectContacts("eq.$finalId")
                         if (!deleted.isSuccessful) {
                             ChildSyncOutcome(false, httpCode = deleted.code())
@@ -584,6 +603,7 @@ class SyncManager @Inject constructor(
                             val added = apiService.addProjectContacts(rows)
                             ChildSyncOutcome(added.isSuccessful, httpCode = added.code())
                         } else ChildSyncOutcome(true)
+                        }
                     } catch (e: Exception) {
                         if (e is CancellationException) throw e
                         Log.e("SyncManager", "Project-contact sync failed: ${e::class.java.simpleName}")
@@ -600,8 +620,15 @@ class SyncManager @Inject constructor(
         }
 
         val unsyncedActivities = bounded(activityDao.getUnsyncedActivities(), tracker)
-        for (activity in unsyncedActivities) {
-            if (shouldSkip("activity", activity.activityId)) { tracker.skipped(); continue }
+        for (pendingActivity in unsyncedActivities) {
+            if (shouldSkip("activity", pendingActivity.activityId)) { tracker.skipped(); continue }
+            // Never send a client-only project ID to the backend. If the parent sync failed, this
+            // child remains pending; if a durable mapping exists, repair old/stale rows first.
+            val activity = localIdMappingDao.resolvePendingActivityProject(pendingActivity)
+            if (activity == null) {
+                tracker.skipped()
+                continue
+            }
             tracker.attempted()
             try {
                 if (activity.activityId.startsWith("TEMP-")) {
@@ -612,7 +639,7 @@ class SyncManager @Inject constructor(
                     val realId = if (response.isSuccessful) response.body()?.firstOrNull()?.activityId else null
                     if (realId != null) {
                         if (realId != activity.activityId) {
-                            activityDao.replaceTemporaryActivity(
+                            localIdMappingDao.replaceTemporaryActivity(
                                 activity.activityId,
                                 activity.copy(activityId = realId, isSynced = false)
                             )
@@ -671,8 +698,14 @@ class SyncManager @Inject constructor(
         }
 
         val unsyncedResults = bounded(resultDao.getUnsyncedResults(), tracker)
-        for (res in unsyncedResults) {
-            if (shouldSkip("result", res.resultId)) { tracker.skipped(); continue }
+        for (pendingResult in unsyncedResults) {
+            if (shouldSkip("result", pendingResult.resultId)) { tracker.skipped(); continue }
+            val res = localIdMappingDao.resolvePendingResultParents(pendingResult)
+            if (res == null) {
+                tracker.skipped()
+                tracker.failed(SyncFailureType.DEPENDENCY)
+                continue
+            }
             tracker.attempted()
             try {
                 if (res.resultId.startsWith("TEMP-")) {
@@ -700,7 +733,7 @@ class SyncManager @Inject constructor(
                                 ?: if (wasSelfGroup) acceptedId else res.resultGroupId
                             // ✅ ต้อง insert แถว realId ก่อน แล้วค่อยย้ายรูปมาที่ realId แล้วค่อยลบ tempId ทีหลัง
                             // เพราะ activity_result_photo มี FK CASCADE ไปยัง activity_result — ถ้าลบ tempId ก่อน รูปที่ยังผูกกับ tempId จะโดนลบไปด้วย
-                            resultDao.replaceTemporaryResult(
+                            localIdMappingDao.replaceTemporaryResult(
                                 res.resultId,
                                 res.copy(
                                     resultId = acceptedId,
@@ -799,6 +832,9 @@ class SyncManager @Inject constructor(
     private suspend fun pushAppointmentContacts(appointmentId: String): ChildSyncOutcome {
         return try {
             val contacts = appointmentContactDao.getContactsByAppointmentId(appointmentId)
+            if (contacts.any { it.contactId.startsWith("TEMP-") }) {
+                return ChildSyncOutcome(false, error = IllegalStateException("Waiting for contact dependency"))
+            }
             val deleted = apiService.deleteAppointmentContacts("eq.$appointmentId")
             if (!deleted.isSuccessful) return ChildSyncOutcome(false, httpCode = deleted.code())
             if (contacts.isEmpty()) return ChildSyncOutcome(true)

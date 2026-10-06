@@ -67,6 +67,9 @@ interface CustomerDao {
     @Query("SELECT * FROM customer ORDER BY company_name ASC, cust_id ASC")
     fun getAllCustomers(): Flow<List<Customer>>
 
+    @Query("SELECT * FROM customer WHERE is_lead = 1 ORDER BY company_name ASC, cust_id ASC")
+    fun getAllLeads(): Flow<List<Customer>>
+
     @Query("SELECT * FROM customer WHERE company_name LIKE '%' || :searchQuery || '%' ORDER BY company_name ASC, cust_id ASC")
     fun searchCustomers(searchQuery: String): Flow<List<Customer>>
 
@@ -111,6 +114,15 @@ interface CustomerDao {
     @Query("DELETE FROM customer WHERE is_synced = 1")
     suspend fun deleteAllSynced()
 
+    @Query("DELETE FROM customer WHERE is_synced = 1 AND is_lead = 0")
+    suspend fun deleteSyncedErpCustomers()
+
+    @Query("DELETE FROM customer WHERE is_synced = 1 AND is_lead = 1")
+    suspend fun deleteAllSyncedLeads()
+
+    @Query("DELETE FROM customer WHERE is_synced = 1 AND is_lead = 1 AND cust_id NOT IN (:incomingIds)")
+    suspend fun deleteSyncedLeadsNotIn(incomingIds: List<String>)
+
     @Query("SELECT cust_id FROM customer")
     suspend fun getAllCustomerIds(): List<String>
 
@@ -128,6 +140,17 @@ interface CustomerDao {
         if (customers.isNotEmpty()) {
             insertCustomers(customers)
         }
+    }
+
+    /** Replaces the complete visible lead snapshot and purges previously cached ERP rows. */
+    @Transaction
+    suspend fun replaceLeadSnapshot(leads: List<Customer>) {
+        val normalized = leads.map { it.copy(isLead = true, isSynced = true) }
+        val incomingIds = normalized.map { it.custId }
+        if (incomingIds.isEmpty()) deleteAllSyncedLeads()
+        else deleteSyncedLeadsNotIn(incomingIds)
+        if (normalized.isNotEmpty()) insertCustomers(normalized)
+        deleteSyncedErpCustomers()
     }
 
     @Query("DELETE FROM customer WHERE is_synced = 1 AND cust_id NOT IN (:incomingIds)")

@@ -32,6 +32,7 @@ class SyncManagerTest {
     private val tokenManager: TokenManager = mockk(relaxed = true)
     private val customerDao: CustomerDao = mockk(relaxed = true)
     private val projectDao: ProjectDao = mockk(relaxed = true)
+    private val localIdMappingDao: LocalIdMappingDao = mockk(relaxed = true)
     private val contactDao: ContactDao = mockk(relaxed = true)
     private val activityDao: ActivityDao = mockk(relaxed = true)
     private val resultDao: ActivityResultDao = mockk(relaxed = true)
@@ -47,7 +48,7 @@ class SyncManagerTest {
     @Before
     fun setUp() {
         sync = SyncManager(
-            context, apiService, uploadApiService, tokenManager, customerDao, projectDao, contactDao,
+            context, apiService, uploadApiService, tokenManager, customerDao, projectDao, localIdMappingDao, contactDao,
             activityDao, resultDao, photoDao, appointmentContactDao, planItemDao, projectContactDao,
             syncRejectionDao, attachmentOutboxDao
         )
@@ -56,6 +57,10 @@ class SyncManagerTest {
         coEvery { projectDao.getUnsyncedProjects() } returns emptyList()
         coEvery { activityDao.getUnsyncedActivities() } returns emptyList()
         coEvery { resultDao.getUnsyncedResults() } returns emptyList()
+        coEvery { localIdMappingDao.resolvePendingContactCustomer(any()) } answers { firstArg() }
+        coEvery { localIdMappingDao.resolvePendingProjectCustomer(any()) } answers { firstArg() }
+        coEvery { localIdMappingDao.resolvePendingActivityProject(any()) } answers { firstArg() }
+        coEvery { localIdMappingDao.resolvePendingResultParents(any()) } answers { firstArg() }
         coEvery { planItemDao.getUnsyncedAppointmentIds() } returns emptyList()
         coEvery { syncRejectionDao.getAll() } returns emptyList()
         coEvery { syncRejectionDao.idsOfType(any()) } returns emptyList()
@@ -77,7 +82,7 @@ class SyncManagerTest {
         sync.doSync()
 
         coVerify(exactly = 1) {
-            customerDao.replaceTemporaryCustomer(
+            localIdMappingDao.replaceTemporaryCustomer(
                 "TEMP-ABC123",
                 match { it.custId == "C00123" && it.isSynced }
             )

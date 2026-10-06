@@ -14,6 +14,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.util.UUID
 import javax.inject.Inject
@@ -33,6 +35,7 @@ data class AddContactUiState(
     val selectedCompanyId:   String? = null,
     val selectedCompanyName: String? = null,
     val isLoadingCompanies:  Boolean = false,
+    val companySearchMessage: String? = null,
     val projectOptions:      List<Pair<String, String>> = emptyList(),
     val selectedProjectId:   String? = null,
     val selectedProjectName: String? = null,
@@ -83,6 +86,7 @@ sealed class AddContactEvent {
     object RestoreDraft : AddContactEvent()
     object DismissDraftPrompt : AddContactEvent()
     data class CompanySelected(val id: String, val name: String) : AddContactEvent()
+    data class CompanyQueryChanged(val value: String) : AddContactEvent()
     data class ProjectSelected(val id: String, val name: String) : AddContactEvent()
     data class FullNameChanged(val value: String)  : AddContactEvent()
     data class NicknameChanged(val value: String)  : AddContactEvent()
@@ -115,6 +119,8 @@ class AddContactViewModel @Inject constructor(
 
     private val _uiState = MutableStateFlow(AddContactUiState())
     val uiState: StateFlow<AddContactUiState> = _uiState
+    private var leadCompanyOptions: List<Pair<String, String>> = emptyList()
+    private var companySearchJob: Job? = null
 
     private val draft = com.example.pp68_salestrackingapp.utils.DraftController(
         store = draftStore,
@@ -212,8 +218,48 @@ class AddContactViewModel @Inject constructor(
             _uiState.update { it.copy(isLoadingCompanies = true) }
             customerRepo.getCustomers().onSuccess { customers ->
                 // ชื่อซ้ำ = เลือกผิดบริษัทเงียบ ๆ (หน้าจอส่งกลับมาแค่ "ชื่อ") ดู withUniqueLabels
-                _uiState.update { it.copy(companyOptions = customers.map { it.custId to it.companyName }.withUniqueLabels(), isLoadingCompanies = false) }
+                leadCompanyOptions = customers.map { it.custId to it.companyName }.withUniqueLabels()
+                _uiState.update { it.copy(companyOptions = leadCompanyOptions, isLoadingCompanies = false) }
             }.onFailure { _uiState.update { it.copy(isLoadingCompanies = false) } }
+        }
+    }
+
+    private fun searchCompanies(query: String) {
+        companySearchJob?.cancel()
+        val normalized = query.trim()
+        if (normalized.length < 2) {
+            _uiState.update {
+                it.copy(
+                    companyOptions = leadCompanyOptions,
+                    companySearchMessage = if (normalized.isEmpty()) null else "พิมพ์อย่างน้อย 2 ตัวอักษรเพื่อค้นหาลูกค้า ERP"
+                )
+            }
+            return
+        }
+        companySearchJob = viewModelScope.launch {
+            delay(400)
+            _uiState.update { it.copy(companySearchMessage = "กำลังค้นหาลูกค้า ERP…") }
+            customerRepo.searchErpCustomers(normalized).fold(
+                onSuccess = { remote ->
+                    val remoteOptions = remote.map { it.customerCode to it.customerName }
+                    _uiState.update {
+                        it.copy(
+                            companyOptions = (leadCompanyOptions + remoteOptions)
+                                .distinctBy { option -> option.first }
+                                .withUniqueLabels(),
+                            companySearchMessage = if (remote.isEmpty()) "ไม่พบลูกค้า ERP จากคำค้นนี้" else null
+                        )
+                    }
+                },
+                onFailure = {
+                    _uiState.update {
+                        it.copy(
+                            companyOptions = leadCompanyOptions,
+                            companySearchMessage = "ค้นหา ERP ไม่ได้ กรุณาตรวจสอบอินเทอร์เน็ต (Lead ในเครื่องยังเลือกได้)"
+                        )
+                    }
+                }
+            )
         }
     }
 
@@ -235,6 +281,7 @@ class AddContactViewModel @Inject constructor(
                 _uiState.update { it.copy(selectedCompanyId = event.id, selectedCompanyName = event.name, companyError = null, selectedProjectId = null, selectedProjectName = null, projectOptions = emptyList()) }
                 loadProjectsForCompany(event.id)
             }
+            is AddContactEvent.CompanyQueryChanged -> searchCompanies(event.value)
             is AddContactEvent.ProjectSelected -> _uiState.update { it.copy(selectedProjectId = event.id, selectedProjectName = event.name) }
             is AddContactEvent.FullNameChanged -> _uiState.update { it.copy(fullName = event.value, fullNameError = null) }
             is AddContactEvent.NicknameChanged -> _uiState.update { it.copy(nickname = event.value) }
@@ -409,6 +456,7 @@ class AddContactViewModel @Inject constructor(
             val contactToSave = ContactPerson(
                 contactId   = s.contactId ?: ("TEMP-" + UUID.randomUUID().toString().take(8).uppercase()),
                 custId      = s.selectedCompanyId!!,
+                customerName = s.selectedCompanyName,
                 fullName    = s.fullName,
                 nickname    = s.nickname.ifBlank { null },
                 position    = s.position.ifBlank { null },

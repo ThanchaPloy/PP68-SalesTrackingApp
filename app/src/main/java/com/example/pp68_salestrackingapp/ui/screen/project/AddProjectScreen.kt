@@ -234,7 +234,8 @@ fun AddProjectContent(
                                 placeholder = "เลือกลูกค้า",
                                 options     = uiState.customerOptions,
                                 onSelect    = { id, name -> onEvent(AddProjectEvent.CustomerSelected(id, name)) },
-                                onClear     = { onEvent(AddProjectEvent.CustomerSelected("", "")) }
+                                onClear     = { onEvent(AddProjectEvent.CustomerSelected("", "")) },
+                                onQueryChange = { onEvent(AddProjectEvent.CustomerQueryChanged(it)) }
                             )
                         }
                         TextButton(
@@ -245,6 +246,10 @@ fun AddProjectContent(
                             Spacer(Modifier.width(4.dp))
                             Text("สร้างลูกค้าใหม่", fontSize = 12.sp)
                         }
+                    }
+                    uiState.customerSearchMessage?.let {
+                        Text(it, color = AppColors.TextHint, fontSize = 12.sp,
+                            modifier = Modifier.padding(start = 4.dp, top = 2.dp))
                     }
                     if (uiState.customerError != null)
                         Text(uiState.customerError, color = AppColors.Error, fontSize = 12.sp,

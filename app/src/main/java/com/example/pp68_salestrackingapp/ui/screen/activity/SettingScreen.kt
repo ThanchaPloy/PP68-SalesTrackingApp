@@ -312,6 +312,7 @@ private fun SyncStatusScreen(
     onExport: () -> Unit
 ) {
     val pendingCount = uiState.pendingSummary.sumOf { it.second }
+    val attentionCount = uiState.rejected.size + uiState.conflicts.size
     Scaffold(
         topBar = {
             CenterAlignedTopAppBar(
@@ -338,13 +339,13 @@ private fun SyncStatusScreen(
                             is com.example.pp68_salestrackingapp.utils.SyncStatus.WaitingForNetwork -> "รอการเชื่อมต่อหรือลองใหม่"
                             is com.example.pp68_salestrackingapp.utils.SyncStatus.NeedsAttention -> "มีรายการที่ต้องตรวจสอบ"
                             is com.example.pp68_salestrackingapp.utils.SyncStatus.Failed -> "การซิงค์ล่าสุดมีปัญหา"
-                            else -> if (pendingCount == 0 && uiState.rejected.isEmpty()) "ข้อมูลส่งครบแล้ว" else "มีข้อมูลค้างส่ง"
+                            else -> if (pendingCount == 0 && attentionCount == 0) "ข้อมูลส่งครบแล้ว" else "มีข้อมูลที่ต้องตรวจสอบ"
                         },
                         fontWeight = FontWeight.Bold,
                         fontSize = 17.sp
                     )
                     Spacer(Modifier.height(8.dp))
-                    Text("รอส่ง $pendingCount รายการ • ต้องตรวจสอบ ${uiState.rejected.size} รายการ", color = TextGray)
+                    Text("รอส่ง $pendingCount รายการ • ต้องตรวจสอบ $attentionCount รายการ", color = TextGray)
                     uiState.lastSuccessfulSync?.let {
                         Spacer(Modifier.height(4.dp))
                         Text("ส่งครบล่าสุด: $it", color = TextGray, fontSize = 12.sp)
@@ -362,6 +363,17 @@ private fun SyncStatusScreen(
                 Text("รายการที่ต้องตรวจสอบ", fontWeight = FontWeight.Bold, color = RedPrimary)
                 uiState.rejected.groupingBy { it.reason ?: "ไม่ทราบสาเหตุ" }.eachCount().forEach { (reason, count) ->
                     Text("• $reason ($count รายการ)")
+                }
+            }
+            if (uiState.conflicts.isNotEmpty()) {
+                Text("ข้อมูลออฟไลน์ชนกับข้อมูลบนเซิร์ฟเวอร์", fontWeight = FontWeight.Bold, color = RedPrimary)
+                Text(
+                    "แอปเก็บงานที่คุณแก้ไว้และยังไม่ได้เขียนทับ กรุณาติดต่อผู้ดูแลเพื่อตรวจสอบก่อนลบหรือออกจากระบบ",
+                    color = TextGray,
+                    fontSize = 12.sp
+                )
+                uiState.conflicts.groupingBy { it.entityType }.eachCount().forEach { (type, count) ->
+                    Text("• $type ($count รายการ)")
                 }
             }
 

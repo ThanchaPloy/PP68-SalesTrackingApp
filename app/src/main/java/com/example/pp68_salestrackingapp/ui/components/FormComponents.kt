@@ -176,6 +176,7 @@ fun SearchableIdDropdownField(
     options: List<Pair<String, String>>,          // id to ชื่อที่แสดง
     onSelect: (id: String, label: String) -> Unit,
     onClear: () -> Unit = {},
+    onQueryChange: (String) -> Unit = {},
     enabled: Boolean = true
 ) {
     var query by remember(value) { mutableStateOf(value) }
@@ -189,7 +190,9 @@ fun SearchableIdDropdownField(
         // the user typed something. 300 comfortably covers categorical lists (brands,
         // groups, units); genuinely huge lists (customers) still get bounded.
         if (q.isBlank()) options.take(300)
-        else options.filter { it.second.contains(q, ignoreCase = true) }.take(300)
+        else options.filter {
+            it.first.contains(q, ignoreCase = true) || it.second.contains(q, ignoreCase = true)
+        }.take(300)
     }
 
     ExposedDropdownMenuBox(
@@ -198,11 +201,20 @@ fun SearchableIdDropdownField(
     ) {
         OutlinedTextField(
             value = query,
-            onValueChange = { query = it; expanded = true },
+            onValueChange = {
+                query = it
+                expanded = true
+                onQueryChange(it)
+            },
             placeholder = { Text(placeholder, color = AppColors.TextHint, fontSize = 14.sp) },
             trailingIcon = {
                 if (query.isNotBlank()) {
-                    IconButton(onClick = { query = ""; onClear(); expanded = false }) {
+                    IconButton(onClick = {
+                        query = ""
+                        onQueryChange("")
+                        onClear()
+                        expanded = false
+                    }) {
                         Icon(Icons.Default.Close, null, tint = AppColors.TextHint, modifier = Modifier.size(18.dp))
                     }
                 } else {

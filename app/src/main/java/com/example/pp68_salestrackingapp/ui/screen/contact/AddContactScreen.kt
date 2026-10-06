@@ -143,8 +143,13 @@ fun AddContactContent(
                             placeholder = "เลือกบริษัทลูกค้า",
                             options     = uiState.companyOptions,
                             onSelect    = { id, name -> onEvent(AddContactEvent.CompanySelected(id, name)) },
-                            onClear     = { onEvent(AddContactEvent.CompanySelected("", "")) }
+                            onClear     = { onEvent(AddContactEvent.CompanySelected("", "")) },
+                            onQueryChange = { onEvent(AddContactEvent.CompanyQueryChanged(it)) }
                         )
+                        uiState.companySearchMessage?.let {
+                            Text(it, color = AppColors.TextHint, fontSize = 12.sp,
+                                modifier = Modifier.padding(start = 4.dp, top = 2.dp))
+                        }
                         if (uiState.companyError != null)
                             Text(uiState.companyError, color = MaterialTheme.colorScheme.error,
                                 fontSize = 12.sp,

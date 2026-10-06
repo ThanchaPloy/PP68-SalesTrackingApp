@@ -8,6 +8,8 @@ import com.example.pp68_salestrackingapp.data.repository.AuthRepository
 import com.example.pp68_salestrackingapp.data.model.AuthUser
 import com.example.pp68_salestrackingapp.data.repository.CustomerRepository
 import com.example.pp68_salestrackingapp.data.repository.ProjectRepository
+import com.example.pp68_salestrackingapp.data.local.SyncConflictDao
+import com.example.pp68_salestrackingapp.data.repository.syncAccountKey
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -59,6 +61,7 @@ data class HomeUiState(
     val syncFailures: List<String> = emptyList(),
     val pendingSummary: List<Pair<String, Int>> = emptyList(),
     val rejectedCount: Int = 0,
+    val conflictCount: Int = 0,
     val syncStatus: SyncStatus = SyncStatus.Idle
 )
 
@@ -72,7 +75,8 @@ class HomeViewModel @Inject constructor(
     private val apiService:   ApiService,
     // ตัวดาวน์โหลดข้อมูลหลัง login (data.repository) — คนละตัวกับ outbox ใน utils ที่ชื่อซ้ำกัน
     private val downloadSync: com.example.pp68_salestrackingapp.data.repository.SyncManager,
-    private val outboxSync: com.example.pp68_salestrackingapp.utils.SyncManager
+    private val outboxSync: com.example.pp68_salestrackingapp.utils.SyncManager,
+    private val syncConflictDao: SyncConflictDao
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(HomeUiState(authUser = authRepo.currentUser()))
@@ -96,8 +100,16 @@ class HomeViewModel @Inject constructor(
             SyncRuntime.status.collect { status ->
                 val pending = runCatching { outboxSync.pendingSummary() }.getOrDefault(emptyList())
                 val rejected = runCatching { outboxSync.rejectedSummary().size }.getOrDefault(0)
+                val conflicts = authRepo.currentUser()?.userId?.let { userId ->
+                    runCatching { syncConflictDao.countForAccount(syncAccountKey(userId)) }.getOrDefault(0)
+                } ?: 0
                 _uiState.update {
-                    it.copy(syncStatus = status, pendingSummary = pending, rejectedCount = rejected)
+                    it.copy(
+                        syncStatus = status,
+                        pendingSummary = pending,
+                        rejectedCount = rejected,
+                        conflictCount = conflicts
+                    )
                 }
             }
         }

@@ -219,8 +219,13 @@ fun CreateAppointmentScreen(
                         placeholder = "ค้นหาชื่อบริษัท...",
                         options     = state.companyOptions,
                         onSelect    = { id, name -> onEvent(CreateAppointmentEvent.CompanySelected(id, name)) },
-                        onClear     = { onEvent(CreateAppointmentEvent.CompanySelected("", "")) }
+                        onClear     = { onEvent(CreateAppointmentEvent.CompanySelected("", "")) },
+                        onQueryChange = { onEvent(CreateAppointmentEvent.CompanyQueryChanged(it)) }
                     )
+                    state.companySearchMessage?.let {
+                        Text(it, color = AppColors.TextHint, fontSize = 12.sp,
+                            modifier = Modifier.padding(start = 4.dp, top = 2.dp))
+                    }
                     // ลูกค้ารายใหม่ที่ยังไม่มีในระบบ — สร้างเป็น Lead ตรงนี้ได้เลยไม่ต้องออกไปหน้าอื่น
                     TextButton(onClick = { onEvent(CreateAppointmentEvent.ToggleQuickAddCustomer(true)) }) {
                         Icon(Icons.Default.Add, null, tint = RedPrimary, modifier = Modifier.size(18.dp))

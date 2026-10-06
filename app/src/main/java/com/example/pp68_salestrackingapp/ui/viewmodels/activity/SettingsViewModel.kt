@@ -4,6 +4,9 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.pp68_salestrackingapp.data.model.AuthUser
 import com.example.pp68_salestrackingapp.data.repository.AuthRepository
+import com.example.pp68_salestrackingapp.data.local.SyncConflictDao
+import com.example.pp68_salestrackingapp.data.model.SyncConflict
+import com.example.pp68_salestrackingapp.data.repository.syncAccountKey
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -26,6 +29,7 @@ data class SettingsUiState(
     val logoutWarning: String? = null,
     val pendingSummary: List<Pair<String, Int>> = emptyList(),
     val rejected: List<com.example.pp68_salestrackingapp.data.model.SyncRejection> = emptyList(),
+    val conflicts: List<SyncConflict> = emptyList(),
     val syncStatus: SyncStatus = SyncStatus.Idle,
     val lastSuccessfulSync: String? = null
 )
@@ -34,7 +38,8 @@ data class SettingsUiState(
 class SettingsViewModel @Inject constructor(
     private val authRepo: AuthRepository,
     private val syncManager: com.example.pp68_salestrackingapp.utils.SyncManager,
-    private val diagnostics: SyncDiagnostics
+    private val diagnostics: SyncDiagnostics,
+    private val syncConflictDao: SyncConflictDao
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(SettingsUiState())
@@ -64,10 +69,15 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch {
             val pending = runCatching { syncManager.pendingSummary() }.getOrDefault(emptyList())
             val rejected = runCatching { syncManager.rejectedSummary() }.getOrDefault(emptyList())
+            val conflicts = authRepo.currentUser()?.userId?.let { userId ->
+                runCatching { syncConflictDao.getForAccount(syncAccountKey(userId)) }
+                    .getOrDefault(emptyList())
+            }.orEmpty()
             _uiState.update {
                 it.copy(
                     pendingSummary = pending,
                     rejected = rejected,
+                    conflicts = conflicts,
                     lastSuccessfulSync = diagnostics.lastSuccessfulSync()
                 )
             }

@@ -15,6 +15,10 @@ import com.example.pp68_salestrackingapp.data.local.CustomerDao
 import com.example.pp68_salestrackingapp.data.local.ProjectDao
 import com.example.pp68_salestrackingapp.data.local.ContactDao
 import com.example.pp68_salestrackingapp.data.local.SyncRejectionDao
+import com.example.pp68_salestrackingapp.data.local.SyncStateDao
+import com.example.pp68_salestrackingapp.data.local.SyncConflictDao
+import com.example.pp68_salestrackingapp.data.local.SyncSnapshotDao
+import com.example.pp68_salestrackingapp.data.local.LocalIdMappingDao
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -68,7 +72,12 @@ object DatabaseModule {
                 AppDatabase.MIGRATION_52_53,
                 AppDatabase.MIGRATION_53_54,
                 AppDatabase.MIGRATION_54_55,
-                AppDatabase.MIGRATION_55_56
+                AppDatabase.MIGRATION_55_56,
+                AppDatabase.MIGRATION_56_57,
+                AppDatabase.MIGRATION_57_58,
+                AppDatabase.MIGRATION_58_59,
+                AppDatabase.MIGRATION_59_60,
+                AppDatabase.MIGRATION_60_61
             )
             .build()
     }
@@ -132,4 +141,20 @@ object DatabaseModule {
     @Provides
     @Singleton
     fun provideAttachmentOutboxDao(db: AppDatabase): AttachmentOutboxDao = db.attachmentOutboxDao()
+
+    @Provides
+    @Singleton
+    fun provideSyncStateDao(db: AppDatabase): SyncStateDao = db.syncStateDao()
+
+    @Provides
+    @Singleton
+    fun provideSyncConflictDao(db: AppDatabase): SyncConflictDao = db.syncConflictDao()
+
+    @Provides
+    @Singleton
+    fun provideSyncSnapshotDao(db: AppDatabase): SyncSnapshotDao = db.syncSnapshotDao()
+
+    @Provides
+    @Singleton
+    fun provideLocalIdMappingDao(db: AppDatabase): LocalIdMappingDao = db.localIdMappingDao()
 }

@@ -38,14 +38,15 @@ class AuthRepository @Inject constructor(
                     val finalEmpType = loginResp.employee?.empPost ?: loginResp.empType
                     val pending = outboxSyncManager.pendingSummary()
                     val rejected = outboxSyncManager.rejectedSummary()
-                    val hasProtectedLocalData = pending.isNotEmpty() || rejected.isNotEmpty()
+                    val conflicts = database.syncConflictDao().countAll()
+                    val hasProtectedLocalData = pending.isNotEmpty() || rejected.isNotEmpty() || conflicts > 0
                     val isSameUser = previousUserId == finalUserId ||
                         (previousUserId.isNullOrBlank() && !hasProtectedLocalData)
 
                     // สำคัญ: ตรวจและบล็อกก่อนเขียน token ใหม่ เพื่อไม่ให้งานของ A ถูกส่งด้วยสิทธิ์ของ B
                     if (!isSameUser && hasProtectedLocalData && !discardPreviousData) {
                         return@withContext kotlin.Result.failure(
-                            AccountSwitchBlockedException(pending, rejected)
+                            AccountSwitchBlockedException(pending, rejected, conflicts)
                         )
                     }
                     if (!isSameUser) {
@@ -84,7 +85,8 @@ class AuthRepository @Inject constructor(
 
     class AccountSwitchBlockedException(
         val pending: List<Pair<String, Int>>,
-        val rejected: List<com.example.pp68_salestrackingapp.data.model.SyncRejection>
+        val rejected: List<com.example.pp68_salestrackingapp.data.model.SyncRejection>,
+        val conflicts: Int = 0
     ) : Exception(
         buildString {
             append("มีข้อมูลของบัญชีก่อนหน้าค้างอยู่ในเครื่อง")
@@ -94,6 +96,7 @@ class AuthRepository @Inject constructor(
                 append("\nต้องตรวจสอบ:\n")
                 append(groups.entries.joinToString("\n") { (key, count) -> "• ${key.first}: ${key.second} ($count รายการ)" })
             }
+            if (conflicts > 0) append("\nข้อมูลออฟไลน์ชนกับเซิร์ฟเวอร์: $conflicts รายการ")
             append("\nหากลบ ข้อมูลเหล่านี้จะกู้คืนไม่ได้")
         }
     )
@@ -217,6 +220,16 @@ class AuthRepository @Inject constructor(
                         PendingRejectionException(
                             "มีข้อมูล ${rejected.size} รายการที่เซิร์ฟเวอร์ไม่รับ และจะหายไปถ้าออกจากระบบตอนนี้\n$reasons",
                             rejected.size
+                        )
+                    )
+                }
+
+                val conflicts = database.syncConflictDao().countAll()
+                if (conflicts > 0 && !force) {
+                    return@withContext kotlin.Result.failure(
+                        PendingRejectionException(
+                            "มีข้อมูลออฟไลน์ $conflicts รายการที่ชนกับข้อมูลบนเซิร์ฟเวอร์ และจะหายไปถ้าออกจากระบบตอนนี้",
+                            conflicts
                         )
                     )
                 }

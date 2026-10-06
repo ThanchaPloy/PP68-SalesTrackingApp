@@ -60,5 +60,11 @@ data class ContactPerson(
     val createdBy: String? = null,
 
     @ColumnInfo(name = "is_synced")
-    val isSynced: Boolean = true
+    val isSynced: Boolean = true,
+
+    // Keep this new optional field last so existing positional Kotlin callers remain compatible.
+    // It is only an offline display snapshot, not a cached ERP customer record.
+    @ColumnInfo(name = "customer_name")
+    @SerializedName("customer_name")
+    val customerName: String? = null
 )

@@ -6,7 +6,13 @@ import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.example.pp68_salestrackingapp.data.repository.AuthRepository
 import com.example.pp68_salestrackingapp.data.repository.SyncManager
+import com.example.pp68_salestrackingapp.data.repository.DeltaSyncRepository
+import com.example.pp68_salestrackingapp.data.repository.DeltaSyncCursorExpiredException
+import com.example.pp68_salestrackingapp.data.repository.DeltaSyncProtocolException
+import com.example.pp68_salestrackingapp.data.model.SyncState
 import com.example.pp68_salestrackingapp.utils.SyncDiagnostics
+import com.example.pp68_salestrackingapp.utils.SyncFailureType
+import com.example.pp68_salestrackingapp.utils.classifySyncFailure
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import kotlinx.coroutines.CancellationException
@@ -19,36 +25,55 @@ class DownloadSyncWorker @AssistedInject constructor(
     @Assisted params: WorkerParameters,
     private val authRepository: AuthRepository,
     private val downloadSync: SyncManager,
+    private val deltaSync: DeltaSyncRepository,
     private val diagnostics: SyncDiagnostics
 ) : CoroutineWorker(context, params) {
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
         val user = authRepository.currentUser() ?: return@withContext Result.success()
         try {
-            val outcome = downloadSync.syncAll(user.userId, user.teamId.orEmpty())
-            val failed = outcome.failedParts
+            val state = deltaSync.getState(user.userId)
+            val bootstrapRequired = state?.bootstrapStatus != SyncState.STATUS_READY
+            if (bootstrapRequired) {
+                deltaSync.bootstrapSnapshot(user.userId).getOrThrow()
+            }
+            val deltaPages = deltaSync.syncUntilCaughtUp(user.userId).getOrThrow()
+            downloadSync.refreshOptionalMasterData()
+            downloadSync.clearFailedParts()
             diagnostics.record(
-                if (failed.isEmpty()) "download_finished" else "download_partial",
+                "download_finished",
                 mapOf(
-                    "temporary_failures" to failed.count { it.failureType != com.example.pp68_salestrackingapp.utils.SyncFailureType.LOCAL_FATAL },
-                    "failure_types" to failed.groupingBy { it.failureType }.eachCount().entries.joinToString(",") { "${it.key}:${it.value}" },
+                    "bootstrap" to bootstrapRequired,
+                    "delta_pages" to deltaPages,
                     "worker_attempt" to runAttemptCount
                 )
             )
-            when {
-                outcome.hasLocalFatalFailure -> Result.failure(
-                    androidx.work.workDataOf("error_type" to "LOCAL_FATAL")
-                )
-                outcome.shouldRetry -> Result.retry()
-                else -> Result.success()
-            }
+            Result.success()
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
+            val failureType = classifySyncFailure(e)
+            downloadSync.reportFailedParts(listOf("ดาวน์โหลดข้อมูล"))
             diagnostics.record("download_failed", mapOf(
                 "worker_attempt" to runAttemptCount,
-                "error_type" to e::class.java.simpleName
+                "error_type" to e::class.java.simpleName,
+                "failure_type" to failureType.name
             ))
-            Result.retry()
+            when {
+                e is DeltaSyncCursorExpiredException -> Result.retry()
+                e is DeltaSyncProtocolException -> Result.failure(
+                    androidx.work.workDataOf("error_type" to e::class.java.simpleName)
+                )
+                failureType in setOf(
+                    SyncFailureType.NETWORK,
+                    SyncFailureType.TIMEOUT,
+                    SyncFailureType.RATE_LIMITED,
+                    SyncFailureType.SERVER,
+                    SyncFailureType.UNKNOWN
+                ) -> Result.retry()
+                else -> Result.failure(
+                    androidx.work.workDataOf("error_type" to e::class.java.simpleName)
+                )
+            }
         }
     }
 }
