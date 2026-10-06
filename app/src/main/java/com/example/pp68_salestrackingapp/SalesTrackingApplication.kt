@@ -31,6 +31,35 @@ class SalesTrackingApplication : Application(), Configuration.Provider, ImageLoa
     @Inject
     lateinit var syncManager: SyncManager
 
+    @Inject
+    lateinit var diagnostics: com.example.pp68_salestrackingapp.utils.SyncDiagnostics
+
+    /**
+     * แอปล่มแล้วไม่เหลือร่องรอยในไฟล์ diagnostics เลย ผู้ใช้ส่งไฟล์มาให้ก็ไม่เห็นว่าเกิดอะไร
+     *
+     * เก็บแค่ชนิดของ exception กับชื่อเธรด ไม่เก็บข้อความหรือ stack trace เพราะสองอย่างนั้น
+     * มักมีค่าจากข้อมูลจริงปนมา (ชื่อลูกค้า รหัสรายการ บางทีก็ token)
+     *
+     * ต้องเขียนลงดิสก์แบบรอให้เสร็จ เพราะ process กำลังจะตาย แล้วส่งต่อให้ handler เดิมเสมอ
+     * ไม่งั้นจะกลืน crash จนระบบไม่รู้ว่าแอปล่ม
+     */
+    private fun recordCrashesInDiagnostics() {
+        val previous = Thread.getDefaultUncaughtExceptionHandler()
+        Thread.setDefaultUncaughtExceptionHandler { thread, error ->
+            runCatching {
+                diagnostics.record(
+                    "app_crash",
+                    mapOf(
+                        "error_type" to error::class.java.name,
+                        "thread" to thread.name
+                    ),
+                    flush = true
+                )
+            }
+            previous?.uncaughtException(thread, error)
+        }
+    }
+
     override val workManagerConfiguration: Configuration
         get() = Configuration.Builder()
             .setWorkerFactory(workerFactory)
@@ -45,6 +74,7 @@ class SalesTrackingApplication : Application(), Configuration.Provider, ImageLoa
 
     override fun onCreate() {
         super.onCreate()
+        recordCrashesInDiagnostics()
         NotificationChannels.ensureCreated(this)
         syncManager.scheduleEndOfDayReminder()
 

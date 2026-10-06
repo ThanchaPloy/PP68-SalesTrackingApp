@@ -20,8 +20,12 @@ class SyncDiagnostics @Inject constructor(
 ) {
     private val prefs = context.getSharedPreferences("sync_diagnostics", Context.MODE_PRIVATE)
 
+    /**
+     * [flush] = เขียนลงดิสก์ทันทีแทน apply() แบบ async
+     * ใช้ตอนบันทึก crash เพราะ process กำลังจะตาย ถ้ารอ apply() เขียนไม่ทัน บันทึกจะหายไป
+     */
     @Synchronized
-    fun record(event: String, fields: Map<String, Any?> = emptyMap()) {
+    fun record(event: String, fields: Map<String, Any?> = emptyMap(), flush: Boolean = false) {
         val events = readEvents()
         events.put(JSONObject().apply {
             put("timestamp", Instant.now().toString())
@@ -33,7 +37,8 @@ class SyncDiagnostics @Inject constructor(
         val bounded = JSONArray()
         val start = (events.length() - MAX_EVENTS).coerceAtLeast(0)
         for (index in start until events.length()) bounded.put(events.getJSONObject(index))
-        prefs.edit().putString(KEY_EVENTS, bounded.toString()).apply()
+        val editor = prefs.edit().putString(KEY_EVENTS, bounded.toString())
+        if (flush) editor.commit() else editor.apply()
     }
 
     fun exportFile(): File {
@@ -70,7 +75,10 @@ class SyncDiagnostics @Inject constructor(
         val ALLOWED_FIELDS = setOf(
             "run_id", "trigger", "attempted", "succeeded", "temporary_failures",
             "permanent_failures", "rejected_pending", "still_pending", "worker_attempt",
-            "error_type", "failure_types"
+            "error_type", "failure_types",
+            // ของที่เพิ่มมาเพื่อให้ไฟล์มีร่องรอยของ error ที่เกิดตอนใช้งานจริง ไม่ใช่แค่ของ worker
+            // path เก็บเฉพาะส่วน path ไม่เอา query string เพราะในนั้นมีรหัสรายการจริง
+            "method", "path", "http_code", "thread"
         )
     }
 }

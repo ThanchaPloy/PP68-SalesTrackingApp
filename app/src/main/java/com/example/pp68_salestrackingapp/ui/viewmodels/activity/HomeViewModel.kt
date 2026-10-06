@@ -114,6 +114,16 @@ class HomeViewModel @Inject constructor(
                         conflictCount = conflicts
                     )
                 }
+
+                // แบนเนอร์ "ดาวน์โหลดข้อมูลไม่สำเร็จ" ตั้งค่าตอน DownloadSyncWorker ล้ม (เช่นเปิดแอป
+                // ตอนออฟไลน์) และถูกล้างเมื่อ worker ตัวนั้นรันสำเร็จเท่านั้น แต่ตอนเน็ตกลับมามีแค่
+                // worker ฝั่งอัปโหลดที่ถูกปลุก ข้อมูลจึงขึ้นไปได้ตามปกติแต่แบนเนอร์ค้างอยู่อย่างนั้น
+                // พออัปโหลดสำเร็จแปลว่าเน็ตใช้ได้แล้ว จึงสั่งดาวน์โหลดซ้ำให้แบนเนอร์หายเอง
+                if (status is com.example.pp68_salestrackingapp.utils.SyncStatus.Success &&
+                    downloadSync.failedParts.value.isNotEmpty()
+                ) {
+                    outboxSync.scheduleDownload()
+                }
             }
         }
     }

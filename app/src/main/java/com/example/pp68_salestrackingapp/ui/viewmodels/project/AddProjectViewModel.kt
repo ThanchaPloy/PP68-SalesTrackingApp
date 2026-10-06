@@ -336,6 +336,10 @@ class AddProjectViewModel @Inject constructor(
                         }
                     } else if (userBranch != null && _uiState.value.projectId == null) {
                         onEvent(AddProjectEvent.TeamSelected(userBranch.branchId, userBranch.branchName))
+                    } else if (userBranchId.isNotBlank() && _uiState.value.selectedTeamId.isNullOrBlank()) {
+                        // ออฟไลน์และแคชสาขาว่าง — ยังรู้สาขาของผู้ใช้จาก token จึงเลือกให้ไว้ก่อน
+                        // ดีกว่าปล่อยช่องว่างแล้วให้ผู้ใช้เดาว่าต้องทำอะไรต่อ
+                        _uiState.update { it.copy(selectedTeamId = userBranchId) }
                     }
                 } catch (e: Exception) {
                     _uiState.update { it.copy(isLoadingTeams = false) }
@@ -728,10 +732,9 @@ class AddProjectViewModel @Inject constructor(
                 valid = false
             }
         }
-        if (s.selectedTeamId.isNullOrBlank()) {
-            _uiState.update { it.copy(saveError = "กรุณาเลือกสาขาที่พนักงานขายรับผิดชอบ") }
-            valid = false
-        }
+        // ❌ ไม่บังคับเลือกสาขาที่พนักงานขายรับผิดชอบ — รายชื่อสาขามาจาก server เท่านั้น
+        // ตอนออฟไลน์และแคชสาขายังว่าง ดรอปดาวน์จะไม่มีอะไรให้เลือก ผู้ใช้จึงบันทึกโครงการ
+        // ไม่ได้เลยทั้งที่ข้อมูลอื่นครบ ตอนบันทึกมี fallback เป็นสาขาของผู้ใช้เองอยู่แล้ว
         // ❌ เอาการเช็ค billingBranch ออก เพื่อให้ไม่บังคับกรอกตามที่ผู้ใช้แจ้ง
         return valid
     }
