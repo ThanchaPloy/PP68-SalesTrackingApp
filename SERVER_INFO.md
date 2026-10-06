@@ -72,27 +72,50 @@ nginx -s reload        # หมายเหตุ: nginx บนเครื่�
 
 | Repo | GitHub `origin/main` | สถานะ |
 |---|---|---|
-| **Backend** (`ThanchaPloy/backend-PP68SalesTrackingApp`) | `40f0fa4` merge Phase 4A | deploy แล้วหรือยัง ให้เช็คด้วยวิธีด้านล่าง |
+| **Backend** (`ThanchaPloy/backend-PP68SalesTrackingApp`) | `e2e9ba6` — Phase 4A + 4B + fix ERP/นัดหมาย + log flag | ยืนยันแล้วว่า Phase 4A ขึ้น production (`/account/complete-initial-setup` ตอบ 405) ส่วนตัวหลังจากนั้นไม่มี route ใหม่ ดูจาก log ตอน start แทน |
 | **Android app** (`ThanchaPloy/PP68-SalesTrackingApp`) | ยังไม่ได้ merge — งานอยู่บน branch | ดูตาราง branch ด้านล่าง |
 
 Server (`.177`) มี SSH deploy key ของตัวเองแล้ว ใช้ `git pull`/`git push` จาก repo backend ได้โดยตรงไม่ต้องผ่านเครื่องอื่น
 
-### branch ที่ยังไม่ได้ merge เข้า main (ตุลาคม 2026)
+### branch ของ Android (ตุลาคม 2026)
 
-| Repo | Branch | เนื้อหา |
-|---|---|---|
-| Backend | `feature/appointment-policy` | Phase 4B กติกาแก้/ลบ/บันทึกผลนัดหมาย หลัง flag `APPOINTMENT_POLICY_V2` ที่ปิดอยู่ |
-| Android | `release/phase-4a` | ตัวที่คู่กับ backend `main` ตอนนี้ — มีแค่หน้าบังคับตั้งค่าบัญชี |
-| Android | `feature/appointment-policy` | ซ้อน 4A + 4B + 4C ไว้ทั้งหมด **ห้าม build แจกจนกว่า backend 4B จะขึ้น** |
+ยังไม่มี branch ไหน merge เข้า `main` ของฝั่งแอป แต่ละ release คือการตัด branch แล้ว build จากตรงนั้น
 
-### ลำดับ rollout ที่ห้ามสลับ
+| Branch | เนื้อหา |
+|---|---|
+| `release/phase-4a` | บังคับตั้งค่าบัญชีอย่างเดียว (ตัวแรกที่แจก) |
+| `release/phase-4b` | 4A + กติกานัดหมายตามเวลาเริ่มนัด + เวลาอ้างอิงจากเซิร์ฟเวอร์ |
+| `release/phase-4c` | **ตัวล่าสุดที่ใช้แจก** — 4A + 4B + ฉบับร่างหลายรายการ + fix จากการทดสอบเครื่องจริง (Room 63) |
+| `feature/appointment-policy` | branch พัฒนา ทุก fix ถูก cherry-pick กลับมาที่นี่เสมอ |
 
-1. deploy backend `main` แล้วยืนยันว่า migration ขึ้นจริง (ดูด้านล่าง)
-2. แจก APK ที่ build จาก Android `release/phase-4a` — ยังไม่มีอะไรเปลี่ยนสำหรับผู้ใช้
-3. รอจนมั่นใจว่าทุกคนอัปเดตแล้ว
-4. จึงรัน `migrations/oneoff_enable_required_account_setup.sql` ด้วยมือ เพื่อเปิดบังคับตั้งรหัสผ่าน
+ฝั่ง backend `fix/*` และ `feature/appointment-policy` merge เข้า `main` หมดแล้ว
 
-ถ้ารันข้อ 4 ก่อนข้อ 2 ผู้ใช้บนแอปรุ่นเก่าจะ login ได้แต่ไม่มีหน้าให้ตั้งค่า = ใช้งานไม่ได้ทั้งหมด
+### สวิตช์สองตัวที่เปิดด้วยมือ ไม่ได้เปิดเองตอน deploy
+
+**1. `APPOINTMENT_POLICY_V2` — กติกาแก้/ลบ/บันทึกผลนัดหมายฝั่ง server**
+
+ใส่เป็นบรรทัดในไฟล์ `.env` ที่รากโปรเจกต์ (`loadDotenv()` ใน `Application.kt` อ่านตอน start แล้วยัดเป็น system property ก่อน config ถูก parse)
+
+```bash
+echo 'APPOINTMENT_POLICY_V2=true' >> .env     # >> คือต่อท้าย ถ้าใช้ > จะทับทั้งไฟล์
+systemctl restart pp68-backend
+```
+
+ยืนยันจาก log ตอน start ต้องขึ้น `PP68 Backend started on port 8080 (appointment_policy_v2=true)` ถ้าขึ้น `false` แปลว่าไฟล์ไม่ถูกอ่าน เกือบทุกครั้งคือ `WorkingDirectory` ของ systemd ไม่ได้ชี้มาที่รากโปรเจกต์ (ปัญหาเดียวกับที่ทำให้ migration ไม่รัน)
+
+เปิดแล้วเครื่องที่ยังใช้ APK ก่อน `release/phase-4b` จะแก้นัดหมายไม่ได้เลย เพราะรุ่นเก่าไม่ส่ง `client_modified_at` ขึ้นมา ทุกการแก้จะได้ 422 — ต้องแจก APK ให้ครบก่อนหรือพร้อมกัน ปิดกลับได้ด้วยการลบบรรทัดนั้นแล้ว restart ไม่ต้อง rollback โค้ดหรือแตะฐานข้อมูล
+
+**2. `password_change_required` — บังคับตั้งรหัสผ่าน/เบอร์ครั้งแรก**
+
+migration สร้างคอลัมน์ให้เป็น `FALSE` ทุกบัญชี หน้าตั้งค่าจะไม่โผล่จนกว่าจะเปิดเอง
+
+ทดสอบเฉพาะบัญชีตัวเองก่อนได้
+```sql
+UPDATE employee SET password_change_required = TRUE WHERE emp_code = 'อีเมลตัวพิมพ์เล็ก';
+```
+เปิดทั้งบริษัทให้รัน `migrations/oneoff_enable_required_account_setup.sql`
+
+**ห้ามเปิดก่อนแจก APK ที่มีหน้าตั้งค่า** ผู้ใช้บนแอปรุ่นเก่าจะ login ได้แต่ไม่มีหน้าให้ตั้งค่า = ใช้งานไม่ได้ทั้งหมด
 
 ---
 
