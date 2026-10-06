@@ -15,6 +15,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -51,7 +52,10 @@ fun InitialAccountSetupScreen(
                 .fillMaxWidth()
                 .padding(20.dp),
             shape = RoundedCornerShape(20.dp),
-            tonalElevation = 6.dp
+            // พื้นขาวล้วน ไม่ใช้ tonalElevation เพราะ Material จะผสมสีหลักของแอป (แดง)
+            // ลงบนพื้นผิวตามระดับความสูง ทำให้การ์ดออกชมพู
+            color = Color.White,
+            shadowElevation = 6.dp
         ) {
             Column(
                 modifier = Modifier
