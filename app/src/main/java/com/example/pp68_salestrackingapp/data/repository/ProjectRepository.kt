@@ -48,7 +48,20 @@ class ProjectRepository @Inject constructor(
      * Paged query for the main project list only. Other callers such as export intentionally keep
      * using [getAllProjectsFlow] because they require a complete dataset.
      */
+    /**
+     * รายการโครงการของผู้ใช้คนนี้เท่านั้น
+     *
+     * ตาราง project ในเครื่องมีของทั้งสาขา เพราะ delta sync ดึงตามขอบเขตที่ผู้ใช้มีสิทธิ์เห็น
+     * (resolveScope ฝั่ง server คิดจากสาขา ไม่ใช่รายบุคคล) ถ้าไม่กรองตรงนี้ หน้ารายการจะ
+     * โชว์โครงการของเพื่อนร่วมสาขาด้วย ซึ่งเคยถูกบังไว้ด้วยผลข้างเคียงของ refreshProjects
+     * ที่ลบแถวของคนอื่นทิ้งทุกครั้ง — พอออฟไลน์แล้ว refresh ล้ม ของคนอื่นจึงโผล่หมด
+     *
+     * แถวที่ create_by เป็น null (ข้อมูลเก่าก่อนระบบเริ่มบันทึกเจ้าของ) ยังแสดงอยู่ ตรงกับ
+     * CallerScope.allows ฝั่ง server ที่ปล่อยแถวไร้เจ้าของผ่าน — ซ่อนไปจะทำให้ผู้ใช้หา
+     * โครงการเก่าของตัวเองไม่เจอ ซึ่งแย่กว่าการเห็นแถวไร้เจ้าของปนมาบ้าง
+     */
     fun getProjectsPagingFlow(
+        ownerId: String,
         searchQuery: String,
         tabIndex: Int,
         selectedStatuses: Set<String>,
@@ -63,6 +76,7 @@ class ProjectRepository @Inject constructor(
         ),
         pagingSourceFactory = {
             projectDao.getProjectsPaging(
+                ownerId = ownerId,
                 searchQuery = searchQuery.trim(),
                 tabIndex = tabIndex,
                 closedStatuses = ProjectStages.CLOSED.sorted(),
