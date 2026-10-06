@@ -242,7 +242,9 @@ class AddProjectViewModelTest {
         val state = viewModel.uiState.value
         assertEquals("กรุณากรอกชื่อโครงการ", state.projectNameError)
         assertEquals("กรุณาเลือกสถานะ", state.statusError)
-        assertEquals("กรุณาเลือกสาขาที่พนักงานขายรับผิดชอบ", state.saveError)
+        // สาขาที่พนักงานขายรับผิดชอบไม่บังคับแล้ว รายชื่อสาขามาจาก server เท่านั้น
+        // ตอนออฟไลน์จะไม่มีอะไรให้เลือก การบังคับทำให้บันทึกโครงการไม่ได้เลย
+        assertEquals(null, state.saveError)
         coVerify(exactly = 0) { projectRepo.createProject(any(), any()) }
         coVerify(exactly = 0) { projectRepo.updateProject(any(), any()) }
     }
@@ -611,5 +613,25 @@ class AddProjectViewModelTest {
         advanceUntilIdle()
 
         assertFalse(viewModel.uiState.value.draftAvailable)
+    }
+    /**
+     * เคสจากการทดสอบเครื่องจริง: ปิดเน็ตแล้วสร้างโครงการ ดรอปดาวน์สาขาว่างเพราะรายชื่อมาจาก server
+     * เดิมติด validation จนบันทึกไม่ได้เลย ทั้งที่ข้อมูลอื่นครบและ outbox ตามส่งให้ได้อยู่แล้ว
+     */
+    @Test
+    fun `a project saves offline even when no branch could be loaded`() = runTest {
+        coEvery { branchRepo.syncFromRemote() } throws java.io.IOException("offline")
+        coEvery { branchRepo.observeBranches() } returns emptyList()
+        coEvery { branchRepo.getBranches() } returns Result.failure(java.io.IOException("offline"))
+        initViewModel()
+        advanceUntilIdle()
+
+        viewModel.onEvent(AddProjectEvent.ProjectNameChanged("โครงการตอนเน็ตหลุด"))
+        viewModel.onEvent(AddProjectEvent.StatusChanged("Prospect"))
+        viewModel.onEvent(AddProjectEvent.Save)
+        advanceUntilIdle()
+
+        assertEquals(null, viewModel.uiState.value.saveError)
+        coVerify(exactly = 1) { projectRepo.createProject(any(), any()) }
     }
 }

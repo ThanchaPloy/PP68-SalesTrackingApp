@@ -85,7 +85,8 @@ object NetworkModule {
     @Singleton
     fun provideAuthInterceptor(
         tokenManager: TokenManager,
-        serverTimeAnchor: com.example.pp68_salestrackingapp.utils.ServerTimeAnchor
+        serverTimeAnchor: com.example.pp68_salestrackingapp.utils.ServerTimeAnchor,
+        diagnostics: com.example.pp68_salestrackingapp.utils.SyncDiagnostics
     ): Interceptor {
         return Interceptor { chain ->
             val originalRequest = chain.request()
@@ -127,6 +128,25 @@ object NetworkModule {
             // ทุก HTTP response มี header Date จากเซิร์ฟเวอร์อยู่แล้ว จึงได้เวลาอ้างอิงฟรี
             // โดยไม่ต้องเพิ่มฟิลด์ server_time ในทุก endpoint (แผนงาน B.4 ข้อ 1)
             response.headers.getDate("Date")?.let { serverTimeAnchor.record(it.time) }
+
+            // ไฟล์ diagnostics เคยมีแต่เหตุการณ์ของ worker สองตัว ความผิดพลาดที่ผู้ใช้เจอจริง
+            // ระหว่างกดใช้งาน (405/404/500 จากหน้าไหนก็ตาม) ไม่เคยถูกบันทึกเลย
+            // ดักที่นี่จุดเดียวได้ครบทุกเส้นทางของแอป โดยไม่ต้องไปไล่แก้ทุก ViewModel
+            //
+            // เก็บเฉพาะ method/path/รหัสสถานะ ไม่เอา query string เพราะในนั้นมีรหัสรายการจริง
+            // และไม่แตะ header หรือ body ซึ่งมีทั้ง token และข้อมูลลูกค้า
+            if (!response.isSuccessful) {
+                runCatching {
+                    diagnostics.record(
+                        "http_error",
+                        mapOf(
+                            "method" to originalRequest.method,
+                            "path" to originalRequest.url.encodedPath,
+                            "http_code" to response.code
+                        )
+                    )
+                }
+            }
             // ✅ 401 จาก endpoint ที่ต้อง auth หมายถึง token หมดอายุ/ไม่ถูกต้องเสมอ (ต่างจาก
             // login-api ที่ 401 หมายถึงรหัสผ่านผิด) — เคลียร์ token แล้วแจ้งให้เด้งไปหน้า Login
             // change-password-api ก็ 401 ตอนกรอกรหัสผ่านเดิมผิดเหมือนกัน (คนละความหมายกับ token
