@@ -4,6 +4,9 @@ import androidx.room.withTransaction
 import com.example.pp68_salestrackingapp.data.local.AppDatabase
 import com.example.pp68_salestrackingapp.data.model.AppointmentDraft
 import com.example.pp68_salestrackingapp.di.TokenManager
+import com.example.pp68_salestrackingapp.utils.DraftStore
+import com.google.gson.JsonObject
+import com.google.gson.JsonParser
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 import java.time.Clock
@@ -30,6 +33,7 @@ sealed interface DraftSaveResult {
 class AppointmentDraftRepository @Inject constructor(
     private val database: AppDatabase,
     private val tokenManager: TokenManager,
+    private val draftStore: DraftStore,
     private val clock: Clock
 ) {
     private val dao get() = database.appointmentDraftDao()
@@ -110,8 +114,55 @@ class AppointmentDraftRepository @Inject constructor(
 
     suspend fun deleteForOwner(ownerKey: String): Int = dao.deleteForOwner(ownerKey)
 
+    /**
+     * ย้ายร่างนัดหมายยุค SharedPreferences เข้ามาใน Room (แผนงาน C.4)
+     *
+     * ย้ายได้เฉพาะเมื่อพิสูจน์ได้ว่าเป็นของบัญชีที่ล็อกอินอยู่ คือ localDataOwner ตรงกับผู้ใช้ปัจจุบัน
+     * ถ้าพิสูจน์ไม่ได้ให้ลบทิ้ง ห้ามเอาไปแสดงกับบัญชีใหม่ เพราะร่างของเซลส์คนก่อนอาจมีชื่อลูกค้า
+     * และรายละเอียดงานที่คนถัดไปไม่ควรเห็น
+     *
+     * เรียกซ้ำได้ เพราะลบ key เดิมทิ้งทุกกรณีหลังทำงานเสร็จ
+     */
+    suspend fun migrateLegacyDrafts(): Int {
+        val legacy = draftStore.rawEntriesWithPrefix(LEGACY_PREFIX)
+        if (legacy.isEmpty()) return 0
+
+        val currentUser = tokenManager.getUserData()?.userId
+        val owner = tokenManager.getLocalDataOwner()
+        val provenOwner = currentUser != null && owner != null && currentUser == owner
+        if (!provenOwner) {
+            draftStore.clearWithPrefix(LEGACY_PREFIX)
+            return 0
+        }
+
+        var moved = 0
+        for ((_, payloadJson) in legacy) {
+            val fields = runCatching { JsonParser.parseString(payloadJson).asJsonObject }.getOrNull()
+            val result = saveDraft(
+                draftId = null,
+                schemaVersion = LEGACY_SCHEMA_VERSION,
+                payloadJson = payloadJson,
+                title = fields.stringOrNull("titleTopic"),
+                plannedDate = fields.stringOrNull("plannedDate"),
+                plannedTime = fields.stringOrNull("startTime"),
+                projectId = fields.stringOrNull("selectedProjectId"),
+                customerId = fields.stringOrNull("selectedCustomerId")
+            )
+            if (result is DraftSaveResult.Saved) moved++
+            // เต็มโควตาแล้วหยุด แต่ยังลบ key เก่าทิ้ง ไม่วนพยายามซ้ำทุกครั้งที่เปิดหน้า
+            if (result is DraftSaveResult.LimitReached) break
+        }
+        draftStore.clearWithPrefix(LEGACY_PREFIX)
+        return moved
+    }
+
+    private fun JsonObject?.stringOrNull(name: String): String? =
+        this?.get(name)?.takeIf { !it.isJsonNull }?.asString?.takeIf { it.isNotBlank() }
+
     companion object {
         const val MAX_DRAFTS_PER_ACCOUNT = 20
+        const val LEGACY_PREFIX = "create_appointment:"
+        const val LEGACY_SCHEMA_VERSION = 1
         const val EXPIRY_DAYS = 30L
     }
 }

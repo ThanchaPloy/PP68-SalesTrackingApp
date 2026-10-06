@@ -17,7 +17,8 @@ class AuthRepository @Inject constructor(
     private val authService: AuthService,
     private val tokenManager: TokenManager,
     private val database: AppDatabase,
-    private val outboxSyncManager: OutboxSyncManager
+    private val outboxSyncManager: OutboxSyncManager,
+    private val draftRepository: AppointmentDraftRepository
 ) {
     suspend fun login(
         username: String,
@@ -46,7 +47,7 @@ class AuthRepository @Inject constructor(
                     // สำคัญ: ตรวจและบล็อกก่อนเขียน token ใหม่ เพื่อไม่ให้งานของ A ถูกส่งด้วยสิทธิ์ของ B
                     if (!isSameUser && hasProtectedLocalData && !discardPreviousData) {
                         return@withContext kotlin.Result.failure(
-                            AccountSwitchBlockedException(pending, rejected, conflicts)
+                            AccountSwitchBlockedException(pending, rejected, conflicts, draftRepository.countDrafts())
                         )
                     }
                     if (!isSameUser) {
@@ -95,7 +96,8 @@ class AuthRepository @Inject constructor(
     class AccountSwitchBlockedException(
         val pending: List<Pair<String, Int>>,
         val rejected: List<com.example.pp68_salestrackingapp.data.model.SyncRejection>,
-        val conflicts: Int = 0
+        val conflicts: Int = 0,
+        val drafts: Int = 0
     ) : Exception(
         buildString {
             append("มีข้อมูลของบัญชีก่อนหน้าค้างอยู่ในเครื่อง")
@@ -106,6 +108,8 @@ class AuthRepository @Inject constructor(
                 append(groups.entries.joinToString("\n") { (key, count) -> "• ${key.first}: ${key.second} ($count รายการ)" })
             }
             if (conflicts > 0) append("\nข้อมูลออฟไลน์ชนกับเซิร์ฟเวอร์: $conflicts รายการ")
+            // ร่างไม่ใช่ข้อมูลธุรกิจที่ค้างส่ง จึงไม่ใช่เหตุผลที่บล็อก แต่ถูกลบไปด้วยจริง ๆ ต้องบอก
+            if (drafts > 0) append("\nฉบับร่างนัดหมายของบัญชีก่อนหน้า: $drafts รายการ")
             append("\nหากลบ ข้อมูลเหล่านี้จะกู้คืนไม่ได้")
         }
     )
@@ -233,11 +237,23 @@ class AuthRepository @Inject constructor(
                     )
                 }
 
+                // ร่างนัดหมายไม่บล็อก logout (ไม่ใช่งานที่ค้างส่ง) แต่ clearAllTables ลบทิ้งจริง
+                // ผู้ใช้ต้องได้เห็นจำนวนก่อนยืนยัน ไม่ใช่มารู้ตอนกลับมาแล้วร่างหายหมด
+                val drafts = draftRepository.countDrafts()
                 val conflicts = database.syncConflictDao().countAll()
+                if (conflicts == 0 && drafts > 0 && !force) {
+                    return@withContext kotlin.Result.failure(
+                        PendingRejectionException(
+                            "มีฉบับร่างนัดหมาย $drafts รายการในเครื่อง และจะถูกลบถ้าออกจากระบบตอนนี้",
+                            drafts
+                        )
+                    )
+                }
                 if (conflicts > 0 && !force) {
                     return@withContext kotlin.Result.failure(
                         PendingRejectionException(
-                            "มีข้อมูลออฟไลน์ $conflicts รายการที่ชนกับข้อมูลบนเซิร์ฟเวอร์ และจะหายไปถ้าออกจากระบบตอนนี้",
+                            "มีข้อมูลออฟไลน์ $conflicts รายการที่ชนกับข้อมูลบนเซิร์ฟเวอร์ และจะหายไปถ้าออกจากระบบตอนนี้" +
+                                if (drafts > 0) "\nรวมถึงฉบับร่างนัดหมายอีก $drafts รายการ" else "",
                             conflicts
                         )
                     )

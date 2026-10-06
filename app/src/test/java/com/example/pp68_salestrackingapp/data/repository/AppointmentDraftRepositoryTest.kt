@@ -6,12 +6,14 @@ import com.example.pp68_salestrackingapp.data.local.AppointmentDraftDao
 import com.example.pp68_salestrackingapp.data.model.AppointmentDraft
 import com.example.pp68_salestrackingapp.data.model.AuthUser
 import com.example.pp68_salestrackingapp.di.TokenManager
+import com.example.pp68_salestrackingapp.utils.DraftStore
 import io.mockk.called
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.mockkStatic
+import io.mockk.verify
 import io.mockk.slot
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -28,6 +30,7 @@ class AppointmentDraftRepositoryTest {
     private val dao: AppointmentDraftDao = mockk(relaxed = true)
     private val database: AppDatabase = mockk(relaxed = true)
     private val tokenManager: TokenManager = mockk(relaxed = true)
+    private val draftStore: DraftStore = mockk(relaxed = true)
     private val clock = Clock.fixed(Instant.parse("2026-10-06T03:00:00Z"), ZoneId.of("UTC"))
     private lateinit var repo: AppointmentDraftRepository
 
@@ -43,7 +46,8 @@ class AppointmentDraftRepositoryTest {
         val block = slot<suspend () -> Any>()
         coEvery { database.withTransaction(capture(block)) } coAnswers { block.captured.invoke() }
 
-        repo = AppointmentDraftRepository(database, tokenManager, clock)
+        every { draftStore.rawEntriesWithPrefix(any()) } returns emptyMap()
+        repo = AppointmentDraftRepository(database, tokenManager, draftStore, clock)
     }
 
     private fun existing(id: String, createdAt: String) = AppointmentDraft(
@@ -143,5 +147,57 @@ class AppointmentDraftRepositoryTest {
     fun `deleting a draft is scoped to this account`() = runTest {
         repo.deleteDraft("D1")
         coVerify(exactly = 1) { dao.deleteById(ownerKey, "D1") }
+    }
+    // ── ย้ายร่างยุค SharedPreferences (C.4) ────────────────────────────
+    private val legacy = mapOf(
+        "create_appointment:new:none" to """{"titleTopic":"คุยสเปก","plannedDate":"2026-10-20"}"""
+    )
+
+    @Test
+    fun `a legacy draft moves over only when the owner can be proven`() = runTest {
+        every { draftStore.rawEntriesWithPrefix("create_appointment:") } returns legacy
+        every { tokenManager.getLocalDataOwner() } returns "U1"
+        coEvery { dao.countForOwner(ownerKey) } returns 0
+
+        assertEquals(1, repo.migrateLegacyDrafts())
+
+        val saved = slot<AppointmentDraft>()
+        coVerify { dao.upsert(capture(saved)) }
+        assertEquals("คุยสเปก", saved.captured.title)
+        assertEquals("2026-10-20", saved.captured.plannedDate)
+        assertEquals(ownerKey, saved.captured.ownerKey)
+        verify { draftStore.clearWithPrefix("create_appointment:") }
+    }
+
+    /** เครื่องที่ใช้ร่วมกัน: ร่างของเซลส์คนก่อนต้องไม่โผล่ให้คนถัดไปเห็น */
+    @Test
+    fun `a legacy draft from another account is deleted instead of shown`() = runTest {
+        every { draftStore.rawEntriesWithPrefix("create_appointment:") } returns legacy
+        every { tokenManager.getLocalDataOwner() } returns "SOMEONE-ELSE"
+
+        assertEquals(0, repo.migrateLegacyDrafts())
+
+        coVerify(exactly = 0) { dao.upsert(any()) }
+        verify { draftStore.clearWithPrefix("create_appointment:") }
+    }
+
+    @Test
+    fun `an unknown owner is not trusted either`() = runTest {
+        every { draftStore.rawEntriesWithPrefix("create_appointment:") } returns legacy
+        every { tokenManager.getLocalDataOwner() } returns null
+
+        assertEquals(0, repo.migrateLegacyDrafts())
+
+        coVerify(exactly = 0) { dao.upsert(any()) }
+        verify { draftStore.clearWithPrefix("create_appointment:") }
+    }
+
+    @Test
+    fun `running the migration twice does nothing the second time`() = runTest {
+        every { draftStore.rawEntriesWithPrefix("create_appointment:") } returns emptyMap()
+
+        assertEquals(0, repo.migrateLegacyDrafts())
+
+        verify(exactly = 0) { draftStore.clearWithPrefix(any()) }
     }
 }

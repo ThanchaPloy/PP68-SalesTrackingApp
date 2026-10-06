@@ -46,6 +46,28 @@ class DraftStore @Inject constructor(@ApplicationContext context: Context) {
 
     private fun dismissedKey(key: String) = "$key:dismissed"
 
+    /**
+     * อ่านฉบับร่างดิบตาม prefix ไว้ย้ายไปเก็บที่อื่น — คืนเฉพาะตัวที่ยังไม่หมดอายุ
+     * มีไว้สำหรับการย้ายร่างนัดหมายไป Room (แผนงาน C.4) ไม่ใช่สำหรับใช้งานปกติ
+     */
+    fun rawEntriesWithPrefix(prefix: String): Map<String, String> =
+        prefs.all.keys
+            .filter { it.startsWith(prefix) && !it.endsWith(":dismissed") }
+            .mapNotNull { key ->
+                val raw = prefs.getString(key, null) ?: return@mapNotNull null
+                val envelope = runCatching { gson.fromJson(raw, Envelope::class.java) }.getOrNull()
+                    ?: return@mapNotNull null
+                if (Companion.isExpired(envelope.savedAt)) null else key to envelope.json
+            }
+            .toMap()
+
+    /** ลบทุก key ตาม prefix รวมทั้งธง dismissed ของมัน */
+    fun clearWithPrefix(prefix: String) {
+        val editor = prefs.edit()
+        prefs.all.keys.filter { it.startsWith(prefix) }.forEach { editor.remove(it) }
+        editor.apply()
+    }
+
     companion object {
         private const val PREFS_NAME = "form_drafts"
 

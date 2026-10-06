@@ -25,12 +25,13 @@ class AuthRepositoryLoginTest {
     private val tokenManager: TokenManager = mockk(relaxed = true)
     private val database: AppDatabase = mockk(relaxed = true)
     private val outbox: OutboxSyncManager = mockk(relaxed = true)
+    private val draftRepository: AppointmentDraftRepository = mockk(relaxed = true)
     private lateinit var repo: AuthRepository
 
     @Before
     fun setUp() {
         clearAllMocks()
-        repo = AuthRepository(apiService, authService, tokenManager, database, outbox)
+        repo = AuthRepository(apiService, authService, tokenManager, database, outbox, draftRepository)
         coEvery { authService.login(any()) } returns Response.success(LoginResponse(token = "jwt-123", userId = "U1"))
         coEvery { outbox.pendingSummary() } returns emptyList()
         coEvery { outbox.rejectedSummary() } returns emptyList()
@@ -171,5 +172,35 @@ class AuthRepositoryLoginTest {
         verify(exactly = 0) { tokenManager.saveToken("full-token") }
         verify(exactly = 0) { outbox.scheduleSync(any()) }
         verify(exactly = 0) { outbox.scheduleDownload() }
+    }
+    /**
+     * ร่างไม่ใช่ข้อมูลที่ค้างส่ง จึงไม่ควร "บล็อก" การออกจากระบบ แต่ clearAllTables ลบมันทิ้งจริง
+     * ผู้ใช้ต้องได้เห็นจำนวนก่อน ไม่ใช่มารู้ตอนกลับเข้ามาแล้วร่างหายหมด (แผนงาน C.4)
+     */
+    @Test
+    fun `logout warns how many drafts will be deleted then proceeds when confirmed`() = runTest {
+        coEvery { draftRepository.countDrafts() } returns 3
+        coEvery { database.syncConflictDao().countAll() } returns 0
+
+        val warned = repo.logout()
+
+        assertTrue(warned.isFailure)
+        assertTrue(warned.exceptionOrNull()!!.message!!.contains("3"))
+        verify(exactly = 0) { database.clearAllTables() }
+
+        val confirmed = repo.logout(force = true)
+
+        assertTrue(confirmed.isSuccess)
+        verify(exactly = 1) { database.clearAllTables() }
+    }
+
+    @Test
+    fun `logout with no drafts does not stop to ask`() = runTest {
+        coEvery { draftRepository.countDrafts() } returns 0
+        coEvery { database.syncConflictDao().countAll() } returns 0
+
+        assertTrue(repo.logout().isSuccess)
+
+        verify(exactly = 1) { database.clearAllTables() }
     }
 }
