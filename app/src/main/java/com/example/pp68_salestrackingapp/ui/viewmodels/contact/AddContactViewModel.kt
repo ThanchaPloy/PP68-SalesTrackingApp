@@ -231,14 +231,14 @@ class AddContactViewModel @Inject constructor(
             _uiState.update {
                 it.copy(
                     companyOptions = leadCompanyOptions,
-                    companySearchMessage = if (normalized.isEmpty()) null else "พิมพ์อย่างน้อย 2 ตัวอักษรเพื่อค้นหาลูกค้า ERP"
+                    companySearchMessage = if (normalized.isEmpty()) null else "พิมพ์อย่างน้อย 2 ตัวอักษรเพื่อค้นหาลูกค้าเก่า(dynamic)"
                 )
             }
             return
         }
         companySearchJob = viewModelScope.launch {
             delay(400)
-            _uiState.update { it.copy(companySearchMessage = "กำลังค้นหาลูกค้า ERP…") }
+            _uiState.update { it.copy(companySearchMessage = "กำลังค้นหาลูกค้าเก่า(dynamic)…") }
             customerRepo.searchErpCustomers(normalized).fold(
                 onSuccess = { remote ->
                     val remoteOptions = remote.map { it.customerCode to it.customerName }
@@ -247,7 +247,7 @@ class AddContactViewModel @Inject constructor(
                             companyOptions = (leadCompanyOptions + remoteOptions)
                                 .distinctBy { option -> option.first }
                                 .withUniqueLabels(),
-                            companySearchMessage = if (remote.isEmpty()) "ไม่พบลูกค้า ERP จากคำค้นนี้" else null
+                            companySearchMessage = if (remote.isEmpty()) "ไม่พบลูกค้าเก่า(dynamic) จากคำค้นนี้" else null
                         )
                     }
                 },
@@ -255,7 +255,7 @@ class AddContactViewModel @Inject constructor(
                     _uiState.update {
                         it.copy(
                             companyOptions = leadCompanyOptions,
-                            companySearchMessage = err.message ?: "ค้นหา ERP ไม่ได้ (Lead ในเครื่องยังเลือกได้)"
+                            companySearchMessage = err.message ?: "ค้นหาลูกค้าเก่า(dynamic) ไม่ได้ (Lead ในเครื่องยังเลือกได้)"
                         )
                     }
                 }

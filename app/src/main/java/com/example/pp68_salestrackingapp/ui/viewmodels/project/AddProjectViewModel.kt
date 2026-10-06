@@ -140,6 +140,16 @@ sealed class AddProjectEvent {
     object DismissDraftPrompt : AddProjectEvent()
 }
 
+/**
+ * เลขสำหรับใส่ในช่องกรอก — Double.toString() เปลี่ยนเป็นรูปวิทยาศาสตร์เมื่อถึงสิบล้าน
+ * (1.0E7) ผู้ใช้เปิดหน้าแก้ไขโครงการแล้วเจอค่าแบบนั้นในช่องมูลค่า แก้ต่อไม่ได้
+ *
+ * BigDecimal.valueOf ใช้ค่าตามที่พิมพ์ได้จริงของ Double ไม่ใช่ค่าไบนารีดิบ แล้ว toPlainString
+ * รับประกันว่าไม่มีเลขยกกำลังออกมา ส่วน stripTrailingZeros ตัด .0 ของจำนวนเต็มทิ้ง
+ */
+internal fun Double.toPlainAmount(): String =
+    java.math.BigDecimal.valueOf(this).stripTrailingZeros().toPlainString()
+
 @HiltViewModel
 class AddProjectViewModel @Inject constructor(
     private val projectRepo:  ProjectRepository,
@@ -373,7 +383,7 @@ class AddProjectViewModel @Inject constructor(
                             projectName            = project.projectName,
                             projectStatus          = project.projectStatus,
                             opportunityScore      = project.opportunityScore, // ✅ Load opportunity score
-                            expectedValue          = project.expectedValue?.toString() ?: "",
+                            expectedValue          = project.expectedValue?.toPlainAmount() ?: "",
                             startDate              = project.startDate,
                             closeDate              = project.closingDate,
                             siteLat                = project.projectLat,
@@ -459,14 +469,14 @@ class AddProjectViewModel @Inject constructor(
             _uiState.update {
                 it.copy(
                     customerOptions = leadCustomerOptions,
-                    customerSearchMessage = if (normalized.isEmpty()) null else "พิมพ์อย่างน้อย 2 ตัวอักษรเพื่อค้นหาลูกค้า ERP"
+                    customerSearchMessage = if (normalized.isEmpty()) null else "พิมพ์อย่างน้อย 2 ตัวอักษรเพื่อค้นหาลูกค้าเก่า(dynamic)"
                 )
             }
             return
         }
         customerSearchJob = viewModelScope.launch {
             delay(400)
-            _uiState.update { it.copy(customerSearchMessage = "กำลังค้นหาลูกค้า ERP…") }
+            _uiState.update { it.copy(customerSearchMessage = "กำลังค้นหาลูกค้าเก่า(dynamic)…") }
             customerRepo.searchErpCustomers(normalized).fold(
                 onSuccess = { remote ->
                     val remoteOptions = remote.map { it.customerCode to it.customerName }
@@ -475,7 +485,7 @@ class AddProjectViewModel @Inject constructor(
                             customerOptions = (leadCustomerOptions + remoteOptions)
                                 .distinctBy { option -> option.first }
                                 .withUniqueLabels(),
-                            customerSearchMessage = if (remote.isEmpty()) "ไม่พบลูกค้า ERP จากคำค้นนี้" else null
+                            customerSearchMessage = if (remote.isEmpty()) "ไม่พบลูกค้าเก่า(dynamic) จากคำค้นนี้" else null
                         )
                     }
                 },
@@ -483,7 +493,7 @@ class AddProjectViewModel @Inject constructor(
                     _uiState.update {
                         it.copy(
                             customerOptions = leadCustomerOptions,
-                            customerSearchMessage = err.message ?: "ค้นหา ERP ไม่ได้ (Lead ในเครื่องยังเลือกได้)"
+                            customerSearchMessage = err.message ?: "ค้นหาลูกค้าเก่า(dynamic) ไม่ได้ (Lead ในเครื่องยังเลือกได้)"
                         )
                     }
                 }

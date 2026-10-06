@@ -157,10 +157,10 @@ class CustomerRepository @Inject constructor(
             } else {
                 // server ตอบกลับมาจริง แค่ไม่สำเร็จ — ไม่ใช่เรื่องเน็ต ต้องโชว์โค้ดให้เห็น
                 // (404 = backend ที่ deploy อยู่ยังไม่มี /customer/search, 5xx = server มีปัญหา)
-                kotlin.Result.failure(Exception("ค้นหา ERP ไม่ได้ (HTTP ${response.code()}) แจ้งผู้ดูแลระบบได้เลย (Lead ในเครื่องยังเลือกได้)"))
+                kotlin.Result.failure(Exception("ค้นหาลูกค้าเก่า(dynamic) ไม่ได้ (HTTP ${response.code()}) แจ้งผู้ดูแลระบบได้เลย (Lead ในเครื่องยังเลือกได้)"))
             }
         } catch (e: IOException) {
-            kotlin.Result.failure(Exception("ค้นหา ERP ไม่ได้ กรุณาตรวจสอบอินเทอร์เน็ต (Lead ในเครื่องยังเลือกได้)"))
+            kotlin.Result.failure(Exception("ค้นหาลูกค้าเก่า(dynamic) ไม่ได้ กรุณาตรวจสอบอินเทอร์เน็ต (Lead ในเครื่องยังเลือกได้)"))
         } catch (e: Exception) {
             if (e is CancellationException) throw e
             kotlin.Result.failure(e)
