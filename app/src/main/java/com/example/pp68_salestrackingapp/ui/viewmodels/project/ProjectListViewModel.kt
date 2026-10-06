@@ -46,14 +46,17 @@ class ProjectListViewModel @Inject constructor(
         _searchQuery.debounce(300),
         _selectedTabIndex,
         _selectedStatuses,
-        _selectedScores
-    ) { query, tabIndex, statuses, scores ->
-        FilterCriteria(query, tabIndex, statuses, scores)
+        _selectedScores,
+        // ผูกกับผู้ใช้ด้วย เพื่อให้สลับบัญชีแล้วรายการเปลี่ยนตามโดยไม่ต้องรีสตาร์ตหน้า
+        _authUser
+    ) { query, tabIndex, statuses, scores, user ->
+        FilterCriteria(query, tabIndex, statuses, scores, user?.userId.orEmpty())
     }
         .distinctUntilChanged()
         .flatMapLatest { criteria ->
             // Tab/search/status/score filtering is performed by Room, not on an in-memory full list.
             repo.getProjectsPagingFlow(
+                ownerId = criteria.ownerId,
                 searchQuery = criteria.query,
                 tabIndex = criteria.tabIndex,
                 selectedStatuses = criteria.statuses,
@@ -113,6 +116,7 @@ class ProjectListViewModel @Inject constructor(
         val query: String,
         val tabIndex: Int,
         val statuses: Set<String>,
-        val scores: Set<String>
+        val scores: Set<String>,
+        val ownerId: String
     )
 }

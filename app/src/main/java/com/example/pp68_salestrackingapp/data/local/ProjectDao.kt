@@ -22,7 +22,8 @@ interface ProjectDao {
     @Query(
         """
         SELECT * FROM project
-        WHERE (
+        WHERE (create_by IS NULL OR create_by = :ownerId)
+        AND (
             (:tabIndex = 0 AND (projectStatus IS NULL OR projectStatus NOT IN (:closedStatuses)))
             OR (:tabIndex = 1 AND projectStatus IN (:wonStatuses))
             OR (:tabIndex = 2 AND projectStatus IN (:lostStatuses))
@@ -34,6 +35,7 @@ interface ProjectDao {
         """
     )
     fun getProjectsPaging(
+        ownerId: String,
         searchQuery: String,
         tabIndex: Int,
         closedStatuses: List<String>,

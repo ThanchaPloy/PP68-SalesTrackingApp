@@ -170,6 +170,6 @@ Inert, harmless, not yet removed — nothing references any of it:
 
 ## Conventions
 
-JSON and SQL use `snake_case`, Kotlin properties use `camelCase`, bridged per-field with `@SerializedName` (Gson) and `@ColumnInfo` (Room). The two annotations do not always agree — `Project.createdBy` maps to the `user_id` column, for example — so check both before renaming anything.
+JSON and SQL use `snake_case`, Kotlin properties use `camelCase`, bridged per-field with `@SerializedName` (Gson) and `@ColumnInfo` (Room). The two annotations do not always agree, and neither always matches the property name: on `Project`, `createBy` is the `create_by` column while `requestBy` is the `user_id` column. Check both annotations before renaming anything, and never guess the owner column from the property name.
 
 Package must match directory for every file. Several files previously drifted (a ViewModel under `ui/viewmodels/` declaring `package ui.screen.…`), which made same-package references resolve to the wrong class.

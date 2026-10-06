@@ -60,6 +60,7 @@ class ProjectPagingStressTest {
         lateinit var page: List<Project>
         val firstPageMs = measureTimeMillis {
             val result = database.projectDao().getProjectsPaging(
+                ownerId = "U1",
                 searchQuery = "",
                 tabIndex = 0,
                 closedStatuses = listOf("PO", "Lost", "Failed"),

@@ -9,6 +9,8 @@ import com.example.pp68_salestrackingapp.data.model.Project
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -72,9 +74,11 @@ class ProjectPagingQueryTest {
         tabIndex: Int,
         searchQuery: String = "",
         statuses: List<String> = emptyList(),
-        scores: List<String> = emptyList()
+        scores: List<String> = emptyList(),
+        ownerId: String = OWNER
     ): List<Project> {
         val result = dao.getProjectsPaging(
+            ownerId = ownerId,
             searchQuery = searchQuery,
             tabIndex = tabIndex,
             closedStatuses = listOf("PO", "Lost", "Failed"),
@@ -102,12 +106,42 @@ class ProjectPagingQueryTest {
         name: String,
         status: String?,
         score: String?,
-        startDate: String
+        startDate: String,
+        createBy: String? = null
     ) = Project(
         projectId = id,
         projectName = name,
         projectStatus = status,
         opportunityScore = score,
-        startDate = startDate
+        startDate = startDate,
+        createBy = createBy
     )
+
+    /**
+     * ตาราง project ในเครื่องมีของทั้งสาขา เพราะ delta sync ดึงตามขอบเขตที่ผู้ใช้มีสิทธิ์เห็น
+     * หน้ารายการต้องกรองเหลือเฉพาะของตัวเอง — เดิมไม่ได้กรองเลย แล้วถูกบังไว้ด้วยผลข้างเคียง
+     * ของ refreshProjects ที่ลบแถวของคนอื่นทิ้ง พอออฟไลน์แล้ว refresh ล้ม ของคนอื่นจึงโผล่หมด
+     */
+    @Test
+    fun ownerFilterHidesOtherPeoplesProjects() = runBlocking {
+        dao.insertProjects(
+            listOf(
+                project("P1", "ของฉัน", "Quotation", "HOT", "2026-01-01", createBy = OWNER),
+                project("P2", "ของเพื่อนร่วมสาขา", "Quotation", "HOT", "2026-01-02", createBy = "U2"),
+                project("P3", "ของเก่าไม่มีเจ้าของ", "Quotation", "HOT", "2026-01-03", createBy = null)
+            )
+        )
+
+        val ids = load(tabIndex = 0).map { it.projectId }
+
+        assertTrue("ต้องเห็นของตัวเอง", "P1" in ids)
+        assertFalse("ต้องไม่เห็นของเพื่อนร่วมสาขา", "P2" in ids)
+        // แถวที่ไม่มีเจ้าของยังต้องเห็น ตรงกับ CallerScope.allows ฝั่ง server
+        // ซ่อนไปจะทำให้ผู้ใช้หาโครงการเก่าของตัวเองไม่เจอ
+        assertTrue("แถวไร้เจ้าของต้องยังเห็นอยู่", "P3" in ids)
+    }
+
+    private companion object {
+        const val OWNER = "U1"
+    }
 }

@@ -53,7 +53,7 @@ class ProjectListViewModelTest {
     fun setUp() {
         Dispatchers.setMain(dispatcher)
         every { authRepo.currentUser() } returns AuthUser("U1", "u@test.com", "sale", "T1")
-        every { projectRepo.getProjectsPagingFlow(any(), any(), any(), any()) } returns
+        every { projectRepo.getProjectsPagingFlow(any(), any(), any(), any(), any()) } returns
             flowOf(PagingData.empty())
         coEvery { projectRepo.refreshProjects(any()) } returns Result.success(Unit)
     }
@@ -115,7 +115,7 @@ class ProjectListViewModelTest {
         collectPagingGeneration()
 
         verify(exactly = 1) {
-            projectRepo.getProjectsPagingFlow("", 0, emptySet(), emptySet())
+            projectRepo.getProjectsPagingFlow("U1", "", 0, emptySet(), emptySet())
         }
     }
 
@@ -129,7 +129,7 @@ class ProjectListViewModelTest {
         collectPagingGeneration()
 
         verify(exactly = 1) {
-            projectRepo.getProjectsPagingFlow("", 1, emptySet(), emptySet())
+            projectRepo.getProjectsPagingFlow("U1", "", 1, emptySet(), emptySet())
         }
     }
 
@@ -140,7 +140,7 @@ class ProjectListViewModelTest {
         collectPagingGeneration()
 
         verify(exactly = 1) {
-            projectRepo.getProjectsPagingFlow("", 2, emptySet(), emptySet())
+            projectRepo.getProjectsPagingFlow("U1", "", 2, emptySet(), emptySet())
         }
     }
 
@@ -151,7 +151,7 @@ class ProjectListViewModelTest {
         collectPagingGeneration()
 
         verify(exactly = 1) {
-            projectRepo.getProjectsPagingFlow("Hot", 0, emptySet(), emptySet())
+            projectRepo.getProjectsPagingFlow("U1", "Hot", 0, emptySet(), emptySet())
         }
     }
 
@@ -177,7 +177,7 @@ class ProjectListViewModelTest {
 
         collectPagingGeneration()
         verify(exactly = 1) {
-            projectRepo.getProjectsPagingFlow("", 0, setOf("Quotation"), setOf("HOT"))
+            projectRepo.getProjectsPagingFlow("U1", "", 0, setOf("Quotation"), setOf("HOT"))
         }
 
         viewModel.toggleScoreFilter("HOT")
@@ -200,7 +200,7 @@ class ProjectListViewModelTest {
 
     @Test
     fun givenFlowThrows_whenProjectsCollected_thenSetsError() = runTest {
-        every { projectRepo.getProjectsPagingFlow(any(), any(), any(), any()) } returns
+        every { projectRepo.getProjectsPagingFlow(any(), any(), any(), any(), any()) } returns
             flow { throw IllegalStateException("db fail") }
         initVm()
         collectPagingGeneration()
