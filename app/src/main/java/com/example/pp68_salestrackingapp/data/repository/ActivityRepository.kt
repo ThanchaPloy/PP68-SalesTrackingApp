@@ -141,9 +141,15 @@ class ActivityRepository @Inject constructor(
                         for (chunk in chunks) {
                             try {
                                 val cr = apiService.getAppointmentContacts("in.(${chunk.joinToString(",")})")
-                                if (cr.isSuccessful && !cr.body().isNullOrEmpty())
-                                    appointmentContactDao.insertAppointmentContacts(cr.body()!!)
-                                else contactFailure = contactFailure ?: Exception("HTTP ${cr.code()}")
+                                // ✅ "สำเร็จแต่ไม่มีผู้เข้าร่วม" คือคำตอบที่ถูกต้อง ไม่ใช่ความล้มเหลว
+                                // เดิมนับลิสต์ว่างเป็น error แล้วบันทึกเป็น "HTTP 200" ทำให้การรีเฟรช
+                                // ทั้งก้อนล้มทั้งที่ server ตอบปกติ — นัดที่ยังไม่ใส่ผู้เข้าร่วมเป็นเรื่องปกติ
+                                if (!cr.isSuccessful) {
+                                    contactFailure = contactFailure ?: Exception("HTTP ${cr.code()}")
+                                } else {
+                                    cr.body()?.takeIf { it.isNotEmpty() }
+                                        ?.let { appointmentContactDao.insertAppointmentContacts(it) }
+                                }
                             } catch (e: Exception) {
                                 if (e is CancellationException) throw e
                                 contactFailure = contactFailure ?: e
@@ -181,8 +187,12 @@ class ActivityRepository @Inject constructor(
                         for (chunk in chunks) {
                             try {
                                 val pr = apiService.getResultPhotos("in.(${chunk.joinToString(",")})", limit = chunk.size * 5)
-                                if (pr.isSuccessful && !pr.body().isNullOrEmpty()) photoDao.insertPhotos(pr.body()!!)
-                                else photoFailure = photoFailure ?: Exception("HTTP ${pr.code()}")
+                                // เหตุผลเดียวกับผู้เข้าร่วม — ผลการขายที่ไม่มีรูปแนบเป็นเรื่องปกติ
+                                if (!pr.isSuccessful) {
+                                    photoFailure = photoFailure ?: Exception("HTTP ${pr.code()}")
+                                } else {
+                                    pr.body()?.takeIf { it.isNotEmpty() }?.let { photoDao.insertPhotos(it) }
+                                }
                             } catch (e: Exception) {
                                 if (e is CancellationException) throw e
                                 photoFailure = photoFailure ?: e
