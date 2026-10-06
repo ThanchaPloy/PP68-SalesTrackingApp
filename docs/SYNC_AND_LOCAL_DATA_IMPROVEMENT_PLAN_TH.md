@@ -2,6 +2,10 @@
 
 สถานะเอกสาร ณ 6 ตุลาคม 2026: ระยะที่ 1 ผ่าน compile/unit tests และรอ device acceptance; ระยะที่ 2 ปิด checkpoint 2A–2D ระดับโค้ด/automated verification แต่ staging scenarios ที่พักไว้ยังเป็น production gate; ระยะที่ 3 ปิด checkpoint 3A และ Phase 3B ระดับโค้ดพร้อม full regression แล้ว รวม snapshot+delta runtime, durable conflict, TEMP ID mapping ครบ dependency graph และการลดรูปไม่เกิน 500 KiB ส่วน backend ระยะที่ 3 เตรียมพร้อมสำหรับ deploy แต่ยังไม่ deploy และยังเหลือ retention (3C), observability/rollout (3D), staging และเครื่องจริงก่อนปิด roadmap ทั้งหมด
 
+แผนงานเพิ่มเติมเรื่อง forced account setup, กฎนัดหมายใหม่ และ Draft นัดหมายหลายรายการถูกแยกไว้ที่ [ACCOUNT_APPOINTMENT_DRAFT_IMPROVEMENT_PLAN_TH.md](ACCOUNT_APPOINTMENT_DRAFT_IMPROVEMENT_PLAN_TH.md) — ณ 6 ตุลาคม 2026 เขียนโค้ดครบทั้งสามเฟสแล้ว (ดูตารางสถานะในเอกสารนั้น) ยังเหลือทดสอบเครื่องจริงและการเปิด flag
+
+ระยะที่ 3 ฝั่ง backend **deploy ขึ้น production แล้ว** เมื่อ 6 ตุลาคม 2026 (`/sync/v2/*`, `/customer/search`, `GET /lead_customer` ตอบ 401 แทน 404/405 แล้ว)
+
 ## บันทึกปิดงานระยะที่ 1 — รายการ 1–4 (4 ตุลาคม 2026)
 
 - Download Worker รวมผลของทุกส่วนจริง ไม่รายงานว่าสำเร็จเมื่อ repository คืน `Result.failure`; network/timeout/429/5xx จะ retry, 401 และ local fatal จะหยุด retry อัตโนมัติและแสดงว่าให้ตรวจสอบ

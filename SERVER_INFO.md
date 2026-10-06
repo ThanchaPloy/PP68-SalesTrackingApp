@@ -31,6 +31,19 @@ systemctl restart pp68-backend
 systemctl status pp68-backend --no-pager
 ```
 
+**ต้องเช็คทุกครั้งหลัง deploy ที่มี migration ใหม่** — `DatabaseFactory` รันเฉพาะไฟล์ที่อยู่ในลิสต์ของมัน และหา path แบบ relative กับ working directory ของ process ถ้า `WorkingDirectory` ของ systemd ไม่ใช่ราก repo จะข้ามทุก migration แบบมี warning บรรทัดเดียว
+
+ดู log ตอน start หา `migration ok:` ของไฟล์ที่เพิ่งเพิ่ม และต้องไม่มี `migration FAILED:` หรือ `migration SKIPPED (หาไฟล์ไม่เจอ...)`
+
+> log ไปที่ stdout ของ service ไม่ได้เขียนไฟล์เอง เคยเสียเวลาเพราะ grep ผิดที่แล้วสรุปว่า "ไม่มี error" ทั้งที่ดูคนละที่กับที่ service เขียนจริง
+
+ยิงเช็คจากนอกเครื่องได้อีกทาง โดยเทียบ 405 กับ 404 — 405 แปลว่ามี route แล้วแค่ผิด method ส่วน 404 แปลว่าโค้ดยังไม่ขึ้น:
+
+```bash
+curl -s -o /dev/null -w "%{http_code}\n" https://api-ploy.cskmitl.com/account/complete-initial-setup  # 405 = Phase 4A ขึ้นแล้ว
+curl -s -o /dev/null -w "%{http_code}\n" https://api-ploy.cskmitl.com/sync/v2/cursor                   # 401 = Phase 3 ขึ้นแล้ว
+```
+
 ### วิธี reload nginx บน `.225` (ถ้าจำเป็นจริงๆ เช่นแก้ config)
 ```bash
 ssh root@192.168.15.225
@@ -55,14 +68,31 @@ nginx -s reload        # หมายเหตุ: nginx บนเครื่�
 
 ---
 
-## 📦 Git repo status (ตรวจล่าสุด 2026-07-27)
+## 📦 Git repo status (ตรวจล่าสุด 2026-10-06)
 
-| Repo | Local/Server commit | GitHub `origin/main` | สถานะ |
-|---|---|---|---|
-| **Backend** (`ThanchaPloy/backend-PP68SalesTrackingApp`) | `0b0d911` (บน `192.168.15.177`) | `0b0d911` | ✅ ตรงกัน |
-| **Android app** (`ThanchaPloy/PP68-SalesTrackingApp`) | `6b27dea` | `6b27dea` | ✅ ตรงกัน |
+| Repo | GitHub `origin/main` | สถานะ |
+|---|---|---|
+| **Backend** (`ThanchaPloy/backend-PP68SalesTrackingApp`) | `40f0fa4` merge Phase 4A | deploy แล้วหรือยัง ให้เช็คด้วยวิธีด้านล่าง |
+| **Android app** (`ThanchaPloy/PP68-SalesTrackingApp`) | ยังไม่ได้ merge — งานอยู่บน branch | ดูตาราง branch ด้านล่าง |
 
 Server (`.177`) มี SSH deploy key ของตัวเองแล้ว ใช้ `git pull`/`git push` จาก repo backend ได้โดยตรงไม่ต้องผ่านเครื่องอื่น
+
+### branch ที่ยังไม่ได้ merge เข้า main (ตุลาคม 2026)
+
+| Repo | Branch | เนื้อหา |
+|---|---|---|
+| Backend | `feature/appointment-policy` | Phase 4B กติกาแก้/ลบ/บันทึกผลนัดหมาย หลัง flag `APPOINTMENT_POLICY_V2` ที่ปิดอยู่ |
+| Android | `release/phase-4a` | ตัวที่คู่กับ backend `main` ตอนนี้ — มีแค่หน้าบังคับตั้งค่าบัญชี |
+| Android | `feature/appointment-policy` | ซ้อน 4A + 4B + 4C ไว้ทั้งหมด **ห้าม build แจกจนกว่า backend 4B จะขึ้น** |
+
+### ลำดับ rollout ที่ห้ามสลับ
+
+1. deploy backend `main` แล้วยืนยันว่า migration ขึ้นจริง (ดูด้านล่าง)
+2. แจก APK ที่ build จาก Android `release/phase-4a` — ยังไม่มีอะไรเปลี่ยนสำหรับผู้ใช้
+3. รอจนมั่นใจว่าทุกคนอัปเดตแล้ว
+4. จึงรัน `migrations/oneoff_enable_required_account_setup.sql` ด้วยมือ เพื่อเปิดบังคับตั้งรหัสผ่าน
+
+ถ้ารันข้อ 4 ก่อนข้อ 2 ผู้ใช้บนแอปรุ่นเก่าจะ login ได้แต่ไม่มีหน้าให้ตั้งค่า = ใช้งานไม่ได้ทั้งหมด
 
 ---
 
