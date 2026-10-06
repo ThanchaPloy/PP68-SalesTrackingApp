@@ -22,7 +22,7 @@ interface ProjectDao {
     @Query(
         """
         SELECT * FROM project
-        WHERE (create_by IS NULL OR create_by = :ownerId)
+        WHERE create_by = :ownerId
         AND (
             (:tabIndex = 0 AND (projectStatus IS NULL OR projectStatus NOT IN (:closedStatuses)))
             OR (:tabIndex = 1 AND projectStatus IN (:wonStatuses))
