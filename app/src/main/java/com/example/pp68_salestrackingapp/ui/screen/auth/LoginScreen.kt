@@ -42,7 +42,7 @@ val ErrorRed        = Color(0xFFDC2626)
 
 @Composable
 fun LoginScreen(
-    onLoginSuccess: (AuthUser) -> Unit,
+    onLoginSuccess: (AuthUser, Boolean) -> Unit,
     onRegisterClick: () -> Unit = {},
     viewModel: LoginViewModel = hiltViewModel()
 ) {
@@ -60,8 +60,8 @@ fun LoginScreen(
         onDiscardPreviousData = viewModel::discardPreviousDataAndLogin,
         onCancelAccountSwitch = viewModel::cancelAccountSwitch,
         onRegisterClick  = onRegisterClick,
-        onLoginSuccess   = {
-            onLoginSuccess(it)
+        onLoginSuccess   = { user, setupRequired ->
+            onLoginSuccess(user, setupRequired)
             viewModel.resetState()
         }
     )
@@ -78,7 +78,7 @@ fun LoginScreenContent(
     onDiscardPreviousData: () -> Unit = {},
     onCancelAccountSwitch: () -> Unit = {},
     onRegisterClick: () -> Unit = {},
-    onLoginSuccess: (AuthUser) -> Unit
+    onLoginSuccess: (AuthUser, Boolean) -> Unit
 ) {
     var showPassword by remember { mutableStateOf(false) }
     val focusManager = LocalFocusManager.current
@@ -99,7 +99,7 @@ fun LoginScreenContent(
 
     LaunchedEffect(uiState) {
         if (uiState is LoginUiState.Success) {
-            onLoginSuccess(uiState.user)
+            onLoginSuccess(uiState.user, uiState.setupRequired)
         }
     }
 
@@ -302,7 +302,7 @@ fun LoginScreenPreview() {
             onDiscardPreviousData = {},
             onCancelAccountSwitch = {},
             onRegisterClick  = {},
-            onLoginSuccess   = {}
+            onLoginSuccess   = { _, _ -> }
         )
     }
 }

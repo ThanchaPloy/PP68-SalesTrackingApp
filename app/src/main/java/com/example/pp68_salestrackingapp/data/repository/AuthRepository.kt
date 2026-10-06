@@ -68,9 +68,18 @@ class AuthRepository @Inject constructor(
                     tokenManager.saveUserData(authUser)
                     tokenManager.saveLocalDataOwner(finalUserId)
 
+                    tokenManager.saveInitialSetupRequirement(
+                        required = loginResp.setupRequired,
+                        phoneRequired = loginResp.phoneRequired,
+                        noticeVersion = loginResp.phoneNoticeVersion
+                    )
+
                     // Login จบตรงนี้ ไม่รอจำนวนข้อมูล/ความเร็วเครือข่าย งานจริงทำใน WorkManager
-                    outboxSyncManager.scheduleSync(com.example.pp68_salestrackingapp.utils.SyncTrigger.LOGIN)
-                    outboxSyncManager.scheduleDownload()
+                    // setup-only token must never be used by business sync workers.
+                    if (!loginResp.setupRequired) {
+                        outboxSyncManager.scheduleSync(com.example.pp68_salestrackingapp.utils.SyncTrigger.LOGIN)
+                        outboxSyncManager.scheduleDownload()
+                    }
 
                     kotlin.Result.success(loginResp)
                 } else {
@@ -251,6 +260,53 @@ class AuthRepository @Inject constructor(
     }
 
     fun isUserLoggedIn(): Boolean = !tokenManager.getToken().isNullOrEmpty()
+
+    fun initialSetupInfo(): InitialSetupInfo = tokenManager.getInitialSetupInfo()
+
+    fun abandonInitialSetup() {
+        // Keep Room and localDataOwner intact. A setup-only token cannot upload business data,
+        // and deleting the database here could destroy protected offline work.
+        tokenManager.clearToken()
+    }
+
+    suspend fun completeInitialSetup(
+        currentPassword: String,
+        newPassword: String,
+        phoneNumber: String?
+    ): kotlin.Result<Unit> = withContext(Dispatchers.IO) {
+        try {
+            val setup = initialSetupInfo()
+            if (!setup.required) {
+                return@withContext kotlin.Result.failure(Exception("กรุณาเข้าสู่ระบบใหม่"))
+            }
+            val response = authService.completeInitialSetup(
+                CompleteInitialSetupRequest(
+                    currentPassword = currentPassword,
+                    newPassword = newPassword,
+                    phoneNumber = phoneNumber?.takeIf { setup.phoneRequired },
+                    phoneNoticeVersion = setup.phoneNoticeVersion?.takeIf { setup.phoneRequired }
+                )
+            )
+            val body = response.body()
+            if (!response.isSuccessful || body == null) {
+                val raw = response.errorBody()?.string().orEmpty()
+                val message = try {
+                    org.json.JSONObject(raw).optString("message").ifBlank { "ตั้งค่าบัญชีไม่สำเร็จ" }
+                } catch (_: Exception) { "ตั้งค่าบัญชีไม่สำเร็จ" }
+                return@withContext kotlin.Result.failure(Exception(message))
+            }
+
+            // Replace the short-lived setup token only after the server transaction commits.
+            tokenManager.saveToken(body.token)
+            tokenManager.saveInitialSetupRequirement(false, false, null)
+            outboxSyncManager.scheduleSync(com.example.pp68_salestrackingapp.utils.SyncTrigger.LOGIN)
+            outboxSyncManager.scheduleDownload()
+            kotlin.Result.success(Unit)
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            kotlin.Result.failure(e)
+        }
+    }
 
     val sessionExpired = tokenManager.sessionExpired
 

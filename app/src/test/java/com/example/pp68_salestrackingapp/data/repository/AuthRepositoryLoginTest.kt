@@ -3,6 +3,7 @@ package com.example.pp68_salestrackingapp.data.repository
 import com.example.pp68_salestrackingapp.data.local.AppDatabase
 import com.example.pp68_salestrackingapp.data.model.AuthUser
 import com.example.pp68_salestrackingapp.data.model.LoginResponse
+import com.example.pp68_salestrackingapp.data.model.InitialSetupInfo
 import com.example.pp68_salestrackingapp.data.model.SyncRejection
 import com.example.pp68_salestrackingapp.data.remote.ApiService
 import com.example.pp68_salestrackingapp.data.remote.AuthService
@@ -10,6 +11,8 @@ import com.example.pp68_salestrackingapp.di.TokenManager
 import com.example.pp68_salestrackingapp.utils.SyncManager as OutboxSyncManager
 import com.example.pp68_salestrackingapp.utils.SyncTrigger
 import io.mockk.*
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.ResponseBody.Companion.toResponseBody
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -110,5 +113,63 @@ class AuthRepositoryLoginTest {
         assertTrue(result.isSuccess)
         coVerify(exactly = 1) { database.clearAllTables() }
         verify { outbox.scheduleDownload() }
+    }
+
+    @Test
+    fun `required initial setup stores restricted session and does not start business sync`() = runTest {
+        every { tokenManager.getUserData() } returns AuthUser("U1", "u@test.com", "sale")
+        coEvery { authService.login(any()) } returns Response.success(
+            LoginResponse(
+                token = "setup-token",
+                userId = "U1",
+                setupRequired = true,
+                passwordChangeRequired = true,
+                phoneRequired = true,
+                phoneNoticeVersion = "2026-10-06"
+            )
+        )
+
+        val result = repo.login("u@test.com", "old-password")
+
+        assertTrue(result.isSuccess)
+        verify { tokenManager.saveToken("setup-token") }
+        verify { tokenManager.saveInitialSetupRequirement(true, true, "2026-10-06") }
+        verify(exactly = 0) { outbox.scheduleSync(any()) }
+        verify(exactly = 0) { outbox.scheduleDownload() }
+    }
+
+    @Test
+    fun `completing initial setup replaces token and starts sync only after server success`() = runTest {
+        every { tokenManager.getInitialSetupInfo() } returns InitialSetupInfo(true, true, "2026-10-06")
+        coEvery { authService.completeInitialSetup(any()) } returns Response.success(
+            LoginResponse(token = "full-token", userId = "U1")
+        )
+
+        val result = repo.completeInitialSetup("old-password", "new-password", "0812345678")
+
+        assertTrue(result.isSuccess)
+        verifyOrder {
+            tokenManager.saveToken("full-token")
+            tokenManager.saveInitialSetupRequirement(false, false, null)
+            outbox.scheduleSync(SyncTrigger.LOGIN)
+            outbox.scheduleDownload()
+        }
+    }
+
+    @Test
+    fun `failed initial setup keeps restricted token and never starts sync`() = runTest {
+        every { tokenManager.getInitialSetupInfo() } returns InitialSetupInfo(true, true, "2026-10-06")
+        coEvery { authService.completeInitialSetup(any()) } returns Response.error(
+            400,
+            "{\"error\":\"BAD_REQUEST\",\"message\":\"เบอร์ไม่ถูกต้อง\"}"
+                .toResponseBody("application/json".toMediaType())
+        )
+
+        val result = repo.completeInitialSetup("old-password", "new-password", "123")
+
+        assertTrue(result.isFailure)
+        verify(exactly = 0) { tokenManager.saveToken("full-token") }
+        verify(exactly = 0) { outbox.scheduleSync(any()) }
+        verify(exactly = 0) { outbox.scheduleDownload() }
     }
 }

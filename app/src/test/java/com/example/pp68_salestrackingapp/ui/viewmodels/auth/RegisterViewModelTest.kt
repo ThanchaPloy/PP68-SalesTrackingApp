@@ -246,7 +246,7 @@ class RegisterViewModelTest {
 
     // TC-UNIT-VM-REG-14
     @Test
-    fun `register with password shorter than 6 chars should set error`() = runTest {
+    fun `register with password shorter than 8 chars should set error`() = runTest {
         setupEmailPatternMock(matches = true)
         coEvery { branchRepository.syncFromRemote() } returns Result.success(Unit)
         coEvery { branchRepository.observeBranches() } returns sampleBranches
@@ -255,11 +255,11 @@ class RegisterViewModelTest {
 
         viewModel.onFullNameChange("John")
         viewModel.onEmailChange("test@example.com")
-        viewModel.onPasswordChange("12345")
+        viewModel.onPasswordChange("1234567")   // 7 ตัว — ติดขอบล่างของกติกาใหม่
         viewModel.onBranchSelected(0)
         viewModel.register()
 
-        assertEquals("รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร", viewModel.uiState.value.error)
+        assertEquals("รหัสผ่านต้องมีอย่างน้อย 8 ตัวอักษร", viewModel.uiState.value.error)
     }
 
     // TC-UNIT-VM-REG-15

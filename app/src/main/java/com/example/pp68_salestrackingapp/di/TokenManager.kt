@@ -19,6 +19,9 @@ class TokenManager @Inject constructor(
 
     init {
         checkAppVersionAndForceRelogin()
+        // Setup password fields are deliberately memory-only. If the process dies halfway through,
+        // discard the short-lived setup session and require a fresh login.
+        if (prefs.getBoolean("initial_setup_required", false)) clearToken()
     }
 
     private fun checkAppVersionAndForceRelogin() {
@@ -53,6 +56,21 @@ class TokenManager @Inject constructor(
     fun getToken(): String? {
         return prefs.getString("jwt_token", null)
     }
+
+    fun saveInitialSetupRequirement(required: Boolean, phoneRequired: Boolean, noticeVersion: String?) {
+        prefs.edit().apply {
+            putBoolean("initial_setup_required", required)
+            putBoolean("initial_setup_phone_required", phoneRequired)
+            if (noticeVersion == null) remove("initial_setup_notice_version")
+            else putString("initial_setup_notice_version", noticeVersion)
+        }.commit()
+    }
+
+    fun getInitialSetupInfo() = com.example.pp68_salestrackingapp.data.model.InitialSetupInfo(
+        required = prefs.getBoolean("initial_setup_required", false),
+        phoneRequired = prefs.getBoolean("initial_setup_phone_required", false),
+        phoneNoticeVersion = prefs.getString("initial_setup_notice_version", null)
+    )
 
     fun saveUserData(user: AuthUser) {
         prefs.edit().apply {
@@ -111,6 +129,9 @@ class TokenManager @Inject constructor(
             remove("user_name")
             remove("user_branch")
             remove("emp_type")
+            remove("initial_setup_required")
+            remove("initial_setup_phone_required")
+            remove("initial_setup_notice_version")
         }.apply()
     }
 

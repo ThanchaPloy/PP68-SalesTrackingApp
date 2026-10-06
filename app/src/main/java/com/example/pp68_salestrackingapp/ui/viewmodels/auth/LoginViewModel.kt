@@ -16,7 +16,7 @@ sealed interface LoginUiState {
     object Loading : LoginUiState
     data class Error(val message: String) : LoginUiState
     data class AccountSwitchBlocked(val message: String) : LoginUiState
-    data class Success(val user: AuthUser) : LoginUiState
+    data class Success(val user: AuthUser, val setupRequired: Boolean) : LoginUiState
 }
 
 @HiltViewModel
@@ -70,7 +70,8 @@ class LoginViewModel @Inject constructor(
                         teamId = finalBranchId,
                         fullName = finalFullName,
                         empType = finalEmpType
-                    )
+                    ),
+                    setupRequired = response.setupRequired
                 )
             }
             result.onFailure { exception ->

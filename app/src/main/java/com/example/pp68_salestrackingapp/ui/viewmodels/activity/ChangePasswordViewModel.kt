@@ -42,8 +42,8 @@ class ChangePasswordViewModel @Inject constructor(
             _uiState.update { it.copy(error = "กรุณากรอกข้อมูลให้ครบ") }
             return
         }
-        if (s.newPassword.length < 6) {
-            _uiState.update { it.copy(error = "รหัสผ่านใหม่ต้องมีอย่างน้อย 6 ตัวอักษร") }
+        if (s.newPassword.codePointCount(0, s.newPassword.length) < 8) {
+            _uiState.update { it.copy(error = "รหัสผ่านใหม่ต้องมีอย่างน้อย 8 ตัวอักษร") }
             return
         }
         if (s.newPassword != s.confirmPassword) {

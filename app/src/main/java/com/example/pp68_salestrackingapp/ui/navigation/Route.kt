@@ -2,6 +2,7 @@ package com.example.pp68_salestrackingapp.ui.navigation
 
 sealed class Route(val path: String) {
     object Login : Route("login")
+    object InitialAccountSetup : Route("initial_account_setup")
     object Register : Route("register")
     object Home : Route("home")
     object CustomerList : Route("customer_list")

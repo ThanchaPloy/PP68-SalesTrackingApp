@@ -122,7 +122,7 @@ object NetworkModule {
             // change-password-api ก็ 401 ตอนกรอกรหัสผ่านเดิมผิดเหมือนกัน (คนละความหมายกับ token
             // หมดอายุ) ไม่งั้นพิมพ์รหัสเดิมผิดจะโดนเด้งออกจากระบบทั้งที่ยัง login อยู่ปกติ
             if (response.code == 401 && !path.contains("login-api") && !path.contains("register-api") &&
-                !path.contains("change-password-api")
+                !path.contains("change-password-api") && !path.contains("complete-initial-setup")
             ) {
                 tokenManager.notifySessionExpired()
             }

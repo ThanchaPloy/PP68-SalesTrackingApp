@@ -16,6 +16,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.example.pp68_salestrackingapp.ui.screen.activity.*
 import com.example.pp68_salestrackingapp.ui.screen.auth.LoginScreen
+import com.example.pp68_salestrackingapp.ui.screen.auth.InitialAccountSetupScreen
 // import com.example.pp68_salestrackingapp.ui.screen.auth.RegisterScreen
 import com.example.pp68_salestrackingapp.ui.screen.customer.*
 import com.example.pp68_salestrackingapp.ui.screen.dashboard.DashboardScreen
@@ -75,12 +76,21 @@ fun SalesTrackingApp(initialSettingsScreen: String? = null) {
         // --- Auth ---
         composable(Route.Login.path) {
             LoginScreen(
-                onLoginSuccess = {
-                    navController.navigate(Route.Home.path) {
+                onLoginSuccess = { _, setupRequired ->
+                    navController.navigate(if (setupRequired) Route.InitialAccountSetup.path else Route.Home.path) {
                         popUpTo(Route.Login.path) { inclusive = true }
                     }
                 },
                 // onRegisterClick = { navController.navigate(Route.Register.path) }
+            )
+        }
+
+        composable(Route.InitialAccountSetup.path) {
+            InitialAccountSetupScreen(
+                onCompleted = {
+                    navController.navigate(Route.Home.path) { popUpTo(0) { inclusive = true } }
+                },
+                onLogout = { navigateToLogin() }
             )
         }
 

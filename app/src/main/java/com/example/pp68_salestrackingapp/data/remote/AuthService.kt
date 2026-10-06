@@ -18,6 +18,9 @@ interface AuthService {
     @POST("change-password-api")
     suspend fun changePassword(@Body request: ChangePasswordRequest): Response<ChangePasswordResponse>
 
+    @POST("account/complete-initial-setup")
+    suspend fun completeInitialSetup(@Body request: CompleteInitialSetupRequest): Response<LoginResponse>
+
     @GET("customer")
     suspend fun getCustomers(
         @Query("branch_id") branchId: String? = null,

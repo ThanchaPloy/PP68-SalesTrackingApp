@@ -91,8 +91,8 @@ class RegisterViewModel @Inject constructor(
             return
         }
 
-        if (s.password.length < 6) {
-            _uiState.update { it.copy(error = "รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร") }
+        if (s.password.codePointCount(0, s.password.length) < 8) {
+            _uiState.update { it.copy(error = "รหัสผ่านต้องมีอย่างน้อย 8 ตัวอักษร") }
             return
         }
 

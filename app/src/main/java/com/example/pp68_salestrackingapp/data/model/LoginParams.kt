@@ -14,7 +14,12 @@ data class LoginResponse(
     @SerializedName("role")      val role:     String? = null,
     @SerializedName("branch_id") val branchId: String? = null,
     @SerializedName("emp_type")  val empType:  String? = null,
-    @SerializedName("employee")  val employee: EmployeeResponseDto? = null
+    @SerializedName("employee")  val employee: EmployeeResponseDto? = null,
+    @SerializedName("setup_required") val setupRequired: Boolean = false,
+    @SerializedName("password_change_required") val passwordChangeRequired: Boolean = false,
+    @SerializedName("phone_required") val phoneRequired: Boolean = false,
+    @SerializedName("phone_notice_version") val phoneNoticeVersion: String? = null,
+    @SerializedName("server_time") val serverTime: String? = null
 )
 
 data class EmployeeResponseDto(
