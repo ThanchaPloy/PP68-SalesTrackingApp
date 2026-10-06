@@ -101,7 +101,19 @@ data class SalesActivity(
     // Local-only fields
     @ColumnInfo(name = "project_name")
     val projectName: String? = null,
+    /**
+     * ชื่อบริษัทของนัดหมาย — อ่านจาก server ได้ แต่ไม่เคยถูกส่งกลับขึ้นไป
+     *
+     * ตั้งแต่ลูกค้า ERP เป็น remote-only ตาราง customer ในเครื่องมีแต่ lead ที่แอปสร้างเอง
+     * การ join หาชื่อจึงได้ค่าว่างสำหรับลูกค้า ERP และหน้ารายละเอียดนัดโชว์ช่องบริษัทเปล่า
+     * server จึงแนบ customer_name มากับนัดหมายให้เลย
+     *
+     * ใส่ @SerializedName ได้โดยไม่ทำให้ค่านี้หลุดขึ้น server เพราะทุกทางที่เขียนนัดหมาย
+     * (CreateRequestPayloads.activity และ patchBody ใน SyncManager) ประกอบ Map เองทั้งหมด
+     * ไม่ได้ปล่อย entity ให้ Gson แปลง
+     */
     @ColumnInfo(name = "company_name")
+    @SerializedName("customer_name")
     val companyName: String? = null,
     @ColumnInfo(name = "contact_name")
     val contactName: String? = null,

@@ -61,7 +61,11 @@ object NetworkModule {
     }
 
     // Only serialize fields that have @SerializedName — local-only Room fields (isSynced,
-    // projectName, companyName, etc.) have no @SerializedName and must not reach PostgREST.
+    // projectName, locationName, etc.) have no @SerializedName and must not reach PostgREST.
+    //
+    // ข้อยกเว้นที่ตั้งใจ: SalesActivity.companyName มี @SerializedName("customer_name") เพื่อ
+    // "อ่าน" ชื่อบริษัทที่ server แนบมากับนัดหมาย (ลูกค้า ERP ไม่ได้อยู่ใน Room อีกแล้ว)
+    // ค่านี้ไม่หลุดขึ้น server เพราะทุกทางที่เขียนนัดหมายประกอบ Map เอง ไม่ได้ส่ง entity ให้ Gson
     // internal เพื่อให้เทสต์ยิง gson ตัวเดียวกับที่ Retrofit ใช้จริง — ถ้าเทสต์สร้าง Gson ของตัวเอง
     // มันจะไม่ได้ทดสอบ adapter ตัวจริงเลย กลายเป็นเทสต์ที่ผ่านแต่ไม่กันอะไร
     internal val gson = GsonBuilder()
