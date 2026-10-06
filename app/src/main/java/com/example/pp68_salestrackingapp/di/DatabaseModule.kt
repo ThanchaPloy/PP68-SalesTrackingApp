@@ -8,6 +8,7 @@ import com.example.pp68_salestrackingapp.data.local.ActivityResultDao
 import com.example.pp68_salestrackingapp.data.local.ActivityResultPhotoDao
 import com.example.pp68_salestrackingapp.data.local.AttachmentOutboxDao
 import com.example.pp68_salestrackingapp.data.local.AppDatabase
+import com.example.pp68_salestrackingapp.data.local.AppointmentDraftDao
 import com.example.pp68_salestrackingapp.data.local.AppointmentContactDao
 import com.example.pp68_salestrackingapp.data.local.ProjectContactDao
 import com.example.pp68_salestrackingapp.data.local.BranchDao
@@ -78,9 +79,16 @@ object DatabaseModule {
                 AppDatabase.MIGRATION_58_59,
                 AppDatabase.MIGRATION_59_60,
                 AppDatabase.MIGRATION_60_61,
-                AppDatabase.MIGRATION_61_62
+                AppDatabase.MIGRATION_61_62,
+                AppDatabase.MIGRATION_62_63
             )
             .build()
+    }
+
+    @Provides
+    @Singleton
+    fun provideAppointmentDraftDao(database: AppDatabase): AppointmentDraftDao {
+        return database.appointmentDraftDao()
     }
 
     @Provides

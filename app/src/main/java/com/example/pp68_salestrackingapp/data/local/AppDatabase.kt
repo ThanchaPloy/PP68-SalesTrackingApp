@@ -23,9 +23,10 @@ import com.example.pp68_salestrackingapp.data.model.*
         SyncState::class,
         SyncConflict::class,
         SyncSnapshotItem::class,
-        LocalIdMapping::class
+        LocalIdMapping::class,
+        AppointmentDraft::class
     ],
-    version = 62,
+    version = 63,
     exportSchema = true
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -46,6 +47,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun syncConflictDao(): SyncConflictDao
     abstract fun syncSnapshotDao(): SyncSnapshotDao
     abstract fun localIdMappingDao(): LocalIdMappingDao
+    abstract fun appointmentDraftDao(): AppointmentDraftDao
 
     // clearAllData() ถูกลบออก — เป็น wrapper บาง ๆ ของ clearAllTables() ที่ไม่มีใครเรียกเลย
     // ตัวที่ใช้งานจริงคือ clearAllTables() ที่ AuthRepository เรียกตอน login คนละคน/logout ซึ่งมี
@@ -598,6 +600,48 @@ abstract class AppDatabase : RoomDatabase() {
          * additive ล้วน แถวเดิมได้ NULL/0 ซึ่งแปลว่า "ไม่มีข้อมูลเวลาแก้" และถูกตัดสิน
          * ด้วยเวลาที่ server เห็นตอนรับคำขอเหมือนเดิม
          */
+        /**
+         * C.1: ฉบับร่างนัดหมายหลายรายการ ย้ายจาก SharedPreferences มาอยู่ Room
+         *
+         * แผนเขียนไว้ว่า 61 -> 62 แต่ 62 ถูกใช้ไปกับงาน B.4 แล้ว จึงเป็น 62 -> 63
+         *
+         * ตารางใหม่ล้วน ไม่แตะข้อมูลเดิม การย้ายร่างเก่าจาก SharedPreferences ทำในแอป
+         * ไม่ใช่ใน migration เพราะต้องพิสูจน์เจ้าของก่อน ซึ่ง SQL ไม่รู้
+         */
+        val MIGRATION_62_63 = object : Migration(62, 63) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `appointment_draft` (
+                        `draft_id` TEXT NOT NULL,
+                        `owner_key` TEXT NOT NULL,
+                        `schema_version` INTEGER NOT NULL,
+                        `title` TEXT,
+                        `planned_date` TEXT,
+                        `planned_time` TEXT,
+                        `project_id` TEXT,
+                        `project_name_snapshot` TEXT,
+                        `customer_id` TEXT,
+                        `customer_name_snapshot` TEXT,
+                        `payload_json` TEXT NOT NULL,
+                        `created_at` TEXT NOT NULL,
+                        `updated_at` TEXT NOT NULL,
+                        `expires_at` TEXT NOT NULL,
+                        PRIMARY KEY(`draft_id`)
+                    )
+                    """.trimIndent()
+                )
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_appointment_draft_owner_updated` " +
+                        "ON `appointment_draft` (`owner_key`, `updated_at`)"
+                )
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_appointment_draft_owner_expires` " +
+                        "ON `appointment_draft` (`owner_key`, `expires_at`)"
+                )
+            }
+        }
+
         val MIGRATION_61_62 = object : Migration(61, 62) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE `activity_table` ADD COLUMN `plan_edit_at` TEXT")
