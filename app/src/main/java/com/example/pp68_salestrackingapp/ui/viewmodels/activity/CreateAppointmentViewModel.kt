@@ -1,5 +1,6 @@
 package com.example.pp68_salestrackingapp.ui.viewmodels.activity
 
+import com.example.pp68_salestrackingapp.data.repository.DraftSaveResult
 import com.example.pp68_salestrackingapp.utils.AppointmentPolicy
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -78,7 +79,12 @@ data class CreateAppointmentUiState(
     val showStartTimePicker: Boolean = false,
     val showEndTimePicker:   Boolean = false,
 
-    val draftAvailable: Boolean = false,
+    /** ร่างที่กำลังแก้อยู่ — null = ฟอร์มนี้ยังไม่เคยถูกบันทึกเป็นร่าง */
+    val draftId: String? = null,
+    /** ขึ้นข้อความยืนยันสั้น ๆ หลังกดบันทึกร่าง โดยไม่ต้องออกจากหน้า */
+    val draftSavedAt: String? = null,
+    /** เต็ม 20 รายการ — ต้องพาไปหน้ารายการให้ผู้ใช้เลือกลบเอง ไม่ลบให้เงียบ ๆ */
+    val draftLimitReached: Boolean = false,
 
     // สร้างบริษัทลูกค้า (Lead) ด่วน — กรอกแค่ชื่อ+ประเภท ฟิลด์อื่นเติมทีหลังที่หน้าลูกค้าได้
     val isQuickAddCustomerOpen: Boolean = false,
@@ -121,12 +127,18 @@ data class CreateAppointmentDraft(
     val otherObjectiveText: String = ""
 )
 
+/** ขึ้นเลขเมื่อฟิลด์ใน CreateAppointmentDraft เปลี่ยนจนร่างเก่าอ่านกลับมาไม่ได้ */
+const val DRAFT_SCHEMA_VERSION = 1
+private const val PARENT_PROJECT = "project"
+private const val PARENT_CUSTOMER = "customer"
+
 sealed class CreateAppointmentEvent {
     data class LoadActivity(val activityId: String)         : CreateAppointmentEvent()
     data class LoadInitialProject(val projectId: String)    : CreateAppointmentEvent()
     object CheckDraft         : CreateAppointmentEvent()
-    object RestoreDraft       : CreateAppointmentEvent()
-    object DismissDraftPrompt : CreateAppointmentEvent()
+    data class LoadDraft(val draftId: String) : CreateAppointmentEvent()
+    object SaveDraftNow       : CreateAppointmentEvent()
+    object DismissDraftLimit  : CreateAppointmentEvent()
     data class ProjectSelected(val id: String?, val name: String?, val status: String?) : CreateAppointmentEvent()
     data class CompanySelected(val id: String, val name: String) : CreateAppointmentEvent()
     data class CompanyQueryChanged(val value: String)           : CreateAppointmentEvent()
@@ -167,7 +179,8 @@ class CreateAppointmentViewModel @Inject constructor(
     private val authRepo:     AuthRepository,
     private val draftStore:   DraftStore,
     private val clock:        java.time.Clock,
-    private val serverTimeAnchor: com.example.pp68_salestrackingapp.utils.ServerTimeAnchor
+    private val serverTimeAnchor: com.example.pp68_salestrackingapp.utils.ServerTimeAnchor,
+    private val draftRepository: com.example.pp68_salestrackingapp.data.repository.AppointmentDraftRepository
 ) : ViewModel() {
 
     /**
@@ -244,21 +257,83 @@ class CreateAppointmentViewModel @Inject constructor(
         val s = _uiState.value
         awaitingInitialLocation = s.activityId == null && s.activityType == "onsite" &&
             s.lat == null && s.lng == null
-        if (draft.check()) _uiState.update { it.copy(draftAvailable = true) }
+        // ไม่มีการถามว่า "พบฉบับร่าง จะกู้คืนไหม" อีกแล้ว — ร่างเป็นรายการที่ผู้ใช้เปิดเองจากหน้ารายการ
+        // การเดาให้เองว่าร่างไหนคู่กับฟอร์มที่เปิดอยู่ คือต้นเหตุเดิมที่ร่างคนละเรื่องมาทับกัน
     }
 
     fun isDirty(): Boolean = draft.isDirty()
 
-    fun saveDraft() = draft.save()
+    /** บันทึกร่างโดยไม่ต้องออกจากหน้า — ร่างเดิมถูกเขียนทับ ไม่งอกสำเนา */
+    fun saveDraft() {
+        val s = _uiState.value
+        viewModelScope.launch {
+            when (val result = draftRepository.saveDraft(
+                draftId = s.draftId,
+                schemaVersion = DRAFT_SCHEMA_VERSION,
+                payloadJson = com.google.gson.Gson().toJson(s.toDraft()),
+                title = s.titleTopic.takeIf { it.isNotBlank() },
+                plannedDate = s.plannedDate,
+                plannedTime = s.startTime,
+                projectId = s.selectedProjectId,
+                projectNameSnapshot = s.projectOptions.firstOrNull { it.id == s.selectedProjectId }?.name,
+                customerId = s.selectedCustomerId,
+                customerNameSnapshot = s.companyOptions.firstOrNull { it.first == s.selectedCustomerId }?.second
+            )) {
+                is DraftSaveResult.Saved -> _uiState.update {
+                    it.copy(
+                        draftId = result.draftId,
+                        draftSavedAt = java.time.Instant.now(clock).toString(),
+                        draftLimitReached = false,
+                        saveError = null
+                    )
+                }
+                is DraftSaveResult.LimitReached -> _uiState.update { it.copy(draftLimitReached = true) }
+                is DraftSaveResult.Failed -> _uiState.update {
+                    it.copy(saveError = result.error.message ?: "บันทึกฉบับร่างไม่สำเร็จ")
+                }
+            }
+        }
+    }
 
-    fun discardDraft() = draft.discard()
+    /** ลบเฉพาะร่างที่กำลังแก้อยู่ ร่างอื่นของผู้ใช้ต้องไม่ถูกแตะ */
+    fun discardDraft() {
+        val id = _uiState.value.draftId ?: return
+        viewModelScope.launch { draftRepository.deleteDraft(id) }
+    }
 
-    fun restoreDraft() {
-        val d = draft.takePending() ?: return
+    /** เปิดร่างที่ผู้ใช้เลือกจากหน้ารายการ */
+    fun loadDraft(draftId: String) {
+        viewModelScope.launch {
+            val stored = draftRepository.getDraft(draftId) ?: run {
+                _uiState.update { it.copy(saveError = "ไม่พบฉบับร่างนี้แล้ว อาจถูกลบหรือหมดอายุไปก่อน") }
+                return@launch
+            }
+            val d = runCatching {
+                com.google.gson.Gson().fromJson(stored.payloadJson, CreateAppointmentDraft::class.java)
+            }.getOrNull() ?: run {
+                _uiState.update { it.copy(saveError = "ฉบับร่างนี้เสียหาย อ่านกลับมาไม่ได้") }
+                return@launch
+            }
+            applyDraft(d, draftId, stored.projectNameSnapshot, stored.customerNameSnapshot)
+        }
+    }
+
+    private suspend fun applyDraft(
+        d: CreateAppointmentDraft,
+        draftId: String,
+        projectNameSnapshot: String?,
+        customerNameSnapshot: String?
+    ) {
+        // TEMP- id อาจถูกแทนด้วย id จริงไปแล้วระหว่างที่ร่างค้างอยู่ และ parent อาจถูกลบไปเลย
+        val resolvedProjectId = d.selectedProjectId?.let { draftRepository.resolveParentId(PARENT_PROJECT, it) }
+        val resolvedCustomerId = d.selectedCustomerId?.let { draftRepository.resolveParentId(PARENT_CUSTOMER, it) }
+        val projectGone = resolvedProjectId != null && !draftRepository.projectExists(resolvedProjectId)
+        val customerGone = resolvedCustomerId != null && !draftRepository.customerExists(resolvedCustomerId)
         _uiState.update {
             it.copy(
-                selectedProjectId = d.selectedProjectId,
-                selectedCustomerId = d.selectedCustomerId,
+                draftId = draftId,
+                selectedProjectId = resolvedProjectId.takeIf { !projectGone },
+                selectedCustomerId = resolvedCustomerId.takeIf { !customerGone },
                 titleTopic = d.titleTopic,
                 activityType = d.activityType,
                 plannedDate = d.plannedDate,
@@ -270,14 +345,17 @@ class CreateAppointmentViewModel @Inject constructor(
                 selectedMasterIds = d.selectedMasterIds,
                 isOtherSelected = d.isOtherSelected,
                 otherObjectiveText = d.otherObjectiveText,
-                draftAvailable = false
+                // ของที่หายไปต้องให้ผู้ใช้เลือกใหม่ก่อนบันทึกจริง ไม่ใช่บันทึกทับด้วยรหัสที่ไม่มีอยู่แล้ว
+                // บอกชื่อที่เก็บไว้ตอนบันทึกร่างด้วย ไม่งั้นผู้ใช้ไม่รู้ว่าของเดิมคืออะไร
+                saveError = listOfNotNull(
+                    if (projectGone) "โครงการ \"${projectNameSnapshot ?: resolvedProjectId}\" ถูกลบไปแล้ว" else null,
+                    if (customerGone) "บริษัท \"${customerNameSnapshot ?: resolvedCustomerId}\" ถูกลบไปแล้ว" else null
+                ).takeIf { it.isNotEmpty() }?.joinToString("\n")
+                    ?.plus("\nกรุณาเลือกใหม่ก่อนบันทึก")
             )
         }
-        d.selectedProjectId?.let { loadContactsForProject(it, d.selectedContactIds) }
-    }
-
-    fun dismissDraftPrompt() {
-        _uiState.update { it.copy(draftAvailable = false) }
+        resolvedProjectId?.takeIf { !projectGone }?.let { loadContactsForProject(it, d.selectedContactIds) }
+        draft.captureBaseline()
     }
 
     init {
@@ -910,8 +988,10 @@ class CreateAppointmentViewModel @Inject constructor(
 
             CreateAppointmentEvent.Save -> save()
             CreateAppointmentEvent.CheckDraft -> checkForDraft()
-            CreateAppointmentEvent.RestoreDraft -> restoreDraft()
-            CreateAppointmentEvent.DismissDraftPrompt -> dismissDraftPrompt()
+            is CreateAppointmentEvent.LoadDraft -> loadDraft(event.draftId)
+            CreateAppointmentEvent.SaveDraftNow -> saveDraft()
+            CreateAppointmentEvent.DismissDraftLimit ->
+                _uiState.update { it.copy(draftLimitReached = false) }
         }
     }
 

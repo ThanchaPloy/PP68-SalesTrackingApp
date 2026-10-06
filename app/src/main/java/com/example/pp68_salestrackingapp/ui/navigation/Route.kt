@@ -20,6 +20,10 @@ sealed class Route(val path: String) {
     object ProjectInventory : Route("project_inventory/{projectId}") {
         fun createRoute(projectId: String) = "project_inventory/$projectId"
     }
+    object AppointmentDrafts : Route("appointment_drafts")
+    object CreateActivityFromDraft : Route("create_activity_draft/{draftId}") {
+        fun createRoute(draftId: String) = "create_activity_draft/$draftId"
+    }
     object AddProject : Route("add_project")
     object EditProject : Route("edit_project/{projectId}") {
         fun createRoute(projectId: String) = "edit_project/$projectId"

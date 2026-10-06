@@ -86,6 +86,7 @@ fun HomeScreen(
     onSettingsClick:     () -> Unit = {},
     onLogoutClick:       () -> Unit = {},
     onAddPhoneClick:     () -> Unit = {},
+    onOpenDrafts:        () -> Unit = {},
     currentTab:          Int,
     onTabChange:         (Int) -> Unit,
     viewModel: HomeViewModel = hiltViewModel()
@@ -93,7 +94,6 @@ fun HomeScreen(
     val uiState by viewModel.uiState.collectAsState()
 
     val context = androidx.compose.ui.platform.LocalContext.current
-    var hasApptDraft by remember { mutableStateOf(false) }
     val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
         val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
@@ -101,7 +101,7 @@ fun HomeScreen(
                 viewModel.loadActivities()
                 // กรอกเบอร์ในหน้าโปรไฟล์แล้วย้อนกลับมา การ์ดทวงเบอร์ต้องหายทันที ไม่ต้องรอลากรีเฟรช
                 viewModel.recheckPhoneNumber()
-                hasApptDraft = com.example.pp68_salestrackingapp.utils.DraftStore.peekExists(context, "create_appointment:new:none")
+                viewModel.refreshDraftCount()
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -129,11 +129,8 @@ fun HomeScreen(
         onMonthChange       = { viewModel.selectMonth(it) },
         onRetrySync         = { viewModel.retrySync() },
         onDismissSyncFailures = { viewModel.dismissSyncFailures() },
-        hasApptDraft        = hasApptDraft,
-        onDismissApptDraft  = {
-            hasApptDraft = false
-            com.example.pp68_salestrackingapp.utils.DraftStore.dismiss(context, "create_appointment:new:none")
-        }
+        draftCount          = uiState.draftCount,
+        onOpenDrafts        = onOpenDrafts
     )
 }
 
@@ -154,8 +151,8 @@ private fun HomeScreenContent(
     onMonthChange:       (YearMonth) -> Unit,
     onRetrySync:         () -> Unit = {},
     onDismissSyncFailures: () -> Unit = {},
-    hasApptDraft:        Boolean = false,
-    onDismissApptDraft:  () -> Unit = {}
+    draftCount:          Int = 0,
+    onOpenDrafts:        () -> Unit = {}
 ) {
     Scaffold(
         topBar = {
@@ -240,13 +237,15 @@ private fun HomeScreenContent(
                 contentPadding      = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
                 verticalArrangement = Arrangement.spacedBy(0.dp)
             ) {
-                if (hasApptDraft) {
+                // ไม่มีปุ่มปิดแบนเนอร์แล้ว เพราะมันไม่ได้ทวงร่างใดร่างหนึ่ง แต่เป็นทางเข้าหน้ารายการ
+                // ปิดไปก็ไม่มีประโยชน์ และของเดิมที่จำว่า "ปิดแล้ว" ทำให้ร่างที่ค้างอยู่หายไปจากสายตา
+                if (draftCount > 0) {
                     item {
                         com.example.pp68_salestrackingapp.ui.components.DraftBanner(
-                            message = "มีนัดหมายที่กรอกค้างไว้",
-                            actionLabel = "ทำต่อ",
-                            onAction = onAddClick,
-                            onDismiss = onDismissApptDraft,
+                            message = "มีฉบับร่างนัดหมาย $draftCount รายการ",
+                            actionLabel = "ดูรายการ",
+                            onAction = onOpenDrafts,
+                            onDismiss = onOpenDrafts,
                             modifier = Modifier.padding(bottom = 8.dp)
                         )
                     }

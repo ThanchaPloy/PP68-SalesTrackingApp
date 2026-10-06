@@ -49,8 +49,10 @@ private val ErrorRed   = Color(0xFFD32F2F)
 fun CreateAppointmentScreen(
     activityId: String? = null,
     projectId: String? = null,
+    draftId: String? = null,
     onBack: () -> Unit,
     onSaved: () -> Unit = onBack,
+    onOpenDrafts: () -> Unit = {},
     viewModel: CreateAppointmentViewModel = hiltViewModel()
 ) {
     val state by viewModel.uiState.collectAsState()
@@ -91,9 +93,12 @@ fun CreateAppointmentScreen(
         }
     }
 
-    LaunchedEffect(activityId, projectId) {
+    LaunchedEffect(activityId, projectId, draftId) {
         if (activityId != null) {
             onEvent(CreateAppointmentEvent.LoadActivity(activityId))
+        } else if (draftId != null) {
+            onEvent(CreateAppointmentEvent.CheckDraft)
+            onEvent(CreateAppointmentEvent.LoadDraft(draftId))
         } else if (projectId != null) {
             onEvent(CreateAppointmentEvent.LoadInitialProject(projectId))
         } else {
@@ -116,6 +121,26 @@ fun CreateAppointmentScreen(
             onSaveDraft = { viewModel.saveDraft(); showDiscardDialog = false; onBack() },
             onDiscard   = { viewModel.discardDraft(); showDiscardDialog = false; onBack() },
             onDismiss   = { showDiscardDialog = false }
+        )
+    }
+
+    // เต็มโควตาแล้วพาไปหน้ารายการให้ผู้ใช้เลือกลบเอง ไม่ลบร่างเก่าสุดทิ้งให้เงียบ ๆ
+    if (state.draftLimitReached) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { onEvent(CreateAppointmentEvent.DismissDraftLimit) },
+            title = { Text("เก็บฉบับร่างได้เต็มแล้ว") },
+            text = { Text("กรุณาลบฉบับร่างที่ไม่ใช้แล้วก่อน จึงจะบันทึกร่างใหม่ได้") },
+            confirmButton = {
+                TextButton(onClick = {
+                    onEvent(CreateAppointmentEvent.DismissDraftLimit)
+                    onOpenDrafts()
+                }) { Text("ดูรายการฉบับร่าง") }
+            },
+            dismissButton = {
+                TextButton(onClick = { onEvent(CreateAppointmentEvent.DismissDraftLimit) }) {
+                    Text("ปิด")
+                }
+            }
         )
     }
 
@@ -153,12 +178,12 @@ fun CreateAppointmentScreen(
                 .padding(horizontal = 20.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
-            if (state.draftAvailable) {
-                com.example.pp68_salestrackingapp.ui.components.DraftBanner(
-                    message = "พบฉบับร่างที่บันทึกไว้ก่อนหน้านี้",
-                    actionLabel = "กู้คืน",
-                    onAction = { onEvent(CreateAppointmentEvent.RestoreDraft) },
-                    onDismiss = { onEvent(CreateAppointmentEvent.DismissDraftPrompt) }
+            // ไม่มีแบนเนอร์ "พบฉบับร่าง จะกู้คืนไหม" แล้ว — ร่างเป็นรายการที่ผู้ใช้เปิดเองจากหน้ารายการ
+            state.draftSavedAt?.let {
+                Text(
+                    "บันทึกฉบับร่างแล้ว",
+                    color = Color(0xFF2E7D32),
+                    fontSize = 13.sp
                 )
             }
 
@@ -509,6 +534,15 @@ fun CreateAppointmentScreen(
                         }
                     )
                 }
+            }
+
+            TextButton(
+                onClick = { onEvent(CreateAppointmentEvent.SaveDraftNow) },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Icon(Icons.Default.Save, null, tint = TextGray, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(6.dp))
+                Text("บันทึกฉบับร่างไว้ทำต่อ", color = TextGray, fontSize = 13.sp)
             }
 
             state.timeAnchorWarning?.let {

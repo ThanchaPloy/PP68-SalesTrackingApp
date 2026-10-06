@@ -37,6 +37,7 @@ class AppointmentDraftRepository @Inject constructor(
     private val clock: Clock
 ) {
     private val dao get() = database.appointmentDraftDao()
+    private val idMappingDao get() = database.localIdMappingDao()
 
     private fun ownerKeyOrNull(): String? =
         tokenManager.getUserData()?.userId?.takeIf { it.isNotBlank() }?.let { syncAccountKey(it) }
@@ -158,6 +159,21 @@ class AppointmentDraftRepository @Inject constructor(
 
     private fun JsonObject?.stringOrNull(name: String): String? =
         this?.get(name)?.takeIf { !it.isJsonNull }?.asString?.takeIf { it.isNotBlank() }
+
+    /**
+     * แปลง TEMP- id ที่ค้างอยู่ในร่างให้เป็น id จริง ถ้าระหว่างนั้นถูก sync ขึ้นไปแล้ว (แผนงาน C.4)
+     *
+     * ร่างอาจถูกเก็บไว้หลายวัน โครงการที่ตอนนั้นยังเป็น TEMP- อาจได้รหัสจริงไปแล้ว
+     * ถ้าไม่ remap จะได้ร่างที่ชี้ไปยังรหัสที่ไม่มีอยู่ในเครื่องอีกต่อไป
+     */
+    suspend fun resolveParentId(entityType: String, id: String): String =
+        idMappingDao.resolveMappedId(entityType, id)
+
+    suspend fun projectExists(projectId: String): Boolean =
+        database.projectDao().getProjectById(projectId) != null
+
+    suspend fun customerExists(customerId: String): Boolean =
+        database.customerDao().getCustomerById(customerId) != null
 
     companion object {
         const val MAX_DRAFTS_PER_ACCOUNT = 20

@@ -47,6 +47,8 @@ data class ActivityCard(
 )
 
 data class HomeUiState(
+    /** จำนวนฉบับร่างนัดหมายของบัญชีนี้ — ใช้เป็นทางเข้าหน้ารายการ ไม่ใช่การทวงร่างใดร่างหนึ่ง */
+    val draftCount: Int = 0,
     val selectedMonth:   YearMonth              = YearMonth.now(),
     val groupedCards: Map<String, List<ActivityCard>> = emptyMap(),
     val isLoading:       Boolean                = false,
@@ -68,6 +70,7 @@ data class HomeUiState(
 @OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
 class HomeViewModel @Inject constructor(
+    private val draftRepo: com.example.pp68_salestrackingapp.data.repository.AppointmentDraftRepository,
     private val activityRepo: ActivityRepository,
     private val authRepo:     AuthRepository,
     private val customerRepo: CustomerRepository,
@@ -190,6 +193,13 @@ class HomeViewModel @Inject constructor(
                         }
                     )
                 }
+        }
+    }
+
+    fun refreshDraftCount() {
+        viewModelScope.launch {
+            val count = runCatching { draftRepo.countDrafts() }.getOrDefault(0)
+            _uiState.update { it.copy(draftCount = count) }
         }
     }
 

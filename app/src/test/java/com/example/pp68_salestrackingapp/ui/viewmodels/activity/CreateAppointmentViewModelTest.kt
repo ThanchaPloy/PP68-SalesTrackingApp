@@ -15,6 +15,7 @@ import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
+import com.example.pp68_salestrackingapp.data.repository.DraftSaveResult
 import io.mockk.slot
 import io.mockk.verify
 import kotlinx.coroutines.Dispatchers
@@ -50,6 +51,7 @@ class CreateAppointmentViewModelTest {
     private val contactRepo = mockk<com.example.pp68_salestrackingapp.data.repository.ContactRepository>(relaxed = true)
     private val draftStore = mockk<com.example.pp68_salestrackingapp.utils.DraftStore>(relaxed = true)
     private val serverTimeAnchor: com.example.pp68_salestrackingapp.utils.ServerTimeAnchor = mockk(relaxed = true)
+    private val draftRepository: com.example.pp68_salestrackingapp.data.repository.AppointmentDraftRepository = mockk(relaxed = true)
 
     @Before
     fun setUp() {
@@ -108,7 +110,7 @@ class CreateAppointmentViewModelTest {
             ActivityMaster(1, "Lead", "สำรวจความต้องการ")
         )
 
-        val vm = CreateAppointmentViewModel(context, activityRepo, projectRepo, customerRepo, contactRepo, authRepo, draftStore, java.time.Clock.system(java.time.ZoneId.of("Asia/Bangkok")), serverTimeAnchor)
+        val vm = CreateAppointmentViewModel(context, activityRepo, projectRepo, customerRepo, contactRepo, authRepo, draftStore, java.time.Clock.system(java.time.ZoneId.of("Asia/Bangkok")), serverTimeAnchor, draftRepository)
         advanceUntilIdle()
 
         assertEquals(1, vm.uiState.value.projectOptions.size)
@@ -126,7 +128,7 @@ class CreateAppointmentViewModelTest {
         configureBaseData()
         coEvery { activityRepo.getMasterActivities() } returns emptyList()
 
-        val vm = CreateAppointmentViewModel(context, activityRepo, projectRepo, customerRepo, contactRepo, authRepo, draftStore, java.time.Clock.system(java.time.ZoneId.of("Asia/Bangkok")), serverTimeAnchor)
+        val vm = CreateAppointmentViewModel(context, activityRepo, projectRepo, customerRepo, contactRepo, authRepo, draftStore, java.time.Clock.system(java.time.ZoneId.of("Asia/Bangkok")), serverTimeAnchor, draftRepository)
         advanceUntilIdle()
         vm.onEvent(CreateAppointmentEvent.CheckDraft)
         advanceUntilIdle()
@@ -143,7 +145,7 @@ class CreateAppointmentViewModelTest {
         configureBaseData()
         coEvery { activityRepo.getMasterActivities() } returns emptyList()
 
-        val vm = CreateAppointmentViewModel(context, activityRepo, projectRepo, customerRepo, contactRepo, authRepo, draftStore, java.time.Clock.system(java.time.ZoneId.of("Asia/Bangkok")), serverTimeAnchor)
+        val vm = CreateAppointmentViewModel(context, activityRepo, projectRepo, customerRepo, contactRepo, authRepo, draftStore, java.time.Clock.system(java.time.ZoneId.of("Asia/Bangkok")), serverTimeAnchor, draftRepository)
         advanceUntilIdle()
         vm.onEvent(CreateAppointmentEvent.CheckDraft)
         advanceUntilIdle()
@@ -159,7 +161,7 @@ class CreateAppointmentViewModelTest {
         configureBaseData()
         coEvery { activityRepo.getMasterActivities() } throws RuntimeException("network")
 
-        val vm = CreateAppointmentViewModel(context, activityRepo, projectRepo, customerRepo, contactRepo, authRepo, draftStore, java.time.Clock.system(java.time.ZoneId.of("Asia/Bangkok")), serverTimeAnchor)
+        val vm = CreateAppointmentViewModel(context, activityRepo, projectRepo, customerRepo, contactRepo, authRepo, draftStore, java.time.Clock.system(java.time.ZoneId.of("Asia/Bangkok")), serverTimeAnchor, draftRepository)
         advanceUntilIdle()
 
         assertTrue(vm.uiState.value.allMasterOptions.isNotEmpty())
@@ -173,7 +175,7 @@ class CreateAppointmentViewModelTest {
             ActivityMaster(1, "Lead", "Lead item"),
             ActivityMaster(2, "Quotation", "Quotation item")
         )
-        val vm = CreateAppointmentViewModel(context, activityRepo, projectRepo, customerRepo, contactRepo, authRepo, draftStore, java.time.Clock.system(java.time.ZoneId.of("Asia/Bangkok")), serverTimeAnchor)
+        val vm = CreateAppointmentViewModel(context, activityRepo, projectRepo, customerRepo, contactRepo, authRepo, draftStore, java.time.Clock.system(java.time.ZoneId.of("Asia/Bangkok")), serverTimeAnchor, draftRepository)
         advanceUntilIdle()
 
         vm.onEvent(CreateAppointmentEvent.ProjectSelected("PRJ-1", "Project A", "Lead"))
@@ -192,7 +194,7 @@ class CreateAppointmentViewModelTest {
         configureBaseData()
         coEvery { activityRepo.getMasterActivities() } returns listOf(ActivityMaster(1, "Lead", "L"))
         every { authRepo.currentUser() } returns null
-        val vm = CreateAppointmentViewModel(context, activityRepo, projectRepo, customerRepo, contactRepo, authRepo, draftStore, java.time.Clock.system(java.time.ZoneId.of("Asia/Bangkok")), serverTimeAnchor)
+        val vm = CreateAppointmentViewModel(context, activityRepo, projectRepo, customerRepo, contactRepo, authRepo, draftStore, java.time.Clock.system(java.time.ZoneId.of("Asia/Bangkok")), serverTimeAnchor, draftRepository)
         advanceUntilIdle()
         vm.onEvent(CreateAppointmentEvent.LoadInitialProject("PRJ-1"))
         vm.onEvent(CreateAppointmentEvent.TypeChanged("onsite"))
@@ -215,7 +217,7 @@ class CreateAppointmentViewModelTest {
         configureBaseData()
         coEvery { activityRepo.getMasterActivities() } returns listOf(ActivityMaster(1, "Lead", "L"))
         every { authRepo.currentUser() } returns AuthUser("U1", "u@test.com", "sale")
-        val vm = CreateAppointmentViewModel(context, activityRepo, projectRepo, customerRepo, contactRepo, authRepo, draftStore, java.time.Clock.system(java.time.ZoneId.of("Asia/Bangkok")), serverTimeAnchor)
+        val vm = CreateAppointmentViewModel(context, activityRepo, projectRepo, customerRepo, contactRepo, authRepo, draftStore, java.time.Clock.system(java.time.ZoneId.of("Asia/Bangkok")), serverTimeAnchor, draftRepository)
         advanceUntilIdle()
         vm.onEvent(CreateAppointmentEvent.LoadInitialProject("PRJ-1"))
         vm.onEvent(CreateAppointmentEvent.TypeChanged("onsite"))
@@ -241,7 +243,7 @@ class CreateAppointmentViewModelTest {
         configureBaseData()
         coEvery { activityRepo.getMasterActivities() } returns listOf(ActivityMaster(1, "Lead", "L"))
         every { authRepo.currentUser() } returns AuthUser("U1", "u@test.com", "sale")
-        val vm = CreateAppointmentViewModel(context, activityRepo, projectRepo, customerRepo, contactRepo, authRepo, draftStore, java.time.Clock.system(java.time.ZoneId.of("Asia/Bangkok")), serverTimeAnchor)
+        val vm = CreateAppointmentViewModel(context, activityRepo, projectRepo, customerRepo, contactRepo, authRepo, draftStore, java.time.Clock.system(java.time.ZoneId.of("Asia/Bangkok")), serverTimeAnchor, draftRepository)
         advanceUntilIdle()
         vm.onEvent(CreateAppointmentEvent.LoadInitialProject("PRJ-1"))
         vm.onEvent(CreateAppointmentEvent.TypeChanged("online"))
@@ -269,7 +271,7 @@ class CreateAppointmentViewModelTest {
         coEvery { activityRepo.savePlanItems(any(), any()) } returns Unit
 
         listOf("online", "call").forEach { type ->
-            val vm = CreateAppointmentViewModel(context, activityRepo, projectRepo, customerRepo, contactRepo, authRepo, draftStore, java.time.Clock.system(java.time.ZoneId.of("Asia/Bangkok")), serverTimeAnchor)
+            val vm = CreateAppointmentViewModel(context, activityRepo, projectRepo, customerRepo, contactRepo, authRepo, draftStore, java.time.Clock.system(java.time.ZoneId.of("Asia/Bangkok")), serverTimeAnchor, draftRepository)
             advanceUntilIdle()
             vm.onEvent(CreateAppointmentEvent.LoadInitialProject("PRJ-1"))
             vm.onEvent(CreateAppointmentEvent.TypeChanged(type))
@@ -295,7 +297,7 @@ class CreateAppointmentViewModelTest {
         coEvery { activityRepo.saveAppointmentContacts(any(), any()) } returns Unit
         coEvery { activityRepo.savePlanItems(any(), any()) } returns Unit
 
-        val vm = CreateAppointmentViewModel(context, activityRepo, projectRepo, customerRepo, contactRepo, authRepo, draftStore, java.time.Clock.system(java.time.ZoneId.of("Asia/Bangkok")), serverTimeAnchor)
+        val vm = CreateAppointmentViewModel(context, activityRepo, projectRepo, customerRepo, contactRepo, authRepo, draftStore, java.time.Clock.system(java.time.ZoneId.of("Asia/Bangkok")), serverTimeAnchor, draftRepository)
         advanceUntilIdle()
         vm.onEvent(CreateAppointmentEvent.LoadInitialProject("PRJ-1"))
         vm.onEvent(CreateAppointmentEvent.TypeChanged("onsite"))
@@ -324,7 +326,7 @@ class CreateAppointmentViewModelTest {
     fun `picker events and toggles should update state deterministically`() = runTest {
         configureBaseData()
         coEvery { activityRepo.getMasterActivities() } returns listOf(ActivityMaster(1, "Lead", "L"))
-        val vm = CreateAppointmentViewModel(context, activityRepo, projectRepo, customerRepo, contactRepo, authRepo, draftStore, java.time.Clock.system(java.time.ZoneId.of("Asia/Bangkok")), serverTimeAnchor)
+        val vm = CreateAppointmentViewModel(context, activityRepo, projectRepo, customerRepo, contactRepo, authRepo, draftStore, java.time.Clock.system(java.time.ZoneId.of("Asia/Bangkok")), serverTimeAnchor, draftRepository)
         advanceUntilIdle()
 
         vm.onEvent(CreateAppointmentEvent.ShowStartTimePicker)
@@ -366,7 +368,7 @@ class CreateAppointmentViewModelTest {
             ActivityMaster(1, "Lead", "Lead item"),
             ActivityMaster(2, "Quotation", "Quotation item")
         )
-        val vm = CreateAppointmentViewModel(context, activityRepo, projectRepo, customerRepo, contactRepo, authRepo, draftStore, java.time.Clock.system(java.time.ZoneId.of("Asia/Bangkok")), serverTimeAnchor)
+        val vm = CreateAppointmentViewModel(context, activityRepo, projectRepo, customerRepo, contactRepo, authRepo, draftStore, java.time.Clock.system(java.time.ZoneId.of("Asia/Bangkok")), serverTimeAnchor, draftRepository)
         advanceUntilIdle()
 
         vm.onEvent(CreateAppointmentEvent.ContactToggled("CT-1"))
@@ -382,7 +384,7 @@ class CreateAppointmentViewModelTest {
         configureBaseData()
         coEvery { activityRepo.getMasterActivities() } returns emptyList()
         coEvery { projectRepo.getProjectById("PRJ-X") } returns Result.failure(Exception("not found"))
-        val vm = CreateAppointmentViewModel(context, activityRepo, projectRepo, customerRepo, contactRepo, authRepo, draftStore, java.time.Clock.system(java.time.ZoneId.of("Asia/Bangkok")), serverTimeAnchor)
+        val vm = CreateAppointmentViewModel(context, activityRepo, projectRepo, customerRepo, contactRepo, authRepo, draftStore, java.time.Clock.system(java.time.ZoneId.of("Asia/Bangkok")), serverTimeAnchor, draftRepository)
         advanceUntilIdle()
 
         vm.onEvent(CreateAppointmentEvent.LoadInitialProject("PRJ-X"))
@@ -402,7 +404,7 @@ class CreateAppointmentViewModelTest {
         )
         coEvery { customerRepo.getContactPersons("C2") } returns Result.failure(Exception("contact failed"))
         coEvery { activityRepo.getMasterActivities() } returns listOf(ActivityMaster(1, "Lead", "Lead item"))
-        val vm = CreateAppointmentViewModel(context, activityRepo, projectRepo, customerRepo, contactRepo, authRepo, draftStore, java.time.Clock.system(java.time.ZoneId.of("Asia/Bangkok")), serverTimeAnchor)
+        val vm = CreateAppointmentViewModel(context, activityRepo, projectRepo, customerRepo, contactRepo, authRepo, draftStore, java.time.Clock.system(java.time.ZoneId.of("Asia/Bangkok")), serverTimeAnchor, draftRepository)
         advanceUntilIdle()
 
         vm.onEvent(CreateAppointmentEvent.ProjectSelected("PRJ-2", "Project B", "Lead"))
@@ -426,7 +428,7 @@ class CreateAppointmentViewModelTest {
             listOf(ContactPerson(contactId = "CT-1", custId = "C2", fullName = "Contact One"))
         )
         coEvery { activityRepo.getMasterActivities() } returns listOf(ActivityMaster(1, "Lead", "Lead item"))
-        val vm = CreateAppointmentViewModel(context, activityRepo, projectRepo, customerRepo, contactRepo, authRepo, draftStore, java.time.Clock.system(java.time.ZoneId.of("Asia/Bangkok")), serverTimeAnchor)
+        val vm = CreateAppointmentViewModel(context, activityRepo, projectRepo, customerRepo, contactRepo, authRepo, draftStore, java.time.Clock.system(java.time.ZoneId.of("Asia/Bangkok")), serverTimeAnchor, draftRepository)
         advanceUntilIdle()
 
         vm.onEvent(CreateAppointmentEvent.ProjectSelected("PRJ-2", "Project B", "Lead"))
@@ -445,7 +447,7 @@ class CreateAppointmentViewModelTest {
         coEvery { activityRepo.getMasterActivities() } returns emptyList()
         every { authRepo.currentUser() } returns AuthUser("U1", "u@test.com", "sale")
         coEvery { activityRepo.addActivity(any()) } returns Result.failure(Exception("insert fail"))
-        val vm = CreateAppointmentViewModel(context, activityRepo, projectRepo, customerRepo, contactRepo, authRepo, draftStore, java.time.Clock.system(java.time.ZoneId.of("Asia/Bangkok")), serverTimeAnchor)
+        val vm = CreateAppointmentViewModel(context, activityRepo, projectRepo, customerRepo, contactRepo, authRepo, draftStore, java.time.Clock.system(java.time.ZoneId.of("Asia/Bangkok")), serverTimeAnchor, draftRepository)
         advanceUntilIdle()
         vm.onEvent(CreateAppointmentEvent.LoadInitialProject("PRJ-1"))
         vm.onEvent(CreateAppointmentEvent.TypeChanged("onsite"))
@@ -471,7 +473,7 @@ class CreateAppointmentViewModelTest {
         coEvery { activityRepo.addActivity(any()) } returns Result.success("ACT-001")
         coEvery { activityRepo.saveAppointmentContacts(any(), any()) } returns Unit
 
-        val vm = CreateAppointmentViewModel(context, activityRepo, projectRepo, customerRepo, contactRepo, authRepo, draftStore, java.time.Clock.system(java.time.ZoneId.of("Asia/Bangkok")), serverTimeAnchor)
+        val vm = CreateAppointmentViewModel(context, activityRepo, projectRepo, customerRepo, contactRepo, authRepo, draftStore, java.time.Clock.system(java.time.ZoneId.of("Asia/Bangkok")), serverTimeAnchor, draftRepository)
         advanceUntilIdle()
         vm.onEvent(CreateAppointmentEvent.LoadInitialProject("PRJ-1"))
         vm.onEvent(CreateAppointmentEvent.TitleChanged("edited"))
@@ -544,7 +546,7 @@ class CreateAppointmentViewModelTest {
         coEvery { activityRepo.getPlanItems("A-EDIT") } returns Result.success(emptyList())
         coEvery { activityRepo.getAppointmentContacts("A-EDIT") } returns emptyList()
 
-        val vm = CreateAppointmentViewModel(context, activityRepo, projectRepo, customerRepo, contactRepo, authRepo, draftStore, java.time.Clock.system(java.time.ZoneId.of("Asia/Bangkok")), serverTimeAnchor)
+        val vm = CreateAppointmentViewModel(context, activityRepo, projectRepo, customerRepo, contactRepo, authRepo, draftStore, java.time.Clock.system(java.time.ZoneId.of("Asia/Bangkok")), serverTimeAnchor, draftRepository)
         advanceUntilIdle()
         vm.onEvent(CreateAppointmentEvent.LoadActivity("A-EDIT"))
         advanceUntilIdle()
@@ -578,7 +580,7 @@ class CreateAppointmentViewModelTest {
         coEvery { activityRepo.getPlanItems("A-EDIT") } returns Result.success(emptyList())
         coEvery { activityRepo.getAppointmentContacts("A-EDIT") } returns emptyList()
 
-        val vm = CreateAppointmentViewModel(context, activityRepo, projectRepo, customerRepo, contactRepo, authRepo, draftStore, java.time.Clock.system(java.time.ZoneId.of("Asia/Bangkok")), serverTimeAnchor)
+        val vm = CreateAppointmentViewModel(context, activityRepo, projectRepo, customerRepo, contactRepo, authRepo, draftStore, java.time.Clock.system(java.time.ZoneId.of("Asia/Bangkok")), serverTimeAnchor, draftRepository)
         advanceUntilIdle()
         vm.onEvent(CreateAppointmentEvent.LoadActivity("A-EDIT"))
         advanceUntilIdle()
@@ -596,7 +598,7 @@ class CreateAppointmentViewModelTest {
         configureBaseData()
         coEvery { activityRepo.getMasterActivities() } returns emptyList()
         every { authRepo.currentUser() } returns AuthUser("U1", "u@test.com", "sale")
-        val vm = CreateAppointmentViewModel(context, activityRepo, projectRepo, customerRepo, contactRepo, authRepo, draftStore, java.time.Clock.system(java.time.ZoneId.of("Asia/Bangkok")), serverTimeAnchor)
+        val vm = CreateAppointmentViewModel(context, activityRepo, projectRepo, customerRepo, contactRepo, authRepo, draftStore, java.time.Clock.system(java.time.ZoneId.of("Asia/Bangkok")), serverTimeAnchor, draftRepository)
         advanceUntilIdle()
 
         val started = java.time.LocalDate.now().minusDays(1).toString()
@@ -639,7 +641,7 @@ class CreateAppointmentViewModelTest {
         coEvery { activityRepo.getMasterActivities() } returns emptyList()
         every { authRepo.currentUser() } returns AuthUser("U1", "u@test.com", "sale")
         coEvery { activityRepo.updateActivity(any(), any()) } returns Result.success(Unit)
-        val vm = CreateAppointmentViewModel(context, activityRepo, projectRepo, customerRepo, contactRepo, authRepo, draftStore, java.time.Clock.system(java.time.ZoneId.of("Asia/Bangkok")), serverTimeAnchor)
+        val vm = CreateAppointmentViewModel(context, activityRepo, projectRepo, customerRepo, contactRepo, authRepo, draftStore, java.time.Clock.system(java.time.ZoneId.of("Asia/Bangkok")), serverTimeAnchor, draftRepository)
         advanceUntilIdle()
 
         val farOut = java.time.LocalDate.now().plusDays(30).toString()
@@ -681,7 +683,7 @@ class CreateAppointmentViewModelTest {
             )
         )
 
-        val vm = CreateAppointmentViewModel(context, activityRepo, projectRepo, customerRepo, contactRepo, authRepo, draftStore, java.time.Clock.system(java.time.ZoneId.of("Asia/Bangkok")), serverTimeAnchor)
+        val vm = CreateAppointmentViewModel(context, activityRepo, projectRepo, customerRepo, contactRepo, authRepo, draftStore, java.time.Clock.system(java.time.ZoneId.of("Asia/Bangkok")), serverTimeAnchor, draftRepository)
         advanceUntilIdle()
         vm.onEvent(CreateAppointmentEvent.CompanySelected("C1", "Company A"))
         advanceUntilIdle()
@@ -700,7 +702,7 @@ class CreateAppointmentViewModelTest {
             )
         )
 
-        val vm = CreateAppointmentViewModel(context, activityRepo, projectRepo, customerRepo, contactRepo, authRepo, draftStore, java.time.Clock.system(java.time.ZoneId.of("Asia/Bangkok")), serverTimeAnchor)
+        val vm = CreateAppointmentViewModel(context, activityRepo, projectRepo, customerRepo, contactRepo, authRepo, draftStore, java.time.Clock.system(java.time.ZoneId.of("Asia/Bangkok")), serverTimeAnchor, draftRepository)
         advanceUntilIdle()
         vm.onEvent(CreateAppointmentEvent.CompanySelected("C1", "Company A"))
         advanceUntilIdle()
@@ -716,7 +718,7 @@ class CreateAppointmentViewModelTest {
         )
         coEvery { customerRepo.getContactPersons("C2", null) } returns Result.success(emptyList())
 
-        val vm = CreateAppointmentViewModel(context, activityRepo, projectRepo, customerRepo, contactRepo, authRepo, draftStore, java.time.Clock.system(java.time.ZoneId.of("Asia/Bangkok")), serverTimeAnchor)
+        val vm = CreateAppointmentViewModel(context, activityRepo, projectRepo, customerRepo, contactRepo, authRepo, draftStore, java.time.Clock.system(java.time.ZoneId.of("Asia/Bangkok")), serverTimeAnchor, draftRepository)
         advanceUntilIdle()
         vm.onEvent(CreateAppointmentEvent.CompanySelected("C1", "Company A"))
         advanceUntilIdle()
@@ -736,7 +738,7 @@ class CreateAppointmentViewModelTest {
         val custSlot = slot<Customer>()
         coEvery { customerRepo.addCustomer(capture(custSlot)) } returns Result.success("C-NEW")
 
-        val vm = CreateAppointmentViewModel(context, activityRepo, projectRepo, customerRepo, contactRepo, authRepo, draftStore, java.time.Clock.system(java.time.ZoneId.of("Asia/Bangkok")), serverTimeAnchor)
+        val vm = CreateAppointmentViewModel(context, activityRepo, projectRepo, customerRepo, contactRepo, authRepo, draftStore, java.time.Clock.system(java.time.ZoneId.of("Asia/Bangkok")), serverTimeAnchor, draftRepository)
         advanceUntilIdle()
         vm.onEvent(CreateAppointmentEvent.ToggleQuickAddCustomer(true))
         vm.onEvent(CreateAppointmentEvent.QuickAddCustomerChanged("Acme", "Owner"))
@@ -757,7 +759,7 @@ class CreateAppointmentViewModelTest {
 
     @Test
     fun `quick add customer with missing fields does not hit the repository`() = runTest {
-        val vm = CreateAppointmentViewModel(context, activityRepo, projectRepo, customerRepo, contactRepo, authRepo, draftStore, java.time.Clock.system(java.time.ZoneId.of("Asia/Bangkok")), serverTimeAnchor)
+        val vm = CreateAppointmentViewModel(context, activityRepo, projectRepo, customerRepo, contactRepo, authRepo, draftStore, java.time.Clock.system(java.time.ZoneId.of("Asia/Bangkok")), serverTimeAnchor, draftRepository)
         advanceUntilIdle()
         vm.onEvent(CreateAppointmentEvent.ToggleQuickAddCustomer(true))
         vm.onEvent(CreateAppointmentEvent.QuickAddCustomerChanged("Acme", ""))
@@ -782,7 +784,7 @@ class CreateAppointmentViewModelTest {
             Project(projectId = "PRJ-NEW", custId = "C1", projectName = "New Site", projectStatus = "Lead")
         )
 
-        val vm = CreateAppointmentViewModel(context, activityRepo, projectRepo, customerRepo, contactRepo, authRepo, draftStore, java.time.Clock.system(java.time.ZoneId.of("Asia/Bangkok")), serverTimeAnchor)
+        val vm = CreateAppointmentViewModel(context, activityRepo, projectRepo, customerRepo, contactRepo, authRepo, draftStore, java.time.Clock.system(java.time.ZoneId.of("Asia/Bangkok")), serverTimeAnchor, draftRepository)
         advanceUntilIdle()
         vm.onEvent(CreateAppointmentEvent.CompanySelected("C1", "Company A"))
         advanceUntilIdle()
@@ -803,7 +805,7 @@ class CreateAppointmentViewModelTest {
 
     @Test
     fun `quick add project with missing fields does not hit the repository`() = runTest {
-        val vm = CreateAppointmentViewModel(context, activityRepo, projectRepo, customerRepo, contactRepo, authRepo, draftStore, java.time.Clock.system(java.time.ZoneId.of("Asia/Bangkok")), serverTimeAnchor)
+        val vm = CreateAppointmentViewModel(context, activityRepo, projectRepo, customerRepo, contactRepo, authRepo, draftStore, java.time.Clock.system(java.time.ZoneId.of("Asia/Bangkok")), serverTimeAnchor, draftRepository)
         advanceUntilIdle()
         vm.onEvent(CreateAppointmentEvent.ToggleQuickAddProject(true))
         vm.onEvent(CreateAppointmentEvent.QuickAddProjectNameChanged("New Site"))
@@ -814,68 +816,159 @@ class CreateAppointmentViewModelTest {
         coVerify(exactly = 0) { projectRepo.createProject(any(), any()) }
     }
 
-    // ไฟล์นี้มีเทสต์จังหวะ baseline (GPS auto-fill) อยู่แล้ว แต่ยังขาดส่วน save/restore/discard
-    // ซึ่งเป็นส่วนที่คัดลอกไปฟอร์มอื่นทั้งหมด — คุมไว้ก่อนจะรวมโค้ดชุดนี้เป็นตัวเดียว
+    // ฉบับร่างย้ายไปอยู่ Room แบบหลายรายการแล้ว (Phase 4C) — ไม่มีการเดาว่าร่างไหนคู่กับฟอร์มไหนอีก
     @Test
-    fun `saveDraft writes the appointment form under the new-appointment key`() = runTest {
+    fun `saveDraft stores the form through the draft repository`() = runTest {
         configureBaseData()
-        val vm = CreateAppointmentViewModel(context, activityRepo, projectRepo, customerRepo, contactRepo, authRepo, draftStore, java.time.Clock.system(java.time.ZoneId.of("Asia/Bangkok")), serverTimeAnchor)
-        advanceUntilIdle()
-        vm.onEvent(CreateAppointmentEvent.CheckDraft)
+        coEvery { draftRepository.saveDraft(any(), any(), any(), any(), any(), any(), any(), any(), any(), any()) } returns
+            DraftSaveResult.Saved("D1")
+        val vm = CreateAppointmentViewModel(context, activityRepo, projectRepo, customerRepo, contactRepo, authRepo, draftStore, java.time.Clock.system(java.time.ZoneId.of("Asia/Bangkok")), serverTimeAnchor, draftRepository)
         advanceUntilIdle()
 
         vm.onEvent(CreateAppointmentEvent.TitleChanged("เข้าพบเพื่อนำเสนอ"))
         vm.saveDraft()
+        advanceUntilIdle()
 
-        val saved = slot<CreateAppointmentDraft>()
-        verify { draftStore.save("create_appointment:new:none", capture(saved)) }
-        assertEquals("เข้าพบเพื่อนำเสนอ", saved.captured.titleTopic)
+        val payload = slot<String>()
+        coVerify {
+            draftRepository.saveDraft(
+                draftId = null, schemaVersion = any(), payloadJson = capture(payload),
+                title = "เข้าพบเพื่อนำเสนอ", plannedDate = any(), plannedTime = any(),
+                projectId = any(), projectNameSnapshot = any(),
+                customerId = any(), customerNameSnapshot = any()
+            )
+        }
+        assertTrue(payload.captured.contains("เข้าพบเพื่อนำเสนอ"))
+        assertEquals("D1", vm.uiState.value.draftId)
+    }
+
+    /** กดบันทึกร่างซ้ำต้องเขียนทับร่างเดิม ไม่ใช่งอกรายการใหม่ทุกครั้งจนเต็มโควตา */
+    @Test
+    fun `saving twice reuses the same draft id`() = runTest {
+        configureBaseData()
+        coEvery { draftRepository.saveDraft(any(), any(), any(), any(), any(), any(), any(), any(), any(), any()) } returns
+            DraftSaveResult.Saved("D1")
+        val vm = CreateAppointmentViewModel(context, activityRepo, projectRepo, customerRepo, contactRepo, authRepo, draftStore, java.time.Clock.system(java.time.ZoneId.of("Asia/Bangkok")), serverTimeAnchor, draftRepository)
+        advanceUntilIdle()
+
+        vm.saveDraft()
+        advanceUntilIdle()
+        vm.saveDraft()
+        advanceUntilIdle()
+
+        coVerify(exactly = 1) { draftRepository.saveDraft(draftId = null, schemaVersion = any(), payloadJson = any(), title = any(), plannedDate = any(), plannedTime = any(), projectId = any(), projectNameSnapshot = any(), customerId = any(), customerNameSnapshot = any()) }
+        coVerify(exactly = 1) { draftRepository.saveDraft(draftId = "D1", schemaVersion = any(), payloadJson = any(), title = any(), plannedDate = any(), plannedTime = any(), projectId = any(), projectNameSnapshot = any(), customerId = any(), customerNameSnapshot = any()) }
     }
 
     @Test
-    fun `discardDraft clears the same appointment key`() = runTest {
+    fun `hitting the limit asks the user to delete instead of dropping a draft`() = runTest {
         configureBaseData()
-        val vm = CreateAppointmentViewModel(context, activityRepo, projectRepo, customerRepo, contactRepo, authRepo, draftStore, java.time.Clock.system(java.time.ZoneId.of("Asia/Bangkok")), serverTimeAnchor)
+        coEvery { draftRepository.saveDraft(any(), any(), any(), any(), any(), any(), any(), any(), any(), any()) } returns
+            DraftSaveResult.LimitReached(20)
+        val vm = CreateAppointmentViewModel(context, activityRepo, projectRepo, customerRepo, contactRepo, authRepo, draftStore, java.time.Clock.system(java.time.ZoneId.of("Asia/Bangkok")), serverTimeAnchor, draftRepository)
         advanceUntilIdle()
-        vm.onEvent(CreateAppointmentEvent.CheckDraft)
+
+        vm.saveDraft()
+        advanceUntilIdle()
+
+        assertTrue(vm.uiState.value.draftLimitReached)
+        assertEquals(null, vm.uiState.value.draftId)
+        coVerify(exactly = 0) { draftRepository.deleteDraft(any()) }
+    }
+
+    @Test
+    fun `discardDraft deletes only the draft being edited`() = runTest {
+        configureBaseData()
+        coEvery { draftRepository.getDraft("D1") } returns draftRow("D1", """{"titleTopic":"ค้างไว้"}""")
+        val vm = CreateAppointmentViewModel(context, activityRepo, projectRepo, customerRepo, contactRepo, authRepo, draftStore, java.time.Clock.system(java.time.ZoneId.of("Asia/Bangkok")), serverTimeAnchor, draftRepository)
+        advanceUntilIdle()
+        vm.onEvent(CreateAppointmentEvent.LoadDraft("D1"))
         advanceUntilIdle()
 
         vm.discardDraft()
+        advanceUntilIdle()
 
-        verify { draftStore.clear("create_appointment:new:none") }
+        coVerify(exactly = 1) { draftRepository.deleteDraft("D1") }
     }
 
     @Test
-    fun `a saved appointment draft is offered and restoring it fills the form back in`() = runTest {
+    fun `with no draft open discard touches nothing`() = runTest {
         configureBaseData()
-        every { draftStore.load("create_appointment:new:none", CreateAppointmentDraft::class.java) } returns
-            CreateAppointmentDraft(titleTopic = "หัวข้อที่ค้างไว้", activityType = "call")
-
-        val vm = CreateAppointmentViewModel(context, activityRepo, projectRepo, customerRepo, contactRepo, authRepo, draftStore, java.time.Clock.system(java.time.ZoneId.of("Asia/Bangkok")), serverTimeAnchor)
-        advanceUntilIdle()
-        vm.onEvent(CreateAppointmentEvent.CheckDraft)
+        val vm = CreateAppointmentViewModel(context, activityRepo, projectRepo, customerRepo, contactRepo, authRepo, draftStore, java.time.Clock.system(java.time.ZoneId.of("Asia/Bangkok")), serverTimeAnchor, draftRepository)
         advanceUntilIdle()
 
-        assertTrue(vm.uiState.value.draftAvailable)
+        vm.discardDraft()
+        advanceUntilIdle()
 
-        vm.onEvent(CreateAppointmentEvent.RestoreDraft)
+        coVerify(exactly = 0) { draftRepository.deleteDraft(any()) }
+    }
+
+    @Test
+    fun `opening a draft fills the form back in`() = runTest {
+        configureBaseData()
+        coEvery { draftRepository.getDraft("D1") } returns
+            draftRow("D1", """{"titleTopic":"หัวข้อที่ค้างไว้","activityType":"call"}""")
+        val vm = CreateAppointmentViewModel(context, activityRepo, projectRepo, customerRepo, contactRepo, authRepo, draftStore, java.time.Clock.system(java.time.ZoneId.of("Asia/Bangkok")), serverTimeAnchor, draftRepository)
+        advanceUntilIdle()
+
+        vm.onEvent(CreateAppointmentEvent.LoadDraft("D1"))
         advanceUntilIdle()
 
         assertEquals("หัวข้อที่ค้างไว้", vm.uiState.value.titleTopic)
         assertEquals("call", vm.uiState.value.activityType)
-        assertFalse(vm.uiState.value.draftAvailable)
+        assertEquals("D1", vm.uiState.value.draftId)
     }
 
+    /** โครงการที่ร่างอ้างถึงถูกลบไปแล้ว ต้องบอกชื่อเดิมและบังคับเลือกใหม่ ไม่ใช่เงียบแล้วบันทึกทับ */
     @Test
-    fun `no stored appointment draft means no prompt`() = runTest {
+    fun `a draft whose project was deleted forces the user to pick again`() = runTest {
         configureBaseData()
-        val vm = CreateAppointmentViewModel(context, activityRepo, projectRepo, customerRepo, contactRepo, authRepo, draftStore, java.time.Clock.system(java.time.ZoneId.of("Asia/Bangkok")), serverTimeAnchor)
-        advanceUntilIdle()
-        vm.onEvent(CreateAppointmentEvent.CheckDraft)
+        coEvery { draftRepository.getDraft("D2") } returns
+            draftRow("D2", """{"selectedProjectId":"PRJ-GONE"}""", projectName = "โครงการเก่า")
+        coEvery { draftRepository.resolveParentId("project", "PRJ-GONE") } returns "PRJ-GONE"
+        coEvery { draftRepository.projectExists("PRJ-GONE") } returns false
+        val vm = CreateAppointmentViewModel(context, activityRepo, projectRepo, customerRepo, contactRepo, authRepo, draftStore, java.time.Clock.system(java.time.ZoneId.of("Asia/Bangkok")), serverTimeAnchor, draftRepository)
         advanceUntilIdle()
 
-        assertFalse(vm.uiState.value.draftAvailable)
+        vm.onEvent(CreateAppointmentEvent.LoadDraft("D2"))
+        advanceUntilIdle()
+
+        assertEquals(null, vm.uiState.value.selectedProjectId)
+        assertTrue(vm.uiState.value.saveError!!.contains("โครงการเก่า"))
     }
+
+    /** TEMP- id ที่ sync ขึ้นไปแล้วระหว่างที่ร่างค้างอยู่ ต้องถูกแทนด้วยรหัสจริง */
+    @Test
+    fun `a draft pointing at a TEMP id is remapped to the real one`() = runTest {
+        configureBaseData()
+        coEvery { draftRepository.getDraft("D3") } returns
+            draftRow("D3", """{"selectedProjectId":"TEMP-9"}""")
+        coEvery { draftRepository.resolveParentId("project", "TEMP-9") } returns "PRJ-1"
+        coEvery { draftRepository.projectExists("PRJ-1") } returns true
+        val vm = CreateAppointmentViewModel(context, activityRepo, projectRepo, customerRepo, contactRepo, authRepo, draftStore, java.time.Clock.system(java.time.ZoneId.of("Asia/Bangkok")), serverTimeAnchor, draftRepository)
+        advanceUntilIdle()
+
+        vm.onEvent(CreateAppointmentEvent.LoadDraft("D3"))
+        advanceUntilIdle()
+
+        assertEquals("PRJ-1", vm.uiState.value.selectedProjectId)
+    }
+
+    private fun draftRow(
+        id: String,
+        payload: String,
+        projectName: String? = null
+    ) = com.example.pp68_salestrackingapp.data.model.AppointmentDraft(
+        draftId = id,
+        ownerKey = "owner",
+        schemaVersion = 1,
+        payloadJson = payload,
+        projectNameSnapshot = projectName,
+        createdAt = "2026-10-06T03:00:00Z",
+        updatedAt = "2026-10-06T03:00:00Z",
+        expiresAt = "2026-11-05T03:00:00Z"
+    )
+
 
     // outbox ใช้คำนำหน้า TEMP- ตัดสินว่าจะ POST (สร้างใหม่) หรือ PATCH (แก้ของเดิม)
     // เดิมสร้างด่วนใช้ UUID เปล่า — กดสร้างตอนไม่มีเน็ตแล้ว outbox จะส่ง PATCH
@@ -885,7 +978,7 @@ class CreateAppointmentViewModelTest {
         configureBaseData()
         coEvery { customerRepo.addCustomer(any()) } returns Result.success("C00123")
 
-        val vm = CreateAppointmentViewModel(context, activityRepo, projectRepo, customerRepo, contactRepo, authRepo, draftStore, java.time.Clock.system(java.time.ZoneId.of("Asia/Bangkok")), serverTimeAnchor)
+        val vm = CreateAppointmentViewModel(context, activityRepo, projectRepo, customerRepo, contactRepo, authRepo, draftStore, java.time.Clock.system(java.time.ZoneId.of("Asia/Bangkok")), serverTimeAnchor, draftRepository)
         advanceUntilIdle()
         vm.onEvent(CreateAppointmentEvent.QuickAddCustomerChanged("บริษัททดสอบ", "Owner"))
         vm.onEvent(CreateAppointmentEvent.SaveQuickAddCustomer)
@@ -901,7 +994,7 @@ class CreateAppointmentViewModelTest {
         configureBaseData()
         coEvery { contactRepo.addContact(any()) } returns Result.success("CT-REAL-1")
 
-        val vm = CreateAppointmentViewModel(context, activityRepo, projectRepo, customerRepo, contactRepo, authRepo, draftStore, java.time.Clock.system(java.time.ZoneId.of("Asia/Bangkok")), serverTimeAnchor)
+        val vm = CreateAppointmentViewModel(context, activityRepo, projectRepo, customerRepo, contactRepo, authRepo, draftStore, java.time.Clock.system(java.time.ZoneId.of("Asia/Bangkok")), serverTimeAnchor, draftRepository)
         advanceUntilIdle()
         vm.onEvent(CreateAppointmentEvent.CompanySelected("C1", "Company A"))
         advanceUntilIdle()
@@ -924,7 +1017,7 @@ class CreateAppointmentViewModelTest {
     fun `a quick contact without a company selected is refused`() = runTest {
         configureBaseData()
 
-        val vm = CreateAppointmentViewModel(context, activityRepo, projectRepo, customerRepo, contactRepo, authRepo, draftStore, java.time.Clock.system(java.time.ZoneId.of("Asia/Bangkok")), serverTimeAnchor)
+        val vm = CreateAppointmentViewModel(context, activityRepo, projectRepo, customerRepo, contactRepo, authRepo, draftStore, java.time.Clock.system(java.time.ZoneId.of("Asia/Bangkok")), serverTimeAnchor, draftRepository)
         advanceUntilIdle()
         vm.onEvent(CreateAppointmentEvent.QuickAddContactChanged("คุณทดสอบ", "0812345678"))
         vm.onEvent(CreateAppointmentEvent.SaveQuickAddContact)

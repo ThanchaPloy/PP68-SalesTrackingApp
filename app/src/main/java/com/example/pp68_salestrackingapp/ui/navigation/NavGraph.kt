@@ -116,6 +116,7 @@ fun SalesTrackingApp(initialSettingsScreen: String? = null) {
                 onSettingsClick     = { navController.navigate(Route.Settings.path) },
                 onLogoutClick       = onLogout,
                 onAddPhoneClick     = { navController.navigate(Route.Settings.createRoute("edit_profile")) },
+                onOpenDrafts        = { navController.navigate(Route.AppointmentDrafts.path) },
                 currentTab          = currentTab,
                 onTabChange         = { tab -> navigateToTab(navController, tab) }
             )
@@ -124,7 +125,30 @@ fun SalesTrackingApp(initialSettingsScreen: String? = null) {
         composable(Route.CreateActivity.path) {
             CreateAppointmentScreen(
                 onBack = { navController.popBackStack() },
-                onSaved = { navController.popBackStack() }
+                onSaved = { navController.popBackStack() },
+                onOpenDrafts = { navController.navigate(Route.AppointmentDrafts.path) }
+            )
+        }
+
+        composable(Route.AppointmentDrafts.path) {
+            com.example.pp68_salestrackingapp.ui.screen.activity.AppointmentDraftListScreen(
+                onBack = { navController.popBackStack() },
+                onOpenDraft = { id ->
+                    navController.navigate(Route.CreateActivityFromDraft.createRoute(id))
+                },
+                onCreateNew = { navController.navigate(Route.CreateActivity.path) }
+            )
+        }
+
+        composable(
+            route = Route.CreateActivityFromDraft.path,
+            arguments = listOf(navArgument("draftId") { type = NavType.StringType })
+        ) { backStackEntry ->
+            CreateAppointmentScreen(
+                draftId = backStackEntry.arguments?.getString("draftId"),
+                onBack = { navController.popBackStack() },
+                onSaved = { navController.popBackStack() },
+                onOpenDrafts = { navController.popBackStack() }
             )
         }
 
