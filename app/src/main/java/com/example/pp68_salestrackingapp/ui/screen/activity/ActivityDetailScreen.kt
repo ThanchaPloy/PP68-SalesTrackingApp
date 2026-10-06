@@ -1,5 +1,6 @@
 package com.example.pp68_salestrackingapp.ui.screen.activity
 
+import com.example.pp68_salestrackingapp.utils.AppointmentPolicy
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -137,16 +138,10 @@ fun ActivityDetailContent(
                 modifier = Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(20.dp),
                 verticalArrangement = Arrangement.spacedBy(20.dp)
             ) {
-                val effectiveStatus = com.example.pp68_salestrackingapp.utils.AppointmentStatus.effective(
-                    s.activity?.status, s.activity?.activityDate, s.activity?.activityType
-                )
-                // W6: ห้ามแก้แผนที่ยังไม่เสร็จ (planned) เมื่อเหลือเวลา <= 7 วันก่อนวันนัด
-                // เดิมปุ่มแก้ไขโชว์ทุกกรณี ผู้ใช้จึงเข้าไปแก้ฟอร์มได้จนสุดแล้วค่อยโดนบล็อกตอนกดบันทึก
-                // (CreateAppointmentViewModel.validate) ซึ่งเสียเวลาเปล่าและดูเหมือนกฎไม่ทำงาน
-                // สถานะอื่น (checked_in/completed/ขาดนัด) ยังแก้ได้เหมือนเดิม ไม่เข้าเงื่อนไขนี้
-                val editLocked = com.example.pp68_salestrackingapp.utils.AppointmentStatus.isEditLocked(
-                    s.activity?.status, s.activity?.activityDate, s.activity?.activityType
-                )
+                // ตัดสินใน ViewModel จากค่าดิบ — ในนี้ plannedTime ถูกแปลงเป็น "02:00 PM" แล้ว
+                // ถ้าคิดกติกาตรงนี้จะอ่านบ่ายสองเป็นตีสอง
+                val effectiveStatus = s.effectiveStatus
+                val editLocked = s.editDenialMessage != null
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     StatusBadge(effectiveStatus)
                     Spacer(Modifier.weight(1f))
@@ -161,14 +156,8 @@ fun ActivityDetailContent(
                         }
                     }
                 }
-                if (editLocked) {
-                    Text(
-                        if (effectiveStatus == com.example.pp68_salestrackingapp.utils.AppointmentStatus.MISSING)
-                            "นัดหมายนี้ขาดไปแล้ว จึงแก้ไขหรือลบไม่ได้ — บันทึกผลย้อนหลังได้ตามปกติ"
-                        else
-                            "ใกล้ถึงวันนัดแล้ว (เหลือไม่ถึง 7 วัน) จึงแก้ไขหรือลบแผนนี้ไม่ได้",
-                        fontSize = 12.sp, color = TextGray
-                    )
+                s.editDenialMessage?.let {
+                    Text(it, fontSize = 12.sp, color = TextGray)
                 }
                 
                 InfoCard(s)
@@ -194,7 +183,7 @@ fun ActivityDetailContent(
                             val isCompleted = effectiveStatus == "completed"
                             val canToggle = effectiveStatus == "planned" ||
                                     effectiveStatus == "checked_in" ||
-                                    effectiveStatus == com.example.pp68_salestrackingapp.utils.AppointmentStatus.MISSING
+                                    effectiveStatus == AppointmentPolicy.MISSING
 
                             Row(
                                 modifier = Modifier
@@ -276,7 +265,7 @@ fun ActivityDetailContent(
                         }
                     }
 
-                    "checked_in", com.example.pp68_salestrackingapp.utils.AppointmentStatus.MISSING -> {
+                    "checked_in", AppointmentPolicy.MISSING -> {
                         Button(
                             onClick  = onSaveResult,
                             modifier = Modifier.fillMaxWidth().height(54.dp),
@@ -300,7 +289,7 @@ private fun StatusBadge(status: String) {
         "planned" -> "planned" to Color(0xFF1976D2)
         "checked_in" -> "checked_in" to Color(0xFF2E7D32)
         "completed" -> "completed" to Color(0xFF546E7A)
-        com.example.pp68_salestrackingapp.utils.AppointmentStatus.MISSING -> "ขาดนัด" to Color(0xFFC62828)
+        AppointmentPolicy.MISSING -> "ขาดนัด" to Color(0xFFC62828)
         else -> status.uppercase() to TextGray
     }
     Surface(color = color.copy(0.1f), shape = RoundedCornerShape(4.dp)) {

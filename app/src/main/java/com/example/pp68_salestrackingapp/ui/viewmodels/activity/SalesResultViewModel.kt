@@ -1,5 +1,6 @@
 package com.example.pp68_salestrackingapp.ui.viewmodels.activity
 
+import com.example.pp68_salestrackingapp.utils.policyFacts
 import android.content.Context
 import android.net.Uri
 import android.util.Log
@@ -32,6 +33,8 @@ data class SalesResultUiState(
     val resultId: String? = null, // ✅ เพิ่มเพื่อรองรับการแก้ไขบันทึกเดิม
     val projectId: String? = null,
     val activityId: String? = null,
+    // ถ่ายภาพแผนไว้ตอนโหลด เพื่อให้ save() ตัดสินกติกาได้โดยไม่ต้องอ่าน Room ซ้ำ
+    val appointmentFacts: com.example.pp68_salestrackingapp.utils.AppointmentPolicy.Facts? = null,
     val project: Project? = null,
     val reportDate: String = LocalDate.now().toString(),
     val currentStatus: String = "",
@@ -130,7 +133,8 @@ class SalesResultViewModel @Inject constructor(
     private val projectRepo: ProjectRepository,
     private val activityRepo: ActivityRepository,
     private val authRepo: AuthRepository,
-    private val draftStore: DraftStore
+    private val draftStore: DraftStore,
+    private val clock: java.time.Clock
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(SalesResultUiState())
@@ -234,7 +238,8 @@ class SalesResultViewModel @Inject constructor(
                     activityId = id,
                     projectId = activity.projectId,
                     mode = ResultMode.FROM_APPOINTMENT,
-                    reportDate = activity.activityDate
+                    reportDate = activity.activityDate,
+                    appointmentFacts = activity.policyFacts()
                 ) }
                 // จำลูกค้าของนัดหมายไว้ เพื่อให้ "สร้างโครงการด่วน" ผูกลูกค้าได้ถูกคนตั้งแต่แรก
                 // ถ้ามีโครงการอยู่ loadProjectData จะทับด้วยลูกค้าของโครงการซึ่งถือเป็นแหล่งที่แม่นกว่า
@@ -760,6 +765,17 @@ class SalesResultViewModel @Inject constructor(
                 if (s.projectId.isNullOrBlank()) { _uiState.update { it.copy(error = "ไม่พบรหัสโครงการ") }; return }
         }
         if (s.isReadOnlyVersion) { _uiState.update { it.copy(error = "กำลังดูเวอร์ชันเก่า ไม่สามารถแก้ไขได้") }; return }
+        // เฉพาะการสร้างผลครั้งแรกของนัดเท่านั้นที่อยู่ใต้กติกา — การแก้ผลเดิม (มี resultId แล้ว)
+        // ใช้ flow เวอร์ชันของผลการขาย ซึ่งต้องทำได้แม้นัดจะ completed ไปแล้ว
+        if (s.mode == ResultMode.FROM_APPOINTMENT && s.resultId == null) {
+            val decision = s.appointmentFacts?.let {
+                com.example.pp68_salestrackingapp.utils.AppointmentPolicy.canCreateResult(it, clock)
+            }
+            if (decision is com.example.pp68_salestrackingapp.utils.AppointmentPolicy.Decision.Denied) {
+                _uiState.update { it.copy(error = decision.message) }
+                return
+            }
+        }
         if (s.visitSummary.isBlank()) { _uiState.update { it.copy(error = "กรุณากรอกสรุปการเข้าพบ") }; return }
         if (s.photos.any { it.isUploading }) { _uiState.update { it.copy(error = "กรุณารอให้เตรียมรูปลงเครื่องเสร็จก่อนบันทึก") }; return }
         val failedCount = s.photos.count { it.url.isNullOrBlank() && it.staged == null }

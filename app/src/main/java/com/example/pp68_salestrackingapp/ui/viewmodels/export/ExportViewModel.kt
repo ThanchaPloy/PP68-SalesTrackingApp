@@ -1,5 +1,6 @@
 package com.example.pp68_salestrackingapp.ui.viewmodels.export
 
+import com.example.pp68_salestrackingapp.utils.policyFacts
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.pp68_salestrackingapp.data.repository.ActivityRepository
@@ -233,7 +234,8 @@ class ExportViewModel @Inject constructor(
                             note = act.weeklyNote ?: "",
                             // W6: แผนที่เลยวันนัดไปแล้วยังไม่เช็คอิน/บันทึกผล ให้รายงานเห็น "missing"
                             // เหมือนที่แอปโชว์ "ขาดนัด" ด้วย ไม่ใช่โชว์ raw status ดิบว่ายัง "planned"
-                            status = com.example.pp68_salestrackingapp.utils.AppointmentStatus.effective(act.planStatus, act.plannedDate, act.activityType),
+                            status = com.example.pp68_salestrackingapp.utils.AppointmentPolicy
+                                .effectiveStatus(act.policyFacts()),
                             results = summaryList,
                             resultDetails = resultDetailsList,
                             activityType = act.activityType,

@@ -80,7 +80,8 @@ class SalesResultViewModelTest {
             projectRepo,
             activityRepo,
             authRepo,
-            draftStore
+            draftStore,
+            java.time.Clock.system(java.time.ZoneId.of("Asia/Bangkok"))
         )
         advanceUntilIdle()
 
@@ -111,7 +112,8 @@ class SalesResultViewModelTest {
             projectRepo,
             activityRepo,
             authRepo,
-            draftStore
+            draftStore,
+            java.time.Clock.system(java.time.ZoneId.of("Asia/Bangkok"))
         )
         advanceUntilIdle()
 
@@ -157,7 +159,8 @@ class SalesResultViewModelTest {
             projectRepo,
             activityRepo,
             authRepo,
-            draftStore
+            draftStore,
+            java.time.Clock.system(java.time.ZoneId.of("Asia/Bangkok"))
         )
         advanceUntilIdle()
         vm.onSummaryChanged("summary")
@@ -199,7 +202,7 @@ class SalesResultViewModelTest {
 
         val vm = SalesResultViewModel(
             SavedStateHandle(mapOf("activityId" to "A1")),
-            projectRepo, activityRepo, authRepo, draftStore
+            projectRepo, activityRepo, authRepo, draftStore, java.time.Clock.system(java.time.ZoneId.of("Asia/Bangkok"))
         )
         advanceUntilIdle()
         vm.onSummaryChanged("summary")
@@ -243,7 +246,8 @@ class SalesResultViewModelTest {
             projectRepo,
             activityRepo,
             authRepo,
-            draftStore
+            draftStore,
+            java.time.Clock.system(java.time.ZoneId.of("Asia/Bangkok"))
         )
         advanceUntilIdle()
 
@@ -285,7 +289,8 @@ class SalesResultViewModelTest {
             projectRepo,
             activityRepo,
             authRepo,
-            draftStore
+            draftStore,
+            java.time.Clock.system(java.time.ZoneId.of("Asia/Bangkok"))
         )
         advanceUntilIdle()
 
@@ -317,7 +322,8 @@ class SalesResultViewModelTest {
             projectRepo,
             activityRepo,
             authRepo,
-            draftStore
+            draftStore,
+            java.time.Clock.system(java.time.ZoneId.of("Asia/Bangkok"))
         )
         advanceUntilIdle()
 
@@ -359,7 +365,8 @@ class SalesResultViewModelTest {
             projectRepo,
             activityRepo,
             authRepo,
-            draftStore
+            draftStore,
+            java.time.Clock.system(java.time.ZoneId.of("Asia/Bangkok"))
         )
         advanceUntilIdle()
 
@@ -410,7 +417,8 @@ class SalesResultViewModelTest {
             projectRepo,
             activityRepo,
             authRepo,
-            draftStore
+            draftStore,
+            java.time.Clock.system(java.time.ZoneId.of("Asia/Bangkok"))
         )
         advanceUntilIdle()
         vm.onSummaryChanged("summary")
@@ -447,7 +455,8 @@ class SalesResultViewModelTest {
             projectRepo,
             activityRepo,
             authRepo,
-            draftStore
+            draftStore,
+            java.time.Clock.system(java.time.ZoneId.of("Asia/Bangkok"))
         )
         advanceUntilIdle()
         vm.onSummaryChanged("summary")
@@ -483,7 +492,8 @@ class SalesResultViewModelTest {
             projectRepo,
             activityRepo,
             authRepo,
-            draftStore
+            draftStore,
+            java.time.Clock.system(java.time.ZoneId.of("Asia/Bangkok"))
         )
         advanceUntilIdle()
         vm.onSummaryChanged("summary")
@@ -531,7 +541,8 @@ class SalesResultViewModelTest {
             projectRepo,
             activityRepo,
             authRepo,
-            draftStore
+            draftStore,
+            java.time.Clock.system(java.time.ZoneId.of("Asia/Bangkok"))
         )
         advanceUntilIdle()
 
@@ -579,7 +590,8 @@ class SalesResultViewModelTest {
             projectRepo,
             activityRepo,
             authRepo,
-            draftStore
+            draftStore,
+            java.time.Clock.system(java.time.ZoneId.of("Asia/Bangkok"))
         )
         advanceUntilIdle()
 
@@ -608,7 +620,8 @@ class SalesResultViewModelTest {
             projectRepo,
             activityRepo,
             authRepo,
-            draftStore
+            draftStore,
+            java.time.Clock.system(java.time.ZoneId.of("Asia/Bangkok"))
         )
         advanceUntilIdle()
         vm.onSummaryChanged("summary")
@@ -630,7 +643,8 @@ class SalesResultViewModelTest {
             projectRepo,
             activityRepo,
             authRepo,
-            draftStore
+            draftStore,
+            java.time.Clock.system(java.time.ZoneId.of("Asia/Bangkok"))
         )
         advanceUntilIdle()
         vm.onSummaryChanged("summary")
@@ -667,7 +681,8 @@ class SalesResultViewModelTest {
             projectRepo,
             activityRepo,
             authRepo,
-            draftStore
+            draftStore,
+            java.time.Clock.system(java.time.ZoneId.of("Asia/Bangkok"))
         )
         advanceUntilIdle()
         vm.onSummaryChanged("summary")
@@ -705,7 +720,8 @@ class SalesResultViewModelTest {
             projectRepo,
             activityRepo,
             authRepo,
-            draftStore
+            draftStore,
+            java.time.Clock.system(java.time.ZoneId.of("Asia/Bangkok"))
         )
         advanceUntilIdle()
         vm.onSummaryChanged("summary")
@@ -731,7 +747,8 @@ class SalesResultViewModelTest {
             projectRepo,
             activityRepo,
             authRepo,
-            draftStore
+            draftStore,
+            java.time.Clock.system(java.time.ZoneId.of("Asia/Bangkok"))
         )
         advanceUntilIdle()
         vm.onSummaryChanged("summary")
@@ -771,7 +788,8 @@ class SalesResultViewModelTest {
             projectRepo,
             activityRepo,
             authRepo,
-            draftStore
+            draftStore,
+            java.time.Clock.system(java.time.ZoneId.of("Asia/Bangkok"))
         )
         advanceUntilIdle()
         vm.onSummaryChanged("summary")
@@ -793,7 +811,8 @@ class SalesResultViewModelTest {
             projectRepo,
             activityRepo,
             authRepo,
-            draftStore
+            draftStore,
+            java.time.Clock.system(java.time.ZoneId.of("Asia/Bangkok"))
         )
         advanceUntilIdle()
 
@@ -846,7 +865,8 @@ class SalesResultViewModelTest {
             projectRepo,
             activityRepo,
             authRepo,
-            draftStore
+            draftStore,
+            java.time.Clock.system(java.time.ZoneId.of("Asia/Bangkok"))
         )
         advanceUntilIdle()
 
@@ -899,7 +919,8 @@ class SalesResultViewModelTest {
             projectRepo,
             activityRepo,
             authRepo,
-            draftStore
+            draftStore,
+            java.time.Clock.system(java.time.ZoneId.of("Asia/Bangkok"))
         )
         advanceUntilIdle()
         vm.onSummaryChanged("summary")
@@ -944,7 +965,8 @@ class SalesResultViewModelTest {
             projectRepo,
             activityRepo,
             authRepo,
-            draftStore
+            draftStore,
+            java.time.Clock.system(java.time.ZoneId.of("Asia/Bangkok"))
         )
         advanceUntilIdle()
         vm.onSummaryChanged("summary")
@@ -989,7 +1011,8 @@ class SalesResultViewModelTest {
             projectRepo,
             activityRepo,
             authRepo,
-            draftStore
+            draftStore,
+            java.time.Clock.system(java.time.ZoneId.of("Asia/Bangkok"))
         )
         advanceUntilIdle()
 
@@ -1026,7 +1049,7 @@ class SalesResultViewModelTest {
         )
 
         val vm = SalesResultViewModel(
-            SavedStateHandle(mapOf("activityId" to "A1")), projectRepo, activityRepo, authRepo, draftStore
+            SavedStateHandle(mapOf("activityId" to "A1")), projectRepo, activityRepo, authRepo, draftStore, java.time.Clock.system(java.time.ZoneId.of("Asia/Bangkok"))
         )
         advanceUntilIdle()
 
@@ -1048,7 +1071,7 @@ class SalesResultViewModelTest {
         )
 
         val vm = SalesResultViewModel(
-            SavedStateHandle(mapOf("activityId" to "A1")), projectRepo, activityRepo, authRepo, draftStore
+            SavedStateHandle(mapOf("activityId" to "A1")), projectRepo, activityRepo, authRepo, draftStore, java.time.Clock.system(java.time.ZoneId.of("Asia/Bangkok"))
         )
         advanceUntilIdle()
 
@@ -1062,7 +1085,8 @@ class SalesResultViewModelTest {
     @Test
     fun `saveQuickProject blocks when name or status is blank`() = runTest {
         val vm = SalesResultViewModel(
-            SavedStateHandle(), projectRepo, activityRepo, authRepo, draftStore
+            SavedStateHandle(), projectRepo, activityRepo, authRepo, draftStore,
+            java.time.Clock.system(java.time.ZoneId.of("Asia/Bangkok"))
         )
         advanceUntilIdle()
 
@@ -1088,7 +1112,7 @@ class SalesResultViewModelTest {
         coEvery { projectRepo.getProjectById("PRJ-NEW") } returns Result.success(createdProject)
 
         val vm = SalesResultViewModel(
-            SavedStateHandle(mapOf("activityId" to "A1")), projectRepo, activityRepo, authRepo, draftStore
+            SavedStateHandle(mapOf("activityId" to "A1")), projectRepo, activityRepo, authRepo, draftStore, java.time.Clock.system(java.time.ZoneId.of("Asia/Bangkok"))
         )
         advanceUntilIdle()
 
@@ -1123,7 +1147,7 @@ class SalesResultViewModelTest {
         )
 
         val vm = SalesResultViewModel(
-            SavedStateHandle(mapOf("activityId" to "A1")), projectRepo, activityRepo, authRepo, draftStore
+            SavedStateHandle(mapOf("activityId" to "A1")), projectRepo, activityRepo, authRepo, draftStore, java.time.Clock.system(java.time.ZoneId.of("Asia/Bangkok"))
         )
         advanceUntilIdle()
 
@@ -1153,7 +1177,7 @@ class SalesResultViewModelTest {
         coEvery { activityRepo.finishActivity(any(), any(), any()) } returns Result.success(Unit)
 
         val vm = SalesResultViewModel(
-            SavedStateHandle(mapOf("activityId" to "A1")), projectRepo, activityRepo, authRepo, draftStore
+            SavedStateHandle(mapOf("activityId" to "A1")), projectRepo, activityRepo, authRepo, draftStore, java.time.Clock.system(java.time.ZoneId.of("Asia/Bangkok"))
         )
         advanceUntilIdle()
         vm.onProjectSelected("PRJ-1")
@@ -1185,7 +1209,7 @@ class SalesResultViewModelTest {
         coEvery { activityRepo.finishActivity(any(), any(), any()) } returns Result.success(Unit)
 
         val vm = SalesResultViewModel(
-            SavedStateHandle(mapOf("activityId" to "A1")), projectRepo, activityRepo, authRepo, draftStore
+            SavedStateHandle(mapOf("activityId" to "A1")), projectRepo, activityRepo, authRepo, draftStore, java.time.Clock.system(java.time.ZoneId.of("Asia/Bangkok"))
         )
         advanceUntilIdle()
         vm.onSummaryChanged("summary")
@@ -1236,7 +1260,7 @@ class SalesResultViewModelTest {
         )
 
         val vm = SalesResultViewModel(
-            SavedStateHandle(mapOf("activityId" to "A1")), projectRepo, activityRepo, authRepo, draftStore
+            SavedStateHandle(mapOf("activityId" to "A1")), projectRepo, activityRepo, authRepo, draftStore, java.time.Clock.system(java.time.ZoneId.of("Asia/Bangkok"))
         )
         advanceUntilIdle()
         vm.onQuickAddProjectNameChanged("New Site")
@@ -1269,7 +1293,7 @@ class SalesResultViewModelTest {
         )
 
         val vm = SalesResultViewModel(
-            SavedStateHandle(mapOf("activityId" to "A1")), projectRepo, activityRepo, authRepo, draftStore
+            SavedStateHandle(mapOf("activityId" to "A1")), projectRepo, activityRepo, authRepo, draftStore, java.time.Clock.system(java.time.ZoneId.of("Asia/Bangkok"))
         )
         advanceUntilIdle()
         vm.onQuickAddProjectNameChanged("New Site")
@@ -1286,7 +1310,7 @@ class SalesResultViewModelTest {
         coEvery { projectRepo.getProjectById("PRJ-1") } returns Result.success(lockedProject())
 
         val vm = SalesResultViewModel(
-            SavedStateHandle(mapOf("projectId" to "PRJ-1")), projectRepo, activityRepo, authRepo, draftStore
+            SavedStateHandle(mapOf("projectId" to "PRJ-1")), projectRepo, activityRepo, authRepo, draftStore, java.time.Clock.system(java.time.ZoneId.of("Asia/Bangkok"))
         )
         advanceUntilIdle()
         vm.onSummaryChanged("ลูกค้าสนใจมาก รอเทียบราคา")
@@ -1315,7 +1339,7 @@ class SalesResultViewModelTest {
         coEvery { projectRepo.getProjectById("PRJ-1") } returns Result.success(lockedProject())
 
         val vm = SalesResultViewModel(
-            SavedStateHandle(mapOf("projectId" to "PRJ-1")), projectRepo, activityRepo, authRepo, draftStore
+            SavedStateHandle(mapOf("projectId" to "PRJ-1")), projectRepo, activityRepo, authRepo, draftStore, java.time.Clock.system(java.time.ZoneId.of("Asia/Bangkok"))
         )
         advanceUntilIdle()
         assertFalse(vm.isDirty())
@@ -1337,7 +1361,7 @@ class SalesResultViewModelTest {
         )
 
         val vm = SalesResultViewModel(
-            SavedStateHandle(mapOf("projectId" to "PRJ-1")), projectRepo, activityRepo, authRepo, draftStore
+            SavedStateHandle(mapOf("projectId" to "PRJ-1")), projectRepo, activityRepo, authRepo, draftStore, java.time.Clock.system(java.time.ZoneId.of("Asia/Bangkok"))
         )
         advanceUntilIdle()
         val chosen = SalesResultViewModel.DEAL_POSITION_MAP.keys.first()
@@ -1362,7 +1386,8 @@ class SalesResultViewModelTest {
             projectRepo,
             activityRepo,
             authRepo,
-            draftStore
+            draftStore,
+            java.time.Clock.system(java.time.ZoneId.of("Asia/Bangkok"))
         )
     }
 

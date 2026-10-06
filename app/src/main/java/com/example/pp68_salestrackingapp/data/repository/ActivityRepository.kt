@@ -8,6 +8,8 @@ import com.example.pp68_salestrackingapp.data.local.*
 import com.example.pp68_salestrackingapp.data.model.*
 import com.example.pp68_salestrackingapp.data.remote.ApiService
 import com.example.pp68_salestrackingapp.ui.viewmodels.activity.ActivityCard
+import com.example.pp68_salestrackingapp.utils.AppointmentPolicy
+import com.example.pp68_salestrackingapp.utils.policyFacts
 import com.example.pp68_salestrackingapp.utils.AppointmentAlarmScheduler
 import com.example.pp68_salestrackingapp.utils.SyncManager
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -42,7 +44,9 @@ class ActivityRepository @Inject constructor(
     private val projectRepo: ProjectRepository,
     private val syncManager: SyncManager,
     private val networkMonitor: com.example.pp68_salestrackingapp.utils.NetworkMonitor,
-    @ApplicationContext private val context: android.content.Context
+    @ApplicationContext private val context: android.content.Context,
+    // กติกานัดหมายทั้งชุดขึ้นกับ "ตอนนี้กี่โมง" จึงรับนาฬิกาเข้ามา ไม่เรียก now() เองในนี้
+    private val clock: java.time.Clock
 ) {
     fun getAllActivitiesFlow(): Flow<List<SalesActivity>> = activityDao.getAllActivities()
 
@@ -261,16 +265,6 @@ class ActivityRepository @Inject constructor(
      *   false สำหรับการอัปเดตที่เกิดจากการบันทึกผล (เช่นผูกโครงการเข้ากับนัด) — นัดที่ขาดไป
      *   ต้องบันทึกย้อนหลังได้เสมอ การล็อกตรงนี้จะทำให้บันทึกผลนัดที่ขาดไม่ได้เลย
      */
-    /** แยกเหตุผลให้ชัด — สองเหตุผลนี้คนละอย่างกัน บอกรวม ๆ ผู้ใช้จะไม่รู้ว่าต้องทำอะไรต่อ */
-    private fun lockedEditMessage(status: String?, plannedDate: String?, activityType: String?): String {
-        val st = com.example.pp68_salestrackingapp.utils.AppointmentStatus
-        return if (st.effective(status, plannedDate, activityType) == st.MISSING) {
-            "นัดหมายนี้ขาดไปแล้ว จึงแก้ไขแผนไม่ได้ — ให้บันทึกผลย้อนหลังแทน"
-        } else {
-            "ใกล้ถึงวันนัดแล้ว (เหลือไม่ถึง 7 วัน) จึงแก้ไขแผนนี้ไม่ได้"
-        }
-    }
-
     suspend fun updateActivity(
         activityId: String,
         // Any? ไม่ใช่ Any — ผู้เรียกต้องส่ง null ได้เพื่อ "ล้างค่าฟิลด์นี้" (เช่น ถอดโครงการออกจาก
@@ -293,14 +287,12 @@ class ActivityRepository @Inject constructor(
                 }
             }
             // กติกาเดียวกับที่ UI ใช้ซ่อนปุ่มดินสอ — entry point อื่นที่เรียก repository ตรง ๆ จึงข้ามไม่ได้
+            // กันกรณีเปิดฟอร์มค้างไว้ข้ามเวลานัดแล้วค่อยกดบันทึก ซึ่งตอนเปิดยังแก้ได้อยู่
             if (isPlanEdit) {
                 val existing = activityDao.getActivityById(resolvedActivityId)
-                if (existing != null && com.example.pp68_salestrackingapp.utils.AppointmentStatus
-                        .isEditLocked(existing.status, existing.activityDate, existing.activityType)
-                ) {
-                    return@withContext kotlin.Result.failure(
-                        Exception(lockedEditMessage(existing.status, existing.activityDate, existing.activityType))
-                    )
+                val decision = existing?.let { AppointmentPolicy.canEdit(it.policyFacts(), clock) }
+                if (decision is AppointmentPolicy.Decision.Denied) {
+                    return@withContext kotlin.Result.failure(Exception(decision.message))
                 }
             }
             // ── ชั้นในเครื่อง: ต้องสำเร็จก่อน ถ้าพังต้องคืน failure ─────────────────────────
@@ -503,7 +495,7 @@ class ActivityRepository @Inject constructor(
                 // เรียก repository ตรงๆ เช็คอินซ้ำ/เช็คอินนัดที่ขาดนัดไปแล้วได้เลย ย้ายมาเช็คที่นี่แทน
                 val existing = activityDao.getActivityById(resolvedId)
                     ?: return@withContext kotlin.Result.failure(Exception("ไม่พบนัดหมายนี้ในเครื่อง"))
-                if (com.example.pp68_salestrackingapp.utils.AppointmentStatus.effective(existing.status, existing.activityDate, existing.activityType) != "planned") {
+                if (AppointmentPolicy.effectiveStatus(existing.policyFacts(), clock) != "planned") {
                     return@withContext kotlin.Result.failure(Exception("นัดหมายนี้เช็คอินไม่ได้แล้ว (เช็คอินไปแล้ว/ขาดนัด/เสร็จสิ้นแล้ว)"))
                 }
                 activityDao.insertActivity(existing.copy(status = "checked_in", checkInLat = lat, checkInLong = lng, checkInTime = nowStr, isLocationVerified = isVerified, distanceDeviation = distanceDeviation, isSynced = false))
@@ -657,20 +649,11 @@ class ActivityRepository @Inject constructor(
                 resolvedId = localIdMappingDao.resolveExistingId(LocalIdMapping.ENTITY_ACTIVITY, activityId)
                 // ✅ W6 เดิมเช็คแค่ชั้น UI (HomeScreen.canDelete) — entry point อื่นที่เรียก
                 // repository ตรงๆ ข้ามกฎห้ามลบไปได้เลย จุดนี้คือจุดบล็อกจริงที่ทุกทางต้องผ่าน
-                // ตัดสินด้วย isDeleteLocked ตัวเดียวกับที่ UI ใช้ซ่อนปุ่ม แล้วค่อยเลือกข้อความ
-                // ตามเหตุผลที่โดนบล็อก เพื่อไม่ให้สองที่นิยามกฎต่างกัน
+                // ตัดสินด้วย policy ตัวเดียวกับที่ UI ใช้ซ่อนปุ่ม เหตุผลมาจากที่เดียวกัน
                 val existing = activityDao.getActivityById(resolvedId)
-                val status = com.example.pp68_salestrackingapp.utils.AppointmentStatus
-                if (existing != null &&
-                    status.isDeleteLocked(existing.status, existing.activityDate, existing.activityType)
-                ) {
-                    val message = if (status.isEditLocked(existing.status, existing.activityDate, existing.activityType)) {
-                        "ใกล้ถึงวันนัดแล้ว (เหลือไม่ถึง 7 วัน) จึงยกเลิกหรือลบแผนนี้ไม่ได้"
-                    } else {
-                        "เลยวันนัดแล้วแต่ไม่ได้เช็คอิน จึงถือว่าขาดนัด และลบทิ้งไม่ได้ " +
-                            "ให้บันทึกผลย้อนหลังไว้ว่าเกิดอะไรขึ้นแทน"
-                    }
-                    return@withContext kotlin.Result.failure(Exception(message))
+                val decision = existing?.let { AppointmentPolicy.canDelete(it.policyFacts(), clock) }
+                if (decision is AppointmentPolicy.Decision.Denied) {
+                    return@withContext kotlin.Result.failure(Exception(decision.message))
                 }
                 if (resolvedId.startsWith("TEMP-")) {
                     activityDao.deleteActivityById(resolvedId)

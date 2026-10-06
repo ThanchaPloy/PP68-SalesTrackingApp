@@ -1,14 +1,8 @@
 package com.example.pp68_salestrackingapp.utils
 
-import java.time.LocalDate
-import java.time.temporal.ChronoUnit
-
-// W6: กติกาเรื่อง "ขาดนัด" (เลยวันนัดไปแล้วยังไม่เช็คอิน/บันทึกผล) และ "ห้ามแก้ไข/ลบแผนใกล้วันนัด"
-// รวมไว้ที่เดียวเพราะทั้งสองกติกาต้องใช้ status + วันนัดหมายชุดเดียวกัน ในหลายหน้า
-// (HomeScreen, ActivityDetailScreen, CheckInScreen, CreateAppointmentViewModel)
+// เหลือเฉพาะกติกาเรื่อง "ชนิดนัด" — กฎเรื่องเวลา (ขาดนัด / ห้ามแก้ / ห้ามลบ / บันทึกผล)
+// ย้ายไป AppointmentPolicy ซึ่งรับ Clock เข้าไปและเขียนเทสต์เส้นแบ่งเวลาได้
 object AppointmentStatus {
-    const val MISSING = "missing"
-
     // นัดที่ไม่ต้องเช็คอิน (online/call) ไม่มีวันเป็น "ขาดนัด" — ขาดนัดคือการไม่ไปปรากฏตัวตามนัด
     // ซึ่งวัดจากการเช็คอินด้วย GPS นัดออนไลน์/โทรศัพท์ไม่มีขั้นตอนนั้น จึงบันทึกผลย้อนหลังเมื่อไหร่ก็ได้
     private val REQUIRES_CHECK_IN = setOf("onsite")
@@ -32,42 +26,4 @@ object AppointmentStatus {
         else     -> activityType.orEmpty()
     }
 
-    // ต้องเลยวัน ไม่ใช่เลยเวลา — นัดตอนเช้าของวันนี้ที่ยังไม่เช็คอินตอนบ่ายยังไม่นับขาดนัด
-    // ต้องข้ามเที่ยงคืนไปแล้วเท่านั้นถึงจะกลายเป็น missing
-    //
-    // activityType เป็นพารามิเตอร์บังคับโดยตั้งใจ (ไม่ใส่ default) — ทุกจุดที่เรียกต้องตัดสินใจเอง
-    // ว่านัดชนิดไหน ถ้าใส่ default ไว้ จุดที่ลืมส่งจะเงียบๆ กลับไปคิดว่าทุกชนิดขาดนัดได้เหมือนเดิม
-    fun effective(status: String?, plannedDate: String?, activityType: String?): String {
-        val fallback = status ?: "planned"
-        if (!requiresCheckIn(activityType)) return fallback
-        val date = parseDate(plannedDate) ?: return fallback
-        return if (status == "planned" && date.isBefore(LocalDate.now())) MISSING else fallback
-    }
-
-    // ห้ามแก้ไขแผนนัดหมายเมื่อ
-    //   (ก) เหลือเวลา <= 7 วันก่อนถึงวันนัด — กันเปลี่ยน/ยกเลิกกระชั้นชิด
-    //   (ข) ขาดนัดไปแล้ว — ด้วยเหตุผลเดียวกับที่ห้ามลบ: แผนที่ขาดนัดคือหลักฐาน
-    //       การแก้วันนัดเป็นอนาคตทำให้สถานะกลับเป็น planned เท่ากับลบร่องรอยทิ้ง แค่ใช้ทางอ้อม
-    //
-    // การ "บันทึกผล" ไม่ถูกล็อกโดยกติกานี้ — นัดที่ขาดไปต้องบันทึกย้อนหลังได้เสมอ
-    fun isEditLocked(status: String?, plannedDate: String?, activityType: String?): Boolean {
-        if (status != "planned") return false
-        if (effective(status, plannedDate, activityType) == MISSING) return true
-        val date = parseDate(plannedDate) ?: return false
-        val daysUntil = ChronoUnit.DAYS.between(LocalDate.now(), date)
-        return daysUntil in 0..7
-    }
-
-    // กฎการลบแผน รวมไว้ที่เดียวเพราะมีสองที่ที่ต้องเห็นตรงกันเสมอ: ปุ่มลบในหน้า Home (ซ่อน/แสดง)
-    // กับ ActivityRepository.deleteActivity (บล็อกจริง) ถ้าแยกกันเขียนจะดริฟต์กันแน่นอน
-    //
-    // ห้ามลบเมื่อ (ก) อยู่ในช่วง 7 วันก่อนวันนัด — กันยกเลิกกระชั้นชิด
-    // หรือ (ข) ขาดนัดไปแล้ว — แผนที่ขาดนัดเป็นหลักฐานว่าเกิดอะไรขึ้น ลบทิ้งเท่ากับลบร่องรอย
-    // การพลาดนัด ให้บันทึกผลย้อนหลังแทน (online/call ไม่มีสถานะขาดนัด จึงไม่โดนข้อ (ข) นี้)
-    // ตอนนี้กติกาเดียวกับการแก้ไข — คงชื่อไว้เพราะผู้เรียกอ่านแล้วเข้าใจเจตนาชัดกว่า
-    fun isDeleteLocked(status: String?, plannedDate: String?, activityType: String?): Boolean =
-        isEditLocked(status, plannedDate, activityType)
-
-    private fun parseDate(raw: String?): LocalDate? =
-        raw?.take(10)?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
 }

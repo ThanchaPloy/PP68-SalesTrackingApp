@@ -50,7 +50,7 @@ class ActivityRepositoryCheckInTest {
         repo = ActivityRepository(
             apiService, activityDao, projectDao, localIdMappingDao, customerDao, contactDao,
             planItemDao, resultDao, photoDao, appointmentContactDao, projectRepo, syncManager,
-            networkMonitor, context
+            networkMonitor, context, java.time.Clock.systemUTC()
         )
         coEvery { localIdMappingDao.resolveExistingId(any(), any()) } answers { secondArg() }
         coEvery { localIdMappingDao.resolveMappedId(any(), any()) } answers { secondArg() }
@@ -248,16 +248,30 @@ class ActivityRepositoryCheckInTest {
         coVerify(exactly = 1) { apiService.updateActivity(any(), any()) }
     }
 
-    // online/call ไม่มีสถานะขาดนัด จึงแก้ย้อนหลังได้ตามเดิม
+    // กติกาใหม่ (แผนงาน B.1): พ้นเวลาเริ่มนัดแล้วแก้แผนไม่ได้ ไม่ว่านัดชนิดไหน
+    // ต่างจากกฎเดิมที่นัด online/call ย้อนหลังยังแก้ได้เพราะไม่มีสถานะขาดนัด
     @Test
-    fun `editing a past online appointment is still allowed`() = runTest {
+    fun `editing a past online appointment is rejected now that the window closed`() = runTest {
         val yesterday = java.time.LocalDate.now().minusDays(1).toString()
         coEvery { activityDao.getActivityById("A-ONLINE") } returns
             activity.copy(activityId = "A-ONLINE", activityDate = yesterday, activityType = "online")
+
+        val result = repo.updateActivity("A-ONLINE", mapOf("topic" to "แก้หัวข้อ"))
+
+        assertTrue(result.isFailure)
+        coVerify(exactly = 0) { apiService.updateActivity(any(), any()) }
+    }
+
+    // ยังอยู่ก่อนวันนัด จึงแก้ได้ตามปกติ — กันการเผลอล็อกทุกแถว
+    @Test
+    fun `editing an appointment that has not started yet still works`() = runTest {
+        val tomorrow = java.time.LocalDate.now().plusDays(1).toString()
+        coEvery { activityDao.getActivityById("A-FUTURE") } returns
+            activity.copy(activityId = "A-FUTURE", activityDate = tomorrow, activityType = "online")
         coEvery { apiService.updateActivity(any(), any()) } returns
             Response.success(listOf(activity))
 
-        val result = repo.updateActivity("A-ONLINE", mapOf("topic" to "แก้หัวข้อ"))
+        val result = repo.updateActivity("A-FUTURE", mapOf("topic" to "แก้หัวข้อ"))
 
         assertTrue(result.isSuccess)
     }

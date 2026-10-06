@@ -1,5 +1,6 @@
 package com.example.pp68_salestrackingapp.ui.viewmodels.activity
 
+import com.example.pp68_salestrackingapp.utils.AppointmentPolicy
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.pp68_salestrackingapp.data.repository.ActivityRepository
@@ -30,6 +31,10 @@ data class CreateAppointmentUiState(
     // W6: ค่าดั้งเดิมตอนโหลดมาแก้ไข ใช้เช็คว่าห้ามแก้ไข/ลบเพราะใกล้วันนัดหรือยัง (ไม่ใช้ค่าที่กำลังพิมพ์แก้)
     val originalStatus:      String? = null,
     val originalPlannedDate: String? = null,
+    // กติกาแก้ไขตัดสินจาก "แผนเดิม" ไม่ใช่ค่าที่กำลังพิมพ์แก้อยู่ จึงต้องเก็บเวลาเริ่มและสถานะ
+    // เช็คอินของแผนเดิมไว้ด้วย ไม่งั้นจะล็อกตั้งแต่ 00:00 ของทุกแถวที่มีเวลานัดจริง
+    val originalPlannedTime: String? = null,
+    val originalCheckedIn:   Boolean = false,
     val selectedProjectId:   String? = null,
     val selectedProjectName: String? = null,
     val selectedCustomerId:  String? = null,
@@ -158,8 +163,22 @@ class CreateAppointmentViewModel @Inject constructor(
     private val customerRepo: CustomerRepository,
     private val contactRepo:  ContactRepository,
     private val authRepo:     AuthRepository,
-    private val draftStore:   DraftStore
+    private val draftStore:   DraftStore,
+    private val clock:        java.time.Clock
 ) : ViewModel() {
+
+    /** กติกาเดียวกับที่ ActivityRepository.updateActivity ใช้บล็อกจริง อ่านจากแผนเดิมเท่านั้น */
+    private fun editDecision(s: CreateAppointmentUiState): AppointmentPolicy.Decision =
+        AppointmentPolicy.canEdit(
+            AppointmentPolicy.Facts(
+                status = s.originalStatus,
+                activityType = s.activityType,
+                plannedDate = s.originalPlannedDate,
+                plannedTime = s.originalPlannedTime,
+                checkedIn = s.originalCheckedIn
+            ),
+            clock
+        )
 
     private val _uiState = MutableStateFlow(CreateAppointmentUiState())
     val uiState: StateFlow<CreateAppointmentUiState> = _uiState
@@ -628,6 +647,8 @@ class CreateAppointmentViewModel @Inject constructor(
                         activityId        = activity.activityId,
                         originalStatus      = activity.status,
                         originalPlannedDate = activity.activityDate,
+                        originalPlannedTime = activity.plannedTime,
+                        originalCheckedIn   = !activity.checkInTime.isNullOrBlank(),
                         selectedProjectId = activity.projectId,
                         // ✅ CST-UNKNOWN เป็นค่า sentinel ของนัดที่ไม่ระบุลูกค้า ไม่ใช่รหัสลูกค้าจริง
                         // ถ้าปล่อยเข้ามาเป็น selectedCustomerId ตรง ๆ การ "สร้างผู้ติดต่อด่วน" และ
@@ -901,10 +922,11 @@ class CreateAppointmentViewModel @Inject constructor(
                 _uiState.update { it.copy(saveError = "ไม่สามารถสร้างนัดหมายย้อนหลังได้") }
                 false
             }
-            // W6: ห้ามแก้ไขแผนที่ยังไม่เสร็จ (planned) เมื่อเหลือเวลา <= 7 วันก่อนวันนัดเดิม — เช็คจาก
-            // ค่าดั้งเดิมตอนโหลดมา ไม่ใช่วันที่ที่กำลังพิมพ์แก้อยู่ในฟอร์ม
-            s.activityId != null && com.example.pp68_salestrackingapp.utils.AppointmentStatus.isEditLocked(s.originalStatus, s.originalPlannedDate, s.activityType) -> {
-                _uiState.update { it.copy(saveError = "ใกล้ถึงวันนัดแล้ว (เหลือไม่ถึง 7 วัน) จึงแก้ไขแผนนี้ไม่ได้") }
+            // แก้แผนได้จนถึงก่อนเวลาเริ่มนัดเดิม — เช็คจากค่าดั้งเดิมตอนโหลดมา ไม่ใช่วันเวลาที่กำลัง
+            // พิมพ์แก้อยู่ในฟอร์ม ไม่งั้นเลื่อนวันนัดไปอนาคตก่อนแล้วกดบันทึกจะหลุดกติกาได้
+            s.activityId != null && editDecision(s) is AppointmentPolicy.Decision.Denied -> {
+                val denied = editDecision(s) as AppointmentPolicy.Decision.Denied
+                _uiState.update { it.copy(saveError = denied.message) }
                 false
             }
             s.activityType == "onsite" && (s.lat == null || s.lng == null) -> {

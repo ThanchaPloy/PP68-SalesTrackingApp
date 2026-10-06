@@ -1,5 +1,6 @@
 package com.example.pp68_salestrackingapp.ui.screen.activity
 
+import com.example.pp68_salestrackingapp.utils.policyFacts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -71,7 +72,7 @@ private val statusConfigs = mapOf(
     "completed"  to StatusConfig("เสร็จสิ้น",        GrayStatus, Color(0xFFECEFF1), "report"),
     // W6: เลยวันนัดไปแล้วยังไม่เช็คอิน/บันทึกผล — เช็คอินไม่ได้อีกแล้ว แต่ยังบันทึกผลย้อนหลังได้
     // เหมือน checked_in/completed (action="report" เหมือนกัน ไม่ใช่ "checkin")
-    com.example.pp68_salestrackingapp.utils.AppointmentStatus.MISSING to
+    com.example.pp68_salestrackingapp.utils.AppointmentPolicy.MISSING to
         StatusConfig("ขาดนัด", Color(0xFFC62828), Color(0xFFFFEBEE), "report")
 )
 
@@ -370,17 +371,17 @@ fun ActivityCard(
 ) {
     val typeConf   = typeConfigs[card.activityType]
         ?: TypeConfig(card.activityType.uppercase(), Icons.Default.Event, TextGray)
-    val effectiveStatus = com.example.pp68_salestrackingapp.utils.AppointmentStatus.effective(card.planStatus, card.plannedDate, card.activityType)
+    val effectiveStatus = com.example.pp68_salestrackingapp.utils.AppointmentPolicy
+        .effectiveStatus(card.policyFacts())
     val statusConf = statusConfigs[effectiveStatus]
         ?: StatusConfig(effectiveStatus, TextGray, BgLight, null)
 
     val hasNote    = !card.weeklyNote.isNullOrBlank() || card.hasResult
-    // W6: ห้ามลบแผนที่ใกล้วันนัด (<= 7 วัน) หรือที่ขาดนัดไปแล้ว — กฎอยู่ใน isDeleteLocked
-    // ที่เดียวกับที่ ActivityRepository.deleteActivity ใช้บล็อกจริง
-    val canDelete  = card.planStatus == "planned" &&
-        !com.example.pp68_salestrackingapp.utils.AppointmentStatus.isDeleteLocked(
-            card.planStatus, card.plannedDate, card.activityType
-        )
+    // ลบได้เฉพาะก่อนถึงวันนัด — กฎอยู่ใน AppointmentPolicy ที่เดียวกับที่
+    // ActivityRepository.deleteActivity ใช้บล็อกจริง ปุ่มกับการบล็อกจึงไม่มีวันดริฟต์กัน
+    val canDelete  = com.example.pp68_salestrackingapp.utils.AppointmentPolicy
+        .canDelete(card.policyFacts()) is
+        com.example.pp68_salestrackingapp.utils.AppointmentPolicy.Decision.Allowed
     // นัดแบบ call/online ไม่มีขั้นเช็คอิน — สถานะ "planned" จึงพาไปหน้าบันทึกผลตรง ๆ
     // เหมือนกับที่ "checked_in"/"completed" ทำอยู่แล้ว
     val isCallOrOnline = card.activityType == "call" || card.activityType == "online"

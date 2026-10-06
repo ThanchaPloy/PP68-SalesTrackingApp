@@ -1,5 +1,7 @@
 package com.example.pp68_salestrackingapp.ui.viewmodels.activity
 
+import com.example.pp68_salestrackingapp.utils.AppointmentPolicy
+import com.example.pp68_salestrackingapp.utils.policyFacts
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.pp68_salestrackingapp.data.repository.ActivityRepository
@@ -29,12 +31,23 @@ data class ActivityDetailUiState(
     val currentDistance: Double = 0.0, // in meters
     val isCheckingIn: Boolean = false,
 
+    /**
+     * ผลการตัดสินกติกานัดหมาย คิดจาก "ค่าดิบ" ก่อนถูกจัดรูปแบบเพื่อแสดงผล
+     *
+     * ต้องคิดที่นี่ ไม่ใช่ให้หน้าจอคิดเองจาก [activity] เพราะ plannedTime ใน state ถูกแปลงเป็น
+     * "02:00 PM" สำหรับแสดงผลไปแล้ว ถ้าหน้าจอเอาไปตัดสินเองจะอ่านได้เป็น 02:00 น.
+     * แล้วล็อกการแก้ไขตั้งแต่ตีสองของวันนัด แทนที่จะเป็นบ่ายสอง
+     */
+    val effectiveStatus: String = "planned",
+    val editDenialMessage: String? = null,
+
     val error: String? = null
 )
 
 @HiltViewModel
 class ActivityDetailViewModel @Inject constructor(
-    private val repo: ActivityRepository
+    private val repo: ActivityRepository,
+    private val clock: java.time.Clock
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ActivityDetailUiState())
@@ -60,11 +73,16 @@ class ActivityDetailViewModel @Inject constructor(
             // ✅ จัดรูปแบบ "เวลา" ให้อ่านง่ายก่อนแสดงผลได้ แต่ห้ามแตะ activityDate
             //
             // เดิมเขียนวันที่รูปแบบแสดงผล ("Apr 06, 2026") ทับลงไปใน activityDate ซึ่งหน้าจอเอาไป
-            // ส่งต่อให้ AppointmentStatus.effective()/isEditLocked() คิดกติกา W6 — พวกนั้น parse
+            // ส่งต่อให้ AppointmentPolicy คิดกติกา — ตัวนั้น parse
             // ด้วย LocalDate.parse(take(10)) จึงพังเงียบ ๆ แล้วคืนค่า fallback ผลคือบนหน้านี้
             // นัดที่ขาดไปแล้วไม่เคยขึ้นว่า "ขาดนัด" และล็อกห้ามแก้ 7 วันก่อนนัดไม่เคยทำงานเลย
             // (ชั้น repository ยังบล็อกให้อยู่ จึงไม่ถึงกับแก้ข้อมูลได้ แต่ปุ่มโชว์ให้กดแล้วไปเจอ error)
             // การจัดรูปแบบเพื่อแสดงผลเป็นเรื่องของหน้าจอ ไม่ใช่ของ state
+            // ตัดสินกติกาก่อนจัดรูปแบบเวลาเพื่อแสดงผล — ลำดับนี้สำคัญ
+            val policySource = enrichedActivity ?: rawActivity
+            val facts = policySource?.policyFacts()
+            val editDecision = facts?.let { AppointmentPolicy.canEdit(it, clock) }
+
             val finalActivity = enrichedActivity?.let { act ->
                 act.copy(
                     plannedTime = formatTimeForUI(act.plannedTime),
@@ -76,6 +94,10 @@ class ActivityDetailViewModel @Inject constructor(
                 it.copy(
                     isLoading  = false,
                     activity   = finalActivity ?: enrichedActivity ?: rawActivity,
+                    effectiveStatus = facts?.let { f -> AppointmentPolicy.effectiveStatus(f, clock) }
+                        ?: (policySource?.status ?: "planned"),
+                    editDenialMessage =
+                        (editDecision as? AppointmentPolicy.Decision.Denied)?.message,
                     planItems  = itemsResult.getOrDefault(emptyList()),
                     selectedItemIds = itemsResult.getOrDefault(emptyList())
                         .filter { item -> item.isDone }

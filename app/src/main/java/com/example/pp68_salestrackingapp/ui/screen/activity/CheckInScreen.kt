@@ -95,10 +95,10 @@ fun CheckInScreen(
     }
 
     // W6: เช็คอินไม่ได้อีกแล้วถ้าเช็คอินไปแล้ว หรือถ้าเลยวันนัดไปแล้วยังไม่ได้เช็คอิน (ขาดนัด)
-    val checkInEffectiveStatus = com.example.pp68_salestrackingapp.utils.AppointmentStatus.effective(
-        s.activity?.status, s.activity?.activityDate, s.activity?.activityType
-    )
-    if (checkInEffectiveStatus == "checked_in" || checkInEffectiveStatus == com.example.pp68_salestrackingapp.utils.AppointmentStatus.MISSING) {
+    // ใช้ค่าที่ ViewModel คิดไว้จากข้อมูลดิบ หน้าจอนี้ใช้ ActivityDetailViewModel ตัวเดียวกัน
+    // ซึ่ง plannedTime ใน state ถูกแปลงเพื่อแสดงผลไปแล้ว จึงห้ามคิดกติกาเองจากตรงนี้
+    val checkInEffectiveStatus = s.effectiveStatus
+    if (checkInEffectiveStatus == "checked_in" || checkInEffectiveStatus == com.example.pp68_salestrackingapp.utils.AppointmentPolicy.MISSING) {
         LaunchedEffect(Unit) { onBack() }
     }
 
