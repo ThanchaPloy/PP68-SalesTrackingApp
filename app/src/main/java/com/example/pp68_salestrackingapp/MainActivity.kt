@@ -47,6 +47,9 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // ลงทะเบียนครั้งเดียวแล้วอยู่ยาว (KEEP) — ไม่ได้ผูกกับการล็อกอิน เพราะรอบที่รันตอนไม่มี
+        // token จะไม่มีอะไรให้ส่งแล้วจบไปเอง ถูกกว่าการต้องคอยตั้ง/ยกเลิกตามสถานะล็อกอิน
+        syncManager.schedulePeriodicSync()
         enableEdgeToEdge()
         com.example.pp68_salestrackingapp.utils.NotificationChannels.ensureCreated(this)
         askNotificationPermission()

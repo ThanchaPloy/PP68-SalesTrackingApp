@@ -56,6 +56,7 @@ class SyncManager @Inject constructor(
     private companion object {
         // จำกัดเวลาของ worker หนึ่งรอบ; ถ้าเหลือ Room จะทำให้ผลเป็น retry และทำต่อด้วย backoff
         const val MAX_ROWS_PER_ENTITY_PER_RUN = 100
+        const val PERIODIC_SYNC_WORK_NAME = "PeriodicDataSync"
     }
 
     private class RunTracker {
@@ -320,6 +321,32 @@ class SyncManager @Inject constructor(
     /** คง method เดิมไว้ไม่ให้ caller เก่าพัง แต่ไม่รัน network ผูกกับ lifecycle อีกแล้ว */
     fun runSyncNow(scope: CoroutineScope) {
         scheduleSync(SyncTrigger.APP_FOREGROUND)
+    }
+
+    /**
+     * ตาข่ายรองรับของ outbox — ไม่ใช่ทางส่งหลัก
+     *
+     * ทางหลักคือ one-time work ที่ผูกกับการบันทึกแต่ละครั้ง ซึ่งพอมีเน็ตก็รันเองโดยไม่ต้องเปิดแอป
+     * แต่ถ้างานนั้นหายไปจากคิว (ตัวจัดการแบตของเครื่องบางยี่ห้อ force stop แอป ซึ่ง Android
+     * ห้ามปลุกแอปที่ถูก force stop อีกเลย) จะไม่มีอะไรตามส่งให้จนกว่าผู้ใช้จะเปิดแอปเอง
+     *
+     * รอบนี้ไม่ได้แก้เคส force stop — ไม่มีอะไรแก้ได้ ต้องให้ผู้ใช้ปลดล็อกการจัดการแบตเอง
+     * แต่กู้เคสอื่นที่งานหลุดจากคิวได้ และทำให้ "ค้างยาวเงียบ ๆ" กลายเป็น "ช้าสุด 6 ชั่วโมง"
+     *
+     * KEEP ไม่ใช่ UPDATE — เปิดแอปบ่อย ๆ ต้องไม่รีเซ็ตรอบใหม่ทุกครั้งจนไม่เคยครบรอบสักที
+     */
+    fun schedulePeriodicSync() {
+        val request = PeriodicWorkRequestBuilder<SyncWorker>(6, TimeUnit.HOURS)
+            .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
+            .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 10L, TimeUnit.SECONDS)
+            .setInputData(workDataOf(SyncWorker.KEY_TRIGGER to SyncTrigger.PERIODIC.name))
+            .addTag("data_sync_tag")
+            .build()
+        WorkManager.getInstance(context).enqueueUniquePeriodicWork(
+            PERIODIC_SYNC_WORK_NAME,
+            ExistingPeriodicWorkPolicy.KEEP,
+            request
+        )
     }
 
     fun scheduleDownload() {
