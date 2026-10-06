@@ -1013,7 +1013,11 @@ class CreateAppointmentViewModel @Inject constructor(
                 plannedLat     = s.lat,
                 plannedLong    = s.lng,
                 status         = "planned",
-                contactName    = selectedContactNames
+                contactName    = selectedContactNames,
+                // เก็บชื่อที่ผู้ใช้เพิ่งเลือกไว้ด้วย เพื่อให้หน้ารายละเอียดมีชื่อโชว์ทันที
+                // ไม่ต้องรอ sync รอบถัดไป และยังโชว์ได้ตอนออฟไลน์
+                companyName    = s.companyOptions.firstOrNull { it.first == customerId }?.second,
+                projectName    = s.projectOptions.firstOrNull { it.id == s.selectedProjectId }?.name
             )
 
             val finalId: String

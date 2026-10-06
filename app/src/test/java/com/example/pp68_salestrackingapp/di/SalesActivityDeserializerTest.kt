@@ -63,4 +63,25 @@ class SalesActivityDeserializerTest {
         assertEquals("planned", activity.status)
         assertEquals("onsite", activity.activityType)
     }
+    /**
+     * ลูกค้า ERP เป็น remote-only ตั้งแต่ Phase 3 ตาราง customer ในเครื่องจึงไม่มีให้ join หาชื่อ
+     * server แนบ customer_name มากับนัดหมายแทน ถ้าตัวนี้ไม่เข้า companyName หน้ารายละเอียดนัด
+     * จะโชว์ช่องบริษัทว่างทั้งที่ผู้ใช้เลือกบริษัทไว้แล้ว
+     */
+    @Test
+    fun `the customer name the server attaches lands in companyName`() {
+        val json = """{"appointment_id":"A1","emp_code":"U1","cust_code":"C001","customer_name":"บริษัท ตัวอย่าง จำกัด"}"""
+
+        val activity = gson.fromJson(json, SalesActivity::class.java)
+
+        assertEquals("บริษัท ตัวอย่าง จำกัด", activity.companyName)
+        assertEquals("C001", activity.customerId)
+    }
+
+    @Test
+    fun `an appointment without a customer name is still readable`() {
+        val json = """{"appointment_id":"A1","emp_code":"U1"}"""
+
+        assertEquals(null, gson.fromJson(json, SalesActivity::class.java).companyName)
+    }
 }
