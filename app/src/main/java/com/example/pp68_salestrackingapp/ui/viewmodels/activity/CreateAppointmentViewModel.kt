@@ -35,6 +35,8 @@ data class CreateAppointmentUiState(
     // เช็คอินของแผนเดิมไว้ด้วย ไม่งั้นจะล็อกตั้งแต่ 00:00 ของทุกแถวที่มีเวลานัดจริง
     val originalPlannedTime: String? = null,
     val originalCheckedIn:   Boolean = false,
+    /** เตือนก่อนกดบันทึก ไม่ใช่หลังบันทึก — ผู้ใช้ยังเลือกต่อเน็ตก่อนได้ (แผนงาน B.4 ข้อ 5) */
+    val timeAnchorWarning:   String? = null,
     val selectedProjectId:   String? = null,
     val selectedProjectName: String? = null,
     val selectedCustomerId:  String? = null,
@@ -164,8 +166,34 @@ class CreateAppointmentViewModel @Inject constructor(
     private val contactRepo:  ContactRepository,
     private val authRepo:     AuthRepository,
     private val draftStore:   DraftStore,
-    private val clock:        java.time.Clock
+    private val clock:        java.time.Clock,
+    private val serverTimeAnchor: com.example.pp68_salestrackingapp.utils.ServerTimeAnchor
 ) : ViewModel() {
+
+    /**
+     * ไม่มีเวลาที่เชื่อถือได้ (ยังไม่เคยคุยกับเซิร์ฟเวอร์ หรือเครื่องรีบูต/เวลาถูกแก้) และนัดใกล้จะถึง
+     *
+     * เคสนี้ server จะตัดสินจากเวลาที่คำขอเดินทางไปถึง ซึ่งอาจเลยเวลานัดไปแล้วถ้าส่งขึ้นช้า
+     * บอกตามตรงดีกว่าปล่อยให้กดบันทึกแล้วเข้าใจว่าเรียบร้อย แล้วไปตกตอน sync ทีหลัง
+     */
+    private fun timeAnchorWarningFor(
+        activity: com.example.pp68_salestrackingapp.data.model.SalesActivity
+    ): String? {
+        if (serverTimeAnchor.nowOrNull() != null) return null
+        val start = runCatching {
+            java.time.LocalDate.parse(activity.activityDate.take(10))
+                .atTime(
+                    activity.plannedTime?.trim()?.take(5)
+                        ?.let { runCatching { java.time.LocalTime.parse(it) }.getOrNull() }
+                        ?: java.time.LocalTime.MIDNIGHT
+                )
+                .atZone(AppointmentPolicy.THAI_ZONE).toInstant()
+        }.getOrNull() ?: return null
+        val now = java.time.Instant.now(clock)
+        if (start.isBefore(now) || start.isAfter(now.plus(java.time.Duration.ofHours(24)))) return null
+        return "ยังไม่ได้เวลาอ้างอิงจากเซิร์ฟเวอร์ และนัดนี้ใกล้ถึงเวลาแล้ว " +
+            "ถ้าบันทึกตอนไม่มีเน็ต การแก้อาจถูกปฏิเสธตอนส่งขึ้น กรุณาเชื่อมต่ออินเทอร์เน็ตก่อนบันทึก"
+    }
 
     /** กติกาเดียวกับที่ ActivityRepository.updateActivity ใช้บล็อกจริง อ่านจากแผนเดิมเท่านั้น */
     private fun editDecision(s: CreateAppointmentUiState): AppointmentPolicy.Decision =
@@ -649,6 +677,7 @@ class CreateAppointmentViewModel @Inject constructor(
                         originalPlannedDate = activity.activityDate,
                         originalPlannedTime = activity.plannedTime,
                         originalCheckedIn   = !activity.checkInTime.isNullOrBlank(),
+                        timeAnchorWarning   = timeAnchorWarningFor(activity),
                         selectedProjectId = activity.projectId,
                         // ✅ CST-UNKNOWN เป็นค่า sentinel ของนัดที่ไม่ระบุลูกค้า ไม่ใช่รหัสลูกค้าจริง
                         // ถ้าปล่อยเข้ามาเป็น selectedCustomerId ตรง ๆ การ "สร้างผู้ติดต่อด่วน" และ

@@ -25,7 +25,7 @@ import com.example.pp68_salestrackingapp.data.model.*
         SyncSnapshotItem::class,
         LocalIdMapping::class
     ],
-    version = 61,
+    version = 62,
     exportSchema = true
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -587,6 +587,23 @@ abstract class AppDatabase : RoomDatabase() {
                 db.execSQL(
                     "CREATE INDEX IF NOT EXISTS `index_local_id_mapping_entity_type_real_id` " +
                         "ON `local_id_mapping` (`entity_type`, `real_id`)"
+                )
+            }
+        }
+
+        /**
+         * B.4: จำไว้ว่าการแก้แผนเกิดขึ้นเมื่อไหร่ เพื่อให้การแก้ตอนออฟไลน์ก่อนเวลานัด
+         * ยังผ่านกติกาได้แม้จะถูก sync ขึ้นไปหลังเวลานัดไปแล้ว
+         *
+         * additive ล้วน แถวเดิมได้ NULL/0 ซึ่งแปลว่า "ไม่มีข้อมูลเวลาแก้" และถูกตัดสิน
+         * ด้วยเวลาที่ server เห็นตอนรับคำขอเหมือนเดิม
+         */
+        val MIGRATION_61_62 = object : Migration(61, 62) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `activity_table` ADD COLUMN `plan_edit_at` TEXT")
+                db.execSQL(
+                    "ALTER TABLE `activity_table` ADD COLUMN `plan_edit_time_trusted` " +
+                        "INTEGER NOT NULL DEFAULT 0"
                 )
             }
         }

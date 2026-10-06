@@ -705,6 +705,12 @@ class SyncManager @Inject constructor(
                         activity.checkInTime?.let { put("check_in_time", it) }
                         put("is_location_verified", activity.isLocationVerified)
                         activity.distanceDeviation?.let { put("distance_deviation", it) }
+                        // B.4: แถวนี้อาจถูกแก้ไว้ตั้งแต่ก่อนเวลานัดแต่เพิ่งได้ส่งตอนนี้
+                        // ถ้าไม่บอกเวลาที่แก้ไปด้วย server จะตัดสินจากเวลาที่รับคำขอ แล้วปฏิเสธงานที่ทำถูกต้อง
+                        activity.planEditAt?.let {
+                            put("client_modified_at", it)
+                            put("client_time_trusted", activity.planEditTimeTrusted)
+                        }
                     }
                     val response = apiService.updateActivity("eq.${activity.activityId}", patchBody)
                     noteOutcome("activity", activity.activityId, response.isSuccessful, response.code(), tracker)

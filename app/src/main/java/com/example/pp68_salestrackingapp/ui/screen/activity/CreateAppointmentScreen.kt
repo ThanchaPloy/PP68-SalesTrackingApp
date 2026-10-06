@@ -511,6 +511,10 @@ fun CreateAppointmentScreen(
                 }
             }
 
+            state.timeAnchorWarning?.let {
+                Text(it, color = androidx.compose.ui.graphics.Color(0xFFE65100), fontSize = 13.sp)
+            }
+
             state.saveError?.let {
                 Text(it, color = ErrorRed, fontSize = 13.sp)
             }

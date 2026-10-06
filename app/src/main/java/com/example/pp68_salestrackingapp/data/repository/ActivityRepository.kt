@@ -46,7 +46,8 @@ class ActivityRepository @Inject constructor(
     private val networkMonitor: com.example.pp68_salestrackingapp.utils.NetworkMonitor,
     @ApplicationContext private val context: android.content.Context,
     // กติกานัดหมายทั้งชุดขึ้นกับ "ตอนนี้กี่โมง" จึงรับนาฬิกาเข้ามา ไม่เรียก now() เองในนี้
-    private val clock: java.time.Clock
+    private val clock: java.time.Clock,
+    private val serverTimeAnchor: com.example.pp68_salestrackingapp.utils.ServerTimeAnchor
 ) {
     fun getAllActivitiesFlow(): Flow<List<SalesActivity>> = activityDao.getAllActivities()
 
@@ -288,12 +289,21 @@ class ActivityRepository @Inject constructor(
             }
             // กติกาเดียวกับที่ UI ใช้ซ่อนปุ่มดินสอ — entry point อื่นที่เรียก repository ตรง ๆ จึงข้ามไม่ได้
             // กันกรณีเปิดฟอร์มค้างไว้ข้ามเวลานัดแล้วค่อยกดบันทึก ซึ่งตอนเปิดยังแก้ได้อยู่
+            var planEditAt: String? = null
+            var planEditTrusted = false
             if (isPlanEdit) {
                 val existing = activityDao.getActivityById(resolvedActivityId)
                 val decision = existing?.let { AppointmentPolicy.canEdit(it.policyFacts(), clock) }
                 if (decision is AppointmentPolicy.Decision.Denied) {
                     return@withContext kotlin.Result.failure(Exception(decision.message))
                 }
+                // B.4: ประทับเวลาที่ "กดแก้" ไว้ตั้งแต่ตอนนี้ ไม่ใช่ตอนที่ส่งขึ้นได้สำเร็จ
+                // แก้ตอนออฟไลน์ก่อนเวลานัดแล้วค่อยส่งทีหลัง server จะได้ตัดสินจากเวลาที่แก้จริง
+                val trustedNow = serverTimeAnchor.nowOrNull()
+                planEditTrusted = trustedNow != null
+                planEditAt = (trustedNow ?: java.time.Instant.now(clock)).toString()
+                resolvedUpdates["client_modified_at"] = planEditAt
+                resolvedUpdates["client_time_trusted"] = planEditTrusted
             }
             // ── ชั้นในเครื่อง: ต้องสำเร็จก่อน ถ้าพังต้องคืน failure ─────────────────────────
             // เดิม catch ครอบทั้งฟังก์ชันแล้วคืน success(Unit) เสมอ ทำให้ cast พลาด (as String
@@ -302,7 +312,11 @@ class ActivityRepository @Inject constructor(
             var hasPendingParent = false
             try {
                 activityDao.getActivityById(resolvedActivityId)?.let { local ->
-                    var updated = local.copy(isSynced = false)
+                    var updated = local.copy(
+                        isSynced = false,
+                        planEditAt = planEditAt ?: local.planEditAt,
+                        planEditTimeTrusted = if (planEditAt != null) planEditTrusted else local.planEditTimeTrusted
+                    )
                     if (resolvedUpdates.containsKey("plan_status"))    updated = updated.copy(status        = resolvedUpdates["plan_status"] as String)
                     if (resolvedUpdates.containsKey("note"))           updated = updated.copy(weeklyNote    = resolvedUpdates["note"] as? String)
                     if (resolvedUpdates.containsKey("topic"))          updated = updated.copy(detail        = resolvedUpdates["topic"] as? String)

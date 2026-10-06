@@ -9,6 +9,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.runTest
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.ResponseBody.Companion.toResponseBody
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -31,6 +32,7 @@ class ActivityRepositoryCheckInTest {
     private val projectRepo: ProjectRepository = mockk(relaxed = true)
     private val syncManager: SyncManager = mockk(relaxed = true)
     private val networkMonitor: com.example.pp68_salestrackingapp.utils.NetworkMonitor = mockk(relaxed = true)
+    private val serverTimeAnchor: com.example.pp68_salestrackingapp.utils.ServerTimeAnchor = mockk(relaxed = true)
     private val context: android.content.Context = mockk(relaxed = true)
 
     private lateinit var repo: ActivityRepository
@@ -50,7 +52,7 @@ class ActivityRepositoryCheckInTest {
         repo = ActivityRepository(
             apiService, activityDao, projectDao, localIdMappingDao, customerDao, contactDao,
             planItemDao, resultDao, photoDao, appointmentContactDao, projectRepo, syncManager,
-            networkMonitor, context, java.time.Clock.systemUTC()
+            networkMonitor, context, java.time.Clock.systemUTC(), serverTimeAnchor
         )
         coEvery { localIdMappingDao.resolveExistingId(any(), any()) } answers { secondArg() }
         coEvery { localIdMappingDao.resolveMappedId(any(), any()) } answers { secondArg() }
@@ -260,6 +262,61 @@ class ActivityRepositoryCheckInTest {
 
         assertTrue(result.isFailure)
         coVerify(exactly = 0) { apiService.updateActivity(any(), any()) }
+    }
+
+    // ── B.4: ประทับเวลาที่กดแก้ ไม่ใช่เวลาที่ส่งขึ้นสำเร็จ ─────────────────────
+    @Test
+    fun `a plan edit is stamped with the server-anchored time and kept on the row`() = runTest {
+        val tomorrow = java.time.LocalDate.now().plusDays(1).toString()
+        val anchored = java.time.Instant.parse("2026-10-10T06:59:00Z")
+        every { serverTimeAnchor.nowOrNull() } returns anchored
+        coEvery { activityDao.getActivityById("A-EDIT") } returns
+            activity.copy(activityId = "A-EDIT", activityDate = tomorrow)
+        coEvery { apiService.updateActivity(any(), any()) } returns Response.success(listOf(activity))
+
+        repo.updateActivity("A-EDIT", mapOf("topic" to "แก้หัวข้อ"))
+
+        val sent = slot<Map<String, Any?>>()
+        coVerify { apiService.updateActivity(any(), capture(sent)) }
+        assertEquals(anchored.toString(), sent.captured["client_modified_at"])
+        assertEquals(true, sent.captured["client_time_trusted"])
+
+        // ต้องค้างอยู่บนแถวด้วย เพราะ outbox ประกอบ payload ใหม่จากแถว ไม่ได้เก็บ map เดิมไว้
+        val saved = slot<SalesActivity>()
+        coVerify { localIdMappingDao.insertActivityResolvingProject(capture(saved)) }
+        assertEquals(anchored.toString(), saved.captured.planEditAt)
+        assertEquals(true, saved.captured.planEditTimeTrusted)
+    }
+
+    /** ไม่มี anchor = ใช้เวลาเครื่องได้ แต่ต้องบอกตามตรงว่าเชื่อไม่ได้ ไม่ใช่อ้างว่าเชื่อได้ */
+    @Test
+    fun `without a trusted anchor the stamp is marked untrusted`() = runTest {
+        val tomorrow = java.time.LocalDate.now().plusDays(1).toString()
+        every { serverTimeAnchor.nowOrNull() } returns null
+        coEvery { activityDao.getActivityById("A-EDIT2") } returns
+            activity.copy(activityId = "A-EDIT2", activityDate = tomorrow)
+        coEvery { apiService.updateActivity(any(), any()) } returns Response.success(listOf(activity))
+
+        repo.updateActivity("A-EDIT2", mapOf("topic" to "แก้หัวข้อ"))
+
+        val sent = slot<Map<String, Any?>>()
+        coVerify { apiService.updateActivity(any(), capture(sent)) }
+        assertEquals(false, sent.captured["client_time_trusted"])
+        assertTrue(sent.captured["client_modified_at"] is String)
+    }
+
+    /** การผูกโครงการตอนบันทึกผลไม่ใช่การแก้แผน จึงต้องไม่ไปแตะเวลาแก้แผนของแถว */
+    @Test
+    fun `a non plan edit does not stamp a plan edit time`() = runTest {
+        every { serverTimeAnchor.nowOrNull() } returns java.time.Instant.parse("2026-10-10T06:59:00Z")
+        coEvery { activityDao.getActivityById("A-BIND") } returns activity.copy(activityId = "A-BIND")
+        coEvery { apiService.updateActivity(any(), any()) } returns Response.success(listOf(activity))
+
+        repo.updateActivity("A-BIND", mapOf("project_code" to "PRJ-9"), isPlanEdit = false)
+
+        val sent = slot<Map<String, Any?>>()
+        coVerify { apiService.updateActivity(any(), capture(sent)) }
+        assertFalse(sent.captured.containsKey("client_modified_at"))
     }
 
     // ยังอยู่ก่อนวันนัด จึงแก้ได้ตามปกติ — กันการเผลอล็อกทุกแถว

@@ -79,7 +79,10 @@ object NetworkModule {
 
     @Provides
     @Singleton
-    fun provideAuthInterceptor(tokenManager: TokenManager): Interceptor {
+    fun provideAuthInterceptor(
+        tokenManager: TokenManager,
+        serverTimeAnchor: com.example.pp68_salestrackingapp.utils.ServerTimeAnchor
+    ): Interceptor {
         return Interceptor { chain ->
             val originalRequest = chain.request()
             val requestBuilder = originalRequest.newBuilder()
@@ -117,6 +120,9 @@ object NetworkModule {
             }
 
             val response = chain.proceed(requestBuilder.build())
+            // ทุก HTTP response มี header Date จากเซิร์ฟเวอร์อยู่แล้ว จึงได้เวลาอ้างอิงฟรี
+            // โดยไม่ต้องเพิ่มฟิลด์ server_time ในทุก endpoint (แผนงาน B.4 ข้อ 1)
+            response.headers.getDate("Date")?.let { serverTimeAnchor.record(it.time) }
             // ✅ 401 จาก endpoint ที่ต้อง auth หมายถึง token หมดอายุ/ไม่ถูกต้องเสมอ (ต่างจาก
             // login-api ที่ 401 หมายถึงรหัสผ่านผิด) — เคลียร์ token แล้วแจ้งให้เด้งไปหน้า Login
             // change-password-api ก็ 401 ตอนกรอกรหัสผ่านเดิมผิดเหมือนกัน (คนละความหมายกับ token

@@ -117,5 +117,22 @@ data class SalesActivity(
 
     @ColumnInfo(name = "operation_id")
     @SerializedName("operation_id")
-    val operationId: String? = null
+    val operationId: String? = null,
+
+    /**
+     * เวลาที่ผู้ใช้กดแก้แผนครั้งล่าสุด ตามเวลาที่อ้างอิงจากเซิร์ฟเวอร์ (แผนงาน B.4 ข้อ 2)
+     *
+     * ต้องเก็บลงแถว ไม่ใช่ถือไว้ใน memory เพราะการแก้ตอนออฟไลน์อาจถูกส่งขึ้นอีกหลายชั่วโมง
+     * ให้หลัง และ outbox ประกอบ payload ใหม่จากแถวนี้ ไม่ได้เก็บ map เดิมที่ผู้ใช้กดไว้
+     *
+     * ส่งขึ้น server ด้วย จึงมี @SerializedName — ดู ExclusionStrategy ใน NetworkModule
+     */
+    @ColumnInfo(name = "plan_edit_at")
+    @SerializedName("client_modified_at")
+    val planEditAt: String? = null,
+
+    /** เวลาด้านบนมาจาก anchor ที่เชื่อถือได้หรือจากนาฬิกาเครื่องล้วน ๆ */
+    @ColumnInfo(name = "plan_edit_time_trusted")
+    @SerializedName("client_time_trusted")
+    val planEditTimeTrusted: Boolean = false
 )
