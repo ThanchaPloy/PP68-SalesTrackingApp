@@ -92,6 +92,12 @@ The outbox is event-driven: every save enqueues a unique one-time `SyncWorker` c
 
 Delta sync v2 (`data/repository/DeltaSyncRepository` ↔ backend `/sync/v2/*`) downloads an initial keyset snapshot into a shadow table, swaps it in atomically, then replays an ordered change feed by cursor. Server-side the feed is maintained by database triggers installed by `migrations/add_sync_change_feed.sql`, inside the same transaction as the business write.
 
+**A successful response carrying an empty list is not a failure.** `refreshActivities` and `refreshResults` fetch children (appointment contacts, result photos) in batches of 50; an appointment with no participants and a result with no photos are both normal. Treating the empty list as an error once made the whole refresh fail and the stats screen show nothing.
+
+**The download banner and the upload outbox are separate workers.** `_failedParts` in `data/repository/SyncManager` is set when the download worker fails and cleared only when that same worker succeeds. Connectivity returning wakes only the upload worker, so `HomeViewModel` re-schedules a download after an upload succeeds — otherwise the banner sticks forever while data syncs fine behind it.
+
+`utils/SyncDiagnostics` keeps the last 100 events in SharedPreferences and exports them as JSON from the settings screen. Besides the sync workers it now records every non-2xx response (hooked once in `AuthInterceptor`, so no ViewModel has to care) and uncaught exceptions. It stores metadata only — method, path without query string, status code, exception class — because the export leaves the device. **Fields not listed in `ALLOWED_FIELDS` are dropped silently**, so adding a field to a `record()` call means adding it there too.
+
 Room is at **version 63** with a continuous migration chain from 28. `AppDatabase` holds 17 entities. Never bump the version without adding the matching `Migration` object, registering it in `DatabaseModule`, and testing it against the exported Room schema. Each recent migration has a matching `MigrationNNToMMTest` under `app/src/androidTest/`; follow that pattern — the schema JSON alone does not prove the hand-written SQL runs.
 
 On login the entire local DB is cleared and re-synced, so local-only fields do not survive a re-login.
@@ -133,6 +139,8 @@ Two files define what actually exists at runtime — check them before assuming 
 - **Proximity reminders**: `ProximityMonitorService` notifies within a **500 m** radius.
 - **Sales results are versioned, never overwritten.** Each save writes a new `activity_result` row sharing a `result_group_id`, with `version` incremented and `is_latest` moved to the new row. Queries for "current" state must filter `is_latest = 1`; history screens read the whole group.
 - **Opportunity score propagates via a DB trigger**, not client code — writing `activity_result` updates the parent `project` server-side.
+- **An appointment carries its customer's name from the server.** ERP customers are remote-only, so there is no local `customer` row to join for the company name. The backend attaches `customer_name` to every appointment it returns (resolved from `customer` and `lead_customer` in two queries per result set, not per row), and `SalesActivity.companyName` is the one otherwise-local column with a `@SerializedName` so it can read that. It is still never sent back: every appointment write builds its JSON map explicitly. The form also stamps the chosen company and project names onto the row at save time, so a brand-new appointment shows them before the next sync and while offline.
+- **The sales branch is not a required field when creating a project.** The branch list only ever comes from the server, so offline the dropdown is empty; requiring it blocked saving entirely. On save the branch falls back to the caller's own branch from the token.
 - **Two different draft mechanisms, on purpose.** Appointment drafts are many-per-account rows in Room (`appointment_draft`, `AppointmentDraftRepository`), capped at 20, expiring after 30 days, every query scoped by a SHA-256 `owner_key` — the DAO deliberately has no "all accounts" method, because phones are shared between sales staff. The other four forms (customer, project, contact, sales result) still use the single-slot SharedPreferences `utils/DraftStore`. `DraftController` is shared by all five but the appointment form now uses only its baseline/dirty tracking, not its storage.
 - **Appointment reminders are local only** — `AppointmentAlarmScheduler` sets `AlarmManager` alarms at 30/15/0 minutes before the planned time when the appointment is created, and `AppointmentAlarmReceiver` checks `TokenManager.isVisitReminderEnabled()` at fire time. There is no server-initiated push: Firebase (Cloud Messaging, Realtime DB, Analytics) was removed from both repos, along with the status mirror that fed an external web dashboard. A dashboard that needs status history should read `project_stage_log`, which holds strictly more than the mirror ever did. `employee.fcm_token` is still in the database but nothing reads or writes it.
 
@@ -147,6 +155,9 @@ Two files define what actually exists at runtime — check them before assuming 
 - **Do not bump `versionCode` casually.** `TokenManager.checkAppVersionAndForceRelogin()` compares it to the stored value and calls `clearToken()` when they differ, which routes the next login through `clearAllTables()` — offline work that never reached the server is gone, with no warning. Shipping a new build is not by itself a reason to bump it.
 - **Migrations are a hand-maintained list.** `DatabaseFactory` runs only the `migrations/*.sql` paths written in its `scripts` list, resolved relative to the process working directory. A file that exists but is not listed never runs and logs nothing; a file that is listed but missing logs a warning and is skipped. If the systemd unit's `WorkingDirectory` is not the repo root, every migration silently skips.
 - **Source files mix LF and CRLF line endings,** sometimes within one file. Multi-line search-and-replace that assumes `\n` will match nothing in half the file.
+- **The client asks for batches as `in.(a,b,c)`, and `stripEq()` does not understand it.** A route that only strips `eq.` will take the whole string as one id and answer 404 while the data is sitting right there. Unpack with `parseInList()` (`routes/RouteUtils.kt`). Seven other routes still parse it inline, each slightly differently.
+- **`ESCAPE '\\'` inside a Kotlin raw string sends two backslashes.** Postgres rejects the whole query — "escape string must be empty or one character" — so the endpoint answers 500 every time, not just for odd input. Raw strings do not process escapes; write `ESCAPE '\'`.
+- **User-facing wording for ERP customers is "ลูกค้าเก่า(dynamic)", not "ERP".** The code still uses ERP in identifiers and comments; only the strings people read were changed.
 
 ## Known dead code
 
@@ -155,6 +166,7 @@ Inert, harmless, not yet removed — nothing references any of it:
 - `Route.ProjectInventory` / `AddProduct` / `EditProduct` in `ui/navigation/Route.kt` — their screens were deleted with the product-catalog feature.
 - Nine product/team-member functions at the bottom of `ApiService.kt` (`getProductMaster`, `getProductBrands`, `getProjectTeamMemberCodes`, …) plus their `Product*Dto` types. The backend no longer serves these paths.
 - A duplicate `libs.versions.toml` at the repo root; Gradle only reads `gradle/libs.versions.toml`.
+- `ApiService.addActivity(@Body SalesActivity, …)` — the live path is `addActivityMap`, which builds the JSON map explicitly. This matters beyond tidiness: it is why putting a `@SerializedName` on a local-only column cannot leak that column to the server.
 
 ## Conventions
 

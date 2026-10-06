@@ -4,15 +4,29 @@
 
 ## สถานะการทำจริง (ปรับล่าสุด 6 ตุลาคม 2026)
 
-**เขียนโค้ดครบทั้ง 4A, 4B, 4C แล้ว ยังไม่ผ่านการทดสอบบนเครื่องจริงและยังไม่เปิดใช้งาน**
+**เขียนโค้ดครบทั้ง 4A, 4B, 4C และเริ่มทดสอบบนเครื่องจริงแล้ว ยังไม่เปิดบังคับใช้กับผู้ใช้ทั้งหมด**
 
 | เฟส | ขั้น | สถานะ | ที่อยู่ |
 |---|---|---|---|
-| 4A | 1-4 นโยบาย, migration, API, setup gate, tests | เสร็จ | backend `main` (`40f0fa4`), Android `release/phase-4a` |
-| | 5-6 staging, เปิด flag ให้บัญชี active | **ยังไม่ทำ** | รัน `oneoff_enable_required_account_setup.sql` ด้วยมือหลังแจก APK |
-| 4B | 1-4 policy สองฝั่ง, guards, time anchor | เสร็จ | backend `feature/appointment-policy`, Android `feature/appointment-policy` |
-| | 5 เปิด `APPOINTMENT_POLICY_V2` | **ยังไม่ทำ** | ต้องรอ APK ที่มี 4B ออกก่อน |
-| 4C | 1-4 Room, repository, UI, account isolation | เสร็จ | Android `feature/appointment-policy` |
+| 4A | 1-4 นโยบาย, migration, API, setup gate, tests | เสร็จ และ deploy แล้ว | backend `main`, Android `release/phase-4a` |
+| | 5-6 staging, เปิด flag ให้บัญชี active | **ยังไม่เปิด** | `password_change_required` ยังเป็น FALSE ทุกบัญชี รัน `oneoff_enable_required_account_setup.sql` เมื่อพร้อม |
+| 4B | 1-4 policy สองฝั่ง, guards, time anchor | เสร็จ merge เข้า backend `main` แล้ว | Android `release/phase-4b` |
+| | 5 เปิด `APPOINTMENT_POLICY_V2` | ใส่ใน `.env` แล้ว (ตรวจจาก log ตอน start) | ต้องแจก APK ที่มี 4B ให้ครบคู่กัน |
+| 4C | 1-4 Room, repository, UI, account isolation | เสร็จ | Android `release/phase-4c` ← ตัวล่าสุดที่ใช้แจก |
+
+### บั๊กที่พบตอน deploy และทดสอบเครื่องจริง (แก้แล้วทั้งหมด)
+
+| อาการ | ต้นเหตุ |
+|---|---|
+| ค้นหาลูกค้าเก่า(dynamic) ตอบ 500 ทุกครั้ง | `ESCAPE '\\'` ในสตริงดิบของ Kotlin ส่งแบ็กสแลชสองตัว Postgres ปฏิเสธทั้ง query |
+| หน้าสถิติโหลดไม่ขึ้น 404 | `/appointment_contact` รับแต่ id เดี่ยว แต่ไคลเอนต์ยิง `in.(...)` ชุดละ 50 |
+| รีเฟรชล้มทั้งที่ server ตอบปกติ | นับ "สำเร็จแต่ลิสต์ว่าง" เป็น error แล้วบันทึกเป็น HTTP 200 |
+| หน้ารายละเอียดนัดไม่ขึ้นชื่อบริษัท | ลูกค้า ERP เป็น remote-only ไม่มีตารางให้ join — server แนบ `customer_name` มาแทน |
+| แบนเนอร์ค้างหลังเน็ตกลับมา | worker ดาวน์โหลดกับอัปโหลดคนละตัว เน็ตกลับมาปลุกแค่ตัวอัปโหลด |
+| สร้างโครงการตอนออฟไลน์ไม่ได้ | บังคับเลือกสาขาซึ่งรายชื่อมาจาก server เท่านั้น |
+| ไฟล์ diagnostics ไม่มีร่องรอย error จริง | บันทึกแค่เหตุการณ์ของ worker สองตัว เพิ่ม HTTP error ทุกเส้นทางและ crash ของแอป |
+| การ์ดตั้งค่าบัญชีออกสีชมพู | `tonalElevation` ทำให้ Material ผสมสีหลักของแอป (แดง) ลงบนพื้นผิว |
+| มูลค่าเกินสิบล้านขึ้นเป็น 1.0E7 | `Double.toString()` เปลี่ยนเป็นรูปวิทยาศาสตร์เองตั้งแต่ 1e7 |
 
 ### สิ่งที่ทำต่างจากแผน และเหตุผล
 
@@ -28,6 +42,10 @@
 - 8.2 ยังขาดเคส deep link เปิดฟอร์มก่อน cutoff แล้วกด save หลัง cutoff และเคส rejected sync ไม่วน retry
 - 8.3 ยังขาดเคสที่ต้องใช้ Room จริง: สร้างครบ 20 ร่างแล้วไม่เขียนทับกัน, boundary 29/30 วัน, process death แล้วร่างยังอยู่
 - 8.4 regression gate ยังไม่ได้ทำทั้งหัวข้อ
+
+สิ่งที่ทดสอบบนเครื่องจริงไปแล้ว: login, ค้นหาลูกค้าเก่า(dynamic), หน้าสถิติ, สร้าง/แก้นัดหมาย, สร้างโครงการตอนออฟไลน์แล้วเปิดเน็ต ส่วน 4C (ฉบับร่างหลายรายการ) เพิ่งแจก APK ยังไม่มีผลทดสอบกลับมา
+
+บทเรียนจากรอบนี้: บั๊กทั้งหมดในตารางด้านบนไม่มีตัวไหนที่ unit test ชุดเดิมจับได้ เพราะเป็นเรื่องของการต่อสองฝั่งเข้าด้วยกันและของจริงบนเครื่อง — ข้อ 8.4 ที่ยังไม่ได้ทำจึงไม่ใช่พิธีกรรม
 
 ## 1. ข้อกำหนดที่ยืนยันแล้ว
 
