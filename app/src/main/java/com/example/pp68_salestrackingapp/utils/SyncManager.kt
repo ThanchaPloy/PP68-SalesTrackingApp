@@ -294,7 +294,22 @@ class SyncManager @Inject constructor(
         return true
     }
 
+    /**
+     * ผู้ใช้กด "ลองใหม่" = ขอให้ลองทุกแถวอีกหน รวมแถวที่เคยถูกปฏิเสธถาวรด้วย
+     *
+     * retriedThisSession ให้โอกาสแถวที่ถูกปฏิเสธลองใหม่ครั้งเดียวต่อการเปิดแอปหนึ่งรอบ
+     * ซึ่งพอต้นเหตุฝั่ง server ถูกแก้แล้ว ผู้ใช้จะไม่มีทางสั่งลองใหม่ได้เลยจนกว่าจะ
+     * force stop แอป — ไม่มีใครเดาออก และไม่มีปุ่มไหนในแอปทำให้ได้
+     *
+     * ยังคุมไม่ให้รังแกเซิร์ฟเวอร์อยู่ เพราะหนึ่งครั้งที่กด = หนึ่งโอกาสต่อแถว ไม่ใช่วนรัว
+     * และไม่เปิดให้ APP_FOREGROUND ทำแบบนี้ เพราะมันยิงทุกครั้งที่เข้าหน้าแรก
+     */
+    private fun allowRejectedRowsOneMoreTry() {
+        retriedThisSession.clear()
+    }
+
     fun scheduleSync(trigger: SyncTrigger = SyncTrigger.SAVE) {
+        if (trigger == SyncTrigger.MANUAL) allowRejectedRowsOneMoreTry()
         val constraints = Constraints.Builder()
             .setRequiredNetworkType(NetworkType.CONNECTED)
             .build()
