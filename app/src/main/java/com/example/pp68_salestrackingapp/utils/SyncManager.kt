@@ -464,6 +464,39 @@ class SyncManager @Inject constructor(
 
     internal suspend fun doSync(): SyncRunResult = syncMutex.withLock { doSyncLocked() }
 
+    /**
+     * ล้างบันทึกการปฏิเสธที่ไม่เหลือของจริงให้ปฏิเสธแล้ว
+     *
+     * clearRejection ถูกเรียกจากที่เดียวคือตอน push แถวนั้นสำเร็จ ถ้าแถวไม่อยู่ในคิวแล้ว
+     * (ซิงค์ไปแล้วทางอื่น ถูกลบ หรือ id ถูกย้ายจาก TEMP- ไป id จริง) จะไม่มีอะไรมาล้างให้เลย
+     * แถวใน sync_rejection จึงค้างตลอดกาล ผู้ใช้เห็น "เซิร์ฟเวอร์ปฏิเสธ 1 รายการ" ไปเรื่อย ๆ
+     * ทั้งที่ข้อมูลขึ้น server ครบแล้ว และไม่มีปุ่มไหนในแอปล้างได้ (เจอจริง 2026-10-07)
+     *
+     * บันทึกการปฏิเสธมีความหมายเฉพาะตอนที่แถวยังรอส่งอยู่เท่านั้น พอไม่รอแล้วก็ทิ้งได้
+     * ชนิดที่ไม่รู้จักปล่อยไว้ ไม่เดาแล้วลบทิ้ง
+     */
+    private suspend fun pruneStaleRejections() {
+        val ownerId = tokenManager.getLocalDataOwner()
+        val pendingByType: Map<String, Set<String>> = mapOf(
+            "customer" to customerDao.getUnsyncedCustomerIds().toSet(),
+            "contact" to contactDao.getUnsyncedContactIds().toSet(),
+            "project" to projectDao.getUnsyncedProjectIds().toSet(),
+            "activity" to activityDao.getUnsyncedActivityIds().toSet(),
+            "result" to resultDao.getUnsyncedResultIds().toSet(),
+            "checklist" to planItemDao.getUnsyncedAppointmentIds().toSet(),
+            "attachment" to (ownerId?.let {
+                attachmentOutboxDao.getPending(it, Int.MAX_VALUE).map { item -> item.operationId }.toSet()
+            } ?: emptySet())
+        )
+        syncRejectionDao.getAll().forEach { rejection ->
+            val stillPending = pendingByType[rejection.entityType] ?: return@forEach
+            if (rejection.entityId !in stillPending) {
+                Log.d("SyncManager", "ล้างการปฏิเสธที่ไม่เหลือของจริง: ${rejection.entityType}")
+                clearRejection(rejection.entityType, rejection.entityId)
+            }
+        }
+    }
+
     private suspend fun doSyncLocked(): SyncRunResult {
         val runId = java.util.UUID.randomUUID().toString()
         val startedAt = java.time.Instant.now().toString()
@@ -863,6 +896,7 @@ class SyncManager @Inject constructor(
             }
         }
 
+        runCatching { pruneStaleRejections() }
         val pendingAfter = pendingSummary().sumOf { it.second }
         val rejectedAfter = rejectedSummary().size
         val succeeded = ((pendingBefore + rejectedBefore) - (pendingAfter + rejectedAfter)).coerceAtLeast(0)
