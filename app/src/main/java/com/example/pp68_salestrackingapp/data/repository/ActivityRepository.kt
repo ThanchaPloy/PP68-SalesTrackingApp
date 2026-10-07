@@ -281,7 +281,19 @@ class ActivityRepository @Inject constructor(
         // Any? ไม่ใช่ Any — ผู้เรียกต้องส่ง null ได้เพื่อ "ล้างค่าฟิลด์นี้" (เช่น ถอดโครงการออกจาก
         // นัดหมาย) ตัว apply ด้านล่างกับ backend เช็คด้วย containsKey แล้วยอมรับ null อยู่แล้ว
         updates: Map<String, Any?>,
-        isPlanEdit: Boolean = true
+        isPlanEdit: Boolean = true,
+        /**
+         * ชื่อบริษัทที่ผู้ใช้เพิ่งเลือก — ประทับลงแถวในเครื่องอย่างเดียว ไม่เคยส่งขึ้น server
+         *
+         * ลูกค้าเก่า(dynamic) เป็น remote-only ไม่มีแถวใน Room ให้ join หาชื่อ enrichActivity
+         * จึงถอยไปใช้ companyName ที่ค้างอยู่ในแถวเดิม พอแก้นัดแล้วเลือกบริษัท dynamic ตัวใหม่
+         * cust_code เปลี่ยนจริงแต่ชื่อที่แสดงยังเป็นของเดิม ผู้ใช้เห็นเหมือนไม่มีอะไรเกิดขึ้น
+         * (กว่าจะตรงต้องรอ sync รอบถัดไปที่ server แนบ customer_name กลับมา)
+         *
+         * ผูกกับ cust_code เสมอ — มาคู่กันหรือไม่มาเลย ถ้ามี cust_code ในชุดแก้ไขแปลว่า
+         * บริษัทถูกเลือกใหม่ (หรือถูกล้าง) ชื่อที่แสดงจึงต้องเปลี่ยนตามเสมอ
+         */
+        localCompanyName: String? = null
     ): kotlin.Result<Unit> {
         return withContext(Dispatchers.IO) {
             val resolvedActivityId = try {
@@ -338,7 +350,12 @@ class ActivityRepository @Inject constructor(
                     if (resolvedUpdates.containsKey("planned_long"))   updated = updated.copy(plannedLong   = resolvedUpdates["planned_long"] as? Double)
                     if (resolvedUpdates.containsKey("is_appointment")) updated = updated.copy(isAppointment = resolvedUpdates["is_appointment"] as Boolean)
                     if (resolvedUpdates.containsKey("project_code"))  updated = updated.copy(projectId  = resolvedUpdates["project_code"] as? String)
-                    if (resolvedUpdates.containsKey("cust_code"))     updated = updated.copy(customerId = (resolvedUpdates["cust_code"] as? String) ?: updated.customerId)
+                    if (resolvedUpdates.containsKey("cust_code")) {
+                        updated = updated.copy(
+                            customerId  = (resolvedUpdates["cust_code"] as? String) ?: updated.customerId,
+                            companyName = localCompanyName
+                        )
+                    }
                     val persisted = localIdMappingDao.insertActivityResolvingProject(updated)
                     hasPendingParent = persisted.projectId?.startsWith("TEMP-") == true ||
                         persisted.customerId?.startsWith("TEMP-") == true

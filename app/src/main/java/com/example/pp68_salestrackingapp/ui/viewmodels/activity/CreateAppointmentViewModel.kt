@@ -1127,7 +1127,11 @@ class CreateAppointmentViewModel @Inject constructor(
                 updates["cust_code"] = s.selectedCustomerId ?: "CST-UNKNOWN"
                 // เดิมทิ้ง Result ทิ้งไปเฉย ๆ ต่างจากทางสร้างใหม่ที่อยู่ถัดลงไปซึ่งเช็ค isFailure
                 // แก้ไขที่บันทึกไม่ลงจึงเด้งกลับหน้ารายการเหมือนสำเร็จ ทั้งที่ไม่มีอะไรเปลี่ยน
-                val updateResult = activityRepo.updateActivity(appointmentId, updates)
+                val updateResult = activityRepo.updateActivity(
+                    appointmentId,
+                    updates,
+                    localCompanyName = s.selectedCompanyName
+                )
                 if (updateResult.isFailure) {
                     _uiState.update {
                         it.copy(isLoading = false, saveError = updateResult.exceptionOrNull()?.message ?: "บันทึกไม่สำเร็จ")
