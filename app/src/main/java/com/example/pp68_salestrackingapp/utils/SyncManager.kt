@@ -310,9 +310,18 @@ class SyncManager @Inject constructor(
         // จะยกเลิกงาน sync ที่กำลังรอ backoff อยู่แล้วรีเซ็ตนับใหม่ทุกครั้ง ถ้าผู้ใช้แก้ข้อมูลถี่ๆ
         // sync จริงอาจไม่มีโอกาสรันจบเลย KEEP ปล่อยงานที่ค้างอยู่ให้ทำต่อ (ไม่ว่าจะรันอยู่หรือรอ
         // backoff) ส่วนงานที่จบไปแล้ว (สำเร็จ/ล้มเหลวจนหมด retry) จะไม่ถูก KEEP บล็อก จะ enqueue ใหม่ปกติ
+        //
+        // ⚠️ ยกเว้นตอนผู้ใช้สั่งเอง — KEEP ทำให้ "เปิดแอป" และปุ่ม "ลองใหม่" กลายเป็นปุ่มหลอก
+        // backoff ของ WorkManager เป็นเลขยกกำลังและเพดานอยู่ที่ 5 ชั่วโมง ถ้าเซิร์ฟเวอร์เคยตอบ 5xx
+        // ติดกันหลายรอบ (เช่นบั๊กฝั่ง server ที่เพิ่งแก้ไป) งานจะนอนรออยู่นาน ๆ แล้วผู้ใช้กดอะไร
+        // ก็ไม่ขยับ ทั้งที่ปัญหาหายไปแล้ว — สองทริกเกอร์นี้มาจากคนกดเอง ไม่ได้ถี่พอจะกวน backoff
+        val policy = when (trigger) {
+            SyncTrigger.MANUAL, SyncTrigger.APP_FOREGROUND -> ExistingWorkPolicy.REPLACE
+            else -> ExistingWorkPolicy.KEEP
+        }
         WorkManager.getInstance(context).enqueueUniqueWork(
             "DataSyncWorkName",
-            ExistingWorkPolicy.KEEP,
+            policy,
             syncRequest
         )
         SyncRuntime.queued(trigger)
@@ -355,9 +364,12 @@ class SyncManager @Inject constructor(
             .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 10L, TimeUnit.SECONDS)
             .addTag("download_sync_tag")
             .build()
+        // REPLACE ไม่ใช่ KEEP — ทุก caller ของเส้นนี้มาจากคนกดเอง (ล็อกอิน, เปิดหน้าหลัก,
+        // ปุ่มลองใหม่บนแถบเตือน) ถ้า KEEP แล้วงานเก่าติด backoff ยาว ๆ อยู่ แถบเตือนจะค้าง
+        // และผู้ใช้กดอะไรก็ไม่ขยับ
         WorkManager.getInstance(context).enqueueUniqueWork(
             "InitialDownloadWorkName",
-            ExistingWorkPolicy.KEEP,
+            ExistingWorkPolicy.REPLACE,
             request
         )
     }
