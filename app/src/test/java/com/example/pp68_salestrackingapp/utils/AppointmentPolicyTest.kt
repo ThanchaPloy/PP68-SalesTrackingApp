@@ -39,6 +39,7 @@ class AppointmentPolicyTest {
     private val beforeDay = clockAt("2026-10-09T03:00:00Z")      // 09 ต.ค. 10:00 ไทย
     private val dayBeforeStart = clockAt("2026-10-10T06:59:00Z") // 10 ต.ค. 13:59 ไทย
     private val exactlyAtStart = clockAt("2026-10-10T07:00:00Z") // 10 ต.ค. 14:00 ไทย
+    private val afterStartSameDay = clockAt("2026-10-10T10:00:00Z") // 10 ต.ค. 17:00 ไทย
     private val afterDay = clockAt("2026-10-11T03:00:00Z")       // 11 ต.ค. 10:00 ไทย
 
     // ── แถวที่ 1: ก่อนวันนัด ────────────────────────────────────
@@ -173,5 +174,26 @@ class AppointmentPolicyTest {
         val tokyoClock = Clock.fixed(Instant.parse("2026-10-10T16:00:00Z"), ZoneId.of("Asia/Tokyo"))
         assertEquals("planned", AppointmentPolicy.effectiveStatus(facts(), tokyoClock))
         assertDenied(AppointmentPolicy.EDIT_WINDOW_CLOSED, AppointmentPolicy.canEdit(facts(), tokyoClock))
+    }
+
+    /**
+     * เลยเวลาเริ่มนัดแล้วแต่ยังอยู่ในวันนัด ต้องยังเช็คอินได้
+     *
+     * เส้นที่คุมการเช็คอินคือ effectiveStatus ไม่ใช่ canEdit — ทั้ง CheckInScreen และ
+     * ActivityRepository.checkIn ยอมให้เช็คอินเมื่อ effectiveStatus ยังเป็น "planned"
+     * ส่วน MISSING เกิดเมื่อ "พ้นวันนัด" แล้วเท่านั้น ไม่ใช่พ้นเวลาเริ่ม
+     * ช่วงแก้ไขแผนปิดไปแล้วตอนนี้โดยตั้งใจ และไม่เกี่ยวกับการเช็คอิน
+     */
+    @Test
+    fun `onsite check-in stays open after the start time as long as it is still the appointment day`() {
+        assertEquals("planned", AppointmentPolicy.effectiveStatus(facts(), afterStartSameDay))
+        assertEquals(
+            AppointmentPolicy.MISSING,
+            AppointmentPolicy.effectiveStatus(facts(), afterDay)
+        )
+        assertDenied(
+            AppointmentPolicy.EDIT_WINDOW_CLOSED,
+            AppointmentPolicy.canEdit(facts(), afterStartSameDay)
+        )
     }
 }
