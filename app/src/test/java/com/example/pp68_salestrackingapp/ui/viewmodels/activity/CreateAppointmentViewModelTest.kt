@@ -469,7 +469,7 @@ class CreateAppointmentViewModelTest {
         configureBaseData()
         coEvery { activityRepo.getMasterActivities() } returns emptyList()
         every { authRepo.currentUser() } returns AuthUser("U1", "u@test.com", "sale")
-        coEvery { activityRepo.updateActivity(any(), any()) } returns Result.success(Unit)
+        coEvery { activityRepo.updateActivity(any(), any(), any(), any()) } returns Result.success(Unit)
         coEvery { activityRepo.addActivity(any()) } returns Result.success("ACT-001")
         coEvery { activityRepo.saveAppointmentContacts(any(), any()) } returns Unit
 
@@ -509,7 +509,7 @@ class CreateAppointmentViewModelTest {
         advanceUntilIdle()
 
         assertTrue(vm.uiState.value.isSaved)
-        coVerify(exactly = 1) { activityRepo.updateActivity("A-EDIT", any()) }
+        coVerify(exactly = 1) { activityRepo.updateActivity("A-EDIT", any(), any(), any()) }
         coVerify(exactly = 0) { activityRepo.addActivity(any()) }
         // ต้องเรียกด้วยลิสต์ว่าง ไม่ใช่ข้ามไปเลย — เดิมข้าม ทำให้ "ติ๊กเช็คลิสต์ออกจนหมด" ไม่เคย
         // ถูกส่งไปไหน ของเก่ายังค้างทั้งในเครื่องและบน server (savePlanItems ลบก่อนเสมอ)
@@ -525,7 +525,7 @@ class CreateAppointmentViewModelTest {
         coEvery { activityRepo.getMasterActivities() } returns emptyList()
         every { authRepo.currentUser() } returns AuthUser("U1", "u@test.com", "sale")
         val updates = slot<Map<String, Any?>>()
-        coEvery { activityRepo.updateActivity("A-EDIT", capture(updates)) } returns Result.success(Unit)
+        coEvery { activityRepo.updateActivity("A-EDIT", capture(updates), any(), any()) } returns Result.success(Unit)
         coEvery { activityRepo.getActivityById("A-EDIT") } returns Result.success(
             listOf(
                 SalesActivity(
@@ -566,7 +566,7 @@ class CreateAppointmentViewModelTest {
         coEvery { activityRepo.getMasterActivities() } returns emptyList()
         every { authRepo.currentUser() } returns AuthUser("U1", "u@test.com", "sale")
         val updatesSlot = slot<Map<String, Any>>()
-        coEvery { activityRepo.updateActivity("A-EDIT", capture(updatesSlot)) } returns Result.success(Unit)
+        coEvery { activityRepo.updateActivity("A-EDIT", capture(updatesSlot), any(), any()) } returns Result.success(Unit)
         coEvery { activityRepo.getActivityById("A-EDIT") } returns Result.success(
             listOf(
                 SalesActivity(
@@ -632,7 +632,7 @@ class CreateAppointmentViewModelTest {
             vm.uiState.value.saveError
         )
         assertFalse(vm.uiState.value.isSaved)
-        coVerify(exactly = 0) { activityRepo.updateActivity(any(), any()) }
+        coVerify(exactly = 0) { activityRepo.updateActivity(any(), any(), any(), any()) }
     }
 
     @Test
@@ -640,7 +640,7 @@ class CreateAppointmentViewModelTest {
         configureBaseData()
         coEvery { activityRepo.getMasterActivities() } returns emptyList()
         every { authRepo.currentUser() } returns AuthUser("U1", "u@test.com", "sale")
-        coEvery { activityRepo.updateActivity(any(), any()) } returns Result.success(Unit)
+        coEvery { activityRepo.updateActivity(any(), any(), any(), any()) } returns Result.success(Unit)
         val vm = CreateAppointmentViewModel(context, activityRepo, projectRepo, customerRepo, contactRepo, authRepo, draftStore, java.time.Clock.system(java.time.ZoneId.of("Asia/Bangkok")), serverTimeAnchor, draftRepository)
         advanceUntilIdle()
 
@@ -670,7 +670,7 @@ class CreateAppointmentViewModelTest {
         advanceUntilIdle()
 
         assertTrue(vm.uiState.value.isSaved)
-        coVerify(exactly = 1) { activityRepo.updateActivity("A-FAR", any()) }
+        coVerify(exactly = 1) { activityRepo.updateActivity("A-FAR", any(), any(), any()) }
     }
 
     // เลือกบริษัทแล้วต้องได้รายชื่อผู้ติดต่อของบริษัทนั้นมาเลย ไม่ต้องพิมพ์ค้นหาก่อน
