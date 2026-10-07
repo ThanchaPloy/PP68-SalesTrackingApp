@@ -78,7 +78,29 @@ class SyncDiagnostics @Inject constructor(
             "error_type", "failure_types",
             // ของที่เพิ่มมาเพื่อให้ไฟล์มีร่องรอยของ error ที่เกิดตอนใช้งานจริง ไม่ใช่แค่ของ worker
             // path เก็บเฉพาะส่วน path ไม่เอา query string เพราะในนั้นมีรหัสรายการจริง
-            "method", "path", "http_code", "thread"
+            "method", "path", "http_code", "thread",
+            // failure_type ถูก record มาตั้งแต่ต้นแต่ไม่เคยอยู่ในลิสต์นี้ จึงถูกตัดทิ้งเงียบ ๆ ทุกครั้ง
+            // json_path คือเส้นทางในข้อความของ Gson เช่น $.items[2].payload.is_latest
+            // เก็บเฉพาะชื่อฟิลด์ ไม่เอาค่า เพราะไฟล์นี้ออกนอกเครื่อง
+            "failure_type", "json_path"
         )
     }
+}
+
+private val GSON_PATH = Regex("path (\\S+)")
+
+/**
+ * ดึงเฉพาะ path จากข้อความของ Gson — ไม่มี path ก็คืน null
+ *
+ * JsonSyntaxException ที่หลุดจาก delta sync บอกไม่ได้เลยว่าฟิลด์ไหนพัง เพราะ worker
+ * บันทึกแค่ชื่อคลาส แถวใน feed เรียงตาม seq พอชนแถวที่ parse ไม่ได้ก็ตายทุกรอบ
+ * (poison pill) การรู้ชื่อฟิลด์คือสิ่งเดียวที่แยก "ชนิดข้อมูลในดีบีไม่ตรงกับโมเดล" ออกมาได้
+ */
+fun jsonPathOf(error: Throwable): String? {
+    var current: Throwable? = error
+    while (current != null) {
+        GSON_PATH.find(current.message.orEmpty())?.let { return it.groupValues[1] }
+        current = current.cause.takeIf { it !== current }
+    }
+    return null
 }

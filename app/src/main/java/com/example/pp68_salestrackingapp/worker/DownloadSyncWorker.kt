@@ -11,6 +11,7 @@ import com.example.pp68_salestrackingapp.data.repository.DeltaSyncCursorExpiredE
 import com.example.pp68_salestrackingapp.data.repository.DeltaSyncProtocolException
 import com.example.pp68_salestrackingapp.data.model.SyncState
 import com.example.pp68_salestrackingapp.utils.SyncDiagnostics
+import com.example.pp68_salestrackingapp.utils.jsonPathOf
 import com.example.pp68_salestrackingapp.utils.SyncFailureType
 import com.example.pp68_salestrackingapp.utils.classifySyncFailure
 import dagger.assisted.Assisted
@@ -53,11 +54,12 @@ class DownloadSyncWorker @AssistedInject constructor(
         } catch (e: Exception) {
             val failureType = classifySyncFailure(e)
             downloadSync.reportFailedParts(listOf("ดาวน์โหลดข้อมูล"))
-            diagnostics.record("download_failed", mapOf(
-                "worker_attempt" to runAttemptCount,
-                "error_type" to e::class.java.simpleName,
-                "failure_type" to failureType.name
-            ))
+            diagnostics.record("download_failed", buildMap {
+                put("worker_attempt", runAttemptCount)
+                put("error_type", e::class.java.simpleName)
+                put("failure_type", failureType.name)
+                jsonPathOf(e)?.let { put("json_path", it) }
+            })
             when {
                 e is DeltaSyncCursorExpiredException -> Result.retry()
                 e is DeltaSyncProtocolException -> Result.failure(
