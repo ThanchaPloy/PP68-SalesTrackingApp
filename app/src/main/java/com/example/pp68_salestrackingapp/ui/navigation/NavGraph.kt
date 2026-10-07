@@ -188,6 +188,9 @@ fun SalesTrackingApp(initialSettingsScreen: String? = null) {
                 onEdit = { id -> navController.navigate(Route.EditActivity.createRoute(id)) },
                 onCheckin = { id -> navController.navigate(Route.CheckIn.createRoute(id)) },
                 onSaveResult = { id -> navController.navigate(Route.SalesResult.createRoute(id)) },
+                onSaveStandaloneResult = { projectId ->
+                    navController.navigate(Route.StandaloneSalesResult.createRoute(projectId))
+                },
                 onNotificationClick = { navController.navigate(Route.Notification.path) },
                 onSettingsClick = { navController.navigate(Route.Settings.path) },
                 onLogoutClick = onLogout

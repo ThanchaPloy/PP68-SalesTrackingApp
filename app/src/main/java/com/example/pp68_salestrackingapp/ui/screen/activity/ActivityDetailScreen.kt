@@ -62,6 +62,10 @@ fun ActivityDetailScreen(
     // นำไปหน้าบันทึกผลตรง ๆ — ไม่มี API call ระหว่างทางแล้ว การเปลี่ยนสถานะเป็น completed
     // เกิดขึ้นตอนบันทึกผลสำเร็จ (SalesResultViewModel.save()) ไม่ใช่ตอนกดปุ่มนี้
     onSaveResult: (String) -> Unit = {},
+    // นัดที่ขาดไปแล้วบันทึกผลผ่านนัดไม่ได้ (AppointmentPolicy.canCreateResult ปฏิเสธด้วย
+    // MISSED_ONSITE_RESULT_NOT_ALLOWED) แต่การเข้าพบที่เกิดขึ้นจริงยังต้องบันทึกได้
+    // ทางที่เหลือคือบันทึกผูกกับโครงการตรง ๆ ซึ่งข้ามกติกานี้โดยตั้งใจ
+    onSaveStandaloneResult: (String) -> Unit = {},
     onNotificationClick: () -> Unit = {},
     onSettingsClick:     () -> Unit = {},
     onLogoutClick:       () -> Unit = {},
@@ -87,6 +91,7 @@ fun ActivityDetailScreen(
         onCheckin    = { onCheckin(activityId) },
         onToggleItem = { viewModel.toggleItem(it) },
         onSaveResult = { onSaveResult(activityId) },
+        onSaveStandaloneResult = { projectId -> onSaveStandaloneResult(projectId) },
         onClearError = { viewModel.clearError() },
         onNotificationClick = onNotificationClick,
         onSettingsClick     = onSettingsClick,
@@ -103,6 +108,7 @@ fun ActivityDetailContent(
     onCheckin: () -> Unit,
     onToggleItem: (Int) -> Unit,
     onSaveResult: () -> Unit,
+    onSaveStandaloneResult: (String) -> Unit = {},
     onClearError: () -> Unit,
     onNotificationClick: () -> Unit = {},
     onSettingsClick:     () -> Unit = {},
@@ -265,7 +271,7 @@ fun ActivityDetailContent(
                         }
                     }
 
-                    "checked_in", AppointmentPolicy.MISSING -> {
+                    "checked_in" -> {
                         Button(
                             onClick  = onSaveResult,
                             modifier = Modifier.fillMaxWidth().height(54.dp),
@@ -275,6 +281,59 @@ fun ActivityDetailContent(
                             Icon(Icons.Default.CheckCircle, null, tint = White, modifier = Modifier.size(20.dp))
                             Spacer(Modifier.width(8.dp))
                             Text("ไปหน้าบันทึกผล", fontWeight = FontWeight.Bold, color = White)
+                        }
+                    }
+
+                    // ขาดนัด = นัดหน้างานที่พ้นวันนัดแล้วและไม่เคยเช็คอิน
+                    //
+                    // เดิมกิ่งนี้รวมอยู่กับ checked_in แล้วโชว์ปุ่ม "ไปหน้าบันทึกผล" เหมือนกัน
+                    // แต่ AppointmentPolicy.canCreateResult ปฏิเสธนัดแบบนี้เสมอด้วย
+                    // MISSED_ONSITE_RESULT_NOT_ALLOWED และ MISSING เกิดได้เฉพาะนัด onsite
+                    // (ประเภทอื่น requiresCheckIn เป็น false จึงไม่มีวันเป็น MISSING)
+                    // ปุ่มนั้นจึงตันเสมอ 100% ผู้ใช้กรอกสรุปการเข้าพบ แนบรูป แล้วค่อยโดนปฏิเสธ
+                    // ตอนกดบันทึก — เสียเวลากรอกฟรีทั้งฟอร์ม
+                    //
+                    // การเข้าพบที่เกิดขึ้นจริงยังต้องบันทึกได้ ทางที่เหลือคือบันทึกผูกกับโครงการ
+                    // ตรง ๆ (ResultMode.STANDALONE) ซึ่ง SalesResultViewModel.save() ข้ามกติกา
+                    // ของนัดโดยตั้งใจ จึงชี้ทางไปตรงนั้นแทนการซ่อนปุ่มเฉย ๆ
+                    AppointmentPolicy.MISSING -> {
+                        val linkedProjectId = s.activity?.projectId?.takeIf { it.isNotBlank() }
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(Color(0xFFC62828).copy(0.08f), RoundedCornerShape(12.dp))
+                                .padding(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            Text(
+                                "ขาดนัด — ไม่มีการเช็คอินภายในวันนัด",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 14.sp,
+                                color = Color(0xFFC62828)
+                            )
+                            Text(
+                                if (linkedProjectId != null) {
+                                    "นัดนี้บันทึกผลผ่านนัดหมายไม่ได้แล้ว หากเข้าพบจริง " +
+                                        "ให้บันทึกการเข้าพบผูกกับโครงการแทน"
+                                } else {
+                                    "นัดนี้บันทึกผลผ่านนัดหมายไม่ได้แล้ว และยังไม่ได้ผูกกับโครงการใด " +
+                                        "หากเข้าพบจริง ให้เปิดหน้าโครงการที่เกี่ยวข้องแล้วบันทึกการเข้าพบจากตรงนั้น"
+                                },
+                                fontSize = 13.sp,
+                                color = TextGray
+                            )
+                            if (linkedProjectId != null) {
+                                Button(
+                                    onClick  = { onSaveStandaloneResult(linkedProjectId) },
+                                    modifier = Modifier.fillMaxWidth().height(54.dp),
+                                    colors   = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32)),
+                                    shape    = RoundedCornerShape(12.dp)
+                                ) {
+                                    Icon(Icons.Default.CheckCircle, null, tint = White, modifier = Modifier.size(20.dp))
+                                    Spacer(Modifier.width(8.dp))
+                                    Text("บันทึกการเข้าพบที่โครงการ", fontWeight = FontWeight.Bold, color = White)
+                                }
+                            }
                         }
                     }
                 }
