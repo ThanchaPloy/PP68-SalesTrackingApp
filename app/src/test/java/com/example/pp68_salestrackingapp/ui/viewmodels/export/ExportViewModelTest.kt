@@ -42,6 +42,8 @@ class ExportViewModelTest {
     fun setup() {
         Dispatchers.setMain(testDispatcher)
         every { projectRepo.getAllProjectsFlow() } returns flowOf(emptyList())
+        // แผนที่แปลรหัสโครงการเป็นชื่อ เป็นคนละเส้นกับรายการที่กรองเจ้าของแล้ว
+        every { projectRepo.getAllProjectsForNameLookup() } returns flowOf(emptyList())
         every { activityRepo.getAllResultsFlow() } returns flowOf(emptyList())
         viewModel = ExportViewModel(activityRepo, projectRepo, placeSearchRepo)
     }

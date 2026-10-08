@@ -47,10 +47,21 @@ class ActivityRepository @Inject constructor(
     @ApplicationContext private val context: android.content.Context,
     // กติกานัดหมายทั้งชุดขึ้นกับ "ตอนนี้กี่โมง" จึงรับนาฬิกาเข้ามา ไม่เรียก now() เองในนี้
     private val clock: java.time.Clock,
-    private val serverTimeAnchor: com.example.pp68_salestrackingapp.utils.ServerTimeAnchor
+    private val serverTimeAnchor: com.example.pp68_salestrackingapp.utils.ServerTimeAnchor,
+    private val tokenManager: com.example.pp68_salestrackingapp.di.TokenManager
 ) {
     // ติดตามรายการนัดหมายทั้งหมดจากฐานข้อมูลในเครื่อง
-    fun getAllActivitiesFlow(): Flow<List<SalesActivity>> = activityDao.getAllActivities()
+
+    /**
+     * รหัสผู้ใช้ปัจจุบัน ใช้กรองให้เห็นเฉพาะของตัวเอง
+     *
+     * อ่านจาก TokenManager ในชั้นนี้ ไม่ส่งผ่านพารามิเตอร์จากทุก ViewModel เพราะลืมที่ใดที่หนึ่ง
+     * แล้วเป็นรูรั่วเงียบ ไม่ได้ล็อกอินคืนค่าว่าง = ไม่เห็นอะไรเลย ซึ่งปลอดภัยกว่าเห็นของทุกคน
+     */
+    private fun ownerId(): String = tokenManager.getUserData()?.userId.orEmpty()
+
+    /** นัดหมายของผู้ใช้คนนี้ — ตาราง activity_table ในเครื่องมีของทั้งสาขาเหมือน project */
+    fun getAllActivitiesFlow(): Flow<List<SalesActivity>> = activityDao.getActivitiesOwnedBy(ownerId())
 
     // ติดตามรายการนัดหมายของโครงการที่ระบุ
     fun getActivitiesByProjectFlow(projectId: String): Flow<List<SalesActivity>> =
@@ -63,7 +74,8 @@ class ActivityRepository @Inject constructor(
     // ติดตามรหัสบันทึกผลการขายทั้งหมด
     fun getAllResultIdsFlow(): Flow<List<String>> = resultDao.getAllResultIdsFlow()
     // ติดตามบันทึกผลการขายทั้งหมด
-    fun getAllResultsFlow(): Flow<List<ActivityResult>> = resultDao.getAllResultsFlow()
+    /** ผลการขายของผู้ใช้คนนี้ — ใช้กับรายงานและสถิติ */
+    fun getAllResultsFlow(): Flow<List<ActivityResult>> = resultDao.getResultsOwnedBy(ownerId())
     // ติดตามบันทึกผลการขายของโครงการที่ระบุ
     fun getResultsByProjectFlow(projectId: String): Flow<List<ActivityResult>> =
         resolvedIdFlow(LocalIdMapping.ENTITY_PROJECT, projectId)
@@ -660,7 +672,7 @@ class ActivityRepository @Inject constructor(
     suspend fun getMyActivitiesWithDetails(): kotlin.Result<List<ActivityCard>> {
         return withContext(Dispatchers.IO) {
             try {
-                val activities = activityDao.getAllActivities().first()
+                val activities = activityDao.getActivitiesOwnedBy(ownerId()).first()
                 val projects = projectDao.getAllProjects().first().associateBy { it.projectId }
                 val customers = customerDao.getAllForNameLookup().associateBy { it.custId }
                 val cards = activities.map { activity ->

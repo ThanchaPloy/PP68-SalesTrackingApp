@@ -11,10 +11,16 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface ActivityDao {
+    /** นัดหมายของผู้ใช้คนนี้เท่านั้น — คอลัมน์เจ้าของคือ user_id (@SerializedName คือ emp_code) */
+    @Query("SELECT * FROM activity_table WHERE user_id = :ownerId ORDER BY planned_date DESC")
+    fun getActivitiesOwnedBy(ownerId: String): Flow<List<@JvmSuppressWildcards SalesActivity>>
+
     @Query("SELECT * FROM activity_table ORDER BY planned_date DESC")
+    // ดึงข้อมูล ทั้งหมด กิจกรรม
     fun getAllActivities(): Flow<List<@JvmSuppressWildcards SalesActivity>>
 
     @Query("SELECT * FROM activity_table WHERE planned_date >= :startDate AND planned_date <= :endDate")
+    // ดึงข้อมูล กิจกรรม ตาม วันที่ Range
     fun getActivitiesByDateRange(startDate: String, endDate: String): Flow<List<@JvmSuppressWildcards SalesActivity>>
 
     /**
@@ -56,6 +62,7 @@ interface ActivityDao {
         ORDER BY a.planned_date ASC, a.planned_time ASC, a.appointment_id ASC
         """
     )
+    // ดึงข้อมูล กิจกรรม Cards สำหรับ Month
     fun getActivityCardsForMonth(
         userId: String,
         startDate: String,
@@ -63,30 +70,39 @@ interface ActivityDao {
     ): Flow<List<ActivityCardRow>>
 
     @Query("SELECT * FROM activity_table WHERE project_id = :projectId")
+    // ดึงข้อมูล กิจกรรม ตาม โครงการ
     fun getActivitiesByProject(projectId: String): Flow<List<@JvmSuppressWildcards SalesActivity>>
 
     @Query("SELECT * FROM activity_table WHERE cust_id = :customerId")
+    // ดึงข้อมูล กิจกรรม ตาม ลูกค้า
     fun getActivitiesByCustomer(customerId: String): Flow<List<@JvmSuppressWildcards SalesActivity>>
 
     @Query("SELECT * FROM activity_table WHERE appointment_id = :id LIMIT 1")
+    // ดึงข้อมูล กิจกรรม ตาม รหัส
     suspend fun getActivityById(id: String): SalesActivity?
 
     @Insert(onConflict = OnConflictStrategy.IGNORE)
+    // เพิ่ม กิจกรรม Raw
     suspend fun insertActivitiesRaw(activities: List<SalesActivity>): List<Long>
 
     @Insert(onConflict = OnConflictStrategy.IGNORE)
+    // เพิ่ม กิจกรรม Raw
     suspend fun insertActivityRaw(activity: SalesActivity): Long
 
     @Update
+    // อัปเดต กิจกรรม
     suspend fun updateActivities(activities: List<SalesActivity>)
 
     @Update
+    // อัปเดต กิจกรรม Raw
     suspend fun updateActivityRaw(activity: SalesActivity)
 
     @Query("SELECT appointment_id FROM activity_table WHERE is_synced = 0")
+    // ดึงข้อมูล ที่ยังไม่ซิงก์ กิจกรรม รหัส
     suspend fun getUnsyncedActivityIds(): List<String>
 
     @Transaction
+    // เพิ่ม กิจกรรม
     suspend fun insertActivities(activities: List<SalesActivity>) {
         val insertResults = insertActivitiesRaw(activities)
         val updateList = mutableListOf<SalesActivity>()
@@ -105,6 +121,7 @@ interface ActivityDao {
     }
 
     @Transaction
+    // เพิ่ม กิจกรรม
     suspend fun insertActivity(activity: SalesActivity) {
         val insertResult = insertActivityRaw(activity)
         if (insertResult == -1L) {
@@ -114,15 +131,18 @@ interface ActivityDao {
 
 
     @Transaction
+    // เพิ่ม ทั้งหมด
     suspend fun insertAll(activities: List<SalesActivity>) {
         insertActivities(activities)
     }
 
 
     @Query("DELETE FROM activity_table WHERE is_synced = 1")
+    // ลบ ทั้งหมด Synced
     suspend fun deleteAllSynced()
 
     @Transaction
+    // ล้าง And Insert
     suspend fun clearAndInsert(activities: List<SalesActivity>) {
         val incomingIds = activities.map { it.activityId }
         if (incomingIds.isNotEmpty()) {
@@ -134,40 +154,52 @@ interface ActivityDao {
     }
 
     @Query("DELETE FROM activity_table WHERE is_synced = 1 AND appointment_id NOT IN (:incomingIds)")
+    // ลบ Synced กิจกรรม Not ใน
     suspend fun deleteSyncedActivitiesNotIn(incomingIds: List<String>)
 
     @Query("DELETE FROM activity_table WHERE appointment_id = :activityId")
+    // ลบ กิจกรรม ตาม รหัส
     suspend fun deleteActivityById(activityId: String)
 
     @Query("DELETE FROM activity_table WHERE project_id = :projectId")
+    // ลบ กิจกรรม ตาม โครงการ รหัส
     suspend fun deleteActivitiesByProjectId(projectId: String)
 
     @Query("DELETE FROM activity_table WHERE cust_id = :customerId")
+    // ลบ กิจกรรม ตาม ลูกค้า รหัส
     suspend fun deleteActivitiesByCustomerId(customerId: String)
 
     @Query("SELECT * FROM activity_table WHERE is_synced = 0")
+    // ดึงข้อมูล ที่ยังไม่ซิงก์ กิจกรรม
     suspend fun getUnsyncedActivities(): List<SalesActivity>
 
     @Query("UPDATE activity_table SET is_synced = :isSynced WHERE appointment_id = :activityId")
+    // อัปเดต การซิงก์ สถานะ
     suspend fun updateSyncStatus(activityId: String, isSynced: Boolean)
 
     @Query("UPDATE activity_table SET location_name = :locationName WHERE appointment_id = :activityId")
+    // อัปเดต ตำแหน่ง Name
     suspend fun updateLocationName(activityId: String, locationName: String)
 
     @Query("UPDATE activity_table SET cust_id = :newCustId WHERE cust_id = :oldCustId")
+    // อัปเดต Cust รหัส สำหรับ กิจกรรม
     suspend fun updateCustIdForActivities(oldCustId: String, newCustId: String)
 
     @Query("UPDATE activity_table SET project_id = :newProjectId WHERE project_id = :oldProjectId")
+    // อัปเดต โครงการ รหัส สำหรับ กิจกรรม
     suspend fun updateProjectIdForActivities(oldProjectId: String, newProjectId: String)
 
     @Query("UPDATE appointment_contact SET appointment_id = :realId WHERE appointment_id = :tempId")
+    // เปลี่ยนการอ้างอิงของ นัดหมาย ผู้ติดต่อ รหัส
     suspend fun remapAppointmentContactIds(tempId: String, realId: String)
 
     @Query("UPDATE activity_plan_item SET appointmentId = :realId WHERE appointmentId = :tempId")
+    // เปลี่ยนการอ้างอิงของ แผน รายการ นัดหมาย รหัส
     suspend fun remapPlanItemAppointmentIds(tempId: String, realId: String)
 
     /** Replaces a server-generated appointment ID and all local references atomically. */
     @Transaction
+    // แทนที่ Temporary กิจกรรม
     suspend fun replaceTemporaryActivity(tempId: String, replacement: SalesActivity) {
         insertActivity(replacement)
         remapAppointmentContactIds(tempId, replacement.activityId)

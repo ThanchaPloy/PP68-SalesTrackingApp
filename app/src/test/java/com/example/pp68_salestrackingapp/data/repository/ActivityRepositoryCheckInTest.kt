@@ -33,6 +33,7 @@ class ActivityRepositoryCheckInTest {
     private val syncManager: SyncManager = mockk(relaxed = true)
     private val networkMonitor: com.example.pp68_salestrackingapp.utils.NetworkMonitor = mockk(relaxed = true)
     private val serverTimeAnchor: com.example.pp68_salestrackingapp.utils.ServerTimeAnchor = mockk(relaxed = true)
+    private val tokenManager: com.example.pp68_salestrackingapp.di.TokenManager = mockk(relaxed = true)
     private val context: android.content.Context = mockk(relaxed = true)
 
     private lateinit var repo: ActivityRepository
@@ -52,7 +53,7 @@ class ActivityRepositoryCheckInTest {
         repo = ActivityRepository(
             apiService, activityDao, projectDao, localIdMappingDao, customerDao, contactDao,
             planItemDao, resultDao, photoDao, appointmentContactDao, projectRepo, syncManager,
-            networkMonitor, context, java.time.Clock.systemUTC(), serverTimeAnchor
+            networkMonitor, context, java.time.Clock.systemUTC(), serverTimeAnchor, tokenManager
         )
         coEvery { localIdMappingDao.resolveExistingId(any(), any()) } answers { secondArg() }
         coEvery { localIdMappingDao.resolveMappedId(any(), any()) } answers { secondArg() }

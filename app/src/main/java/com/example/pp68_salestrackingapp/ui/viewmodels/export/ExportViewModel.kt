@@ -136,7 +136,9 @@ class ExportViewModel @Inject constructor(
                     } catch (e: Exception) { false }
                 }
 
-                val projectsMap = projectRepo.getAllProjectsFlow().first().associateBy { it.projectId }
+                // แผนที่นี้ใช้แปลรหัสโครงการเป็นชื่อเท่านั้น ไม่ใช่รายการที่เอาไปโชว์
+                // ถ้ากรองเจ้าของ นัดหมายที่อ้างถึงโครงการของคนอื่นจะขึ้นชื่อโครงการว่าง
+                val projectsMap = projectRepo.getAllProjectsForNameLookup().first().associateBy { it.projectId }
                 val exportItems = mutableListOf<ExportActivityItem>()
 
                 // ✅ เดิม filter allResults ทับทุก activity (O(N·M)) — group ครั้งเดียวแล้ว lookup O(1) แทน

@@ -38,9 +38,33 @@ class ProjectRepository @Inject constructor(
     private val projectContactDao: ProjectContactDao,
     private val contactDao: ContactDao,
     private val syncManager: SyncManager,
-    private val networkMonitor: com.example.pp68_salestrackingapp.utils.NetworkMonitor
+    private val networkMonitor: com.example.pp68_salestrackingapp.utils.NetworkMonitor,
+    private val tokenManager: com.example.pp68_salestrackingapp.di.TokenManager
 ) {
-    fun getAllProjectsFlow(): Flow<List<Project>> = projectDao.getAllProjects()
+    /**
+     * รหัสผู้ใช้ปัจจุบัน ใช้กรองให้เห็นเฉพาะของตัวเอง
+     *
+     * อ่านจาก TokenManager ในชั้นนี้ ไม่ส่งผ่านพารามิเตอร์จากทุก ViewModel เพราะลืมที่ใดที่หนึ่ง
+     * แล้วเป็นรูรั่วเงียบ ไม่ได้ล็อกอินคืนค่าว่าง = ไม่เห็นอะไรเลย ซึ่งปลอดภัยกว่าเห็นของทุกคน
+     */
+    private fun ownerId(): String = tokenManager.getUserData()?.userId.orEmpty()
+
+    /**
+     * โครงการของผู้ใช้คนนี้ ใช้กับทุกที่ที่เอาไป "แสดงเป็นรายการ" เช่น รายงาน สถิติ dropdown
+     *
+     * ตาราง project ในเครื่องมีของทั้งสาขา เพราะ delta sync ดึงตามขอบเขตที่ผู้ใช้มีสิทธิ์เห็น
+     * (resolveScope ฝั่ง server คิดจากสาขา) ถ้าไม่กรอง รายงานจะมีของเพื่อนร่วมสาขาปนมา
+     */
+    fun getAllProjectsFlow(): Flow<List<Project>> = projectDao.getProjectsOwnedBy(ownerId())
+
+    /**
+     * ทุกโครงการในเครื่อง ไม่กรองเจ้าของ — ใช้แปลรหัสโครงการเป็นชื่อเท่านั้น
+     *
+     * การ "แปลรหัสเป็นชื่อ" ไม่ใช่ขอบเขตการมองเห็น ถ้านัดหมายอ้างถึงโครงการของคนอื่น
+     * รายงานควรขึ้นชื่อได้ ไม่ใช่ว่างเปล่า ห้ามเอาไปใช้เติม dropdown หรือหน้ารายการ
+     */
+    fun getAllProjectsForNameLookup(): Flow<List<Project>> = projectDao.getAllProjects()
+    // ค้นหา โครงการ กระแสข้อมูล
     fun searchProjectsFlow(query: String): Flow<List<Project>> =
         projectDao.searchProjects("%$query%")
 
@@ -93,6 +117,7 @@ class ProjectRepository @Inject constructor(
         }
     ).flow
 
+    // ดึงข้อมูล โครงการ ตาม รหัส กระแสข้อมูล
     fun getProjectByIdFlow(projectId: String): Flow<Project?> =
         if (projectId.startsWith("TEMP-")) {
             localIdMappingDao.observeRealId(LocalIdMapping.ENTITY_PROJECT, projectId)
@@ -108,6 +133,7 @@ class ProjectRepository @Inject constructor(
         const val PROJECT_MAX_LOADED_ROWS = 150
     }
 
+    // รีเฟรช โครงการ
     suspend fun refreshProjects(userId: String): Result<Unit> {
         return withContext(Dispatchers.IO) {
             try {
@@ -134,6 +160,7 @@ class ProjectRepository @Inject constructor(
         }
     }
 
+    // สร้าง โครงการ
     suspend fun createProject(project: Project, userId: String): Result<Project> {
         return withContext(Dispatchers.IO) {
             val today = java.time.LocalDate.now().toString()
@@ -294,6 +321,7 @@ class ProjectRepository @Inject constructor(
         }
     }
 
+    // ลบ โครงการ
     suspend fun deleteProject(projectId: String): Result<Unit> {
         return withContext(Dispatchers.IO) {
             try {
@@ -325,6 +353,7 @@ class ProjectRepository @Inject constructor(
         }
     }
 
+    // บันทึก โครงการ ผู้ติดต่อ
     suspend fun saveProjectContacts(projectId: String, contactIds: List<String>): Result<Unit> {
         return withContext(Dispatchers.IO) {
             Log.d("ProjectRepo", "saveProjectContacts started. projectId=$projectId, ${contactIds.size} contacts")
@@ -370,6 +399,7 @@ class ProjectRepository @Inject constructor(
         }
     }
 
+    // ดึงข้อมูล โครงการ ผู้ติดต่อ
     suspend fun getProjectContacts(projectId: String): Result<List<ContactPerson>> {
         return withContext(Dispatchers.IO) {
             val resolvedProjectId = localIdMappingDao.resolveMappedId(LocalIdMapping.ENTITY_PROJECT, projectId)
@@ -426,6 +456,7 @@ class ProjectRepository @Inject constructor(
         }
     }
 
+    // อัปเดต โครงการ Fields
     suspend fun updateProjectFields(projectId: String, fields: Map<String, Any?>): Result<Unit> {
         return try {
             val resolvedId = localIdMappingDao.resolveExistingId(LocalIdMapping.ENTITY_PROJECT, projectId)
@@ -466,6 +497,7 @@ class ProjectRepository @Inject constructor(
         } catch (e: Exception) { Result.failure(e) }
     }
 
+    // ดึงข้อมูล Members ตาม สาขา
     suspend fun getMembersByBranch(branchId: String): Result<List<Pair<String, String>>> {
         return withContext(Dispatchers.IO) {
             try {
@@ -485,6 +517,7 @@ class ProjectRepository @Inject constructor(
         }
     }
 
+    // ดึงข้อมูล สาขา
     suspend fun getBranches(): Result<List<Pair<String, String>>> {
         return try {
             val response = apiService.getBranches()
@@ -493,6 +526,7 @@ class ProjectRepository @Inject constructor(
         } catch (e: Exception) { Result.success(emptyList()) }
     }
 
+    // ดึงข้อมูล โครงการ ตาม รหัส
     suspend fun getProjectById(projectId: String): Result<Project> {
         return withContext(Dispatchers.IO) {
             try {
