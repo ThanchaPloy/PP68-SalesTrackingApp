@@ -49,8 +49,10 @@ class ActivityRepository @Inject constructor(
     private val clock: java.time.Clock,
     private val serverTimeAnchor: com.example.pp68_salestrackingapp.utils.ServerTimeAnchor
 ) {
+    // ติดตามรายการนัดหมายทั้งหมดจากฐานข้อมูลในเครื่อง
     fun getAllActivitiesFlow(): Flow<List<SalesActivity>> = activityDao.getAllActivities()
 
+    // ติดตามรายการนัดหมายของโครงการที่ระบุ
     fun getActivitiesByProjectFlow(projectId: String): Flow<List<SalesActivity>> =
         resolvedIdFlow(LocalIdMapping.ENTITY_PROJECT, projectId).flatMapLatest { resolvedId ->
             activityDao.getActivitiesByProject(resolvedId).map { list ->
@@ -58,16 +60,21 @@ class ActivityRepository @Inject constructor(
             }
         }
 
+    // ติดตามรหัสบันทึกผลการขายทั้งหมด
     fun getAllResultIdsFlow(): Flow<List<String>> = resultDao.getAllResultIdsFlow()
+    // ติดตามบันทึกผลการขายทั้งหมด
     fun getAllResultsFlow(): Flow<List<ActivityResult>> = resultDao.getAllResultsFlow()
+    // ติดตามบันทึกผลการขายของโครงการที่ระบุ
     fun getResultsByProjectFlow(projectId: String): Flow<List<ActivityResult>> =
         resolvedIdFlow(LocalIdMapping.ENTITY_PROJECT, projectId)
             .flatMapLatest(resultDao::getAllResultsByProject)
 
+    // ติดตามประวัติทุกเวอร์ชันของบันทึกผลการขาย
     fun getResultVersionHistory(resultGroupId: String): Flow<List<ActivityResult>> =
         resolvedIdFlow(LocalIdMapping.ENTITY_RESULT, resultGroupId)
             .flatMapLatest(resultDao::getVersionHistory)
 
+    // ติดตามประวัติบันทึกผลการขายแบบแบ่งหน้า
     fun getResultVersionHistoryPaging(resultGroupId: String): Flow<PagingData<ActivityResult>> =
         resolvedIdFlow(LocalIdMapping.ENTITY_RESULT, resultGroupId).flatMapLatest { resolvedId ->
             Pager(
@@ -82,6 +89,7 @@ class ActivityRepository @Inject constructor(
             ).flow
         }
 
+    // ติดตามรหัสจริงบนเซิร์ฟเวอร์ที่สัมพันธ์กับรหัสชั่วคราว
     private fun resolvedIdFlow(entityType: String, id: String): Flow<String> =
         if (id.startsWith("TEMP-")) {
             localIdMappingDao.observeRealId(entityType, id).map { it ?: id }
@@ -89,6 +97,7 @@ class ActivityRepository @Inject constructor(
             kotlinx.coroutines.flow.flowOf(id)
         }
 
+    // ติดตามการ์ดนัดหมายของเดือนที่ระบุ
     fun getActivityCardsForMonthFlow(
         userId: String,
         startDate: String,
@@ -120,6 +129,7 @@ class ActivityRepository @Inject constructor(
             }
         }
 
+    // รีเฟรช กิจกรรม
     suspend fun refreshActivities(userId: String): kotlin.Result<Unit> {
         return withContext(Dispatchers.IO) {
             try {
@@ -170,6 +180,7 @@ class ActivityRepository @Inject constructor(
         }
     }
 
+    // รีเฟรช ผลการขาย
     suspend fun refreshResults(userId: String): kotlin.Result<Unit> {
         return withContext(Dispatchers.IO) {
             try {
@@ -213,6 +224,7 @@ class ActivityRepository @Inject constructor(
         }
     }
 
+    // เพิ่ม กิจกรรม
     suspend fun addActivity(activity: SalesActivity): kotlin.Result<String> {
         return withContext(Dispatchers.IO) {
             val tempId = "TEMP-${java.util.UUID.randomUUID().toString().take(8).uppercase()}"
@@ -398,6 +410,7 @@ class ActivityRepository @Inject constructor(
         }
     }
 
+    // บันทึกรายการแผนงานของนัดหมายลงฐานข้อมูลในเครื่อง
     suspend fun savePlanItems(appointmentId: String, items: List<ActivityPlanItem>) {
         withContext(Dispatchers.IO) {
             // เก็บลงเครื่องแบบยังไม่ซิงค์ไว้ก่อน แล้วค่อยปลดธงเมื่อส่งขึ้น server สำเร็จ
@@ -435,6 +448,7 @@ class ActivityRepository @Inject constructor(
         }
     }
 
+    // ดึงรายการแผนงานของนัดหมายที่ระบุ
     suspend fun getPlanItems(activityId: String): kotlin.Result<List<PlanItemDto>> {
         return withContext(Dispatchers.IO) {
             try {
@@ -466,6 +480,7 @@ class ActivityRepository @Inject constructor(
         }
     }
 
+    // อัปเดตสถานะสำเร็จของรายการแผนงาน
     suspend fun updatePlanItemStatus(activityId: String, masterId: Int, isDone: Boolean) {
         withContext(Dispatchers.IO) {
             val resolvedId = localIdMappingDao.resolveExistingId(LocalIdMapping.ENTITY_ACTIVITY, activityId)
@@ -473,6 +488,7 @@ class ActivityRepository @Inject constructor(
         }
     }
 
+    // อัปเดตรายการเช็กลิสต์และเตรียมข้อมูลสำหรับซิงก์
     suspend fun updateChecklistItem(appointmentId: String, masterId: Int, isDone: Boolean) {
         withContext(Dispatchers.IO) {
             val resolvedId = localIdMappingDao.resolveExistingId(LocalIdMapping.ENTITY_ACTIVITY, appointmentId)
@@ -497,6 +513,7 @@ class ActivityRepository @Inject constructor(
         }
     }
 
+    // ดึงข้อมูล กิจกรรม ตาม รหัส
     suspend fun getActivityById(id: String): kotlin.Result<List<SalesActivity>> {
         return withContext(Dispatchers.IO) {
             val resolvedId = localIdMappingDao.resolveMappedId(LocalIdMapping.ENTITY_ACTIVITY, id)
@@ -517,6 +534,7 @@ class ActivityRepository @Inject constructor(
         }
     }
 
+    // บันทึกการเช็กอินพร้อมพิกัดและผลการตรวจสอบตำแหน่ง
     suspend fun checkIn(activityId: String, lat: Double, lng: Double, isVerified: Boolean, distanceDeviation: Double? = null): kotlin.Result<Unit> {
         return withContext(Dispatchers.IO) {
             val resolvedId = try {
@@ -581,6 +599,7 @@ class ActivityRepository @Inject constructor(
         }
     }
 
+    // ปิดนัดหมายพร้อมบันทึกเช็กลิสต์และหมายเหตุ
     suspend fun finishActivity(activityId: String, doneMasterIds: List<Int>, note: String?): kotlin.Result<Unit> {
         return withContext(Dispatchers.IO) {
             val resolvedId = try {
@@ -637,12 +656,13 @@ class ActivityRepository @Inject constructor(
         }
     }
 
+    // ดึงนัดหมายของผู้ใช้ปัจจุบันพร้อมรายละเอียดที่เกี่ยวข้อง
     suspend fun getMyActivitiesWithDetails(): kotlin.Result<List<ActivityCard>> {
         return withContext(Dispatchers.IO) {
             try {
                 val activities = activityDao.getAllActivities().first()
                 val projects = projectDao.getAllProjects().first().associateBy { it.projectId }
-                val customers = customerDao.getAllCustomers().first().associateBy { it.custId }
+                val customers = customerDao.getAllForNameLookup().associateBy { it.custId }
                 val cards = activities.map { activity ->
                     val project = activity.projectId?.let { projects[it] }
                     val customer = activity.customerId?.let { customers[it] }
@@ -655,6 +675,7 @@ class ActivityRepository @Inject constructor(
         }
     }
 
+    // ดึงข้อมูลมาสเตอร์สำหรับประเภทกิจกรรม
     suspend fun getMasterActivities(): List<ActivityMaster> {
         return withContext(Dispatchers.IO) {
             try {
@@ -683,6 +704,7 @@ class ActivityRepository @Inject constructor(
         try { appointmentContactDao.deleteContactsByAppointmentId(activityId) } catch (_: Exception) {}
     }
 
+    // ลบ กิจกรรม
     suspend fun deleteActivity(activityId: String): kotlin.Result<Unit> {
         return withContext(Dispatchers.IO) {
             var resolvedId = activityId
@@ -726,6 +748,7 @@ class ActivityRepository @Inject constructor(
         }
     }
 
+    // ดึงบันทึกผลการขายของนัดหมายที่ระบุ
     suspend fun getActivityResult(activityId: String): ActivityResult? {
         return withContext(Dispatchers.IO) {
             val resolvedActivityId = localIdMappingDao.resolveMappedId(LocalIdMapping.ENTITY_ACTIVITY, activityId)
@@ -748,6 +771,7 @@ class ActivityRepository @Inject constructor(
         }
     }
 
+    // รีเฟรชรายการรูปภาพของบันทึกผลการขายจากเซิร์ฟเวอร์
     private suspend fun refreshPhotosForResult(resultId: String) {
         try {
             val pr = apiService.getResultPhotos("eq.$resultId")
@@ -755,6 +779,7 @@ class ActivityRepository @Inject constructor(
         } catch (_: Exception) {}
     }
 
+    // ดึงข้อมูล ผลการขาย ตาม รหัส
     suspend fun getResultById(resultId: String): ActivityResult? {
         return withContext(Dispatchers.IO) {
             val resolvedId = localIdMappingDao.resolveMappedId(LocalIdMapping.ENTITY_RESULT, resultId)
@@ -773,12 +798,14 @@ class ActivityRepository @Inject constructor(
         }
     }
 
+    // บันทึก กิจกรรม ผลการขาย
     suspend fun saveActivityResult(result: ActivityResult, photos: List<ResultPhotoInput> = emptyList()): kotlin.Result<Unit> {
         return withContext(Dispatchers.IO) {
             saveResultAsNewVersion(result, photos)
         }
     }
 
+    // บันทึกผลการขายที่ไม่ได้ผูกกับนัดหมาย
     suspend fun saveStandaloneResult(projectId: String, result: ActivityResult, photos: List<ResultPhotoInput> = emptyList()): kotlin.Result<Unit> {
         return withContext(Dispatchers.IO) {
             val resultWithProject = result.copy(projectId = projectId, activityId = null)
@@ -911,6 +938,7 @@ class ActivityRepository @Inject constructor(
         }
     }
 
+    // ดึงตำแหน่งไฟล์หรือ URL รูปภาพของบันทึกผลการขาย
     suspend fun getResultPhotos(resultId: String): List<String> {
         return withContext(Dispatchers.IO) {
             val resolvedId = localIdMappingDao.resolveMappedId(LocalIdMapping.ENTITY_RESULT, resultId)
@@ -918,12 +946,14 @@ class ActivityRepository @Inject constructor(
         }
     }
 
+    // ดึงรายการข้อมูลรูปภาพของบันทึกผลการขาย
     suspend fun getResultPhotoEntries(resultId: String): List<ActivityResultPhoto> =
         withContext(Dispatchers.IO) {
             val resolvedId = localIdMappingDao.resolveMappedId(LocalIdMapping.ENTITY_RESULT, resultId)
             photoDao.getPhotosByResultId(resolvedId)
         }
 
+    // ดึงไฟล์แนบของผลการขายที่ยังรออัปโหลด
     suspend fun getPendingResultAttachments(resultId: String): List<AttachmentOutbox> =
         withContext(Dispatchers.IO) {
             val resolvedId = localIdMappingDao.resolveMappedId(LocalIdMapping.ENTITY_RESULT, resultId)
@@ -948,6 +978,7 @@ class ActivityRepository @Inject constructor(
         }
     }
 
+    // ซิงก์สถานะโครงการให้สอดคล้องกับผลการขาย
     private suspend fun syncProjectStatus(result: ActivityResult) {
         val pid = result.projectId ?: result.activityId?.let { activityDao.getActivityById(it)?.projectId } ?: return
         val newStatus = result.newStatus ?: return
@@ -961,6 +992,7 @@ class ActivityRepository @Inject constructor(
         } catch (e: Exception) { Log.e("ActivityRepository", "Update Project Status Failed: ${e.message}") }
     }
 
+    // เติมรายละเอียดโครงการและลูกค้าให้ข้อมูลนัดหมาย
     suspend fun enrichActivity(activity: SalesActivity): SalesActivity {
         return withContext(Dispatchers.IO) {
             try {
@@ -979,6 +1011,7 @@ class ActivityRepository @Inject constructor(
         }
     }
 
+    // ดึงรายการนัดหมายของโครงการจากรหัสโครงการ
     suspend fun getActivitiesByProjectId(projectId: String): List<SalesActivity> {
         return withContext(Dispatchers.IO) {
             val resolvedId = localIdMappingDao.resolveMappedId(LocalIdMapping.ENTITY_PROJECT, projectId)
@@ -987,6 +1020,7 @@ class ActivityRepository @Inject constructor(
         }
     }
 
+    // บันทึกความสัมพันธ์ระหว่างนัดหมายกับผู้ติดต่อ
     suspend fun saveAppointmentContacts(appointmentId: String, contactIds: List<String>) {
         withContext(Dispatchers.IO) {
             val (resolvedAppointmentId, items) = localIdMappingDao.replaceAppointmentContactsResolvingIds(
@@ -1021,6 +1055,7 @@ class ActivityRepository @Inject constructor(
         }
     }
 
+    // ดึงรหัสผู้ติดต่อที่ผูกกับนัดหมาย
     suspend fun getAppointmentContacts(appointmentId: String): List<String> {
         return withContext(Dispatchers.IO) {
             val resolvedId = localIdMappingDao.resolveMappedId(LocalIdMapping.ENTITY_ACTIVITY, appointmentId)

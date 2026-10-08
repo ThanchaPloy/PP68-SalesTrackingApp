@@ -40,6 +40,18 @@ class CustomerRepository @Inject constructor(
     private val syncManager: SyncManager,
     private val networkMonitor: com.example.pp68_salestrackingapp.utils.NetworkMonitor
 ) {
+    /**
+     * รหัสผู้ใช้ปัจจุบัน ใช้กรองให้เห็นเฉพาะลูกค้าของตัวเอง
+     *
+     * อ่านจาก TokenManager ตรงนี้ ไม่ส่งผ่านพารามิเตอร์จากทุก ViewModel เพราะมีจุดเรียกหลายที่
+     * (หน้ารายการลูกค้า ฟอร์มนัดหมาย ฟอร์มผู้ติดต่อ หน้าสถิติ) ลืมที่ใดที่หนึ่งแล้วรูรั่วเงียบ
+     *
+     * ไม่ได้ล็อกอินคืนค่าว่าง = ไม่เห็นอะไรเลย ซึ่งปลอดภัยกว่าเห็นของทุกคน
+     * ส่วนการสลับบัญชีไม่ต้องห่วง เพราะล็อกอินใหม่ล้าง Room ทั้งก้อนแล้วสร้างหน้าจอใหม่หมด
+     */
+    private fun ownerId(): String = tokenManager.getUserData()?.userId.orEmpty()
+
+    // ดึงข้อมูล ลูกค้า Paging กระแสข้อมูล
     fun getCustomersPagingFlow(
         searchQuery: String,
         bizGroup: String?,
@@ -56,6 +68,7 @@ class CustomerRepository @Inject constructor(
         ),
         pagingSourceFactory = {
             customerDao.getCustomersPaging(
+                ownerId = ownerId(),
                 searchQuery = searchQuery.trim(),
                 bizGroup = bizGroup,
                 custType = custType,
@@ -65,14 +78,18 @@ class CustomerRepository @Inject constructor(
         }
     ).flow
 
-    fun getAllCustomersFlow(): Flow<List<Customer>> = customerDao.getAllCustomers()
+    // ดึงข้อมูล ทั้งหมด ลูกค้า กระแสข้อมูล
+    fun getAllCustomersFlow(): Flow<List<Customer>> = customerDao.getAllCustomers(ownerId())
+    // ค้นหา ลูกค้า กระแสข้อมูล
     fun searchCustomersFlow(query: String): Flow<List<Customer>> = customerDao.searchCustomers("%$query%")
+    // ดึงข้อมูล ทั้งหมด ผู้ติดต่อ
     fun getAllContacts(): Flow<List<ContactPerson>> = contactDao.getAllContacts()
 
+    // ดึงข้อมูล Local ลูกค้า
     suspend fun getLocalCustomers(): kotlin.Result<List<Customer>> {
         return withContext(Dispatchers.IO) {
             try {
-                val list = customerDao.getAllCustomers().first()
+                val list = customerDao.getAllCustomers(ownerId()).first()
                 if (list.isNotEmpty()) kotlin.Result.success(list)
                 else kotlin.Result.failure(Exception("No local customers"))
             } catch (e: Exception) {
@@ -81,6 +98,7 @@ class CustomerRepository @Inject constructor(
         }
     }
 
+    // รีเฟรช ลูกค้า
     suspend fun refreshCustomers(branchId: String): kotlin.Result<Unit> {
         return withContext(Dispatchers.IO) {
             try {
@@ -102,6 +120,7 @@ class CustomerRepository @Inject constructor(
         }
     }
 
+    // ดึงข้อมูล ลูกค้า ตาม รหัส
     suspend fun getCustomerById(id: String): kotlin.Result<Customer> {
         return withContext(Dispatchers.IO) {
             try {
@@ -130,10 +149,11 @@ class CustomerRepository @Inject constructor(
         }
     }
 
+    // ดึงข้อมูล ลูกค้า
     suspend fun getCustomers(): kotlin.Result<List<Customer>> {
         return withContext(Dispatchers.IO) {
             try {
-                val local = customerDao.getAllLeads().first()
+                val local = customerDao.getAllLeads(ownerId()).first()
                 kotlin.Result.success(local)
             } catch (e: Exception) {
                 kotlin.Result.failure(e)
@@ -141,6 +161,7 @@ class CustomerRepository @Inject constructor(
         }
     }
 
+    // ค้นหา Erp ลูกค้า
     suspend fun searchErpCustomers(
         query: String,
         after: String? = null,
@@ -167,6 +188,7 @@ class CustomerRepository @Inject constructor(
         }
     }
 
+    // เพิ่ม ลูกค้า
     suspend fun addCustomer(customer: Customer): kotlin.Result<String> {
         return withContext(Dispatchers.IO) {
             val today = java.time.LocalDate.now().toString()
@@ -225,6 +247,7 @@ class CustomerRepository @Inject constructor(
         }
     }
 
+    // อัปเดต ลูกค้า
     suspend fun updateCustomer(custId: String, customer: Customer): kotlin.Result<Unit> {
         return withContext(Dispatchers.IO) {
             val resolvedId = try {
@@ -290,6 +313,7 @@ class CustomerRepository @Inject constructor(
         }
     }
 
+    // ลบ ลูกค้า
     suspend fun deleteCustomer(custId: String): kotlin.Result<Unit> {
         return withContext(Dispatchers.IO) {
             try {
@@ -365,6 +389,7 @@ class CustomerRepository @Inject constructor(
         }
     }
 
+    // ลบ ผู้ติดต่อ
     suspend fun deleteContact(contactId: String): kotlin.Result<Unit> {
         return withContext(Dispatchers.IO) {
             try {
@@ -386,6 +411,7 @@ class CustomerRepository @Inject constructor(
         }
     }
 
+    // ดึงข้อมูล ทั้งหมด ผู้ติดต่อ เบอร์โทร แผนที่ข้อมูล
     suspend fun getAllContactPhoneMap(): Map<String, String> {
         return withContext(Dispatchers.IO) {
             try {

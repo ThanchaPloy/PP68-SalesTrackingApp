@@ -74,7 +74,7 @@ class Phase2DatabaseBaselineTest {
         lateinit var loadedCustomers: List<Customer>
         lateinit var loadedProjects: List<Project>
         val customerReadMs = measureTimeMillis {
-            loadedCustomers = db.customerDao().getAllCustomers().first()
+            loadedCustomers = db.customerDao().getAllCustomers(OWNER).first()
         }
         val projectReadMs = measureTimeMillis {
             loadedProjects = db.projectDao().getAllProjects().first()
@@ -113,6 +113,8 @@ class Phase2DatabaseBaselineTest {
 
     private companion object {
         const val TAG = "Phase2Baseline"
+        // แถวถูกกระจายเจ้าของเป็น U0..U49 อ่านในมุมของคนหนึ่งคนตามที่ query จริงทำ
+        const val OWNER = "U1"
         const val ROW_COUNT = 5_000
         val BASELINE_QUERIES = linkedMapOf(
             "customer_list" to "SELECT * FROM customer ORDER BY company_name ASC LIMIT 50",

@@ -42,6 +42,7 @@ class CustomerContactPagingStressTest {
                     else "Company %05d".format(index),
                 bizPostingGroup = if (index % 2 == 0) "R" else "W",
                 custType = "Dealer",
+                createdBy = OWNER,
                 isLead = index % 3 == 0
             )
         }
@@ -50,7 +51,7 @@ class CustomerContactPagingStressTest {
         val customerInsertMs = SystemClock.elapsedRealtime() - customerInsertStart
 
         val customerLoadStart = SystemClock.elapsedRealtime()
-        val customerPage = database.customerDao().getCustomersPaging("", null, null, 0, null)
+        val customerPage = database.customerDao().getCustomersPaging(OWNER, "", null, null, 0, null)
             .load(PagingSource.LoadParams.Refresh(null, INITIAL_LOAD_SIZE, false))
         val customerLoadMs = SystemClock.elapsedRealtime() - customerLoadStart
         check(customerPage is PagingSource.LoadResult.Page)
@@ -83,6 +84,7 @@ class CustomerContactPagingStressTest {
     }
 
     private companion object {
+        const val OWNER = "U1"
         const val ROW_COUNT = 50_000
         const val INITIAL_LOAD_SIZE = 60
     }

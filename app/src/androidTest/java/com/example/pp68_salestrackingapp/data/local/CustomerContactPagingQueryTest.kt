@@ -86,7 +86,7 @@ class CustomerContactPagingQueryTest {
         initial: String? = null
     ): List<Customer> = page(
         database.customerDao().getCustomersPaging(
-            searchQuery, bizGroup, custType, tabIndex, initial
+            OWNER, searchQuery, bizGroup, custType, tabIndex, initial
         )
     )
 
@@ -120,6 +120,12 @@ class CustomerContactPagingQueryTest {
         companyName = name,
         bizPostingGroup = bizGroup,
         custType = custType,
+        createdBy = OWNER,
         isLead = isLead
     )
+
+    private companion object {
+        // คอลัมน์เจ้าของคือ user_id — getCustomersPaging กรองด้วยค่านี้
+        const val OWNER = "U1"
+    }
 }
