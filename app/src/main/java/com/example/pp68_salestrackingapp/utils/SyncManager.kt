@@ -64,15 +64,22 @@ class SyncManager @Inject constructor(
         var skipped: Int = 0
         private val failures = mutableMapOf<SyncFailureType, Int>()
 
+        // สร้างผลลัพธ์ของรายการที่มีการพยายามส่ง
         fun attempted() { attempted++ }
+        // สร้างผลลัพธ์ของรายการที่ถูกข้าม
         fun skipped(count: Int = 1) { skipped += count }
+        // สร้างผลลัพธ์ของรายการที่ส่งไม่สำเร็จ
         fun failed(type: SyncFailureType) {
             val normalized = if (type == SyncFailureType.UNKNOWN) SyncFailureType.LOCAL_FATAL else type
             failures[normalized] = (failures[normalized] ?: 0) + 1
         }
+        // สร้างผลลัพธ์ล้มเหลวจากรหัสตอบกลับ HTTP
         fun httpFailed(code: Int) { failed(classifyHttpCode(code)) }
+        // สร้างผลลัพธ์ล้มเหลวจาก exception
         fun exception(error: Throwable) { failed(classifySyncFailure(error)) }
+        // สร้างสำเนาสถานะผลลัพธ์ปัจจุบัน
         fun snapshot(): Map<SyncFailureType, Int> = failures.toMap()
+        // ลองดำเนินการอีกครั้งสำหรับ able Failure Count
         fun retryableFailureCount(): Int = failures.filterKeys {
             it in setOf(
                 SyncFailureType.NETWORK, SyncFailureType.TIMEOUT, SyncFailureType.RATE_LIMITED,
@@ -81,11 +88,13 @@ class SyncManager @Inject constructor(
         }.values.sum()
     }
 
+    // จำกัดความยาวข้อความไม่ให้เกินขนาดที่กำหนด
     private fun <T> bounded(items: List<T>, tracker: RunTracker): List<T> {
         tracker.skipped((items.size - MAX_ROWS_PER_ENTITY_PER_RUN).coerceAtLeast(0))
         return items.take(MAX_ROWS_PER_ENTITY_PER_RUN)
     }
 
+    // คำนวณค่าแฮช SHA-256 ของข้อความ
     private fun sha256(file: File): String {
         val digest = MessageDigest.getInstance("SHA-256")
         file.inputStream().buffered().use { input ->
@@ -99,6 +108,7 @@ class SyncManager @Inject constructor(
         return digest.digest().joinToString("") { "%02x".format(it) }
     }
 
+    // ซิงก์ ไฟล์แนบ
     private suspend fun syncAttachments(tracker: RunTracker) {
         val ownerId = tokenManager.getLocalDataOwner() ?: return
         val items = attachmentOutboxDao.getPending(ownerId, MAX_ROWS_PER_ENTITY_PER_RUN)
@@ -204,6 +214,7 @@ class SyncManager @Inject constructor(
         val error: Throwable? = null
     )
 
+    // นำไปใช้กับ Child Outcome
     private suspend fun applyChildOutcome(
         entityType: String,
         id: String,
@@ -227,6 +238,7 @@ class SyncManager @Inject constructor(
     // ข้อมูลจะค้างในเครื่องตลอดกาลแบบเงียบ ๆ) เก็บใน memory พอ เพราะความหมายคือ "รอบนี้ลองหรือยัง"
     private val retriedThisSession = Collections.synchronizedSet(mutableSetOf<String>())
 
+    // กำหนดสถานะของ Blocked
     fun markBlocked(entityType: String, id: String) {
         blockedRows.add("$entityType:$id")
         rejectionScope.launch { recordRejection(entityType, id, 403, "ไม่มีสิทธิ์แก้ไขรายการนี้") }
@@ -235,6 +247,7 @@ class SyncManager @Inject constructor(
     // เรียกจาก repository ได้แบบ fire-and-forget (markBlocked) และจาก doSync แบบ suspend ตรง ๆ
     private val rejectionScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
+    // บันทึกเหตุการณ์ของ รายการถูกปฏิเสธ
     internal suspend fun recordRejection(entityType: String, id: String, httpCode: Int, reason: String?) {
         runCatching {
             syncRejectionDao.upsert(
@@ -249,6 +262,7 @@ class SyncManager @Inject constructor(
         }
     }
 
+    // ล้าง รายการถูกปฏิเสธ
     private suspend fun clearRejection(entityType: String, id: String) {
         blockedRows.remove("$entityType:$id")
         runCatching { syncRejectionDao.clear(entityType, id) }
@@ -258,6 +272,7 @@ class SyncManager @Inject constructor(
     // ส่วน 5xx/timeout/ไม่มีเน็ต = ปัญหาชั่วคราว ต้องลองใหม่ ห้ามบันทึกเป็นการปฏิเสธถาวร
     private fun isPermanentRejection(code: Int): Boolean = code in setOf(400, 403, 404, 409, 422)
 
+    // บันทึกเหตุการณ์ของ If Permanent
     private suspend fun recordIfPermanent(entityType: String, id: String, code: Int) {
         if (!isPermanentRejection(code)) return
         val reason = when (code) {
@@ -308,6 +323,7 @@ class SyncManager @Inject constructor(
         retriedThisSession.clear()
     }
 
+    // จัดตาราง การซิงก์
     fun scheduleSync(trigger: SyncTrigger = SyncTrigger.SAVE) {
         if (trigger == SyncTrigger.MANUAL) allowRejectedRowsOneMoreTry()
         val constraints = Constraints.Builder()
@@ -373,6 +389,7 @@ class SyncManager @Inject constructor(
         )
     }
 
+    // จัดตาราง Download
     fun scheduleDownload() {
         val request = OneTimeWorkRequestBuilder<DownloadSyncWorker>()
             .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
@@ -389,6 +406,7 @@ class SyncManager @Inject constructor(
         )
     }
 
+    // จัดตาราง End ของ Day Reminder
     fun scheduleEndOfDayReminder() {
         val bangkok = java.time.ZoneId.of("Asia/Bangkok")
         val now = java.time.ZonedDateTime.now(bangkok)
@@ -407,6 +425,7 @@ class SyncManager @Inject constructor(
         )
     }
 
+    // ตรวจว่ามี รายการรอส่ง Changes
     suspend fun hasPendingChanges(): Boolean = withContext(Dispatchers.IO) {
         pendingSummary().isNotEmpty()
     }
@@ -462,6 +481,7 @@ class SyncManager @Inject constructor(
     // ใช้ withLock ไม่ใช่ tryLock เพราะ AuthRepository เรียกแล้วต้องได้ผลจริงก่อน logout
     private val syncMutex = kotlinx.coroutines.sync.Mutex()
 
+    // เริ่มกระบวนการซิงก์โดยป้องกันไม่ให้หลายงานทำพร้อมกัน
     internal suspend fun doSync(): SyncRunResult = syncMutex.withLock { doSyncLocked() }
 
     /**
@@ -497,6 +517,7 @@ class SyncManager @Inject constructor(
         }
     }
 
+    // ดำเนินขั้นตอนซิงก์ทั้งหมดภายในล็อกของกระบวนการ
     private suspend fun doSyncLocked(): SyncRunResult {
         val runId = java.util.UUID.randomUUID().toString()
         val startedAt = java.time.Instant.now().toString()
@@ -630,6 +651,7 @@ class SyncManager @Inject constructor(
                         "project_status"    to project.projectStatus,
                         "start_date"        to project.startDate,
                         "closing_date"      to project.closingDate,
+                        "desired_completion_date" to project.desiredCompletionDate,
                         "project_lat"       to project.projectLat,
                         "project_long"      to project.projectLong,
                         "opportunity_score" to project.opportunityScore,

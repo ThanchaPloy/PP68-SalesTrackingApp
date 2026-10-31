@@ -30,6 +30,9 @@ data class AddProjectUiState(
     val expectedValue:          String  = "",
     val startDate:              String? = null,
     val closeDate:              String? = null,
+    // เดือนที่ต้องการสินค้า เก็บเป็น "yyyy-MM-01" (ดู utils/DesiredMonth) — บังคับกรอกเมื่อสถานะเป็น Quotation
+    val desiredMonth:           String? = null,
+    val desiredMonthError:      String? = null,
     val projectStatus:          String? = null,
     val opportunityScore:       String? = null, // ✅ เพิ่มฟิลด์ระดับความสำคัญ
     val locationText:           String  = "",
@@ -101,7 +104,8 @@ data class AddProjectDraft(
     val dealPosition: String = "",
     val previousSolution: String = "",
     val counterpartyType: String = "",
-    val responseSpeed: String = ""
+    val responseSpeed: String = "",
+    val desiredMonth: String? = null
 )
 
 sealed class AddProjectEvent {
@@ -114,6 +118,7 @@ sealed class AddProjectEvent {
     data class ExpectedValueChanged(val value: String)            : AddProjectEvent()
     data class StartDateChanged(val value: String)                : AddProjectEvent()
     data class CloseDateChanged(val value: String)                : AddProjectEvent()
+    data class DesiredMonthChanged(val value: String)             : AddProjectEvent()
     data class StatusChanged(val value: String)                   : AddProjectEvent()
     data class OpportunityScoreChanged(val value: String)         : AddProjectEvent() // ✅ เพิ่ม Event
     data class TeamSelected(val id: String, val name: String)     : AddProjectEvent()
@@ -178,7 +183,8 @@ class AddProjectViewModel @Inject constructor(
         projectName, branch, expectedValue, startDate, closeDate, projectStatus, opportunityScore,
         siteLat, siteLong, selectedCustomerId, selectedContactIds,
         selectedTeamId, selectedBillingBranchId,
-        lossReason, otherLossReason, dealPosition, previousSolution, counterpartyType, responseSpeed
+        lossReason, otherLossReason, dealPosition, previousSolution, counterpartyType, responseSpeed,
+        desiredMonth
     )
 
 
@@ -201,6 +207,7 @@ class AddProjectViewModel @Inject constructor(
                 expectedValue = d.expectedValue,
                 startDate = d.startDate,
                 closeDate = d.closeDate,
+                desiredMonth = d.desiredMonth,
                 projectStatus = d.projectStatus,
                 opportunityScore = d.opportunityScore,
                 siteLat = d.siteLat,
@@ -363,6 +370,9 @@ class AddProjectViewModel @Inject constructor(
         return result.getOrNull()?.map { it.contactId.trim() to (it.fullName ?: it.nickname ?: "") } ?: emptyList()
     }
 
+    // สถานะตอนเปิดแก้ไข — โครงการเก่าที่อยู่ Quotation อยู่แล้วโดยไม่มีเดือนต้องยังบันทึกได้ (แบนเนอร์เตือนแทน)
+    private var loadedStatus: String? = null
+
     private fun loadProject(id: String) {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
@@ -379,6 +389,7 @@ class AddProjectViewModel @Inject constructor(
                         else -> com.example.pp68_salestrackingapp.utils.LossReasons.OTHER to project.lossReason
                     }
 
+                    loadedStatus = project.projectStatus
                     val dealFactors = com.example.pp68_salestrackingapp.utils.DealFactors
                     _uiState.update {
                         it.copy(
@@ -390,6 +401,7 @@ class AddProjectViewModel @Inject constructor(
                             expectedValue          = project.expectedValue?.toPlainAmount() ?: "",
                             startDate              = project.startDate,
                             closeDate              = project.closingDate,
+                            desiredMonth           = project.desiredCompletionDate?.takeIf { it.isNotBlank() },
                             siteLat                = project.projectLat,
                             siteLong               = project.projectLong,
                             selectedCustomerId     = project.custId,
@@ -545,6 +557,8 @@ class AddProjectViewModel @Inject constructor(
                 _uiState.update { it.copy(startDate = event.value.ifBlank { null }) }
             is AddProjectEvent.CloseDateChanged ->
                 _uiState.update { it.copy(closeDate = event.value.ifBlank { null }) }
+            is AddProjectEvent.DesiredMonthChanged ->
+                _uiState.update { it.copy(desiredMonth = event.value.ifBlank { null }, desiredMonthError = null) }
             is AddProjectEvent.StatusChanged ->
                 _uiState.update { it.copy(projectStatus = event.value, statusError = null) }
             is AddProjectEvent.OpportunityScoreChanged -> // ✅ อัปเดตฟิลด์ใหม่
@@ -732,6 +746,14 @@ class AddProjectViewModel @Inject constructor(
                 valid = false
             }
         }
+        // บังคับเมื่อ "เข้าสู่" Quotation (โครงการใหม่ หรือเปลี่ยนมาจากสเตจอื่น) — โครงการเก่าที่อยู่ Quotation
+        // มาก่อนและยังไม่มีเดือน ห้ามบล็อกการแก้ไขอย่างอื่น เพราะผู้ใช้อาจยังไม่รู้เดือนจนกว่าลูกค้าตอบ
+        if (com.example.pp68_salestrackingapp.utils.DesiredMonth.isMissing(s.projectStatus, s.desiredMonth) &&
+            loadedStatus != com.example.pp68_salestrackingapp.utils.DesiredMonth.REQUIRED_STATUS
+        ) {
+            _uiState.update { it.copy(desiredMonthError = "กรุณาเลือกเดือนที่ต้องการสินค้า") }
+            valid = false
+        }
         // ❌ ไม่บังคับเลือกสาขาที่พนักงานขายรับผิดชอบ — รายชื่อสาขามาจาก server เท่านั้น
         // ตอนออฟไลน์และแคชสาขายังว่าง ดรอปดาวน์จะไม่มีอะไรให้เลือก ผู้ใช้จึงบันทึกโครงการ
         // ไม่ได้เลยทั้งที่ข้อมูลอื่นครบ ตอนบันทึกมี fallback เป็นสาขาของผู้ใช้เองอยู่แล้ว
@@ -780,7 +802,7 @@ class AddProjectViewModel @Inject constructor(
                     opportunityScore      = s.opportunityScore, // ✅ บันทึกค่าโอกาสการขาย
                     startDate             = s.startDate,
                     closingDate           = s.closeDate,
-                    desiredCompletionDate = null,
+                    desiredCompletionDate = s.desiredMonth,
                     projectLat            = s.siteLat,
                     projectLong           = s.siteLong,
                     lossReason            = finalLossReason,

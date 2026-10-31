@@ -576,6 +576,34 @@ private fun ProjectHeaderCard(
                 }
             }
 
+            // เดือนที่ต้องการสินค้า — โครงการเก่าที่อยู่ Quotation มาก่อนมีฟิลด์นี้จึงยังไม่มีค่า
+            // (ไม่บังคับย้อนหลัง) แต่เตือนให้กลับมาเติม
+            val desiredMonthLabel = com.example.pp68_salestrackingapp.utils.DesiredMonth.label(project.desiredCompletionDate)
+            if (desiredMonthLabel != null) {
+                Spacer(Modifier.height(8.dp))
+                Text("เดือนที่ต้องการสินค้า: $desiredMonthLabel", fontSize = 12.sp, color = TextGray)
+            }
+            if (com.example.pp68_salestrackingapp.utils.DesiredMonth.isMissing(project.projectStatus, project.desiredCompletionDate)) {
+                Spacer(Modifier.height(8.dp))
+                Surface(color = Color(0xFFFEF9C3), shape = RoundedCornerShape(8.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(start = 10.dp, top = 2.dp, bottom = 2.dp, end = 2.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Icon(Icons.Default.Info, null, tint = Color(0xFF92400E), modifier = Modifier.size(16.dp))
+                        Text(
+                            "ยังไม่ได้ระบุเดือนที่ต้องการสินค้า",
+                            fontSize = 12.sp, color = Color(0xFF92400E),
+                            modifier = Modifier.weight(1f)
+                        )
+                        TextButton(onClick = onEdit) {
+                            Text("ระบุเดือน", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF92400E))
+                        }
+                    }
+                }
+            }
+
             if (project.projectStatus !in listOf("Lost", "Failed")) {
                 Spacer(Modifier.height(16.dp))
                 HorizontalDivider(color = Color(0xFFFFFFFF).copy(alpha = 0.5f))

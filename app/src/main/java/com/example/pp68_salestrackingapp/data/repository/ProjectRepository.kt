@@ -296,6 +296,7 @@ class ProjectRepository @Inject constructor(
                 updates["expected_value"] = localProject.expectedValue?.toString() ?: ""
                 updates["start_date"] = localProject.startDate.orEmpty()
                 updates["closing_date"] = localProject.closingDate.orEmpty()
+                updates["desired_completion_date"] = localProject.desiredCompletionDate.orEmpty()
                 localProject.projectLat?.let { updates["project_lat"] = it }
                 localProject.projectLong?.let { updates["project_long"] = it }
                 resolvedAppointmentId?.takeUnless { it.startsWith("TEMP-") }

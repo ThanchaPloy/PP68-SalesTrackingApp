@@ -358,6 +358,33 @@ fun AddProjectContent(
                 )
             }
 
+            // ── เดือนที่ต้องการสินค้า (บังคับเมื่อสถานะเป็น Quotation) ──────────
+            // เลือกแค่เดือน เก็บเป็นวันที่ 1 ของเดือน ดู utils/DesiredMonth
+            val desiredMonthValues = remember(uiState.desiredMonth) {
+                val base = com.example.pp68_salestrackingapp.utils.DesiredMonth.upcoming(java.time.YearMonth.now())
+                val current = uiState.desiredMonth
+                // เดือนที่บันทึกไว้แต่ผ่านไปแล้ว ต้องยังโชว์/เลือกซ้ำได้ ไม่งั้น dropdown ว่างทั้งที่มีค่า
+                if (current != null && base.none { it.take(7) == current.take(7) }) listOf(current) + base else base
+            }
+            val desiredMonthLabels = remember(desiredMonthValues) {
+                listOf("ไม่ระบุ") + desiredMonthValues.map { com.example.pp68_salestrackingapp.utils.DesiredMonth.label(it) ?: it }
+            }
+            FormField(
+                "เดือนที่ต้องการสินค้า",
+                required = uiState.projectStatus == com.example.pp68_salestrackingapp.utils.DesiredMonth.REQUIRED_STATUS
+            ) {
+                DropdownField(
+                    value       = com.example.pp68_salestrackingapp.utils.DesiredMonth.label(uiState.desiredMonth) ?: "",
+                    placeholder = "เลือกเดือน",
+                    options     = desiredMonthLabels,
+                    isError     = uiState.desiredMonthError != null,
+                    errorMsg    = uiState.desiredMonthError,
+                    onSelect    = { idx ->
+                        onEvent(AddProjectEvent.DesiredMonthChanged(if (idx == 0) "" else desiredMonthValues[idx - 1]))
+                    }
+                )
+            }
+
             // ── ปัจจัยของดีล (W6-2) — แก้ไขได้ที่นี่เท่านั้น หน้าบันทึกผลแค่ prefill มาโชว์ ──
             FormField("ตำแหน่งของดีล") {
                 DropdownField(

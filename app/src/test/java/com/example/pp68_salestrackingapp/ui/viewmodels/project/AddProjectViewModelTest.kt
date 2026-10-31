@@ -261,12 +261,14 @@ class AddProjectViewModelTest {
         viewModel.onEvent(AddProjectEvent.ProjectNameChanged("New Project Alpha"))
         viewModel.onEvent(AddProjectEvent.CustomerSelected("C1", "Client A"))
         viewModel.onEvent(AddProjectEvent.StatusChanged("Quotation"))
+        viewModel.onEvent(AddProjectEvent.DesiredMonthChanged("2026-12-01"))
         viewModel.onEvent(AddProjectEvent.TeamSelected("TS-001", "North A"))
         viewModel.onEvent(AddProjectEvent.ContactToggled("CT-1"))
         viewModel.onEvent(AddProjectEvent.ExpectedValueChanged("1,200.50"))
         viewModel.onEvent(AddProjectEvent.Save)
         advanceUntilIdle()
 
+        assertEquals("2026-12-01", projectSlot.captured.desiredCompletionDate)
         val actualExpectedValue = BigDecimal.valueOf(projectSlot.captured.expectedValue ?: 0.0)
             .setScale(2, RoundingMode.HALF_UP)
         assertEquals(BigDecimal("1200.50"), actualExpectedValue)
@@ -274,6 +276,56 @@ class AddProjectViewModelTest {
         assertNull(viewModel.uiState.value.saveError)
         coVerify(exactly = 1) { projectRepo.createProject(any(), "USR-001") }
         coVerify(exactly = 1) { projectRepo.saveProjectContacts(any(), listOf("CT-1")) }
+    }
+
+    @Test
+    fun `new project at Quotation without a desired month is rejected`() = runTest {
+        initViewModel()
+        advanceUntilIdle()
+
+        viewModel.onEvent(AddProjectEvent.ProjectNameChanged("Alpha"))
+        viewModel.onEvent(AddProjectEvent.CustomerSelected("C1", "Client A"))
+        viewModel.onEvent(AddProjectEvent.StatusChanged("Quotation"))
+        viewModel.onEvent(AddProjectEvent.Save)
+        advanceUntilIdle()
+
+        assertEquals("กรุณาเลือกเดือนที่ต้องการสินค้า", viewModel.uiState.value.desiredMonthError)
+        assertFalse(viewModel.uiState.value.isSaved)
+        coVerify(exactly = 0) { projectRepo.createProject(any(), any()) }
+
+        // เลือกเดือนแล้ว error ต้องหาย
+        viewModel.onEvent(AddProjectEvent.DesiredMonthChanged("2026-12-01"))
+        assertNull(viewModel.uiState.value.desiredMonthError)
+    }
+
+    @Test
+    fun `moving an existing project into Quotation requires the month but a legacy Quotation project does not`() = runTest {
+        suspend fun openAndSave(loadedStatus: String) {
+            coEvery { projectRepo.getProjectById("P9") } returns Result.success(
+                Project(projectId = "P9", custId = "C1", projectName = "Old", projectStatus = loadedStatus, branchId = "TS-001")
+            )
+            coEvery { customerRepo.getCustomerById("C1") } returns Result.success(
+                Customer("C1", "Client A", null, null, null, null, null, null, null)
+            )
+            initViewModel()
+            advanceUntilIdle()
+            viewModel.onEvent(AddProjectEvent.LoadProject("P9"))
+            advanceUntilIdle()
+            viewModel.onEvent(AddProjectEvent.StatusChanged("Quotation"))
+            viewModel.onEvent(AddProjectEvent.Save)
+            advanceUntilIdle()
+        }
+
+        // เปลี่ยนมาจาก Lead -> ต้องกรอก
+        openAndSave("Lead")
+        assertFalse(viewModel.uiState.value.isSaved)
+        assertNotNull(viewModel.uiState.value.desiredMonthError)
+        coVerify(exactly = 0) { projectRepo.updateProject(any(), any()) }
+
+        // อยู่ที่ Quotation อยู่แล้วตอนเปิด (ข้อมูลเก่า) -> แก้ไขอย่างอื่นต่อได้
+        openAndSave("Quotation")
+        assertTrue(viewModel.uiState.value.isSaved)
+        assertNull(viewModel.uiState.value.desiredMonthError)
     }
 
     @Test
@@ -315,6 +367,7 @@ class AddProjectViewModelTest {
         viewModel.onEvent(AddProjectEvent.ProjectNameChanged("Proj A"))
         viewModel.onEvent(AddProjectEvent.CustomerSelected("C1", "Client A"))
         viewModel.onEvent(AddProjectEvent.StatusChanged("Quotation"))
+        viewModel.onEvent(AddProjectEvent.DesiredMonthChanged("2026-12-01"))
         viewModel.onEvent(AddProjectEvent.TeamSelected("TS-001", "North A"))
         viewModel.onEvent(AddProjectEvent.Save)
         advanceUntilIdle()
@@ -542,6 +595,7 @@ class AddProjectViewModelTest {
         viewModel.onEvent(AddProjectEvent.ProjectNameChanged("New Project Alpha"))
         viewModel.onEvent(AddProjectEvent.CustomerSelected("C1", "Client A"))
         viewModel.onEvent(AddProjectEvent.StatusChanged("Quotation"))
+        viewModel.onEvent(AddProjectEvent.DesiredMonthChanged("2026-12-01"))
         viewModel.onEvent(AddProjectEvent.TeamSelected("TS-001", "North A"))
         viewModel.onEvent(AddProjectEvent.Save)
         advanceUntilIdle()
