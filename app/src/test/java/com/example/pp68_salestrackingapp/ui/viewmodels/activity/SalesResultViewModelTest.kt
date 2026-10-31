@@ -1160,6 +1160,34 @@ class SalesResultViewModelTest {
         assertFalse(vm.uiState.value.draftAvailable)
     }
 
+    // Mobile phase 2 ข้อ 1 — ออกจากหน้านี้ไปตอนเพิ่มโครงการที่สองไว้แล้วแต่ยังไม่กดบันทึก ต้องกู้คืนได้
+    // เหมือนฟิลด์อื่น ไม่งั้นงานที่เพิ่งเพิ่มหายทั้งที่ส่วนอื่นของฟอร์มกู้คืนได้ปกติ
+    @Test
+    fun `restoring a draft also restores additional projects and reloads each project's data`() = runTest {
+        coEvery { activityRepo.getActivityById("A1") } returns Result.success(
+            listOf(SalesActivity(activityId = "A1", userId = "U1", customerId = null, projectId = "PRJ-1", activityType = "Visit", activityDate = "2026-04-01", status = "checked_in"))
+        )
+        coEvery { projectRepo.getProjectById("PRJ-1") } returns Result.success(Project(projectId = "PRJ-1", custId = "C1", projectName = "Project A", projectStatus = "Lead"))
+        coEvery { projectRepo.getProjectById("PRJ-2") } returns Result.success(Project(projectId = "PRJ-2", custId = "C1", projectName = "Project B", projectStatus = "Lead"))
+        every { draftStore.load("sales_result:A1", SalesResultDraft::class.java) } returns SalesResultDraft(
+            projectId = "PRJ-1", visitSummary = "draft summary",
+            additionalProjects = listOf(AdditionalProjectEntryDraft(projectId = "PRJ-2", opportunityScore = "HOT"))
+        )
+
+        val vm = SalesResultViewModel(
+            SavedStateHandle(mapOf("activityId" to "A1")), projectRepo, activityRepo, authRepo, draftStore, java.time.Clock.system(java.time.ZoneId.of("Asia/Bangkok"))
+        )
+        advanceUntilIdle()
+        vm.restoreDraft()
+        advanceUntilIdle()
+
+        val entries = vm.uiState.value.additionalProjects
+        assertEquals(1, entries.size)
+        assertEquals("PRJ-2", entries.first().projectId)
+        assertEquals("HOT", entries.first().opportunityScore)
+        assertEquals("Project B", entries.first().project?.projectName)
+    }
+
     @Test
     fun `save success pushes the newly linked project back onto the appointment`() = runTest {
         coEvery { activityRepo.getActivityById("A1") } returns Result.success(

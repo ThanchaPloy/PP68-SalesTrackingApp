@@ -136,7 +136,27 @@ data class SalesResultDraft(
     val visitSummary: String = "",
     val lossReason: String = "",
     val otherLossReason: String = "",
-    val selectedItemIds: Set<Int> = emptySet()
+    val selectedItemIds: Set<Int> = emptySet(),
+    // ดราฟของโครงการที่ "เพิ่ม" เข้ามา (ดู AdditionalProjectEntry) — ไม่เก็บ project (object เต็ม)
+    // ซ้ำในดราฟ โหลดใหม่ตอนกู้คืนเหมือนโครงการหลัก (ดู restoreDraft)
+    val additionalProjects: List<AdditionalProjectEntryDraft> = emptyList()
+)
+
+data class AdditionalProjectEntryDraft(
+    val projectId: String,
+    val opportunityScore: String? = null,
+    val dealPosition: String = "",
+    val previousSolution: String = "",
+    val counterpartyMultiplier: String = "",
+    val responseSpeed: String = "",
+    val isProposalSent: Boolean = false,
+    val proposalDate: String? = null,
+    val competitorCount: Int = 0,
+    val dmInvolved: Boolean = false,
+    val isStatusUpdateEnabled: Boolean = false,
+    val newStatus: String = "",
+    val lossReason: String = "",
+    val otherLossReason: String = ""
 )
 
 enum class ResultMode {
@@ -185,7 +205,14 @@ class SalesResultViewModel @Inject constructor(
     private fun SalesResultUiState.toDraft() = SalesResultDraft(
         projectId, isStatusUpdateEnabled, newStatus, opportunityScore, dealPosition, previousSolution,
         counterpartyMultiplier, responseSpeed, isProposalSent, proposalDate, competitorCount,
-        dmInvolved, visitSummary, lossReason, otherLossReason, selectedItemIds
+        dmInvolved, visitSummary, lossReason, otherLossReason, selectedItemIds,
+        additionalProjects = additionalProjects.map { e ->
+            AdditionalProjectEntryDraft(
+                e.projectId, e.opportunityScore, e.dealPosition, e.previousSolution, e.counterpartyMultiplier,
+                e.responseSpeed, e.isProposalSent, e.proposalDate, e.competitorCount, e.dmInvolved,
+                e.isStatusUpdateEnabled, e.newStatus, e.lossReason, e.otherLossReason
+            )
+        }
     )
 
     // เวอร์ชันเก่าดูอย่างเดียวแก้ไม่ได้อยู่แล้ว ไม่ต้องมี draft/dirty-check
@@ -227,12 +254,32 @@ class SalesResultViewModel @Inject constructor(
                 lossReason = d.lossReason,
                 otherLossReason = d.otherLossReason,
                 selectedItemIds = d.selectedItemIds,
+                additionalProjects = d.additionalProjects.map { e ->
+                    AdditionalProjectEntry(
+                        projectId = e.projectId, opportunityScore = e.opportunityScore,
+                        dealPosition = e.dealPosition, previousSolution = e.previousSolution,
+                        counterpartyMultiplier = e.counterpartyMultiplier, responseSpeed = e.responseSpeed,
+                        isProposalSent = e.isProposalSent, proposalDate = e.proposalDate,
+                        competitorCount = e.competitorCount, dmInvolved = e.dmInvolved,
+                        isStatusUpdateEnabled = e.isStatusUpdateEnabled, newStatus = e.newStatus,
+                        lossReason = e.lossReason, otherLossReason = e.otherLossReason
+                    )
+                },
                 draftAvailable = false
             )
         }
         // draft ที่กู้มาอาจมีโครงการที่เพิ่งผูก/สร้างด่วนไว้ — ต้องโหลดข้อมูลโครงการนั้นกลับมาด้วย
         // ไม่งั้น projectId ตั้งแล้วแต่ project/currentStatus ยังว่างอยู่เหมือนไม่ได้ผูกอะไรเลย
         d.projectId?.let { viewModelScope.launch { loadProjectData(it) } }
+        // เหมือนกัน แต่สำหรับโครงการที่ "เพิ่ม" — แค่แนบ project object กลับเข้าไป ไม่แตะคำตอบที่ผู้ใช้
+        // กรอกไว้แล้วในดราฟ (ต่างจาก addProjectEntry ที่ prefill ทับค่าที่ยังว่างของแถวใหม่)
+        d.additionalProjects.forEach { e ->
+            viewModelScope.launch {
+                projectRepo.getProjectById(e.projectId).onSuccess { p ->
+                    updateProjectEntry(e.projectId) { it.copy(project = p) }
+                }
+            }
+        }
     }
 
     fun dismissDraftPrompt() {
