@@ -1260,6 +1260,110 @@ class SalesResultViewModelTest {
         coVerify(exactly = 0) { activityRepo.updateActivity(any(), any(), any()) }
     }
 
+    // Mobile phase 2 ข้อ 1 — "+ เพิ่มโครงการ" (โครงสร้างข้อมูล ยังไม่มี UI)
+    @Test
+    fun `addProjectEntry adds a project and prefills its deal factors, but not the primary or a duplicate`() = runTest {
+        coEvery { activityRepo.getActivityById("A1") } returns Result.success(
+            listOf(SalesActivity(activityId = "A1", userId = "U1", customerId = null, projectId = "PRJ-1", activityType = "Visit", activityDate = "2026-04-01", status = "checked_in"))
+        )
+        coEvery { projectRepo.getProjectById("PRJ-1") } returns Result.success(Project(projectId = "PRJ-1", custId = "C1", projectName = "Project A", projectStatus = "Lead"))
+        coEvery { projectRepo.getProjectById("PRJ-2") } returns Result.success(lockedProject().copy(projectId = "PRJ-2", projectName = "Project B"))
+
+        val vm = SalesResultViewModel(
+            SavedStateHandle(mapOf("activityId" to "A1")), projectRepo, activityRepo, authRepo, draftStore, java.time.Clock.system(java.time.ZoneId.of("Asia/Bangkok"))
+        )
+        advanceUntilIdle()
+
+        vm.addProjectEntry("PRJ-1") // ซ้ำกับโครงการหลัก — ต้องไม่ถูกเพิ่ม
+        vm.addProjectEntry("PRJ-2")
+        advanceUntilIdle()
+        vm.addProjectEntry("PRJ-2") // เพิ่มซ้ำตัวเดิม — ต้องไม่ถูกเพิ่มอีกรอบ
+        advanceUntilIdle()
+
+        val entries = vm.uiState.value.additionalProjects
+        assertEquals(1, entries.size)
+        assertEquals("PRJ-2", entries.first().projectId)
+        assertEquals("ลูกค้าใช้เราอยู่แล้ว การต่อสัญญามีโอกาสสูงมาก", entries.first().dealPosition)
+        assertEquals("Project B", entries.first().project?.projectName)
+    }
+
+    @Test
+    fun `removeProjectEntry removes it from the list`() = runTest {
+        coEvery { activityRepo.getActivityById("A1") } returns Result.success(
+            listOf(SalesActivity(activityId = "A1", userId = "U1", customerId = null, projectId = "PRJ-1", activityType = "Visit", activityDate = "2026-04-01", status = "checked_in"))
+        )
+        coEvery { projectRepo.getProjectById("PRJ-1") } returns Result.success(Project(projectId = "PRJ-1", custId = "C1", projectName = "Project A", projectStatus = "Lead"))
+        coEvery { projectRepo.getProjectById("PRJ-2") } returns Result.success(Project(projectId = "PRJ-2", custId = "C1", projectName = "Project B", projectStatus = "Lead"))
+
+        val vm = SalesResultViewModel(
+            SavedStateHandle(mapOf("activityId" to "A1")), projectRepo, activityRepo, authRepo, draftStore, java.time.Clock.system(java.time.ZoneId.of("Asia/Bangkok"))
+        )
+        advanceUntilIdle()
+        vm.addProjectEntry("PRJ-2")
+        advanceUntilIdle()
+        assertEquals(1, vm.uiState.value.additionalProjects.size)
+
+        vm.removeProjectEntry("PRJ-2")
+
+        assertTrue(vm.uiState.value.additionalProjects.isEmpty())
+    }
+
+    @Test
+    fun `save also persists each additional project as its own result sharing the same photos and summary`() = runTest {
+        coEvery { activityRepo.getActivityById("A1") } returns Result.success(
+            listOf(SalesActivity(activityId = "A1", userId = "U1", customerId = null, projectId = "PRJ-1", activityType = "Visit", activityDate = "2026-04-01", status = "checked_in"))
+        )
+        coEvery { projectRepo.getProjectById("PRJ-1") } returns Result.success(lockedProject())
+        coEvery { projectRepo.getProjectById("PRJ-2") } returns Result.success(lockedProject().copy(projectId = "PRJ-2", projectName = "Project B"))
+        coEvery { activityRepo.saveActivityResult(any(), any()) } returns Result.success(Unit)
+        coEvery { activityRepo.finishActivity(any(), any(), any()) } returns Result.success(Unit)
+
+        val vm = SalesResultViewModel(
+            SavedStateHandle(mapOf("activityId" to "A1")), projectRepo, activityRepo, authRepo, draftStore, java.time.Clock.system(java.time.ZoneId.of("Asia/Bangkok"))
+        )
+        advanceUntilIdle()
+        vm.addProjectEntry("PRJ-2")
+        advanceUntilIdle()
+        vm.onSummaryChanged("summary")
+
+        vm.save()
+        advanceUntilIdle()
+
+        assertTrue(vm.uiState.value.isSaved)
+        assertNull(vm.uiState.value.error)
+        coVerify(exactly = 2) { activityRepo.saveActivityResult(any(), any()) }
+    }
+
+    @Test
+    fun `save blocks when an additional project is missing required analysis answers`() = runTest {
+        coEvery { activityRepo.getActivityById("A1") } returns Result.success(
+            listOf(SalesActivity(activityId = "A1", userId = "U1", customerId = null, projectId = "PRJ-1", activityType = "Visit", activityDate = "2026-04-01", status = "checked_in"))
+        )
+        coEvery { projectRepo.getProjectById("PRJ-1") } returns Result.success(lockedProject())
+        // PRJ-2 ยังไม่เคยตอบปัจจัยข้อ 4-7 เลย (ไม่ใช่ locked) — ต้องบล็อกการบันทึก "ก่อน" เริ่มยิง
+        // request ไหนเลย ไม่ใช่บันทึกโครงการหลักไปก่อนแล้วค่อยพังตอนโครงการที่สอง
+        coEvery { projectRepo.getProjectById("PRJ-2") } returns Result.success(
+            Project(projectId = "PRJ-2", custId = "C1", projectName = "Project B", projectStatus = "Lead")
+        )
+        coEvery { activityRepo.saveActivityResult(any(), any()) } returns Result.success(Unit)
+        coEvery { activityRepo.finishActivity(any(), any(), any()) } returns Result.success(Unit)
+
+        val vm = SalesResultViewModel(
+            SavedStateHandle(mapOf("activityId" to "A1")), projectRepo, activityRepo, authRepo, draftStore, java.time.Clock.system(java.time.ZoneId.of("Asia/Bangkok"))
+        )
+        advanceUntilIdle()
+        vm.addProjectEntry("PRJ-2")
+        advanceUntilIdle()
+        vm.onSummaryChanged("summary")
+
+        vm.save()
+        advanceUntilIdle()
+
+        assertFalse(vm.uiState.value.isSaved)
+        assertNotNull(vm.uiState.value.error)
+        coVerify(exactly = 0) { activityRepo.saveActivityResult(any(), any()) }
+    }
+
     // โครงการที่ตอบปัจจัยข้อ 4-9 ครบแล้ว (ล็อก) — ใช้ในกลุ่มเทสต์ "กลับมาจากหน้าแก้ไขปัจจัย" ด้านล่าง
     private fun lockedProject(
         dealPosition: String = "incumbent",

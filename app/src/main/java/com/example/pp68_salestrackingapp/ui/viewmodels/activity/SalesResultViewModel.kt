@@ -83,7 +83,36 @@ data class SalesResultUiState(
     val quickAddProjectName: String = "",
     val quickAddProjectStatus: String = "",
     val isSavingQuickProject: Boolean = false,
-    val quickAddProjectError: String? = null
+    val quickAddProjectError: String? = null,
+
+    // Mobile phase 2 ข้อ 1 — นัดเดียวคุยได้หลายโครงการ (ดู backend generate_result_id, migration
+    // support_multi_project_appointment_results.sql) โครงการหลักยังใช้ field เดี่ยวๆด้านบนเหมือนเดิม
+    // (projectId, opportunityScore, dealPosition, ...) ส่วนโครงการที่ "เพิ่ม" เข้ามาเก็บแยกไว้ที่นี่
+    // แชร์แค่รูป/สรุปการเข้าพบ/วันที่กับโครงการหลัก ให้คะแนนแยกกันเอง — คนละ activity_result ตอนบันทึก
+    // (ดู save()) ยังไม่มี UI ให้เพิ่ม/แก้ค่าพวกนี้ (รอบนี้ทำแค่โครงสร้างข้อมูล + ทาง save)
+    val additionalProjects: List<AdditionalProjectEntry> = emptyList()
+)
+
+// ค่าคะแนน/ปัจจัยของโครงการที่ "เพิ่ม" เข้ามาในการบันทึกผลครั้งนี้ นอกเหนือจากโครงการหลักของนัด
+// มีฟิลด์ตั้งต้นเหมือน SalesResultUiState ส่วนที่เป็น "ของโครงการ" ทุกประการ (ไม่รวมฟิลด์ที่แชร์กัน
+// เช่น visitSummary/photos/reportDate) เพราะตอนบันทึกต้องประกอบเป็น ActivityResult อีกแถวแยกกัน
+data class AdditionalProjectEntry(
+    val projectId: String,
+    val project: Project? = null,
+    val opportunityScore: String? = null,
+    val dealPosition: String = "",
+    val previousSolution: String = "",
+    val counterpartyMultiplier: String = "",
+    val responseSpeed: String = "",
+    val isProposalSent: Boolean = false,
+    val proposalDate: String? = null,
+    val competitorCount: Int = 0,
+    val dmInvolved: Boolean = false,
+    val isStatusUpdateEnabled: Boolean = false,
+    val newStatus: String = "",
+    val lossReason: String = "",
+    val otherLossReason: String = "",
+    val lossReasonError: String? = null
 )
 
 // ไม่รวมรูป (photos) — Uri ท้องถิ่น/ไฟล์ที่อัปโหลดแล้วกู้คืนข้ามเซสชันไม่ได้อย่างปลอดภัย ผู้ใช้ต้อง
@@ -306,6 +335,42 @@ class SalesResultViewModel @Inject constructor(
     fun onProjectSelected(projectId: String) {
         _uiState.update { it.copy(projectId = projectId) }
         viewModelScope.launch { loadProjectData(projectId) }
+    }
+
+    // "+ เพิ่มโครงการ" — คุยโครงการอื่นในนัดเดียวกันด้วย ให้คะแนนแยกจากโครงการหลัก (ดู
+    // AdditionalProjectEntry/save()) กันไม่ให้ซ้ำกับโครงการหลักหรือซ้ำกับที่เพิ่มไปแล้ว
+    fun addProjectEntry(projectId: String) {
+        val id = projectId.trim()
+        if (id.isBlank() || id == _uiState.value.projectId) return
+        if (_uiState.value.additionalProjects.any { it.projectId == id }) return
+        _uiState.update { it.copy(additionalProjects = it.additionalProjects + AdditionalProjectEntry(projectId = id)) }
+        viewModelScope.launch {
+            projectRepo.getProjectById(id).onSuccess { p ->
+                // W6-2 เหมือนโครงการหลัก: ปัจจัยข้อ 4-9 ที่โครงการนี้ตอบไว้แล้วต้อง prefill มาแสดง
+                updateProjectEntry(id) { entry ->
+                    entry.copy(
+                        project = p,
+                        dealPosition = DEAL_POSITION_REVERSE[p.dealPosition] ?: "",
+                        previousSolution = SOLUTION_REVERSE[p.previousSolution] ?: "",
+                        counterpartyMultiplier = COUNTERPARTY_REVERSE[p.counterpartyType] ?: "",
+                        responseSpeed = RESPONSE_SPEED_REVERSE[p.responseSpeed] ?: "",
+                        isProposalSent = p.isProposalSent ?: false,
+                        proposalDate = p.proposalDate,
+                        competitorCount = p.competitorCount ?: 0
+                    )
+                }
+            }
+        }
+    }
+
+    fun removeProjectEntry(projectId: String) {
+        _uiState.update { it.copy(additionalProjects = it.additionalProjects.filterNot { e -> e.projectId == projectId }) }
+    }
+
+    fun updateProjectEntry(projectId: String, transform: (AdditionalProjectEntry) -> AdditionalProjectEntry) {
+        _uiState.update { s ->
+            s.copy(additionalProjects = s.additionalProjects.map { if (it.projectId == projectId) transform(it) else it })
+        }
     }
 
     fun onQuickAddProjectToggle(isOpen: Boolean) {
@@ -565,6 +630,24 @@ class SalesResultViewModel @Inject constructor(
         p != null && !p.dealPosition.isNullOrBlank() && !p.previousSolution.isNullOrBlank() &&
             !p.counterpartyType.isNullOrBlank() && !p.responseSpeed.isNullOrBlank() &&
             p.isProposalSent != null && p.competitorCount != null
+
+    // กติกาเดียวกับโครงการหลัก (ดู save()) ใช้กับโครงการที่ "เพิ่ม" เข้ามาทุกตัวก่อนเริ่มบันทึก
+    private fun validateProjectEntry(entry: AdditionalProjectEntry): String? {
+        if (!projectHasAllDealFactors(entry.project) &&
+            (entry.dealPosition.isBlank() || entry.previousSolution.isBlank() ||
+             entry.counterpartyMultiplier.isBlank() || entry.responseSpeed.isBlank())
+        ) return "กรุณาตอบคำถามวิเคราะห์ข้อมูลให้ครบสำหรับโครงการ ${entry.project?.projectName ?: entry.projectId}"
+        if (entry.isStatusUpdateEnabled) {
+            if (entry.newStatus.isBlank()) return "กรุณาเลือกสถานะใหม่สำหรับโครงการ ${entry.project?.projectName ?: entry.projectId}"
+            if (entry.newStatus == "Lost" || entry.newStatus == "Failed") {
+                if (entry.lossReason.isBlank()) return "กรุณาระบุเหตุผลที่ไม่ได้งานสำหรับโครงการ ${entry.project?.projectName ?: entry.projectId}"
+                if (entry.lossReason == com.example.pp68_salestrackingapp.utils.LossReasons.OTHER && entry.otherLossReason.isBlank()) {
+                    return "กรุณาระบุเหตุผลอื่น ๆ สำหรับโครงการ ${entry.project?.projectName ?: entry.projectId}"
+                }
+            }
+        }
+        return null
+    }
 
     companion object {
         const val MAX_PHOTOS = 5
@@ -830,6 +913,14 @@ class SalesResultViewModel @Inject constructor(
             }
         }
 
+        // โครงการที่ "เพิ่ม" เข้ามา (ดู addProjectEntry) ต้องผ่านกติกาเดียวกับโครงการหลักทุกข้อ —
+        // ตรวจให้ครบ "ก่อน" เริ่มบันทึกสักแถว ไม่ใช่กลางลูป ไม่งั้นจะเหลือบางโครงการบันทึกไปแล้ว
+        // บางโครงการไม่ผ่าน ทำให้ครึ่งๆกลางๆ
+        for (entry in s.additionalProjects) {
+            val entryError = validateProjectEntry(entry)
+            if (entryError != null) { _uiState.update { it.copy(error = entryError) }; return }
+        }
+
         viewModelScope.launch {
             _uiState.update { it.copy(isSaving = true, error = null) }
             val user = authRepo.currentUser()
@@ -914,6 +1005,52 @@ class SalesResultViewModel @Inject constructor(
                             activityRepo.updateActivity(
                                 s.activityId, mapOf("project_code" to s.projectId), isPlanEdit = false
                             )
+                        }
+                        // โครงการที่ "เพิ่ม" เข้ามา — คนละแถว activity_result จากโครงการหลัก แชร์แค่รูป/
+                        // สรุปการเข้าพบ/วันที่ (photoInputs/cover/s.visitSummary/s.reportDate เดียวกัน)
+                        // โครงการหลักสำเร็จไปแล้วตอนนี้ (นัดถูกปิดแล้วด้วย) ถ้าโครงการที่เพิ่มบางตัวพัง
+                        // ไม่ย้อนกลับโครงการหลักที่สำเร็จไปแล้ว แค่รวมข้อความ error ไว้ให้เห็นว่าตัวไหนพัง
+                        val entryErrors = mutableListOf<String>()
+                        for (entry in s.additionalProjects) {
+                            val entryFreshProject = projectRepo.getProjectById(entry.projectId).getOrNull()
+                            val entryHasProject = true
+                            val entryIsLostOrFailed = entry.isStatusUpdateEnabled &&
+                                (entry.newStatus == "Lost" || entry.newStatus == "Failed")
+                            val entryResult = ActivityResult(
+                                resultId               = "",
+                                activityId             = s.activityId,
+                                projectId              = entry.projectId,
+                                createdBy              = user?.userId,
+                                reportDate             = s.reportDate,
+                                newStatus              = if (entryHasProject && entry.isStatusUpdateEnabled) STATUS_MAP[entry.newStatus] else null,
+                                opportunityScore       = OPPORTUNITY_MAP[entry.opportunityScore] ?: entry.opportunityScore,
+                                dealPosition           = entryFreshProject?.dealPosition
+                                    ?: DEAL_POSITION_MAP[entry.dealPosition] ?: entry.dealPosition.ifBlank { null },
+                                previousSolution       = entryFreshProject?.previousSolution
+                                    ?: SOLUTION_MAP[entry.previousSolution] ?: entry.previousSolution.ifBlank { null },
+                                counterpartyMultiplier = entryFreshProject?.counterpartyType
+                                    ?: COUNTERPARTY_MAP[entry.counterpartyMultiplier] ?: entry.counterpartyMultiplier.ifBlank { null },
+                                responseSpeed          = entryFreshProject?.responseSpeed
+                                    ?: RESPONSE_SPEED_MAP[entry.responseSpeed] ?: entry.responseSpeed.ifBlank { null },
+                                isProposalSent         = entryFreshProject?.isProposalSent ?: entry.isProposalSent,
+                                proposalDate           = if (entryFreshProject?.isProposalSent != null) entryFreshProject.proposalDate else entry.proposalDate,
+                                competitorCount        = entryFreshProject?.competitorCount ?: entry.competitorCount,
+                                dmInvolved             = entry.dmInvolved,
+                                summary                = s.visitSummary,
+                                photoUrl               = cover?.url,
+                                photoTakenAt           = cover?.takenAt,
+                                photoLat               = cover?.lat,
+                                photoLng               = cover?.lng,
+                                photoDeviceModel       = cover?.deviceModel,
+                                lossReason             = if (entryIsLostOrFailed) entry.lossReason else null,
+                                lossReasonNote          = if (entryIsLostOrFailed && entry.lossReason == com.example.pp68_salestrackingapp.utils.LossReasons.OTHER) entry.otherLossReason else null
+                            )
+                            activityRepo.saveActivityResult(entryResult, photoInputs).onFailure {
+                                entryErrors += "${entryFreshProject?.projectName ?: entry.projectId}: ${it.message}"
+                            }
+                        }
+                        if (entryErrors.isNotEmpty()) {
+                            _uiState.update { it.copy(error = "บันทึกผลโครงการหลักสำเร็จ แต่โครงการเพิ่มเติมมีปัญหา: ${entryErrors.joinToString("; ")}") }
                         }
                     }
                     discardDraft()
