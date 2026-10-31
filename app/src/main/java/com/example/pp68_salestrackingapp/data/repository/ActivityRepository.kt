@@ -783,6 +783,28 @@ class ActivityRepository @Inject constructor(
         }
     }
 
+    // ดึงบันทึกผลการขายของนัดหมายที่ระบุ "ทุกโครงการ" — นัดเดียวคุยได้หลายโครงการ (ดู backend
+    // generate_result_id) จึงมีได้มากกว่าหนึ่งแถว ใช้ตัวนี้แทน getActivityResult() ตรงไหนที่ต้อง
+    // แสดงครบทุกโครงการของนัด (เช่นหน้าประวัติ) — getActivityResult() เดิมยังเก็บไว้เพราะที่อื่นต้องการ
+    // แค่แถวเดียว (โครงการหลัก) ไม่ต้องแก้
+    suspend fun getActivityResults(activityId: String): List<ActivityResult> {
+        return withContext(Dispatchers.IO) {
+            val resolvedActivityId = localIdMappingDao.resolveMappedId(LocalIdMapping.ENTITY_ACTIVITY, activityId)
+            try {
+                if (resolvedActivityId.startsWith("TEMP-")) {
+                    return@withContext resultDao.getResultsByActivityId(resolvedActivityId)
+                }
+                val resp = apiService.getActivityResult("eq.$resolvedActivityId")
+                if (resp.isSuccessful && !resp.body().isNullOrEmpty()) {
+                    val results = resp.body()!!.map { it.copy(isSynced = true) }
+                    results.forEach { resultDao.insertResult(it); refreshPhotosForResult(it.resultId) }
+                    return@withContext results
+                }
+                resultDao.getResultsByActivityId(resolvedActivityId)
+            } catch (e: Exception) { resultDao.getResultsByActivityId(resolvedActivityId) }
+        }
+    }
+
     // รีเฟรชรายการรูปภาพของบันทึกผลการขายจากเซิร์ฟเวอร์
     private suspend fun refreshPhotosForResult(resultId: String) {
         try {

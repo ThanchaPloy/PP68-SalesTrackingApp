@@ -1221,6 +1221,45 @@ class SalesResultViewModelTest {
         coVerify(exactly = 0) { activityRepo.updateActivity(any(), any(), any()) }
     }
 
+    // Mobile phase 2 ข้อ 1 — นัดที่ "มีโครงการผูกอยู่แล้ว" ต้องไม่ถูกเขียนทับเป็นโครงการอื่นตอนบันทึก
+    // ผล ไม่งั้นการ "คุยโครงการที่สองในนัดเดียวกัน" จะกลายเป็น "ย้าย" นัดไปอยู่โครงการอื่นโดยไม่ตั้งใจ
+    // (ดู multi-project-appointment-design memory — base_id ของผลแต่ละโครงการคีย์ตาม project_code
+    // ของแถวผลเอง ไม่ได้อิงจาก appointment.project_code อยู่แล้ว การไม่เขียนทับจึงไม่กระทบผลที่บันทึก)
+    @Test
+    fun `save success does not move an appointment that already has a different project linked`() = runTest {
+        coEvery { activityRepo.getActivityById("A1") } returns Result.success(
+            listOf(
+                SalesActivity(
+                    activityId = "A1", userId = "U1", customerId = null, projectId = "PRJ-OLD",
+                    activityType = "Visit", activityDate = "2026-04-01", status = "checked_in"
+                )
+            )
+        )
+        coEvery { projectRepo.getProjectById("PRJ-OLD") } returns Result.success(
+            Project(projectId = "PRJ-OLD", custId = "C1", projectName = "Project Old", projectStatus = "Lead")
+        )
+        coEvery { projectRepo.getProjectById("PRJ-NEW") } returns Result.success(
+            Project(projectId = "PRJ-NEW", custId = "C1", projectName = "Project New", projectStatus = "Lead")
+        )
+        coEvery { activityRepo.saveActivityResult(any(), any()) } returns Result.success(Unit)
+        coEvery { activityRepo.finishActivity(any(), any(), any()) } returns Result.success(Unit)
+
+        val vm = SalesResultViewModel(
+            SavedStateHandle(mapOf("activityId" to "A1")), projectRepo, activityRepo, authRepo, draftStore, java.time.Clock.system(java.time.ZoneId.of("Asia/Bangkok"))
+        )
+        advanceUntilIdle()
+        vm.onProjectSelected("PRJ-NEW")
+        advanceUntilIdle()
+        vm.onSummaryChanged("summary")
+        vm.answerRequiredAnalysis()
+
+        vm.save()
+        advanceUntilIdle()
+
+        assertTrue(vm.uiState.value.isSaved)
+        coVerify(exactly = 0) { activityRepo.updateActivity(any(), any(), any()) }
+    }
+
     // โครงการที่ตอบปัจจัยข้อ 4-9 ครบแล้ว (ล็อก) — ใช้ในกลุ่มเทสต์ "กลับมาจากหน้าแก้ไขปัจจัย" ด้านล่าง
     private fun lockedProject(
         dealPosition: String = "incumbent",

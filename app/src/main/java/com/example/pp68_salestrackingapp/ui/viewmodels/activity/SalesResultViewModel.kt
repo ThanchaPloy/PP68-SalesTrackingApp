@@ -33,6 +33,9 @@ data class SalesResultUiState(
     val resultId: String? = null, // ✅ เพิ่มเพื่อรองรับการแก้ไขบันทึกเดิม
     val projectId: String? = null,
     val activityId: String? = null,
+    // ค่าโครงการของนัดหมาย "ก่อน" เปิดหน้านี้ — ไม่ใช่ projectId ด้านบนที่ผู้ใช้แก้ไขได้ ใช้แยกแค่
+    // ตัดสินว่าจะ "ผูกโครงการให้นัด" ตอนบันทึก (ครั้งแรกที่นัดยังไม่มีโครงการเลย) หรือไม่ (ดู save())
+    val originalActivityProjectId: String? = null,
     // ถ่ายภาพแผนไว้ตอนโหลด เพื่อให้ save() ตัดสินกติกาได้โดยไม่ต้องอ่าน Room ซ้ำ
     val appointmentFacts: com.example.pp68_salestrackingapp.utils.AppointmentPolicy.Facts? = null,
     val project: Project? = null,
@@ -237,6 +240,7 @@ class SalesResultViewModel @Inject constructor(
                 _uiState.update { it.copy(
                     activityId = id,
                     projectId = activity.projectId,
+                    originalActivityProjectId = activity.projectId,
                     mode = ResultMode.FROM_APPOINTMENT,
                     reportDate = activity.activityDate,
                     appointmentFacts = activity.policyFacts()
@@ -256,6 +260,9 @@ class SalesResultViewModel @Inject constructor(
                     _uiState.update { it.copy(
                         resultId = result.resultId,
                         projectId = result.projectId,
+                        // แก้บันทึกที่มีอยู่แล้วแปลว่านัดนี้ถูกผูกโครงการไปแล้วตั้งแต่ตอนบันทึกครั้งแรก
+                        // (ไม่ต้องไปอ่าน appointment จริงซ้ำ แค่ไม่ใช่ null ก็พอกันการผูกซ้ำ)
+                        originalActivityProjectId = result.projectId,
                         mode = if (result.activityId != null) ResultMode.FROM_APPOINTMENT else ResultMode.STANDALONE,
                         activityId = result.activityId,
                         reportDate = result.reportDate ?: LocalDate.now().toString()
@@ -897,7 +904,12 @@ class SalesResultViewModel @Inject constructor(
                         s.activityId?.let { activityRepo.finishActivity(it, s.selectedItemIds.toList(), note = null) }
                         // ผูกโครงการเพิ่มตอนบันทึกผล (นัดหมายที่ไม่ได้ผูกไว้แต่แรก) ต้องอัปเดตกลับไปที่
                         // ตัวนัดหมายจริงด้วย ไม่งั้นเปิดนัดหมายนี้ครั้งหน้าจะยังว่างเหมือนเดิม
-                        if (s.activityId != null && s.projectId != null) {
+                        //
+                        // ✅ เขียนทับเฉพาะตอนที่นัดยังไม่มีโครงการผูกอยู่เลย (originalActivityProjectId
+                        // ว่าง) — เดิมเขียนทับทุกครั้งที่บันทึกผล ถ้านัดมีโครงการอยู่แล้วแล้วผู้ใช้เลือก
+                        // โครงการอื่นตอนบันทึก (คุยโครงการที่สองในนัดเดียวกัน) จะเป็นการ "เพิ่ม" ผล
+                        // ของโครงการนั้น ไม่ใช่ "ย้าย" นัดไปอยู่โครงการอื่น ห้ามเขียนทับโครงการหลักของนัด
+                        if (s.activityId != null && s.projectId != null && s.originalActivityProjectId.isNullOrBlank()) {
                             // นัดที่ขาดไปแล้วก็ต้องผูกโครงการได้ — นี่คือผลพลอยจากการบันทึกผล ไม่ใช่การแก้แผน
                             activityRepo.updateActivity(
                                 s.activityId, mapOf("project_code" to s.projectId), isPlanEdit = false

@@ -20,6 +20,12 @@ interface ActivityResultDao {
     // ดึงข้อมูล ผลการขาย ตาม กิจกรรม รหัส
     suspend fun getResultByActivityId(id: String): ActivityResult?
 
+    // นัดเดียวคุยได้หลายโครงการ (ดู backend generate_result_id — คีย์เวอร์ชัน/กลุ่มเป็น
+    // appointment+project คู่กัน) is_latest = 1 จึงมีได้มากกว่าหนึ่งแถวต่อนัด แถวละโครงการ
+    @Query("SELECT * FROM activity_result WHERE appointment_id = :id AND is_latest = 1")
+    // ดึงข้อมูล ผลการขายทั้งหมด (ทุกโครงการ) ตาม กิจกรรม รหัส
+    suspend fun getResultsByActivityId(id: String): List<ActivityResult>
+
     // ✅ ดึง version ใดก็ได้ตาม id ตรงๆ (ใช้เปิดดูประวัติ version เก่า) ไม่กรอง is_latest
     @Query("SELECT * FROM activity_result WHERE result_id = :resultId LIMIT 1")
     // ดึงข้อมูล ผลการขาย ตาม รหัส
