@@ -249,6 +249,34 @@ class AddProjectViewModelTest {
         coVerify(exactly = 0) { projectRepo.updateProject(any(), any()) }
     }
 
+    // ผู้จัดการภาค/โซน — รหัสโครงการตั้งจากสาขาที่เปิดบิล ไม่ใช่สาขาตัวเอง (trg_set_project_code
+    // ฝั่ง backend) แก้รหัสทีหลังไม่ได้ปลอดภัย จึงบังคับกรอกตั้งแต่ตอนสร้างเฉพาะ role นี้
+    @Test
+    fun `zone manager must select a billing branch before saving, other roles do not`() = runTest {
+        every { authRepo.currentUser() } returns AuthUser("U1", "u@test.com", "ผู้จัดการภาค", "TS-001")
+        initViewModel()
+        advanceUntilIdle()
+
+        assertTrue(viewModel.uiState.value.isBillingBranchRequired)
+
+        viewModel.onEvent(AddProjectEvent.ProjectNameChanged("Alpha"))
+        viewModel.onEvent(AddProjectEvent.StatusChanged("Lead"))
+        viewModel.onEvent(AddProjectEvent.Save)
+        advanceUntilIdle()
+
+        assertEquals("กรุณาเลือกสาขาที่เปิดบิล", viewModel.uiState.value.billingBranchError)
+        coVerify(exactly = 0) { projectRepo.createProject(any(), any()) }
+    }
+
+    @Test
+    fun `an ordinary sale role does not require a billing branch`() = runTest {
+        // ค่าเริ่มต้นของ setUp() คือ role "sale" อยู่แล้ว — ยืนยันตรงๆว่าไม่บังคับ
+        initViewModel()
+        advanceUntilIdle()
+
+        assertFalse(viewModel.uiState.value.isBillingBranchRequired)
+    }
+
     @Test
     fun `save create success should save project contacts`() = runTest {
         val projectSlot = slot<Project>()
