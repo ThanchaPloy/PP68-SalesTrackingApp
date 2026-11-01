@@ -13,7 +13,10 @@ import android.content.pm.PackageManager
 import android.os.Build
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
 import com.example.pp68_salestrackingapp.data.remote.ApiService
+import com.example.pp68_salestrackingapp.data.repository.CallLogRepository
 import com.example.pp68_salestrackingapp.di.TokenManager
 import com.example.pp68_salestrackingapp.utils.SyncManager
 import com.example.pp68_salestrackingapp.utils.SyncStatusNavigation
@@ -25,6 +28,7 @@ class MainActivity : ComponentActivity() {
     @Inject lateinit var apiService: ApiService
     @Inject lateinit var tokenManager: TokenManager
     @Inject lateinit var syncManager: SyncManager
+    @Inject lateinit var callLogRepository: CallLogRepository
 
     // ผลของการขอสิทธิ์ไม่ต้องทำอะไรต่อ — การแจ้งเตือนนัดหมายตั้งไว้ล่วงหน้าด้วย AlarmManager
     // ตั้งแต่ตอนสร้างนัด ระบบจะยิงเองเมื่อถึงเวลาถ้าผู้ใช้อนุญาต
@@ -32,10 +36,17 @@ class MainActivity : ComponentActivity() {
         ActivityResultContracts.RequestPermission()
     ) { }
 
+    // Mobile phase 2 ข้อ 2 — ขอผลแล้วค่อยลองอ่าน call log (ปฏิเสธก็ไม่ทำอะไรต่อ ไม่มี retry
+    // ถามซ้ำ เดี๋ยวน่ารำคาญ รอให้ผู้ใช้ไปเปิดเองจากตั้งค่าเครื่อง)
+    private val callLogPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted -> if (granted) syncCallLogsIfPossible() }
+
 
 
     private var lastSyncMs = 0L
 
+    // จัดการเหตุการณ์ Resume
     override fun onResume() {
         super.onResume()
         val now = System.currentTimeMillis()
@@ -45,6 +56,7 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    // เตรียมค่าเริ่มต้นเมื่อคอมโพเนนต์ถูกสร้าง
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         // ลงทะเบียนครั้งเดียวแล้วอยู่ยาว (KEEP) — ไม่ได้ผูกกับการล็อกอิน เพราะรอบที่รันตอนไม่มี
@@ -53,6 +65,7 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         com.example.pp68_salestrackingapp.utils.NotificationChannels.ensureCreated(this)
         askNotificationPermission()
+        askCallLogPermission()
 
 
         setContent {
@@ -66,11 +79,33 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    // ขอสิทธิ์แสดงการแจ้งเตือนบน Android เวอร์ชันที่กำหนดให้ขอสิทธิ์
     private fun askNotificationPermission() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
         val granted = ContextCompat.checkSelfPermission(
             this, Manifest.permission.POST_NOTIFICATIONS
         ) == PackageManager.PERMISSION_GRANTED
         if (!granted) requestPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+    }
+
+    // ขอสิทธิ์อ่าน call log — เฉพาะตอนล็อกอินแล้ว (ไม่มี token ก็ไม่มีผู้ติดต่อให้จับคู่ ขอไปก็ไม่มีอะไรทำ)
+    private fun askCallLogPermission() {
+        if (tokenManager.getToken() == null) return
+        val granted = ContextCompat.checkSelfPermission(
+            this, Manifest.permission.READ_CALL_LOG
+        ) == PackageManager.PERMISSION_GRANTED
+        if (granted) syncCallLogsIfPossible() else callLogPermissionLauncher.launch(Manifest.permission.READ_CALL_LOG)
+    }
+
+    // อ่าน call log ครั้งเดียวต่อการเปิดแอป แล้วปล่อยให้ outbox (utils/SyncManager) ส่งต่อ —
+    // พังก็แค่ log ไว้ ไม่ใช่สิ่งที่ต้องบล็อกผู้ใช้หรือขึ้นแจ้งเตือน
+    private fun syncCallLogsIfPossible() {
+        lifecycleScope.launch {
+            try {
+                callLogRepository.collectAndQueue()
+            } catch (e: Exception) {
+                android.util.Log.w("CallLog", "อ่าน call log ไม่สำเร็จ: ${e.message}")
+            }
+        }
     }
 }

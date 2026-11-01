@@ -42,6 +42,7 @@ class SyncManagerTest {
     private val projectContactDao: ProjectContactDao = mockk(relaxed = true)
     private val syncRejectionDao: SyncRejectionDao = mockk(relaxed = true)
     private val attachmentOutboxDao: AttachmentOutboxDao = mockk(relaxed = true)
+    private val callLogDao: CallLogDao = mockk(relaxed = true)
 
     private lateinit var sync: SyncManager
 
@@ -50,13 +51,17 @@ class SyncManagerTest {
         sync = SyncManager(
             context, apiService, uploadApiService, tokenManager, customerDao, projectDao, localIdMappingDao, contactDao,
             activityDao, resultDao, photoDao, appointmentContactDao, planItemDao, projectContactDao,
-            syncRejectionDao, attachmentOutboxDao
+            syncRejectionDao, attachmentOutboxDao, callLogDao
         )
         coEvery { customerDao.getUnsyncedCustomers() } returns emptyList()
         coEvery { contactDao.getUnsyncedContacts() } returns emptyList()
         coEvery { projectDao.getUnsyncedProjects() } returns emptyList()
         coEvery { activityDao.getUnsyncedActivities() } returns emptyList()
         coEvery { resultDao.getUnsyncedResults() } returns emptyList()
+        // call log — ปัญหาเดียวกับ relaxed mockk กับ List เสมอ ต้อง stub ไว้ล่วงหน้า (ดูคอมเมนต์
+        // เดียวกันในไฟล์เทสต์อื่นของแอป)
+        coEvery { callLogDao.getUnsyncedCallLogs() } returns emptyList()
+        coEvery { callLogDao.getUnsyncedCallLogIds() } returns emptyList()
         coEvery { localIdMappingDao.resolvePendingContactCustomer(any()) } answers { firstArg() }
         coEvery { localIdMappingDao.resolvePendingProjectCustomer(any()) } answers { firstArg() }
         coEvery { localIdMappingDao.resolvePendingActivityProject(any()) } answers { firstArg() }

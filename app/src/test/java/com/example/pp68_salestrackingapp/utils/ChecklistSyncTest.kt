@@ -35,6 +35,7 @@ class ChecklistSyncTest {
     private val projectContactDao: ProjectContactDao = mockk(relaxed = true)
     private val syncRejectionDao: SyncRejectionDao = mockk(relaxed = true)
     private val attachmentOutboxDao: AttachmentOutboxDao = mockk(relaxed = true)
+    private val callLogDao: CallLogDao = mockk(relaxed = true)
 
     private lateinit var sync: SyncManager
 
@@ -47,7 +48,7 @@ class ChecklistSyncTest {
         sync = SyncManager(
             context, apiService, uploadApiService, tokenManager, customerDao, projectDao, localIdMappingDao, contactDao,
             activityDao, resultDao, photoDao, appointmentContactDao, planItemDao, projectContactDao,
-            syncRejectionDao, attachmentOutboxDao
+            syncRejectionDao, attachmentOutboxDao, callLogDao
         )
         every { tokenManager.getLocalDataOwner() } returns null
         coEvery { customerDao.getUnsyncedCustomers() } returns emptyList()
@@ -55,6 +56,8 @@ class ChecklistSyncTest {
         coEvery { projectDao.getUnsyncedProjects() } returns emptyList()
         coEvery { activityDao.getUnsyncedActivities() } returns emptyList()
         coEvery { resultDao.getUnsyncedResults() } returns emptyList()
+        coEvery { callLogDao.getUnsyncedCallLogs() } returns emptyList()
+        coEvery { callLogDao.getUnsyncedCallLogIds() } returns emptyList()
         coEvery { localIdMappingDao.resolvePendingContactCustomer(any()) } answers { firstArg() }
         coEvery { localIdMappingDao.resolvePendingProjectCustomer(any()) } answers { firstArg() }
         coEvery { localIdMappingDao.resolvePendingActivityProject(any()) } answers { firstArg() }

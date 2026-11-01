@@ -11,6 +11,9 @@
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.READ_CONTACTS" />
+    <!-- Mobile phase 2 ข้อ 2 — call log: ขอ runtime เพิ่ม (ดู MainActivity.askCallLogPermission)
+         เก็บเฉพาะสายที่ตรงกับผู้ติดต่อในระบบ กรองก่อน insert ใน CallLogRepository -->
+    <uses-permission android:name="android.permission.READ_CALL_LOG" />
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-feature android:name="android.hardware.camera" android:required="false" />
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />

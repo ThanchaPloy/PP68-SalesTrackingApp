@@ -24,30 +24,50 @@ import com.example.pp68_salestrackingapp.data.model.*
         SyncConflict::class,
         SyncSnapshotItem::class,
         LocalIdMapping::class,
-        AppointmentDraft::class
+        AppointmentDraft::class,
+        CallLogSync::class
     ],
-    version = 63,
+    version = 64,
     exportSchema = true
 )
 abstract class AppDatabase : RoomDatabase() {
 
+    // คืน DAO สำหรับจัดการข้อมูลลูกค้า
     abstract fun customerDao(): CustomerDao
+    // คืน DAO สำหรับจัดการข้อมูลโครงการ
     abstract fun projectDao(): ProjectDao
+    // คืน DAO สำหรับจัดการข้อมูลนัดหมาย
     abstract fun activityDao(): ActivityDao
+    // คืน DAO สำหรับจัดการข้อมูลผู้ติดต่อ
     abstract fun contactDao(): ContactDao
+    // คืน DAO สำหรับจัดการข้อมูลสาขา
     abstract fun branchDao(): BranchDao
+    // คืน DAO สำหรับจัดการรายการแผนงานของนัดหมาย
     abstract fun activityPlanItemDao(): ActivityPlanItemDao
+    // คืน DAO สำหรับจัดการบันทึกผลการขาย
     abstract fun activityResultDao(): ActivityResultDao
+    // คืน DAO สำหรับจัดการผู้ติดต่อของนัดหมาย
     abstract fun appointmentContactDao(): AppointmentContactDao
+    // คืน DAO สำหรับจัดการผู้ติดต่อของโครงการ
     abstract fun projectContactDao(): ProjectContactDao
+    // คืน DAO สำหรับจัดการรูปภาพของผลการขาย
     abstract fun activityResultPhotoDao(): ActivityResultPhotoDao
+    // ซิงก์ รายการถูกปฏิเสธ Dao
     abstract fun syncRejectionDao(): SyncRejectionDao
+    // คืน DAO สำหรับจัดการคิวไฟล์แนบที่รออัปโหลด
     abstract fun attachmentOutboxDao(): AttachmentOutboxDao
+    // ซิงก์ State Dao
     abstract fun syncStateDao(): SyncStateDao
+    // ซิงก์ ข้อมูลขัดแย้ง Dao
     abstract fun syncConflictDao(): SyncConflictDao
+    // ซิงก์ สแนปช็อต Dao
     abstract fun syncSnapshotDao(): SyncSnapshotDao
+    // คืน DAO สำหรับจัดการความสัมพันธ์ระหว่างรหัสชั่วคราวกับรหัสเซิร์ฟเวอร์
     abstract fun localIdMappingDao(): LocalIdMappingDao
+    // คืน DAO สำหรับจัดการฉบับร่างนัดหมาย
     abstract fun appointmentDraftDao(): AppointmentDraftDao
+    // คืน DAO สำหรับจัดการ call log ที่ตรงกับผู้ติดต่อในระบบ
+    abstract fun callLogDao(): CallLogDao
 
     // clearAllData() ถูกลบออก — เป็น wrapper บาง ๆ ของ clearAllTables() ที่ไม่มีใครเรียกเลย
     // ตัวที่ใช้งานจริงคือ clearAllTables() ที่ AuthRepository เรียกตอน login คนละคน/logout ซึ่งมี
@@ -55,6 +75,7 @@ abstract class AppDatabase : RoomDatabase() {
 
     companion object {
         val MIGRATION_28_29 = object : Migration(28, 29) {
+            // ย้ายโครงสร้างฐานข้อมูลไปยังเวอร์ชันถัดไป
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("""
                     CREATE TABLE project_new (
@@ -91,6 +112,7 @@ abstract class AppDatabase : RoomDatabase() {
         }
 
         val MIGRATION_29_30 = object : Migration(29, 30) {
+            // ย้ายโครงสร้างฐานข้อมูลไปยังเวอร์ชันถัดไป
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE project ADD COLUMN updatedAt TEXT")
             }
@@ -100,10 +122,12 @@ abstract class AppDatabase : RoomDatabase() {
         // เป็นต้นไปสมมติ schema เดียวกับที่ MIGRATION_29_30 ทิ้งไว้) — ใส่เป็น no-op ไว้ปิดช่องว่าง
         // เพื่อไม่ให้ผู้ใช้ที่ค้างอยู่ที่ v30 หรือต่ำกว่าโดน fallbackToDestructiveMigration() ล้างข้อมูล
         val MIGRATION_30_31 = object : Migration(30, 31) {
+            // ย้ายโครงสร้างฐานข้อมูลไปยังเวอร์ชันถัดไป
             override fun migrate(db: SupportSQLiteDatabase) {}
         }
 
         val MIGRATION_31_32 = object : Migration(31, 32) {
+            // ย้ายโครงสร้างฐานข้อมูลไปยังเวอร์ชันถัดไป
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("""
                     CREATE TABLE customer_new (
@@ -134,6 +158,7 @@ abstract class AppDatabase : RoomDatabase() {
         }
 
         val MIGRATION_32_33 = object : Migration(32, 33) {
+            // ย้ายโครงสร้างฐานข้อมูลไปยังเวอร์ชันถัดไป
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE customer ADD COLUMN user_id TEXT")
                 db.execSQL("ALTER TABLE project ADD COLUMN user_id TEXT")
@@ -141,6 +166,7 @@ abstract class AppDatabase : RoomDatabase() {
         }
 
         val MIGRATION_34_35 = object : Migration(34, 35) {
+            // ย้ายโครงสร้างฐานข้อมูลไปยังเวอร์ชันถัดไป
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE project ADD COLUMN customerName TEXT")
                 db.execSQL("ALTER TABLE project ADD COLUMN remark TEXT")
@@ -148,6 +174,7 @@ abstract class AppDatabase : RoomDatabase() {
         }
 
         val MIGRATION_33_34 = object : Migration(33, 34) {
+            // ย้ายโครงสร้างฐานข้อมูลไปยังเวอร์ชันถัดไป
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE customer ADD COLUMN grade INTEGER")
                 db.execSQL("""
@@ -179,12 +206,14 @@ abstract class AppDatabase : RoomDatabase() {
         }
 
         val MIGRATION_35_36 = object : Migration(35, 36) {
+            // ย้ายโครงสร้างฐานข้อมูลไปยังเวอร์ชันถัดไป
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE project ADD COLUMN create_by TEXT")
             }
         }
 
         val MIGRATION_36_37 = object : Migration(36, 37) {
+            // ย้ายโครงสร้างฐานข้อมูลไปยังเวอร์ชันถัดไป
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE customer ADD COLUMN is_synced INTEGER NOT NULL DEFAULT 1")
                 db.execSQL("ALTER TABLE project ADD COLUMN is_synced INTEGER NOT NULL DEFAULT 1")
@@ -195,6 +224,7 @@ abstract class AppDatabase : RoomDatabase() {
         }
 
         val MIGRATION_37_38 = object : Migration(37, 38) {
+            // ย้ายโครงสร้างฐานข้อมูลไปยังเวอร์ชันถัดไป
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("""
                     CREATE TABLE IF NOT EXISTS project_sales_member (
@@ -208,18 +238,21 @@ abstract class AppDatabase : RoomDatabase() {
         }
 
         val MIGRATION_38_39 = object : Migration(38, 39) {
+            // ย้ายโครงสร้างฐานข้อมูลไปยังเวอร์ชันถัดไป
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE activity_table ADD COLUMN created_at TEXT")
             }
         }
 
         val MIGRATION_40_41 = object : Migration(40, 41) {
+            // ย้ายโครงสร้างฐานข้อมูลไปยังเวอร์ชันถัดไป
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE `customer` ADD COLUMN `vat_registration_no` TEXT")
             }
         }
 
         val MIGRATION_39_40 = object : Migration(39, 40) {
+            // ย้ายโครงสร้างฐานข้อมูลไปยังเวอร์ชันถัดไป
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("DROP TABLE IF EXISTS `appointment_contact`")
                 db.execSQL("""
@@ -236,6 +269,7 @@ abstract class AppDatabase : RoomDatabase() {
         }
 
         val MIGRATION_41_42 = object : Migration(41, 42) {
+            // ย้ายโครงสร้างฐานข้อมูลไปยังเวอร์ชันถัดไป
             override fun migrate(db: SupportSQLiteDatabase) {
                 // ✅ cust_id ต้องรองรับ null เพราะบางนัดหมายจากเซิร์ฟเวอร์ไม่ผูกกับลูกค้า
                 db.execSQL("""
@@ -281,6 +315,7 @@ abstract class AppDatabase : RoomDatabase() {
         }
 
         val MIGRATION_42_43 = object : Migration(42, 43) {
+            // ย้ายโครงสร้างฐานข้อมูลไปยังเวอร์ชันถัดไป
             override fun migrate(db: SupportSQLiteDatabase) {
                 // ✅ รองรับ version history ของบันทึกผลการขาย
                 db.execSQL("ALTER TABLE activity_result ADD COLUMN version INTEGER NOT NULL DEFAULT 1")
@@ -291,6 +326,7 @@ abstract class AppDatabase : RoomDatabase() {
         }
 
         val MIGRATION_43_44 = object : Migration(43, 44) {
+            // ย้ายโครงสร้างฐานข้อมูลไปยังเวอร์ชันถัดไป
             override fun migrate(db: SupportSQLiteDatabase) {
                 // ✅ รองรับหลายรูปต่อบันทึกผลการขาย (สูงสุด 5 รูป)
                 db.execSQL("""
@@ -307,12 +343,14 @@ abstract class AppDatabase : RoomDatabase() {
         }
 
         val MIGRATION_44_45 = object : Migration(44, 45) {
+            // ย้ายโครงสร้างฐานข้อมูลไปยังเวอร์ชันถัดไป
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE customer ADD COLUMN is_lead INTEGER NOT NULL DEFAULT 0")
             }
         }
 
         val MIGRATION_45_46 = object : Migration(45, 46) {
+            // ย้ายโครงสร้างฐานข้อมูลไปยังเวอร์ชันถัดไป
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("""
                     CREATE TABLE project_new (
@@ -357,6 +395,7 @@ abstract class AppDatabase : RoomDatabase() {
 
         // ✅ 1 โครงการมีเจ้าของคนเดียว (project.create_by) — เลิกใช้ตาราง M2M นี้แล้ว
         val MIGRATION_46_47 = object : Migration(46, 47) {
+            // ย้ายโครงสร้างฐานข้อมูลไปยังเวอร์ชันถัดไป
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("DROP TABLE IF EXISTS project_sales_member")
             }
@@ -364,6 +403,7 @@ abstract class AppDatabase : RoomDatabase() {
 
         // ✅ cache ชื่อสถานที่ที่ reverse geocode มาแล้ว กันยิงซ้ำทุกครั้งที่ export
         val MIGRATION_47_48 = object : Migration(47, 48) {
+            // ย้ายโครงสร้างฐานข้อมูลไปยังเวอร์ชันถัดไป
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE activity_table ADD COLUMN location_name TEXT")
             }
@@ -372,6 +412,7 @@ abstract class AppDatabase : RoomDatabase() {
         // checklist ไม่เคยมีธงซิงค์ ทำให้ outbox มองข้ามทั้งตาราง — ติ๊กตอนออฟไลน์แล้วหายถาวร
         // ตั้งค่าเริ่มต้นเป็น 1 เพราะแถวที่มีอยู่ตอนอัปเกรดคือแถวที่ซิงค์แล้วทั้งหมด
         val MIGRATION_48_49 = object : Migration(48, 49) {
+            // ย้ายโครงสร้างฐานข้อมูลไปยังเวอร์ชันถัดไป
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE activity_plan_item ADD COLUMN is_synced INTEGER NOT NULL DEFAULT 1")
             }
@@ -380,6 +421,7 @@ abstract class AppDatabase : RoomDatabase() {
         // W4: แยกรหัสเหตุผลที่แพ้ออกจากข้อความอิสระ — loss_reason เดิมเก็บทั้งรหัส 3 แบบ และ
         // ข้อความที่พิมพ์เองปนกัน คอลัมน์ใหม่นี้เก็บเฉพาะข้อความอิสระ ส่วน loss_reason จะเหลือแค่รหัส
         val MIGRATION_49_50 = object : Migration(49, 50) {
+            // ย้ายโครงสร้างฐานข้อมูลไปยังเวอร์ชันถัดไป
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE project ADD COLUMN lossReasonNote TEXT")
                 db.execSQL("ALTER TABLE activity_result ADD COLUMN loss_reason_note TEXT")
@@ -389,6 +431,7 @@ abstract class AppDatabase : RoomDatabase() {
         // W6-2: ปัจจัยข้อ 4-7 sync มาจาก activity_result ล่าสุดของโครงการผ่าน backend trigger
         // (เหมือน opportunityScore) ให้ project เก็บสำเนาไว้ในเครื่องด้วย เพื่อ prefill หน้าบันทึกผล
         val MIGRATION_50_51 = object : Migration(50, 51) {
+            // ย้ายโครงสร้างฐานข้อมูลไปยังเวอร์ชันถัดไป
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE project ADD COLUMN dealPosition TEXT")
                 db.execSQL("ALTER TABLE project ADD COLUMN previousSolution TEXT")
@@ -401,6 +444,7 @@ abstract class AppDatabase : RoomDatabase() {
         // ต้อง nullable ทั้งสามคอลัมน์ (ไม่มี NOT NULL DEFAULT) เพราะ null = ยังไม่เคยตอบ
         // ซึ่งต่างจาก 0/false ที่แปลว่าตอบแล้ว — ถ้าใส่ DEFAULT จะแยกสองกรณีนี้ไม่ออก
         val MIGRATION_51_52 = object : Migration(51, 52) {
+            // ย้ายโครงสร้างฐานข้อมูลไปยังเวอร์ชันถัดไป
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE project ADD COLUMN isProposalSent INTEGER")
                 db.execSQL("ALTER TABLE project ADD COLUMN proposalDate TEXT")
@@ -411,6 +455,7 @@ abstract class AppDatabase : RoomDatabase() {
         // แยก "ยังส่งไม่สำเร็จเพราะเน็ต" ออกจาก "เซิร์ฟเวอร์ปฏิเสธถาวร" — เดิมรวมอยู่ใน is_synced = 0
         // เหมือนกันหมด ด่าน logout จึงบล็อกทั้งที่แถวบางส่วนไม่มีวันส่งผ่านไม่ว่าเน็ตจะดีแค่ไหน
         val MIGRATION_52_53 = object : Migration(52, 53) {
+            // ย้ายโครงสร้างฐานข้อมูลไปยังเวอร์ชันถัดไป
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL(
                     """
@@ -430,6 +475,7 @@ abstract class AppDatabase : RoomDatabase() {
         // Phase 2A: เพิ่มเฉพาะ index ที่ baseline 5,000 แถวพบว่าเป็น full scan หรือใช้ temp B-tree
         // migration นี้ไม่แก้หรือลบ business row จึงรักษา pending/TEMP data เดิมทั้งหมด
         val MIGRATION_53_54 = object : Migration(53, 54) {
+            // ย้ายโครงสร้างฐานข้อมูลไปยังเวอร์ชันถัดไป
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("CREATE INDEX IF NOT EXISTS index_customer_company_name ON customer(company_name)")
                 db.execSQL("CREATE INDEX IF NOT EXISTS index_customer_is_synced ON customer(is_synced)")
@@ -450,6 +496,7 @@ abstract class AppDatabase : RoomDatabase() {
         // Phase 2C: operation ID ต้องอยู่กับแถว TEMP เพื่อให้ retry หลัง process death/reboot
         // ใช้ key เดิมเสมอ ทุกคอลัมน์ nullable เพื่อรักษา compatibility กับข้อมูลที่ sync แล้วเดิม
         val MIGRATION_54_55 = object : Migration(54, 55) {
+            // ย้ายโครงสร้างฐานข้อมูลไปยังเวอร์ชันถัดไป
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE customer ADD COLUMN operation_id TEXT")
                 db.execSQL("ALTER TABLE project ADD COLUMN operation_id TEXT")
@@ -471,6 +518,7 @@ abstract class AppDatabase : RoomDatabase() {
 
         // Phase 2D: รูปเก่าคงอ่านจาก URL เดิม เฉพาะรูปใหม่เท่านั้นที่เข้าคิวถาวรนี้
         val MIGRATION_55_56 = object : Migration(55, 56) {
+            // ย้ายโครงสร้างฐานข้อมูลไปยังเวอร์ชันถัดไป
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("""
                     CREATE TABLE IF NOT EXISTS `attachment_outbox` (
@@ -502,6 +550,7 @@ abstract class AppDatabase : RoomDatabase() {
         // then remove successfully synced ERP customer rows from the local customer table.
         // Unsynced rows are preserved so offline work cannot be lost during an upgrade.
         val MIGRATION_56_57 = object : Migration(56, 57) {
+            // ย้ายโครงสร้างฐานข้อมูลไปยังเวอร์ชันถัดไป
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE `contact_person` ADD COLUMN `customer_name` TEXT")
                 db.execSQL(
@@ -520,6 +569,7 @@ abstract class AppDatabase : RoomDatabase() {
         }
 
         val MIGRATION_57_58 = object : Migration(57, 58) {
+            // ย้ายโครงสร้างฐานข้อมูลไปยังเวอร์ชันถัดไป
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL(
                     """
@@ -538,6 +588,7 @@ abstract class AppDatabase : RoomDatabase() {
         }
 
         val MIGRATION_58_59 = object : Migration(58, 59) {
+            // ย้ายโครงสร้างฐานข้อมูลไปยังเวอร์ชันถัดไป
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL(
                     """
@@ -558,6 +609,7 @@ abstract class AppDatabase : RoomDatabase() {
         }
 
         val MIGRATION_59_60 = object : Migration(59, 60) {
+            // ย้ายโครงสร้างฐานข้อมูลไปยังเวอร์ชันถัดไป
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL(
                     """
@@ -574,6 +626,7 @@ abstract class AppDatabase : RoomDatabase() {
         }
 
         val MIGRATION_60_61 = object : Migration(60, 61) {
+            // ย้ายโครงสร้างฐานข้อมูลไปยังเวอร์ชันถัดไป
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL(
                     """
@@ -609,6 +662,7 @@ abstract class AppDatabase : RoomDatabase() {
          * ไม่ใช่ใน migration เพราะต้องพิสูจน์เจ้าของก่อน ซึ่ง SQL ไม่รู้
          */
         val MIGRATION_62_63 = object : Migration(62, 63) {
+            // ย้ายโครงสร้างฐานข้อมูลไปยังเวอร์ชันถัดไป
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL(
                     """
@@ -643,11 +697,40 @@ abstract class AppDatabase : RoomDatabase() {
         }
 
         val MIGRATION_61_62 = object : Migration(61, 62) {
+            // ย้ายโครงสร้างฐานข้อมูลไปยังเวอร์ชันถัดไป
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE `activity_table` ADD COLUMN `plan_edit_at` TEXT")
                 db.execSQL(
                     "ALTER TABLE `activity_table` ADD COLUMN `plan_edit_time_trusted` " +
                         "INTEGER NOT NULL DEFAULT 0"
+                )
+            }
+        }
+
+        /**
+         * Mobile phase 2 ข้อ 2 — call log กลับมาอีกครั้ง (เดิมถอดไปที่ commit 7e66070 ไม่มี
+         * Room table เลย) ตารางใหม่ล้วน ไม่แตะข้อมูลเดิม
+         */
+        val MIGRATION_63_64 = object : Migration(63, 64) {
+            // ย้ายโครงสร้างฐานข้อมูลไปยังเวอร์ชันถัดไป
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `call_log_sync` (
+                        `log_id` TEXT NOT NULL,
+                        `cust_id` TEXT,
+                        `phone_number` TEXT NOT NULL,
+                        `start_time` TEXT NOT NULL,
+                        `end_time` TEXT,
+                        `duration` INTEGER NOT NULL,
+                        `is_synced` INTEGER NOT NULL,
+                        PRIMARY KEY(`log_id`)
+                    )
+                    """.trimIndent()
+                )
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_call_log_sync_is_synced` " +
+                        "ON `call_log_sync` (`is_synced`)"
                 )
             }
         }

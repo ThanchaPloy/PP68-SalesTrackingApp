@@ -51,7 +51,8 @@ class SyncManager @Inject constructor(
     private val planItemDao: ActivityPlanItemDao,
     private val projectContactDao: ProjectContactDao,
     private val syncRejectionDao: SyncRejectionDao,
-    private val attachmentOutboxDao: AttachmentOutboxDao
+    private val attachmentOutboxDao: AttachmentOutboxDao,
+    private val callLogDao: com.example.pp68_salestrackingapp.data.local.CallLogDao
 ) {
     private companion object {
         // จำกัดเวลาของ worker หนึ่งรอบ; ถ้าเหลือ Room จะทำให้ผลเป็น retry และทำต่อด้วย backoff
@@ -447,6 +448,7 @@ class SyncManager @Inject constructor(
         val rejectedResults   = rejectedIds("result")
         val rejectedChecklist = rejectedIds("checklist")
         val rejectedAttachments = rejectedIds("attachment")
+        val rejectedCallLogs = rejectedIds("call_log")
         val ownerId = tokenManager.getLocalDataOwner()
 
         listOf(
@@ -456,6 +458,7 @@ class SyncManager @Inject constructor(
             "นัดหมาย" to activityDao.getUnsyncedActivities().count { it.activityId !in rejectedActivities },
             "บันทึกผล" to resultDao.getUnsyncedResults().count { it.resultId !in rejectedResults },
             "เช็คลิสต์" to planItemDao.getUnsyncedAppointmentIds().count { it !in rejectedChecklist },
+            "call log" to callLogDao.getUnsyncedCallLogIds().count { it !in rejectedCallLogs },
             "รูป" to (ownerId?.let {
                 attachmentOutboxDao.getPending(it, Int.MAX_VALUE)
                     .count { item -> item.operationId !in rejectedAttachments }
@@ -504,6 +507,7 @@ class SyncManager @Inject constructor(
             "activity" to activityDao.getUnsyncedActivityIds().toSet(),
             "result" to resultDao.getUnsyncedResultIds().toSet(),
             "checklist" to planItemDao.getUnsyncedAppointmentIds().toSet(),
+            "call_log" to callLogDao.getUnsyncedCallLogIds().toSet(),
             "attachment" to (ownerId?.let {
                 attachmentOutboxDao.getPending(it, Int.MAX_VALUE).map { item -> item.operationId }.toSet()
             } ?: emptySet())
@@ -625,6 +629,32 @@ class SyncManager @Inject constructor(
                 if (e is CancellationException) throw e
                 tracker.exception(e)
                 Log.e("SyncManager", "Contact sync failed: ${e::class.java.simpleName}")
+            }
+        }
+
+        // Mobile phase 2 ข้อ 2 — call log เขียนทางเดียว (สร้างแล้วไม่มีการแก้ไข ไม่มี TEMP- id
+        // ให้ remap เหมือน entity อื่น เพราะ log_id คำนวณจากเบอร์+เวลาเริ่มไว้แน่นอนตั้งแต่ตอน
+        // insert ใน CallLogRepository แล้ว ไม่ต้องรอ server ตอบรหัสจริงกลับมา)
+        val unsyncedCallLogs = bounded(callLogDao.getUnsyncedCallLogs(), tracker)
+        for (pendingLog in unsyncedCallLogs) {
+            if (shouldSkip("call_log", pendingLog.logId)) { tracker.skipped(); continue }
+            tracker.attempted()
+            try {
+                val fields = mapOf(
+                    "log_id"       to pendingLog.logId,
+                    "cust_code"    to pendingLog.custId,
+                    "phone_number" to pendingLog.phoneNumber,
+                    "start_time"   to pendingLog.startTime,
+                    "end_time"     to pendingLog.endTime,
+                    "duration"     to pendingLog.duration.toString()
+                )
+                val response = apiService.insertCallLog(fields)
+                noteOutcome("call_log", pendingLog.logId, response.isSuccessful, response.code(), tracker)
+                if (response.isSuccessful) callLogDao.markSynced(pendingLog.logId)
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                tracker.exception(e)
+                Log.e("SyncManager", "Call log sync failed: ${e::class.java.simpleName}")
             }
         }
 

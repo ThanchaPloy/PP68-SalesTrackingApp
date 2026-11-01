@@ -33,6 +33,7 @@ object DatabaseModule {
 
     @Provides
     @Singleton
+    // สร้างและส่งมอบ App ฐานข้อมูล
     fun provideAppDatabase(@ApplicationContext context: Context): AppDatabase {
         return Room.databaseBuilder(
             context,
@@ -80,90 +81,115 @@ object DatabaseModule {
                 AppDatabase.MIGRATION_59_60,
                 AppDatabase.MIGRATION_60_61,
                 AppDatabase.MIGRATION_61_62,
-                AppDatabase.MIGRATION_62_63
+                AppDatabase.MIGRATION_62_63,
+                AppDatabase.MIGRATION_63_64
             )
             .build()
     }
 
     @Provides
     @Singleton
+    // สร้างและส่งมอบ นัดหมาย ฉบับร่าง Dao
     fun provideAppointmentDraftDao(database: AppDatabase): AppointmentDraftDao {
         return database.appointmentDraftDao()
     }
 
     @Provides
     @Singleton
+    // สร้างและส่งมอบ Call Log Dao
+    fun provideCallLogDao(database: AppDatabase): com.example.pp68_salestrackingapp.data.local.CallLogDao {
+        return database.callLogDao()
+    }
+
+    @Provides
+    @Singleton
+    // สร้างและส่งมอบ ลูกค้า Dao
     fun provideCustomerDao(database: AppDatabase): CustomerDao {
         return database.customerDao()
     }
 
     @Provides
     @Singleton
+    // สร้างและส่งมอบ โครงการ Dao
     fun provideProjectDao(database: AppDatabase): ProjectDao {
         return database.projectDao()
     }
 
     @Provides
     @Singleton
+    // สร้างและส่งมอบ กิจกรรม Dao
     fun provideActivityDao(database: AppDatabase): ActivityDao {
         return database.activityDao()
     }
 
     @Provides
     @Singleton
+    // สร้างและส่งมอบ ผู้ติดต่อ Dao
     fun provideContactDao(database: AppDatabase): ContactDao {
         return database.contactDao()
     }
 
     @Provides
     @Singleton
+    // สร้างและส่งมอบ สาขา Dao
     fun provideBranchDao(database: AppDatabase): BranchDao {
         return database.branchDao()
     }
 
     @Provides
     @Singleton
+    // สร้างและส่งมอบ กิจกรรม แผน รายการ Dao
     fun provideActivityPlanItemDao(database: AppDatabase): ActivityPlanItemDao {
         return database.activityPlanItemDao()
     }
 
     @Provides
     @Singleton
+    // สร้างและส่งมอบ กิจกรรม ผลการขาย Dao
     fun provideActivityResultDao(db: AppDatabase): ActivityResultDao = db.activityResultDao()
 
     @Provides
     @Singleton
+    // สร้างและส่งมอบ นัดหมาย ผู้ติดต่อ Dao
     fun provideAppointmentContactDao(db: AppDatabase): AppointmentContactDao = db.appointmentContactDao()
 
     @Provides
     @Singleton
+    // สร้างและส่งมอบ โครงการ ผู้ติดต่อ Dao
     fun provideProjectContactDao(db: AppDatabase): ProjectContactDao = db.projectContactDao()
 
     @Provides
     @Singleton
+    // สร้างและส่งมอบ กิจกรรม ผลการขาย รูปภาพ Dao
     fun provideActivityResultPhotoDao(db: AppDatabase): ActivityResultPhotoDao = db.activityResultPhotoDao()
 
     @Provides
     @Singleton
+    // สร้างและส่งมอบ การซิงก์ รายการถูกปฏิเสธ Dao
     fun provideSyncRejectionDao(db: AppDatabase): SyncRejectionDao = db.syncRejectionDao()
 
     @Provides
     @Singleton
+    // สร้างและส่งมอบ ไฟล์แนบ Outbox Dao
     fun provideAttachmentOutboxDao(db: AppDatabase): AttachmentOutboxDao = db.attachmentOutboxDao()
 
     @Provides
     @Singleton
+    // สร้างและส่งมอบ การซิงก์ State Dao
     fun provideSyncStateDao(db: AppDatabase): SyncStateDao = db.syncStateDao()
 
     @Provides
     @Singleton
+    // สร้างและส่งมอบ การซิงก์ ข้อมูลขัดแย้ง Dao
     fun provideSyncConflictDao(db: AppDatabase): SyncConflictDao = db.syncConflictDao()
 
     @Provides
     @Singleton
+    // สร้างและส่งมอบ การซิงก์ สแนปช็อต Dao
     fun provideSyncSnapshotDao(db: AppDatabase): SyncSnapshotDao = db.syncSnapshotDao()
 
     @Provides
     @Singleton
+    // สร้างและส่งมอบ Local รหัส การจับคู่รหัส Dao
     fun provideLocalIdMappingDao(db: AppDatabase): LocalIdMappingDao = db.localIdMappingDao()
 }
