@@ -354,8 +354,10 @@ class SalesResultViewModel @Inject constructor(
                     _uiState.update { it.copy(error = "ไม่พบข้อมูลนัดหมายหรือบันทึกผลนี้ในเครื่อง ลองเชื่อมต่ออินเทอร์เน็ตแล้วเปิดใหม่") }
                 }
             }
-            // นัดหมายที่ไม่ได้ผูกโครงการไว้แต่แรก ให้ผูกเพิ่มได้ตอนบันทึกผล (ดู onProjectSelected/saveQuickProject)
-            if (_uiState.value.mode == ResultMode.FROM_APPOINTMENT && _uiState.value.projectId == null) {
+            // ต้องมีลิสต์โครงการเสมอเมื่อมีนัดหมาย ไม่ใช่แค่ตอนยังไม่ผูกโครงการ — ใช้ทั้งผูกโครงการหลัก
+            // (ตอน projectId ว่าง) และเป็นตัวเลือกของ "+ เพิ่มโครงการ" (ตอน projectId มีค่าแล้วก็ยังต้อง
+            // ใช้ได้ ไม่งั้น dropdown เพิ่มโครงการจะว่างเปล่าตลอดในเคสปกติที่นัดผูกโครงการหลักไว้แล้ว)
+            if (_uiState.value.mode == ResultMode.FROM_APPOINTMENT) {
                 loadProjectOptions()
             }
             draft.captureBaseline()

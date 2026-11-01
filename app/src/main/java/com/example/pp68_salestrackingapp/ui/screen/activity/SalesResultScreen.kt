@@ -36,6 +36,8 @@ import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.pp68_salestrackingapp.data.model.PlanItemDto
+import com.example.pp68_salestrackingapp.data.model.Project
+import com.example.pp68_salestrackingapp.ui.viewmodels.activity.AdditionalProjectEntry
 import com.example.pp68_salestrackingapp.utils.formatPhotoUrl
 import coil.compose.AsyncImage
 import com.example.pp68_salestrackingapp.ui.components.DatePickerField
@@ -134,6 +136,9 @@ fun SalesResultScreen(
         onLossReasonChanged             = viewModel::onLossReasonChanged,
         onOtherLossReasonChanged        = viewModel::onOtherLossReasonChanged,
         onToggleChecklistItem           = viewModel::toggleChecklistItem,
+        onAddProjectEntry               = viewModel::addProjectEntry,
+        onRemoveProjectEntry            = viewModel::removeProjectEntry,
+        onUpdateProjectEntry            = viewModel::updateProjectEntry,
         lossReasonOptions               = viewModel.lossReasonOptions,
         onPhotoCaptured                 = { uri -> viewModel.onPhotoCaptured(context, uri) },
         onPhotosPicked                  = { uris -> viewModel.onPhotosPicked(context, uris) },
@@ -173,6 +178,9 @@ private fun SalesResultContent(
     onLossReasonChanged: (String) -> Unit,
     onOtherLossReasonChanged: (String) -> Unit,
     onToggleChecklistItem: (Int) -> Unit,
+    onAddProjectEntry: (String) -> Unit = {},
+    onRemoveProjectEntry: (String) -> Unit = {},
+    onUpdateProjectEntry: (String, (AdditionalProjectEntry) -> AdditionalProjectEntry) -> Unit = { _, _ -> },
     lossReasonOptions: List<String>,
     onPhotoCaptured: (Uri) -> Unit,
     onPhotosPicked: (List<Uri>) -> Unit,
@@ -183,6 +191,10 @@ private fun SalesResultContent(
     var expandSolution by remember { mutableStateOf(false) }
     var expandContract by remember { mutableStateOf(false) }
     var expandProposal by remember { mutableStateOf(false) }
+
+    // "+ เพิ่มโครงการ" — null = ปิดอยู่, "" = กำลังเลือกโครงการ (ยังไม่มี entry), อย่างอื่น = project_id
+    // ของ entry ที่กำลังเปิดดู/แก้ไข เก็บเป็น id เดียวพอ เพราะเปิดได้ทีละแผ่นเท่านั้น
+    var editingAdditionalProjectId by remember { mutableStateOf<String?>(null) }
 
     // ข้อ 4-7 ซ่อนอยู่ในแท็บที่พับไว้ ถ้ากดบันทึกแล้วยังตอบไม่ครบต้องกางแท็บที่ขาดให้เอง
     // ไม่งั้นผู้ใช้เห็นแต่ข้อความ error แต่หาไม่เจอว่าต้องไปกรอกตรงไหน
@@ -319,6 +331,47 @@ private fun SalesResultContent(
                                 }
                             }
                             Spacer(Modifier.height(24.dp))
+                        }
+                    }
+                }
+
+                // "+ เพิ่มโครงการ" bottom sheet — editingAdditionalProjectId: null ปิดอยู่,
+                // "" กำลังเลือกโครงการ (ยังไม่มี entry), อย่างอื่นคือ project_id ของ entry ที่เปิดอยู่
+                if (editingAdditionalProjectId != null) {
+                    val pickedId = editingAdditionalProjectId!!
+                    val entry = s.additionalProjects.find { it.projectId == pickedId }
+                    ModalBottomSheet(
+                        onDismissRequest = { editingAdditionalProjectId = null },
+                        containerColor = White
+                    ) {
+                        if (pickedId.isBlank() || entry == null) {
+                            Column(
+                                modifier = Modifier.fillMaxWidth().padding(24.dp),
+                                verticalArrangement = Arrangement.spacedBy(16.dp)
+                            ) {
+                                Text("เพิ่มโครงการ", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = RedPrimary)
+                                val taken = s.additionalProjects.map { it.projectId } + listOfNotNull(s.projectId)
+                                val pickable = s.projectOptions.filter { (id, _) -> id !in taken }
+                                DropdownField(
+                                    value = "",
+                                    placeholder = "เลือกโครงการที่คุยในนัดนี้",
+                                    options = pickable.map { it.second },
+                                    onSelect = { idx ->
+                                        val id = pickable[idx].first
+                                        onAddProjectEntry(id)
+                                        editingAdditionalProjectId = id
+                                    }
+                                )
+                                Spacer(Modifier.height(8.dp))
+                            }
+                        } else {
+                            AdditionalProjectSheetContent(
+                                entry = entry,
+                                lossReasonOptions = lossReasonOptions,
+                                onUpdate = { transform -> onUpdateProjectEntry(pickedId, transform) },
+                                onRemove = { onRemoveProjectEntry(pickedId); editingAdditionalProjectId = null },
+                                onDone = { editingAdditionalProjectId = null }
+                            )
                         }
                     }
                 }
@@ -656,6 +709,45 @@ private fun SalesResultContent(
                 }
                 }
 
+                // "+ เพิ่มโครงการ" (Mobile phase 2 ข้อ 1) — คุยโครงการอื่นในนัดเดียวกันด้วย ให้คะแนน
+                // แยกจากโครงการหลัก แชร์แค่รูป/สรุปการเข้าพบ/วันที่ด้านบน เปิดเป็น bottom sheet
+                // ต่อโครงการ (ไม่ใช่ accordion กางในหน้านี้) กันหน้ายาวเกินไปเมื่อมีหลายโครงการ
+                if (s.projectId != null && !s.isReadOnlyVersion) {
+                    SectionCard(title = "โครงการอื่นที่คุยในนัดนี้", icon = Icons.Default.Groups) {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            s.additionalProjects.forEach { entry ->
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(10.dp))
+                                        .background(BgLight)
+                                        .clickable { editingAdditionalProjectId = entry.projectId }
+                                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        entry.project?.projectName ?: entry.projectId,
+                                        fontSize = 14.sp, fontWeight = FontWeight.Medium, color = TextDark,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    entry.opportunityScore?.let {
+                                        Text(it, fontSize = 13.sp, color = TextGray, modifier = Modifier.padding(end = 8.dp))
+                                    }
+                                    IconButton(onClick = { onRemoveProjectEntry(entry.projectId) }, modifier = Modifier.size(20.dp)) {
+                                        Icon(Icons.Default.Close, null, tint = TextGray, modifier = Modifier.size(16.dp))
+                                    }
+                                }
+                            }
+                            TextButton(onClick = { editingAdditionalProjectId = "" }) {
+                                Icon(Icons.Default.Add, null, tint = RedPrimary, modifier = Modifier.size(18.dp))
+                                Spacer(Modifier.width(4.dp))
+                                Text("เพิ่มโครงการ", color = RedPrimary, fontSize = 14.sp)
+                            }
+                        }
+                    }
+                }
+
                 Spacer(Modifier.height(16.dp))
 
                 Button(
@@ -848,6 +940,228 @@ private const val MAX_RESULT_PHOTOS = 5
 private fun createCameraCaptureUri(context: android.content.Context): Uri {
     val file = File.createTempFile("visit_photo_", ".jpg", context.cacheDir)
     return FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+}
+
+// เหมือน dealFactorsLocked ของโครงการหลักใน SalesResultContent เป๊ะ แต่แยกไว้ต่างหากเพราะที่นั่น
+// เป็น val local ผูกกับ s.project ตัวเดียว ส่วนนี้ต้องเรียกซ้ำได้ต่อ entry ที่กำลังเปิดดู
+private fun dealFactorsLockedFor(p: Project?): Boolean =
+    p != null && !p.dealPosition.isNullOrBlank() && !p.previousSolution.isNullOrBlank() &&
+        !p.counterpartyType.isNullOrBlank() && !p.responseSpeed.isNullOrBlank() &&
+        p.isProposalSent != null && p.competitorCount != null
+
+// เนื้อหาในชีทของ "+ เพิ่มโครงการ" รอบที่เลือกโครงการแล้ว — ซ้ำรูปแบบ "สถานะโครงการ" /
+// "โอกาสในการสำเร็จ" / "ปัจจัยของดีล" / "ใบเสนอราคา & คู่แข่ง" ของโครงการหลักในหน้านี้ ย่อลงให้พอดี
+// กับชีท ไม่มีรูป/สรุปการเข้าพบ/วันที่ซ้ำ — ใช้ของโครงการหลักร่วมกันอยู่แล้ว (ดู save() ของ ViewModel)
+@Composable
+private fun AdditionalProjectSheetContent(
+    entry: AdditionalProjectEntry,
+    lossReasonOptions: List<String>,
+    onUpdate: ((AdditionalProjectEntry) -> AdditionalProjectEntry) -> Unit,
+    onRemove: () -> Unit,
+    onDone: () -> Unit
+) {
+    val locked = dealFactorsLockedFor(entry.project)
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .verticalScroll(rememberScrollState())
+            .padding(start = 20.dp, end = 20.dp, top = 20.dp, bottom = 32.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        Text(
+            entry.project?.projectName ?: entry.projectId,
+            fontWeight = FontWeight.Bold, fontSize = 18.sp, color = RedPrimary
+        )
+
+        SectionCard(title = "สถานะโครงการ", icon = Icons.Default.Info) {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("มีการอัปเดตสถานะ", fontSize = 15.sp, fontWeight = FontWeight.Medium)
+                    Switch(
+                        checked = entry.isStatusUpdateEnabled,
+                        onCheckedChange = { v -> onUpdate { it.copy(isStatusUpdateEnabled = v) } },
+                        colors = SwitchDefaults.colors(checkedThumbColor = White, checkedTrackColor = RedPrimary)
+                    )
+                }
+                if (entry.isStatusUpdateEnabled) {
+                    val statusList = com.example.pp68_salestrackingapp.utils.ProjectStages.SELECTABLE
+                    DropdownField(
+                        value = entry.newStatus,
+                        placeholder = "เลือกสถานะใหม่",
+                        options = statusList,
+                        onSelect = { idx -> onUpdate { it.copy(newStatus = statusList[idx]) } },
+                        displayLabel = { com.example.pp68_salestrackingapp.utils.ProjectStages.labelFor(it) }
+                    )
+                }
+                AnimatedVisibility(
+                    visible = entry.isStatusUpdateEnabled && (entry.newStatus == "Lost" || entry.newStatus == "Failed")
+                ) {
+                    Column(
+                        modifier = Modifier.padding(top = 12.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Text("เหตุผลที่ไม่ได้งาน *", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = RedPrimary)
+                        DropdownField(
+                            value = entry.lossReason,
+                            placeholder = "เลือกเหตุผล",
+                            options = lossReasonOptions,
+                            isError = entry.lossReasonError != null,
+                            errorMsg = entry.lossReasonError,
+                            onSelect = { idx -> onUpdate { it.copy(lossReason = lossReasonOptions[idx]) } },
+                            displayLabel = { com.example.pp68_salestrackingapp.utils.LossReasons.labelFor(it) }
+                        )
+                        if (entry.lossReason == com.example.pp68_salestrackingapp.utils.LossReasons.OTHER) {
+                            OutlinedTextField(
+                                value = entry.otherLossReason,
+                                onValueChange = { v -> onUpdate { it.copy(otherLossReason = v) } },
+                                placeholder = { Text("ระบุเหตุผลอื่น ๆ...", fontSize = 14.sp) },
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(10.dp),
+                                isError = entry.lossReasonError != null,
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedBorderColor = RedPrimary,
+                                    unfocusedBorderColor = BorderGray
+                                )
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        SectionCard(title = "โอกาสในการสำเร็จ", icon = Icons.AutoMirrored.Filled.TrendingUp) {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OpportunityButton("HOT🔥",  entry.opportunityScore == "สูง (HOT)",  Modifier.weight(1f)) { onUpdate { it.copy(opportunityScore = "สูง (HOT)") } }
+                OpportunityButton("WARM☀️", entry.opportunityScore == "กลาง (WARM)", Modifier.weight(1f)) { onUpdate { it.copy(opportunityScore = "กลาง (WARM)") } }
+                OpportunityButton("COLD❄️", entry.opportunityScore == "ต่ำ (COLD)", Modifier.weight(1f)) { onUpdate { it.copy(opportunityScore = "ต่ำ (COLD)") } }
+            }
+        }
+
+        if (locked) {
+            SectionCard(title = "ปัจจัยของดีล", icon = Icons.Default.Lock) {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("ตำแหน่งของดีล: ${entry.dealPosition}", fontSize = 14.sp)
+                    Text("Solution เดิมของลูกค้า: ${entry.previousSolution}", fontSize = 14.sp)
+                    Text("ประเภทคู่สัญญา: ${entry.counterpartyMultiplier}", fontSize = 14.sp)
+                    Text("ความรวดเร็วในการตอบรับ: ${entry.responseSpeed}", fontSize = 14.sp)
+                    Text(
+                        "การส่งใบเสนอราคา: " +
+                            if (entry.isProposalSent) "ส่งแล้ว${entry.proposalDate?.let { d -> " ($d)" } ?: ""}" else "ยังไม่ส่ง",
+                        fontSize = 14.sp
+                    )
+                    Text("จำนวนคู่แข่ง: ${entry.competitorCount} ราย", fontSize = 14.sp)
+                    Text("ค่าเหล่านี้เป็นของโครงการ ไปแก้ที่หน้าโครงการนี้โดยตรง", fontSize = 12.sp, color = TextGray)
+                }
+            }
+        } else {
+            SectionCard(title = "ตำแหน่งของดีล", icon = Icons.Default.Place) {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    SalesResultViewModel.DEAL_POSITION_MAP.keys.forEach { opt ->
+                        SelectOption(opt, entry.dealPosition == opt) { onUpdate { it.copy(dealPosition = opt) } }
+                    }
+                }
+            }
+            SectionCard(title = "Solution เดิมของลูกค้า", icon = Icons.Default.History) {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    SalesResultViewModel.SOLUTION_MAP.keys.forEach { opt ->
+                        SelectOption(opt, entry.previousSolution == opt) { onUpdate { it.copy(previousSolution = opt) } }
+                    }
+                }
+            }
+            SectionCard(title = "ประเภทคู่สัญญา", icon = Icons.Default.Groups) {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    SalesResultViewModel.COUNTERPARTY_MAP.keys.forEach { opt ->
+                        SelectOption(opt, entry.counterpartyMultiplier == opt) { onUpdate { it.copy(counterpartyMultiplier = opt) } }
+                    }
+                }
+            }
+            SectionCard(title = "ความรวดเร็วในการตอบรับ", icon = Icons.Default.Speed) {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    SalesResultViewModel.RESPONSE_SPEED_MAP.keys.forEach { opt ->
+                        SelectOption(opt, entry.responseSpeed == opt) { onUpdate { it.copy(responseSpeed = opt) } }
+                    }
+                }
+            }
+            SectionCard(title = "การส่งใบเสนอราคา", icon = Icons.Default.Description) {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("ส่งใบเสนอราคาแล้ว", fontSize = 15.sp, fontWeight = FontWeight.Medium)
+                        Switch(
+                            checked = entry.isProposalSent,
+                            onCheckedChange = { v -> onUpdate { it.copy(isProposalSent = v) } },
+                            colors = SwitchDefaults.colors(checkedThumbColor = White, checkedTrackColor = RedPrimary)
+                        )
+                    }
+                    if (entry.isProposalSent) {
+                        DatePickerField(
+                            selectedDate = entry.proposalDate ?: "",
+                            placeholder = "ระบุวันที่ส่งใบเสนอราคา",
+                            onDateSelected = { v -> onUpdate { it.copy(proposalDate = v) } }
+                        )
+                    }
+                }
+            }
+            SectionCard(title = "จำนวนคู่แข่ง", icon = Icons.AutoMirrored.Filled.CompareArrows) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("จำนวนคู่แข่งที่ทราบ", fontSize = 15.sp)
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        IconButton(onClick = { onUpdate { it.copy(competitorCount = maxOf(0, it.competitorCount - 1)) } }) {
+                            Icon(Icons.Default.RemoveCircleOutline, null, tint = RedPrimary)
+                        }
+                        Text("${entry.competitorCount}", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                        IconButton(onClick = { onUpdate { it.copy(competitorCount = it.competitorCount + 1) } }) {
+                            Icon(Icons.Default.AddCircleOutline, null, tint = RedPrimary)
+                        }
+                    }
+                }
+            }
+        }
+
+        SectionCard(title = "ผู้มีอำนาจตัดสินใจ (DM)", icon = Icons.Default.Person) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("ได้พบ/ดีลกับ DM โดยตรง", fontSize = 15.sp)
+                Switch(
+                    checked = entry.dmInvolved,
+                    onCheckedChange = { v -> onUpdate { it.copy(dmInvolved = v) } },
+                    colors = SwitchDefaults.colors(checkedThumbColor = White, checkedTrackColor = RedPrimary)
+                )
+            }
+        }
+
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            OutlinedButton(
+                onClick = onRemove,
+                modifier = Modifier.weight(1f),
+                border = BorderStroke(1.dp, RedPrimary)
+            ) {
+                Text("นำโครงการนี้ออก", color = RedPrimary, fontSize = 14.sp)
+            }
+            Button(
+                onClick = onDone,
+                modifier = Modifier.weight(1f),
+                colors = ButtonDefaults.buttonColors(containerColor = RedPrimary),
+                shape = RoundedCornerShape(10.dp)
+            ) {
+                Text("เสร็จ", fontSize = 14.sp, fontWeight = FontWeight.Bold)
+            }
+        }
+    }
 }
 
 @Composable
