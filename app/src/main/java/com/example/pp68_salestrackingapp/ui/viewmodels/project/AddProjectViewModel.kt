@@ -51,6 +51,9 @@ data class AddProjectUiState(
     val isLoadingBillingBranches:  Boolean = false,
     val selectedBillingBranchId:   String? = null,
     val selectedBillingBranchName: String? = null,
+    // ผู้จัดการภาค/โซน: รหัสโครงการตั้งจากสาขานี้ (ไม่ใช่สาขาตัวเอง) บังคับกรอกเฉพาะ role นี้เท่านั้น
+    // เพราะแก้รหัสทีหลังทำไม่ได้ปลอดภัย (project_code เป็น PK ที่มีตารางอื่นอ้างอิงอยู่)
+    val isBillingBranchRequired:   Boolean = false,
     val projectNameError:       String? = null,
     val customerError:          String? = null,
     val statusError:            String? = null,
@@ -262,6 +265,8 @@ class AddProjectViewModel @Inject constructor(
         loadCustomers()
         checkUserBranchAndLoadTeams()
         loadAllBillingBranches()
+        // role มาจาก employee.emp_post ตรงๆ (login response ส่งมาเป็น role อยู่แล้ว ไม่ต้องเพิ่ม field ใหม่)
+        _uiState.update { it.copy(isBillingBranchRequired = authRepo.currentUser()?.role == "ผู้จัดการภาค") }
     }
 
     private fun loadAllBillingBranches() {
@@ -735,7 +740,15 @@ class AddProjectViewModel @Inject constructor(
         // ❌ ไม่บังคับเลือกสาขาที่พนักงานขายรับผิดชอบ — รายชื่อสาขามาจาก server เท่านั้น
         // ตอนออฟไลน์และแคชสาขายังว่าง ดรอปดาวน์จะไม่มีอะไรให้เลือก ผู้ใช้จึงบันทึกโครงการ
         // ไม่ได้เลยทั้งที่ข้อมูลอื่นครบ ตอนบันทึกมี fallback เป็นสาขาของผู้ใช้เองอยู่แล้ว
-        // ❌ เอาการเช็ค billingBranch ออก เพื่อให้ไม่บังคับกรอกตามที่ผู้ใช้แจ้ง
+        //
+        // ✅ สาขาที่เปิดบิล (คนละฟิลด์กับข้างบน) บังคับกรอกเฉพาะ "ผู้จัดการภาค" เท่านั้น — role นี้
+        // ใช้สาขาที่เปิดบิล (ไม่ใช่สาขาตัวเอง) ตั้งรหัสโครงการ (ดู trg_set_project_code ฝั่ง backend)
+        // รหัสถูกสร้างอัตโนมัติตอนบันทึกครั้งแรกแล้วแก้ทีหลังไม่ได้ปลอดภัย (project_code เป็น PK
+        // ที่มีตารางอื่นอ้างอิงอยู่) จึงต้องรู้ให้ถูกตั้งแต่ตอนนี้ — role อื่นยังไม่บังคับเหมือนเดิม
+        if (s.isBillingBranchRequired && s.selectedBillingBranchId.isNullOrBlank()) {
+            _uiState.update { it.copy(billingBranchError = "กรุณาเลือกสาขาที่เปิดบิล") }
+            valid = false
+        }
         return valid
     }
 

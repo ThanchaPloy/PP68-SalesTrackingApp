@@ -291,8 +291,8 @@ fun AddProjectContent(
                 }
             }
 
-            // ── Billing Branch (ไม่บังคับ) ──────────────────────
-            FormField("สาขาที่เปิดบิล", required = false) {
+            // ── Billing Branch (บังคับเฉพาะผู้จัดการภาค ดู AddProjectViewModel.validate()) ──
+            FormField("สาขาที่เปิดบิล", required = uiState.isBillingBranchRequired) {
                 if (uiState.isLoadingBillingBranches) LoadingFieldProject()
                 else DropdownField(
                     value       = uiState.selectedBillingBranchName ?: "",
