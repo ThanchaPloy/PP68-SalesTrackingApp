@@ -98,6 +98,10 @@ data class SalesResultUiState(
 // เช่น visitSummary/photos/reportDate) เพราะตอนบันทึกต้องประกอบเป็น ActivityResult อีกแถวแยกกัน
 data class AdditionalProjectEntry(
     val projectId: String,
+    // ไม่ null = กำลังแก้ผลที่มีอยู่แล้วของโครงการนี้ (โหลดมาจากนัดที่เคยบันทึกไปแล้วก่อนหน้า) ต้องส่งค่า
+    // นี้กลับไปตอนบันทึก (ดู save()) ไม่งั้น saveResultAsNewVersion หา "แถวก่อนหน้า" ไม่เจอ แล้วจะเปิด
+    // group ใหม่แยกออกไปทั้งที่ควรเป็น version ถัดไปของกลุ่มเดิม — null = เพิ่งเพิ่มใหม่ในฟอร์มนี้
+    val resultId: String? = null,
     val project: Project? = null,
     val opportunityScore: String? = null,
     val dealPosition: String = "",
@@ -144,6 +148,7 @@ data class SalesResultDraft(
 
 data class AdditionalProjectEntryDraft(
     val projectId: String,
+    val resultId: String? = null,
     val opportunityScore: String? = null,
     val dealPosition: String = "",
     val previousSolution: String = "",
@@ -208,7 +213,7 @@ class SalesResultViewModel @Inject constructor(
         dmInvolved, visitSummary, lossReason, otherLossReason, selectedItemIds,
         additionalProjects = additionalProjects.map { e ->
             AdditionalProjectEntryDraft(
-                e.projectId, e.opportunityScore, e.dealPosition, e.previousSolution, e.counterpartyMultiplier,
+                e.projectId, e.resultId, e.opportunityScore, e.dealPosition, e.previousSolution, e.counterpartyMultiplier,
                 e.responseSpeed, e.isProposalSent, e.proposalDate, e.competitorCount, e.dmInvolved,
                 e.isStatusUpdateEnabled, e.newStatus, e.lossReason, e.otherLossReason
             )
@@ -256,7 +261,7 @@ class SalesResultViewModel @Inject constructor(
                 selectedItemIds = d.selectedItemIds,
                 additionalProjects = d.additionalProjects.map { e ->
                     AdditionalProjectEntry(
-                        projectId = e.projectId, opportunityScore = e.opportunityScore,
+                        projectId = e.projectId, resultId = e.resultId, opportunityScore = e.opportunityScore,
                         dealPosition = e.dealPosition, previousSolution = e.previousSolution,
                         counterpartyMultiplier = e.counterpartyMultiplier, responseSpeed = e.responseSpeed,
                         isProposalSent = e.isProposalSent, proposalDate = e.proposalDate,
@@ -326,8 +331,26 @@ class SalesResultViewModel @Inject constructor(
                 // CST-UNKNOWN เป็นค่า sentinel ของนัดที่ไม่ระบุลูกค้า ไม่ใช่รหัสลูกค้าจริง
                 custId = activity.customerId?.takeIf { c -> c != "CST-UNKNOWN" }
                 activity.projectId?.let { loadProjectData(it) }
-                // ดึงผลลัพธ์ล่าสุดที่ผูกกับ Appointment นี้ (ถ้ามี)
-                activityRepo.getActivityResult(id)?.let { applyResultToState(it); loadPhotosForResult(it) }
+                // ดึงผลลัพธ์ล่าสุดที่ผูกกับ Appointment นี้ "ทุกโครงการ" — นัดเดียวคุยได้หลายโครงการ
+                // (ดู generate_result_id ฝั่ง backend) แถวที่ตรงกับโครงการหลักของนัดใช้ applyResultToState
+                // ตามเดิม ส่วนที่เหลือ (ถ้ามี) คือโครงการที่ถูก "เพิ่ม" ไว้ในรอบก่อนๆ แปลงกลับเป็น
+                // AdditionalProjectEntry ให้มาโชว์/แก้ไขต่อได้ ไม่ใช่มองไม่เห็นเหมือนก่อนมีฟีเจอร์นี้
+                val results = activityRepo.getActivityResults(id)
+                val primaryResult = results.find { it.projectId == activity.projectId } ?: results.firstOrNull()
+                primaryResult?.let { applyResultToState(it); loadPhotosForResult(it) }
+                val extraEntries = results.filter { it.resultId != primaryResult?.resultId }.map { buildAdditionalProjectEntry(it) }
+                if (extraEntries.isNotEmpty()) {
+                    _uiState.update { it.copy(additionalProjects = extraEntries) }
+                    // แนบ Project object กลับเข้าไปทีละตัวแบบ async เหมือนที่ addProjectEntry/restoreDraft
+                    // ทำไว้แล้ว — ต้องมีเพื่อให้ dealFactorsLockedFor(entry.project) ตัดสินถูกตอนเปิดชีท
+                    extraEntries.forEach { entry ->
+                        viewModelScope.launch {
+                            projectRepo.getProjectById(entry.projectId).onSuccess { p ->
+                                updateProjectEntry(entry.projectId) { it.copy(project = p) }
+                            }
+                        }
+                    }
+                }
                 loadChecklist(id)
             } else {
                 // 2. ถ้าไม่ใช่ อาจเป็น Result ID โดยตรง (กรณี Standalone หรือคลิกจาก History)
@@ -521,17 +544,20 @@ class SalesResultViewModel @Inject constructor(
     // ที่กำลังเปิดดู/แก้จะถูกค่าระดับโครงการทับหายไป
     private var resultApplied = false
 
+    // ✅ W4: อ่านตรงจากสองฟิลด์ที่แยกแล้ว (lossReason=รหัส, lossReasonNote=ข้อความอิสระ)
+    // เดางวนต่อเฉพาะแถวเก่าที่ backend ยังไม่ได้ migrate — ใช้ร่วมกับโครงการหลัก (applyResultToState)
+    // และโครงการที่ "เพิ่ม" ตอนโหลดนัดที่มีผลอยู่แล้วหลายโครงการ (buildAdditionalProjectEntry)
+    private fun splitLossReason(result: ActivityResult): Pair<String, String> = when {
+        !result.lossReasonNote.isNullOrBlank() ->
+            (result.lossReason ?: com.example.pp68_salestrackingapp.utils.LossReasons.OTHER) to result.lossReasonNote
+        result.lossReason.isNullOrBlank() -> "" to ""
+        result.lossReason in lossReasonOptions -> result.lossReason to ""
+        else -> com.example.pp68_salestrackingapp.utils.LossReasons.OTHER to result.lossReason
+    }
+
     private fun applyResultToState(result: ActivityResult) {
         resultApplied = true
-        // ✅ W4: อ่านตรงจากสองฟิลด์ที่แยกแล้ว (lossReason=รหัส, lossReasonNote=ข้อความอิสระ)
-        // เดางวนต่อเฉพาะแถวเก่าที่ backend ยังไม่ได้ migrate
-        val (reason, other) = when {
-            !result.lossReasonNote.isNullOrBlank() ->
-                (result.lossReason ?: com.example.pp68_salestrackingapp.utils.LossReasons.OTHER) to result.lossReasonNote
-            result.lossReason.isNullOrBlank() -> "" to ""
-            result.lossReason in lossReasonOptions -> result.lossReason to ""
-            else -> com.example.pp68_salestrackingapp.utils.LossReasons.OTHER to result.lossReason
-        }
+        val (reason, other) = splitLossReason(result)
 
         _uiState.update {
             it.copy(
@@ -556,6 +582,32 @@ class SalesResultViewModel @Inject constructor(
                 isReadOnlyVersion      = !result.isLatest
             )
         }
+    }
+
+    // แปลงผลที่โหลดมาจาก server กลับเป็น AdditionalProjectEntry — ใช้ตอนเปิดนัดที่เคยบันทึกผลหลาย
+    // โครงการไปแล้วก่อนหน้า (ดู loadInitialData) reverse-map ฟิลด์เดียวกับ applyResultToState ทุก
+    // ตัวที่เป็น "ของโครงการ" เป๊ะ ต่างกันแค่เก็บลง AdditionalProjectEntry ไม่ใช่ _uiState โดยตรง
+    // ไม่มี isReadOnlyVersion เพราะแถวที่โหลดมาผ่านทางนี้กรอง is_latest = 1 มาแล้วเสมอ (ดู
+    // ActivityRepository.getActivityResults / backend findAllLatestByAppointmentId)
+    private fun buildAdditionalProjectEntry(result: ActivityResult): AdditionalProjectEntry {
+        val (reason, other) = splitLossReason(result)
+        return AdditionalProjectEntry(
+            projectId              = result.projectId ?: "",
+            resultId               = result.resultId,
+            opportunityScore       = OPPORTUNITY_REVERSE[result.opportunityScore] ?: result.opportunityScore,
+            dealPosition           = restoreChoice(result.dealPosition, DEAL_POSITION_REVERSE, UNDETERMINED_LABEL),
+            previousSolution       = restoreChoice(result.previousSolution, SOLUTION_REVERSE, UNDETERMINED_LABEL),
+            counterpartyMultiplier = restoreChoice(result.counterpartyMultiplier, COUNTERPARTY_REVERSE, UNDETERMINED_LABEL),
+            responseSpeed          = restoreChoice(result.responseSpeed, RESPONSE_SPEED_REVERSE, RESPONSE_SPEED_DEFAULT),
+            isProposalSent         = result.isProposalSent,
+            proposalDate           = result.proposalDate,
+            competitorCount        = result.competitorCount,
+            dmInvolved             = result.dmInvolved,
+            isStatusUpdateEnabled  = !result.newStatus.isNullOrBlank(),
+            newStatus              = STATUS_REVERSE[result.newStatus] ?: result.newStatus ?: "",
+            lossReason             = reason,
+            otherLossReason        = other
+        )
     }
 
     // ✅ โหลดรูปทั้งหมดจากตาราง activity_result_photo; รูปเก่าก่อนมี feature นี้จะมีแค่ photo_url เดียวบน activity_result
@@ -1066,7 +1118,10 @@ class SalesResultViewModel @Inject constructor(
                             val entryIsLostOrFailed = entry.isStatusUpdateEnabled &&
                                 (entry.newStatus == "Lost" || entry.newStatus == "Failed")
                             val entryResult = ActivityResult(
-                                resultId               = "",
+                                // ไม่ null = แก้ผลที่มีอยู่แล้วของโครงการนี้ (โหลดมาจากนัดที่เคยบันทึก
+                                // ไปแล้ว) — ส่ง resultId เดิมกลับไปให้ saveResultAsNewVersion ต่อ
+                                // version/group ถัดไปของกลุ่มเดิมถูก ไม่เปิด group ใหม่แยกออกไป
+                                resultId               = entry.resultId ?: "",
                                 activityId             = s.activityId,
                                 projectId              = entry.projectId,
                                 createdBy              = user?.userId,

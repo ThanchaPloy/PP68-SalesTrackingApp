@@ -47,6 +47,9 @@ class SalesResultViewModelTest {
         every { draftStore.load<Any>(any(), any()) } returns null
         coEvery { activityRepo.getActivityById(any()) } returns Result.success(emptyList())
         coEvery { activityRepo.getActivityResult(any()) } returns null
+        // เหมือนกัน แต่เป็นตัวพหูพจน์ (คืนทุกโครงการของนัด ดู loadInitialData) — ไม่ใช่ Result/List เฉยๆ
+        // แต่เป็น List<ActivityResult> ตรงๆ ปัญหาเดียวกันถ้าไม่ stub ไว้ก่อน
+        coEvery { activityRepo.getActivityResults(any()) } returns emptyList()
         // relaxed mockk ไม่รู้วิธีสังเคราะห์ kotlin.Result ที่ยังไม่ได้ stub ไว้ให้ (คืน Object เปล่ามาแทน
         // แล้ว cast เป็น List พังเป็น ClassCastException) ต้อง stub ไว้ล่วงหน้าเหมือน getActivityById ข้างบน
         coEvery { activityRepo.getPlanItems(any()) } returns Result.success(emptyList())
@@ -193,9 +196,11 @@ class SalesResultViewModelTest {
                 )
             )
         )
-        coEvery { activityRepo.getActivityResult("A1") } returns ActivityResult(
+        val stubResult1 = ActivityResult(
             resultId = "RES-1", activityId = "A1", projectId = "PRJ-1", summary = "เดิม"
         )
+        coEvery { activityRepo.getActivityResult("A1") } returns stubResult1
+        coEvery { activityRepo.getActivityResults("A1") } returns listOf(stubResult1)
         coEvery { activityRepo.getResultPhotoEntries("RES-1") } returns
             listOf(ActivityResultPhoto("RES-1", 0, ""))
         coEvery { activityRepo.saveActivityResult(any(), any()) } returns Result.success(Unit)
@@ -233,13 +238,15 @@ class SalesResultViewModelTest {
         coEvery { projectRepo.getProjectById("PRJ-1") } returns Result.success(
             Project(projectId = "PRJ-1", custId = "C1", projectName = "Project A", projectStatus = "Lead")
         )
-        coEvery { activityRepo.getActivityResult("A1") } returns ActivityResult(
+        val stubResultTest001 = ActivityResult(
             resultId = "RES-TEST-001",
             activityId = "A1",
             newStatus = "Quotation",
             opportunityScore = "WARM",
             summary = "done summary"
         )
+        coEvery { activityRepo.getActivityResult("A1") } returns stubResultTest001
+        coEvery { activityRepo.getActivityResults("A1") } returns listOf(stubResultTest001)
 
         val vm = SalesResultViewModel(
             SavedStateHandle(mapOf("activityId" to "A1")),
@@ -525,7 +532,7 @@ class SalesResultViewModelTest {
             )
         )
         // บันทึกที่สร้างก่อนข้อ 4-7 กลายเป็นข้อบังคับ — ทั้งสี่ช่องเป็น null
-        coEvery { activityRepo.getActivityResult("A1") } returns ActivityResult(
+        val stubResultOld = ActivityResult(
             resultId = "R-OLD",
             activityId = "A1",
             summary = "เข้าพบตามนัด",
@@ -534,6 +541,8 @@ class SalesResultViewModelTest {
             counterpartyMultiplier = null,
             responseSpeed = null
         )
+        coEvery { activityRepo.getActivityResult("A1") } returns stubResultOld
+        coEvery { activityRepo.getActivityResults("A1") } returns listOf(stubResultOld)
         coEvery { activityRepo.saveActivityResult(any(), any()) } returns Result.success(Unit)
 
         val vm = SalesResultViewModel(
@@ -575,7 +584,7 @@ class SalesResultViewModelTest {
                 )
             )
         )
-        coEvery { activityRepo.getActivityResult("A1") } returns ActivityResult(
+        val stubResultNew = ActivityResult(
             resultId = "R-NEW",
             activityId = "A1",
             summary = "เข้าพบตามนัด",
@@ -584,6 +593,8 @@ class SalesResultViewModelTest {
             counterpartyMultiplier = "direct_main_contractor",
             responseSpeed = "slow_silent"
         )
+        coEvery { activityRepo.getActivityResult("A1") } returns stubResultNew
+        coEvery { activityRepo.getActivityResults("A1") } returns listOf(stubResultNew)
 
         val vm = SalesResultViewModel(
             SavedStateHandle(mapOf("activityId" to "A1")),
@@ -838,7 +849,7 @@ class SalesResultViewModelTest {
         coEvery { projectRepo.getProjectById("PRJ-1") } returns Result.success(
             Project(projectId = "PRJ-1", custId = "C1", projectName = "Project A", projectStatus = "Lead")
         )
-        coEvery { activityRepo.getActivityResult("A1") } returns ActivityResult(
+        val stubResultTest002 = ActivityResult(
             resultId = "RES-TEST-002",
             activityId = "A1",
             reportDate = "2026-04-02",
@@ -859,6 +870,8 @@ class SalesResultViewModelTest {
             photoLng = 100.5,
             photoDeviceModel = "Pixel"
         )
+        coEvery { activityRepo.getActivityResult("A1") } returns stubResultTest002
+        coEvery { activityRepo.getActivityResults("A1") } returns listOf(stubResultTest002)
 
         val vm = SalesResultViewModel(
             SavedStateHandle(mapOf("activityId" to "A1")),
@@ -998,13 +1011,15 @@ class SalesResultViewModelTest {
                 )
             )
         )
-        coEvery { activityRepo.getActivityResult("A1") } returns ActivityResult(
+        val stubResultOld2 = ActivityResult(
             resultId = "R-OLD-2",
             activityId = "A1",
             summary = "เข้าพบตามนัด",
             lossReason = "อื่น ๆ",
             lossReasonNote = "งบประมาณถูกตัด"
         )
+        coEvery { activityRepo.getActivityResult("A1") } returns stubResultOld2
+        coEvery { activityRepo.getActivityResults("A1") } returns listOf(stubResultOld2)
 
         val vm = SalesResultViewModel(
             SavedStateHandle(mapOf("activityId" to "A1")),
@@ -1186,6 +1201,72 @@ class SalesResultViewModelTest {
         assertEquals("PRJ-2", entries.first().projectId)
         assertEquals("HOT", entries.first().opportunityScore)
         assertEquals("Project B", entries.first().project?.projectName)
+    }
+
+    // "ส่วนที่เหลือของข้อ 1" — เปิดนัดที่เคยบันทึกผลหลายโครงการไปแล้วก่อนหน้า (ไม่ใช่เพิ่งเพิ่มรอบนี้)
+    // ต้องเห็นครบทุกโครงการ ไม่ใช่แค่โครงการหลัก
+    @Test
+    fun `loading an appointment with results for several projects already applies the primary and loads the rest as additional entries`() = runTest {
+        coEvery { activityRepo.getActivityById("A1") } returns Result.success(
+            listOf(SalesActivity(activityId = "A1", userId = "U1", customerId = "C1", projectId = "PRJ-1", activityType = "Visit", activityDate = "2026-04-01", status = "completed"))
+        )
+        coEvery { projectRepo.getProjectById("PRJ-1") } returns Result.success(Project(projectId = "PRJ-1", custId = "C1", projectName = "Project A", projectStatus = "Lead"))
+        coEvery { projectRepo.getProjectById("PRJ-2") } returns Result.success(Project(projectId = "PRJ-2", custId = "C1", projectName = "Project B", projectStatus = "Lead"))
+        val primaryStub = ActivityResult(
+            resultId = "RES-A", activityId = "A1", projectId = "PRJ-1", summary = "สรุปร่วม", opportunityScore = "HOT"
+        )
+        val secondStub = ActivityResult(
+            resultId = "RES-B", activityId = "A1", projectId = "PRJ-2", summary = "สรุปร่วม", opportunityScore = "WARM"
+        )
+        coEvery { activityRepo.getActivityResults("A1") } returns listOf(primaryStub, secondStub)
+
+        val vm = SalesResultViewModel(
+            SavedStateHandle(mapOf("activityId" to "A1")), projectRepo, activityRepo, authRepo, draftStore, java.time.Clock.system(java.time.ZoneId.of("Asia/Bangkok"))
+        )
+        advanceUntilIdle()
+
+        val s = vm.uiState.value
+        // โครงการหลัก (PRJ-1 ตรงกับ appointment.projectId) ลงฟิลด์หลักของฟอร์มตามปกติ
+        assertEquals("RES-A", s.resultId)
+        assertEquals("สูง (HOT)", s.opportunityScore) // ต้องเป็นค่าของ RES-A (HOT) ไม่ใช่ RES-B (WARM)
+        // โครงการที่สอง (PRJ-2) ต้องโผล่ใน additionalProjects พร้อม resultId เดิม (ไม่ใช่ null)
+        val extra = s.additionalProjects
+        assertEquals(1, extra.size)
+        assertEquals("PRJ-2", extra.first().projectId)
+        assertEquals("RES-B", extra.first().resultId)
+        assertEquals("กลาง (WARM)", extra.first().opportunityScore)
+        assertEquals("Project B", extra.first().project?.projectName)
+    }
+
+    // แก้ไขโครงการที่เพิ่มซึ่งมีอยู่แล้ว (โหลดมาจากนัดเดิม มี resultId ติดมาด้วย) ต้องส่ง resultId
+    // เดิมกลับไปตอนบันทึก ไม่ใช่สตริงว่าง ไม่งั้นจะเปิด group ใหม่แยกออกไปทั้งที่ควรต่อเวอร์ชันของเดิม
+    @Test
+    fun `saving an edit to an existing additional project sends its original resultId, not a blank one`() = runTest {
+        coEvery { activityRepo.getActivityById("A1") } returns Result.success(
+            listOf(SalesActivity(activityId = "A1", userId = "U1", customerId = "C1", projectId = "PRJ-1", activityType = "Visit", activityDate = "2026-04-01", status = "completed"))
+        )
+        coEvery { projectRepo.getProjectById("PRJ-1") } returns Result.success(lockedProject())
+        coEvery { projectRepo.getProjectById("PRJ-2") } returns Result.success(lockedProject().copy(projectId = "PRJ-2", projectName = "Project B"))
+        val primaryStub = ActivityResult(resultId = "RES-A", activityId = "A1", projectId = "PRJ-1", summary = "สรุปร่วม")
+        val secondStub = ActivityResult(resultId = "RES-B", activityId = "A1", projectId = "PRJ-2", summary = "สรุปร่วม", opportunityScore = "WARM")
+        coEvery { activityRepo.getActivityResults("A1") } returns listOf(primaryStub, secondStub)
+        val entryResultSlots = mutableListOf<ActivityResult>()
+        coEvery { activityRepo.saveActivityResult(capture(entryResultSlots), any()) } returns Result.success(Unit)
+        coEvery { activityRepo.finishActivity(any(), any(), any()) } returns Result.success(Unit)
+
+        val vm = SalesResultViewModel(
+            SavedStateHandle(mapOf("activityId" to "A1")), projectRepo, activityRepo, authRepo, draftStore, java.time.Clock.system(java.time.ZoneId.of("Asia/Bangkok"))
+        )
+        advanceUntilIdle()
+        // แก้คะแนนของโครงการที่สองที่โหลดมา (ไม่ได้เพิ่มใหม่) แล้วบันทึก
+        vm.updateProjectEntry("PRJ-2") { it.copy(opportunityScore = "สูง (HOT)") }
+
+        vm.save()
+        advanceUntilIdle()
+
+        assertTrue(vm.uiState.value.isSaved)
+        val entrySave = entryResultSlots.find { it.projectId == "PRJ-2" }
+        assertEquals("RES-B", entrySave?.resultId)
     }
 
     @Test
