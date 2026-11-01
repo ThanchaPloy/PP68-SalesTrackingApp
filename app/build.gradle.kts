@@ -27,12 +27,13 @@ android {
         targetSdk = 35
         // ⚠️ อย่าขยับ versionCode โดยไม่ตั้งใจ — TokenManager.checkAppVersionAndForceRelogin()
         // เทียบค่านี้กับที่เก็บไว้ ถ้าต่างกันจะ clearToken() บังคับ login ใหม่ทันทีที่เปิดแอป
-        // ซึ่ง "ไม่ผ่านด่าน logout" แล้ว AuthRepository.login() จะ clearAllTables() ทิ้งทั้งหมด
-        // งานที่ทำตอนออฟไลน์ (เช็คอิน/บันทึกผล) ที่ยังดันขึ้น server ไม่สำเร็จจึงหายถาวรโดยไม่เตือน
-        // จะขยับได้ก็ต่อเมื่ออุดรูตรงนั้นก่อน หรือเมื่อจำเป็นต้องบังคับ login ใหม่จริง ๆ (เช่นเปลี่ยน
-        // รูปแบบ token) — การออก build ใหม่เฉย ๆ ไม่ใช่เหตุผลที่ต้องบังคับ
-        versionCode = 5
-        versionName = "1.0.5"
+        // ล็อกอินใหม่จะอ่าน user_id ที่ถูกเคลียร์ไปแล้ว ทำให้ AuthRepository.login() มองว่า
+        // isSameUser = false ถ้ายังมีงานออฟไลน์ที่ยังไม่ sync (pending/rejected/conflict) อยู่
+        // ซึ่งกรณีนั้นจะโดนกันไว้ที่ AccountSwitchBlockedException (ขึ้นจอถาม ไม่ใช่ลบเงียบ ๆ)
+        // ถ้าไม่มีงานค้างเลยก็จะ login ผ่านตามปกติโดยไม่ clearAllTables() — ขยับเลขนี้ตอนออก
+        // build ใหม่ตามปกติได้ ไม่ต้องรอ "อุดรู" อีกแล้ว เพราะด่านกันไว้แล้วใน AuthRepository
+        versionCode = 6
+        versionName = "1.0.6"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
