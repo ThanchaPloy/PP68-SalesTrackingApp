@@ -1014,13 +1014,8 @@ class SalesResultViewModel @Inject constructor(
             }
         }
 
-        // โครงการที่ "เพิ่ม" เข้ามา (ดู addProjectEntry) ต้องผ่านกติกาเดียวกับโครงการหลักทุกข้อ —
-        // ตรวจให้ครบ "ก่อน" เริ่มบันทึกสักแถว ไม่ใช่กลางลูป ไม่งั้นจะเหลือบางโครงการบันทึกไปแล้ว
-        // บางโครงการไม่ผ่าน ทำให้ครึ่งๆกลางๆ
-        for (entry in s.additionalProjects) {
-            val entryError = validateProjectEntry(entry)
-            if (entryError != null) { _uiState.update { it.copy(error = entryError) }; return }
-        }
+        // โครงการที่ "เพิ่ม" เข้ามา (ดู addProjectEntry) ตรวจทีละตัวตอนบันทึกจริง ไม่ใช่ตรงนี้ —
+        // เป็นของเสริม ไม่ควรไปบล็อกโครงการหลักที่กรอกครบแล้ว (ดูด้านในวงบันทึก)
 
         viewModelScope.launch {
             _uiState.update { it.copy(isSaving = true, error = null) }
@@ -1092,6 +1087,8 @@ class SalesResultViewModel @Inject constructor(
                     // ✅ นี่คือจุดเดียวที่นัดหมายเปลี่ยนเป็น completed — ไม่มีปุ่ม "Finish" แยกอีกต่อไป
                     // (เดิมอยู่ที่ ActivityDetailViewModel.finishActivity() ถูกเรียกจากปุ่มที่ไม่ได้
                     // บันทึกข้อมูลอะไรเลย) standalone ไม่มีนัดหมายจริงให้ปิด จึงข้ามขั้นนี้ไป
+                    var remainingEntries = s.additionalProjects
+                    val pendingMessages = mutableListOf<String>()
                     if (s.mode == ResultMode.FROM_APPOINTMENT) {
                         s.activityId?.let { activityRepo.finishActivity(it, s.selectedItemIds.toList(), note = null) }
                         // ผูกโครงการเพิ่มตอนบันทึกผล (นัดหมายที่ไม่ได้ผูกไว้แต่แรก) ต้องอัปเดตกลับไปที่
@@ -1109,12 +1106,19 @@ class SalesResultViewModel @Inject constructor(
                         }
                         // โครงการที่ "เพิ่ม" เข้ามา — คนละแถว activity_result จากโครงการหลัก แชร์แค่รูป/
                         // สรุปการเข้าพบ/วันที่ (photoInputs/cover/s.visitSummary/s.reportDate เดียวกัน)
-                        // โครงการหลักสำเร็จไปแล้วตอนนี้ (นัดถูกปิดแล้วด้วย) ถ้าโครงการที่เพิ่มบางตัวพัง
-                        // ไม่ย้อนกลับโครงการหลักที่สำเร็จไปแล้ว แค่รวมข้อความ error ไว้ให้เห็นว่าตัวไหนพัง
-                        val entryErrors = mutableListOf<String>()
+                        // โครงการหลักสำเร็จไปแล้วตอนนี้ (นัดถูกปิดแล้วด้วย) ไม่ย้อนกลับโครงการหลักที่
+                        // สำเร็จไปแล้วไม่ว่าโครงการที่เพิ่มจะเป็นยังไง — เป็นของเสริม ไม่ใช่ภาคบังคับ
+                        //
+                        // ตรวจ/บันทึก "ทีละตัวแยกกัน" ไม่ใช่ all-or-nothing: ตัวที่กรอกครบบันทึกได้
+                        // ตัวที่ยังไม่ครบ (หรือบันทึกไม่สำเร็จ) ถูกข้ามไว้ก่อน ไม่ลบออกจากฟอร์ม —
+                        // ให้กรอกต่อ/ลองใหม่ในรอบถัดไปได้ ไม่ต้องกรอกทุกโครงการให้ครบก่อนถึงจะบันทึก
+                        // โครงการหลักได้ (ของเดิมบล็อกทั้งหมดถ้าตัวใดตัวหนึ่งไม่ครบ)
+                        val savedProjectIds = mutableSetOf<String>()
                         for (entry in s.additionalProjects) {
+                            val entryError = validateProjectEntry(entry)
+                            if (entryError != null) { pendingMessages += entryError; continue }
+
                             val entryFreshProject = projectRepo.getProjectById(entry.projectId).getOrNull()
-                            val entryHasProject = true
                             val entryIsLostOrFailed = entry.isStatusUpdateEnabled &&
                                 (entry.newStatus == "Lost" || entry.newStatus == "Failed")
                             val entryResult = ActivityResult(
@@ -1126,7 +1130,7 @@ class SalesResultViewModel @Inject constructor(
                                 projectId              = entry.projectId,
                                 createdBy              = user?.userId,
                                 reportDate             = s.reportDate,
-                                newStatus              = if (entryHasProject && entry.isStatusUpdateEnabled) STATUS_MAP[entry.newStatus] else null,
+                                newStatus              = if (entry.isStatusUpdateEnabled) STATUS_MAP[entry.newStatus] else null,
                                 opportunityScore       = OPPORTUNITY_MAP[entry.opportunityScore] ?: entry.opportunityScore,
                                 dealPosition           = entryFreshProject?.dealPosition
                                     ?: DEAL_POSITION_MAP[entry.dealPosition] ?: entry.dealPosition.ifBlank { null },
@@ -1149,16 +1153,44 @@ class SalesResultViewModel @Inject constructor(
                                 lossReason             = if (entryIsLostOrFailed) entry.lossReason else null,
                                 lossReasonNote          = if (entryIsLostOrFailed && entry.lossReason == com.example.pp68_salestrackingapp.utils.LossReasons.OTHER) entry.otherLossReason else null
                             )
-                            activityRepo.saveActivityResult(entryResult, photoInputs).onFailure {
-                                entryErrors += "${entryFreshProject?.projectName ?: entry.projectId}: ${it.message}"
+                            val entrySaveResult = activityRepo.saveActivityResult(entryResult, photoInputs)
+                            if (entrySaveResult.isSuccess) {
+                                savedProjectIds += entry.projectId
+                            } else {
+                                pendingMessages += "${entryFreshProject?.projectName ?: entry.projectId}: ${entrySaveResult.exceptionOrNull()?.message}"
                             }
                         }
-                        if (entryErrors.isNotEmpty()) {
-                            _uiState.update { it.copy(error = "บันทึกผลโครงการหลักสำเร็จ แต่โครงการเพิ่มเติมมีปัญหา: ${entryErrors.joinToString("; ")}") }
-                        }
+                        // บันทึกสำเร็จแล้วตัดออกจากฟอร์ม (เปิดนัดใหม่ก็เห็นผ่าน loadInitialData อยู่ดี
+                        // ถ้าต้องแก้อีก) ตัวที่ยังไม่ครบ/พัง ยังค้างอยู่ให้กรอกต่อ/ลองใหม่
+                        remainingEntries = s.additionalProjects.filterNot { it.projectId in savedProjectIds }
                     }
-                    discardDraft()
-                    _uiState.update { it.copy(isSaving = false, isSaved = true) }
+
+                    if (remainingEntries.isEmpty()) {
+                        // ทุกโครงการ (หลัก + เพิ่ม ถ้ามี) บันทึกสำเร็จครบแล้ว — ปิดหน้าได้ตามปกติ
+                        discardDraft()
+                        _uiState.update { it.copy(isSaving = false, isSaved = true, additionalProjects = remainingEntries) }
+                    } else {
+                        // โครงการหลักสำเร็จแล้ว แต่ยังมีโครงการเสริมที่ยังไม่เสร็จ — ไม่ปิดหน้าจอ
+                        //
+                        // ✅ ต้องดึง resultId จริงของโครงการหลักที่เพิ่งบันทึกกลับมาใส่ state ก่อน —
+                        // s.resultId เดิมยังเป็นค่าตอนเปิดหน้า (ว่างถ้าเป็นการสร้างครั้งแรก) ถ้าผู้ใช้
+                        // กดบันทึกอีกรอบ (เพื่อให้โครงการที่เหลือเสร็จ) โดยไม่รีเฟรชค่านี้ก่อน
+                        // saveResultAsNewVersion จะหา "แถวก่อนหน้า" ไม่เจอ (resultId ว่าง) แล้วเปิด
+                        // group ใหม่แยกออกจากกลุ่มที่เพิ่งสร้างไปเมื่อกี้ทันที
+                        if (s.mode == ResultMode.FROM_APPOINTMENT && s.activityId != null) {
+                            activityRepo.getActivityResult(s.activityId)?.let { applyResultToState(it) }
+                        }
+                        // ตั้ง baseline ของดราฟใหม่ตามสถานะปัจจุบัน (โครงการที่เสร็จแล้วถูกตัดออกไป)
+                        // ผู้ใช้กรอกต่อหรือย้อนกลับผ่าน dialog เซฟฉบับร่างได้ตามปกติ
+                        _uiState.update {
+                            it.copy(
+                                isSaving = false,
+                                additionalProjects = remainingEntries,
+                                error = "บันทึกโครงการหลักสำเร็จ แต่ยังมีโครงการที่ยังไม่เสร็จ: ${pendingMessages.joinToString("; ")}"
+                            )
+                        }
+                        draft.captureBaseline()
+                    }
                 } else {
                     _uiState.update { it.copy(isSaving = false, error = saveResult.exceptionOrNull()?.message) }
                 }

@@ -1443,14 +1443,16 @@ class SalesResultViewModelTest {
         coVerify(exactly = 2) { activityRepo.saveActivityResult(any(), any()) }
     }
 
+    // ออกแบบใหม่ (ตกลงกับผู้สั่งงาน): โครงการเสริมเป็นของเสริม ไม่ควรไปบล็อกโครงการหลักที่กรอกครบแล้ว
+    // — โครงการหลักต้องบันทึกสำเร็จ (1 ครั้ง) ส่วนโครงการที่ยังไม่ครบถูกข้ามไว้ก่อน (ไม่ยิง request
+    // ให้มัน) ค้างอยู่ในฟอร์มให้กรอกต่อ ไม่ปิดหน้าจอจนกว่าจะกรอกครบหรือลบทิ้งเอง
     @Test
-    fun `save blocks when an additional project is missing required analysis answers`() = runTest {
+    fun `save persists the primary project and skips an incomplete additional one, keeping it in the form`() = runTest {
         coEvery { activityRepo.getActivityById("A1") } returns Result.success(
             listOf(SalesActivity(activityId = "A1", userId = "U1", customerId = null, projectId = "PRJ-1", activityType = "Visit", activityDate = "2026-04-01", status = "checked_in"))
         )
         coEvery { projectRepo.getProjectById("PRJ-1") } returns Result.success(lockedProject())
-        // PRJ-2 ยังไม่เคยตอบปัจจัยข้อ 4-7 เลย (ไม่ใช่ locked) — ต้องบล็อกการบันทึก "ก่อน" เริ่มยิง
-        // request ไหนเลย ไม่ใช่บันทึกโครงการหลักไปก่อนแล้วค่อยพังตอนโครงการที่สอง
+        // PRJ-2 ยังไม่เคยตอบปัจจัยข้อ 4-7 เลย (ไม่ใช่ locked)
         coEvery { projectRepo.getProjectById("PRJ-2") } returns Result.success(
             Project(projectId = "PRJ-2", custId = "C1", projectName = "Project B", projectStatus = "Lead")
         )
@@ -1468,9 +1470,95 @@ class SalesResultViewModelTest {
         vm.save()
         advanceUntilIdle()
 
+        // ยังไม่ปิดหน้าจอ เพราะ PRJ-2 ยังไม่เสร็จ แต่โครงการหลักต้องบันทึกไปแล้ว
         assertFalse(vm.uiState.value.isSaved)
         assertNotNull(vm.uiState.value.error)
-        coVerify(exactly = 0) { activityRepo.saveActivityResult(any(), any()) }
+        coVerify(exactly = 1) { activityRepo.saveActivityResult(any(), any()) } // แค่โครงการหลัก
+        coVerify(exactly = 1) { activityRepo.finishActivity(any(), any(), any()) } // นัดหมายต้องปิดแล้ว
+        // PRJ-2 ยังค้างอยู่ในฟอร์มให้กรอกต่อ ไม่ถูกลบทิ้ง
+        assertEquals(1, vm.uiState.value.additionalProjects.size)
+        assertEquals("PRJ-2", vm.uiState.value.additionalProjects.first().projectId)
+    }
+
+    // ต่างจากเทสต์ข้างบน: PRJ-2 กรอกครบแล้ว (ผ่าน validation) แต่ยิง request ไปแล้วเซิร์ฟเวอร์/
+    // เครือข่ายพัง — ก็ต้องค้างอยู่ในฟอร์มเหมือนกัน (ให้กดบันทึกซ้ำได้) ไม่ใช่แค่ validation ไม่ผ่าน
+    @Test
+    fun `save keeps a complete additional project in the form if its own save call fails`() = runTest {
+        coEvery { activityRepo.getActivityById("A1") } returns Result.success(
+            listOf(SalesActivity(activityId = "A1", userId = "U1", customerId = null, projectId = "PRJ-1", activityType = "Visit", activityDate = "2026-04-01", status = "checked_in"))
+        )
+        coEvery { projectRepo.getProjectById("PRJ-1") } returns Result.success(lockedProject())
+        coEvery { projectRepo.getProjectById("PRJ-2") } returns Result.success(lockedProject().copy(projectId = "PRJ-2", projectName = "Project B"))
+        coEvery { activityRepo.finishActivity(any(), any(), any()) } returns Result.success(Unit)
+        // โครงการหลัก (ไม่มี projectId ระบุใน matcher ด้านล่าง) สำเร็จ ส่วน PRJ-2 ล้มเหลว
+        coEvery { activityRepo.saveActivityResult(match { it.projectId == "PRJ-1" }, any()) } returns Result.success(Unit)
+        coEvery { activityRepo.saveActivityResult(match { it.projectId == "PRJ-2" }, any()) } returns Result.failure(Exception("เซิร์ฟเวอร์ตอบ 500"))
+
+        val vm = SalesResultViewModel(
+            SavedStateHandle(mapOf("activityId" to "A1")), projectRepo, activityRepo, authRepo, draftStore, java.time.Clock.system(java.time.ZoneId.of("Asia/Bangkok"))
+        )
+        advanceUntilIdle()
+        vm.addProjectEntry("PRJ-2")
+        advanceUntilIdle()
+        vm.onSummaryChanged("summary")
+
+        vm.save()
+        advanceUntilIdle()
+
+        assertFalse(vm.uiState.value.isSaved)
+        assertTrue(vm.uiState.value.error?.contains("เซิร์ฟเวอร์ตอบ 500") == true)
+        assertEquals(1, vm.uiState.value.additionalProjects.size)
+        assertEquals("PRJ-2", vm.uiState.value.additionalProjects.first().projectId)
+    }
+
+    // บันทึกรอบแรก (โครงการหลักสำเร็จ โครงการเสริมยังไม่ครบ) แล้วบันทึกรอบสองให้ครบ — รอบสองต้อง
+    // ส่ง resultId จริงของโครงการหลักที่เพิ่งได้จาก server กลับไป ไม่ใช่ส่งค่าว่างซ้ำ ไม่งั้นจะเปิด
+    // group ใหม่แยกออกจากกลุ่มที่สร้างไปตอนบันทึกรอบแรกทันที
+    @Test
+    fun `saving a second time after a partial save sends the primary's real resultId, not a blank one`() = runTest {
+        coEvery { activityRepo.getActivityById("A1") } returns Result.success(
+            listOf(SalesActivity(activityId = "A1", userId = "U1", customerId = null, projectId = "PRJ-1", activityType = "Visit", activityDate = "2026-04-01", status = "checked_in"))
+        )
+        coEvery { projectRepo.getProjectById("PRJ-1") } returns Result.success(lockedProject())
+        coEvery { projectRepo.getProjectById("PRJ-2") } returns Result.success(
+            Project(projectId = "PRJ-2", custId = "C1", projectName = "Project B", projectStatus = "Lead")
+        )
+        coEvery { activityRepo.finishActivity(any(), any(), any()) } returns Result.success(Unit)
+        // PRJ-2 ยังกรอกไม่ครบตอนบันทึกรอบแรก จึงถูกข้าม "ก่อน" จะเรียก saveActivityResult เลย
+        // (validateProjectEntry ดักไว้ก่อนแล้ว) รอบแรกจึงมีแต่คำขอของโครงการหลักเท่านั้น
+        val allSentResults = mutableListOf<ActivityResult>()
+        coEvery { activityRepo.saveActivityResult(capture(allSentResults), any()) } returns Result.success(Unit)
+        // หลังบันทึกรอบแรก server ได้มอบ resultId จริงให้แล้ว — ViewModel ต้องดึงกลับมาเก็บไว้
+        coEvery { activityRepo.getActivityResult("A1") } returns ActivityResult(
+            resultId = "RES-SERVER-1", activityId = "A1", projectId = "PRJ-1", summary = "summary"
+        )
+
+        val vm = SalesResultViewModel(
+            SavedStateHandle(mapOf("activityId" to "A1")), projectRepo, activityRepo, authRepo, draftStore, java.time.Clock.system(java.time.ZoneId.of("Asia/Bangkok"))
+        )
+        advanceUntilIdle()
+        vm.addProjectEntry("PRJ-2")
+        advanceUntilIdle()
+        vm.onSummaryChanged("summary")
+
+        vm.save() // รอบแรก: PRJ-2 ยังไม่ครบ ถูกข้าม
+        advanceUntilIdle()
+        assertFalse(vm.uiState.value.isSaved)
+        assertEquals("RES-SERVER-1", vm.uiState.value.resultId) // ดึง resultId จริงกลับมาแล้ว
+
+        // เติมให้ PRJ-2 ครบแล้วบันทึกรอบสอง
+        vm.updateProjectEntry("PRJ-2") { it.copy(
+            dealPosition = "incumbent", previousSolution = "no_solution",
+            counterpartyMultiplier = "direct_main_contractor", responseSpeed = "fast"
+        ) }
+        val callsBeforeRound2 = allSentResults.size
+
+        vm.save() // รอบสอง: โครงการหลักต้องถูกส่งซ้ำด้วย resultId จริง ไม่ใช่ค่าว่าง
+        advanceUntilIdle()
+
+        val round2Calls = allSentResults.drop(callsBeforeRound2)
+        val primarySendInSecondRound = round2Calls.find { it.projectId == "PRJ-1" }
+        assertEquals("RES-SERVER-1", primarySendInSecondRound?.resultId)
     }
 
     // โครงการที่ตอบปัจจัยข้อ 4-9 ครบแล้ว (ล็อก) — ใช้ในกลุ่มเทสต์ "กลับมาจากหน้าแก้ไขปัจจัย" ด้านล่าง
