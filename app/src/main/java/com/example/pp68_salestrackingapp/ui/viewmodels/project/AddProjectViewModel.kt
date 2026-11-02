@@ -272,8 +272,10 @@ class AddProjectViewModel @Inject constructor(
         loadCustomers()
         checkUserBranchAndLoadTeams()
         loadAllBillingBranches()
-        // role มาจาก employee.emp_post ตรงๆ (login response ส่งมาเป็น role อยู่แล้ว ไม่ต้องเพิ่ม field ใหม่)
-        _uiState.update { it.copy(isBillingBranchRequired = authRepo.currentUser()?.role == "ผู้จัดการภาค") }
+        // เช็คจาก emp_type='ZM' ไม่ใช่ role (ซึ่งมาจาก emp_post ของ ERP) อีกแล้ว — emp_post ถูก
+        // ERP sync ทับได้ ส่วน emp_type เป็นคอลัมน์ที่โปรเจกต์นี้คุมเอง ไม่มีวันถูกทับจาก ERP
+        // AuthUser.empType มีอยู่แล้วจาก login response ไม่ต้องเพิ่ม field ใหม่
+        _uiState.update { it.copy(isBillingBranchRequired = authRepo.currentUser()?.empType == "ZM") }
     }
 
     private fun loadAllBillingBranches() {
