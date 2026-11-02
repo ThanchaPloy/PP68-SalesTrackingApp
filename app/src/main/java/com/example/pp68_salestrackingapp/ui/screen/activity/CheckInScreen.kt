@@ -60,6 +60,9 @@ fun CheckInScreen(
     // ✅ ปิด location service ทั้งเครื่องแล้วไม่เคยมีพิกัดแคชไว้เลย fetchCurrentLocation() จะไม่เรียก
     // callback อะไรกลับมาเลย — เดิมสปินเนอร์หมุนค้างตลอดไปไม่มีทางรู้ว่าต้องเปิด location ก่อน
     var locationError by remember { mutableStateOf(false) }
+    // โหลด style แผนที่จาก OpenFreeMap ไม่สำเร็จ (เน็ตช้า/หลุด) — ไม่บล็อกการเช็คอิน เพราะปุ่ม
+    // ยืนยันรอแค่พิกัด GPS ไม่ได้รอแผนที่ render สำเร็จ แค่แจ้งให้รู้ว่าทำไมพื้นที่โล่งเทา
+    var mapLoadError by remember { mutableStateOf(false) }
 
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -135,6 +138,8 @@ fun CheckInScreen(
         currentLng = currentLng,
         isFetchingLocation = isFetchingLocation,
         locationError = locationError,
+        mapLoadError = mapLoadError,
+        onMapLoadError = { mapLoadError = true },
         onBack = onBack,
         onRefreshLocation = {
             isFetchingLocation = true
@@ -163,6 +168,8 @@ fun CheckInContent(
     currentLng: Double?,
     isFetchingLocation: Boolean,
     locationError: Boolean = false,
+    mapLoadError: Boolean = false,
+    onMapLoadError: () -> Unit = {},
     onBack: () -> Unit,
     onRefreshLocation: () -> Unit,
     onConfirmCheckin: (Double, Double) -> Unit
@@ -208,8 +215,24 @@ fun CheckInContent(
                         line = targetPos?.let { listOf(currentPos, it) },
                         lineColor = lineColor.toArgb(),
                         // เห็นทั้งตำแหน่งเราและจุดนัดหมายพร้อมกัน เหมือนพฤติกรรมเดิม
-                        fitBounds = targetPos?.let { listOf(currentPos, it) }
+                        fitBounds = targetPos?.let { listOf(currentPos, it) },
+                        onMapLoadError = onMapLoadError
                     )
+                    // ไม่บล็อกการเช็คอิน (ปุ่มรอแค่พิกัด GPS) แค่บอกให้รู้ว่าทำไมพื้นที่โล่งเทา
+                    if (mapLoadError) {
+                        Surface(
+                            modifier = Modifier.align(Alignment.TopCenter).padding(8.dp),
+                            shape = RoundedCornerShape(16.dp),
+                            color = Color.White.copy(alpha = 0.9f),
+                            shadowElevation = 2.dp
+                        ) {
+                            Text(
+                                "โหลดแผนที่ไม่สำเร็จ (ยังเช็คอินได้ปกติ)",
+                                fontSize = 11.sp, color = RedPrimary,
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp)
+                            )
+                        }
+                    }
                 } else if (locationError) {
                     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {

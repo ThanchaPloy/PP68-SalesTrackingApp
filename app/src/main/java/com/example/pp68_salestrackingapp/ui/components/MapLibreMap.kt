@@ -45,6 +45,9 @@ private const val MARKER_ICON_PREFIX = "pp68-pin-"
  * @param cameraTarget ตำแหน่งที่อยากให้กล้องไป — เปลี่ยนค่าเมื่อไหร่กล้องถึงจะขยับ
  *                     ไม่ได้บังคับ center ทุก recompose เพื่อไม่ให้ทับการ pan/zoom ของผู้ใช้
  * @param onMapTap แตะแผนที่เพื่อเลือกพิกัด — null = ปิดการแตะเลือก
+ * @param onMapLoadError เรียกครั้งเดียวเมื่อโหลด style ไม่สำเร็จ (network error) หรือไม่สำเร็จ
+ *   ภายใน [STYLE_LOAD_TIMEOUT_MS] — ไม่งั้นผู้เรียกไม่มีทางรู้เลยว่าแผนที่เป็นพื้นเปล่าค้างตลอดไป
+ *   เพราะอะไร (เคสเดียวกับที่ fetchCurrentLocation เคยไม่มี timeout มาก่อน)
  */
 @Composable
 fun MapLibreMapView(
@@ -58,7 +61,8 @@ fun MapLibreMapView(
     /** ซูมให้เห็นทุกจุดที่ระบุ — ใช้แทน cameraTarget เมื่ออยากเห็นทั้งสองจุดพร้อมกัน */
     fitBounds: List<LatLng>? = null,
     onMapTap: ((Double, Double) -> Unit)? = null,
-    onMapReady: ((MapLibreMap) -> Unit)? = null
+    onMapReady: ((MapLibreMap) -> Unit)? = null,
+    onMapLoadError: (() -> Unit)? = null
 ) {
     val lifecycleOwner = LocalLifecycleOwner.current
     val mapViewRef = remember { mutableStateOf<MapView?>(null) }
@@ -69,6 +73,15 @@ fun MapLibreMapView(
     val lastFitBounds = remember { mutableStateOf<List<LatLng>?>(null) }
     val onMapTapState = rememberUpdatedState(onMapTap)
     val onMapReadyState = rememberUpdatedState(onMapReady)
+    val onMapLoadErrorState = rememberUpdatedState(onMapLoadError)
+    // ยิง error ได้ครั้งเดียวต่อ MapView หนึ่งตัว กันไม่ให้ทั้ง fail listener และ timeout
+    // ยิงซ้ำสองรอบถ้าพลาดพร้อมกัน
+    val loadErrorFired = remember { mutableStateOf(false) }
+    fun fireLoadErrorOnce() {
+        if (loadErrorFired.value) return
+        loadErrorFired.value = true
+        onMapLoadErrorState.value?.invoke()
+    }
 
     // MapView เป็น View ของ Android ที่ต้องได้รับ lifecycle callback ครบ ไม่งั้น render ค้าง/รั่ว
     DisposableEffect(lifecycleOwner) {
@@ -109,6 +122,11 @@ fun MapLibreMapView(
                 onCreate(null)
                 onStart()
                 onResume()
+                addOnDidFailLoadingMapListener { fireLoadErrorOnce() }
+                android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(
+                    { if (mapRef.value?.style == null) fireLoadErrorOnce() },
+                    STYLE_LOAD_TIMEOUT_MS
+                )
                 getMapAsync { map ->
                     mapRef.value = map
                     map.setStyle(MapConfig.STYLE_URL) { style ->
@@ -174,6 +192,9 @@ fun MapLibreMapView(
 }
 
 private const val FIT_BOUNDS_PADDING_PX = 120
+// โหลด style/tile จาก OpenFreeMap พึ่งเน็ตเวิร์กเหมือนกับ setStyle ที่ไม่มี error listener
+// มาก่อน — เน็ตช้า/หลุดตอนนั้นจะเหลือพื้นเทาเปล่าค้างตลอดไปไม่มีใครรู้ว่าทำไม
+private const val STYLE_LOAD_TIMEOUT_MS = 10_000L
 
 private fun drawLine(lineManager: LineManager, points: List<LatLng>?, color: Int) {
     lineManager.deleteAll()
