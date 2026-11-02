@@ -251,9 +251,11 @@ class AddProjectViewModelTest {
 
     // ผู้จัดการภาค/โซน — รหัสโครงการตั้งจากสาขาที่เปิดบิล ไม่ใช่สาขาตัวเอง (trg_set_project_code
     // ฝั่ง backend) แก้รหัสทีหลังไม่ได้ปลอดภัย จึงบังคับกรอกตั้งแต่ตอนสร้างเฉพาะ role นี้
+    // เช็คจาก empType='ZM' ไม่ใช่ role อีกแล้ว (role มาจาก emp_post ของ ERP, แก้ไม่ได้ ไม่ปลอดภัย
+    // ที่จะพึ่งพาถาวร) — ดู project-code-role-prefix ใน memory สำหรับเหตุผลทั้งหมด
     @Test
     fun `zone manager must select a billing branch before saving, other roles do not`() = runTest {
-        every { authRepo.currentUser() } returns AuthUser("U1", "u@test.com", "ผู้จัดการภาค", "TS-001")
+        every { authRepo.currentUser() } returns AuthUser("U1", "u@test.com", "ผู้จัดการภาค", "TS-001", empType = "ZM")
         initViewModel()
         advanceUntilIdle()
 
