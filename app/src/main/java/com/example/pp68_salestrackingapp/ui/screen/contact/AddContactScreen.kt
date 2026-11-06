@@ -146,10 +146,12 @@ fun AddContactContent(
                             onClear     = { onEvent(AddContactEvent.CompanySelected("", "")) },
                             onQueryChange = { onEvent(AddContactEvent.CompanyQueryChanged(it)) }
                         )
-                        uiState.companySearchMessage?.let {
-                            Text(it, color = AppColors.TextHint, fontSize = 12.sp,
-                                modifier = Modifier.padding(start = 4.dp, top = 2.dp))
-                        }
+                        // ไม่มีข้อความสถานะการค้นหา = โชว์คำอธิบายประจำแทน (ดู COMPANY_PICKER_HINT)
+                        Text(
+                            uiState.companySearchMessage ?: COMPANY_PICKER_HINT,
+                            color = AppColors.TextHint, fontSize = 12.sp,
+                            modifier = Modifier.padding(start = 4.dp, top = 2.dp)
+                        )
                         if (uiState.companyError != null)
                             Text(uiState.companyError, color = MaterialTheme.colorScheme.error,
                                 fontSize = 12.sp,

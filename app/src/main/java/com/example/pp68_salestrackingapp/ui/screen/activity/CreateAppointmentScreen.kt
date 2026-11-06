@@ -247,10 +247,13 @@ fun CreateAppointmentScreen(
                         onClear     = { onEvent(CreateAppointmentEvent.CompanySelected("", "")) },
                         onQueryChange = { onEvent(CreateAppointmentEvent.CompanyQueryChanged(it)) }
                     )
-                    state.companySearchMessage?.let {
-                        Text(it, color = AppColors.TextHint, fontSize = 12.sp,
-                            modifier = Modifier.padding(start = 4.dp, top = 2.dp))
-                    }
+                    // ไม่มีข้อความสถานะการค้นหา = โชว์คำอธิบายประจำแทน ผู้ใช้จะได้รู้ตั้งแต่ยังไม่พิมพ์
+                    // ว่าลูกค้าเก่า(dynamic) ไม่ได้อยู่ในรายการให้เลื่อนหา ต้องพิมพ์ค้นหาเอง
+                    Text(
+                        state.companySearchMessage ?: COMPANY_PICKER_HINT,
+                        color = AppColors.TextHint, fontSize = 12.sp,
+                        modifier = Modifier.padding(start = 4.dp, top = 2.dp)
+                    )
                     // ลูกค้ารายใหม่ที่ยังไม่มีในระบบ — สร้างเป็น Lead ตรงนี้ได้เลยไม่ต้องออกไปหน้าอื่น
                     TextButton(onClick = { onEvent(CreateAppointmentEvent.ToggleQuickAddCustomer(true)) }) {
                         Icon(Icons.Default.Add, null, tint = RedPrimary, modifier = Modifier.size(18.dp))

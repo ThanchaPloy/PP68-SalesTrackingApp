@@ -247,10 +247,12 @@ fun AddProjectContent(
                             Text("สร้างลูกค้าใหม่", fontSize = 12.sp)
                         }
                     }
-                    uiState.customerSearchMessage?.let {
-                        Text(it, color = AppColors.TextHint, fontSize = 12.sp,
-                            modifier = Modifier.padding(start = 4.dp, top = 2.dp))
-                    }
+                    // ไม่มีข้อความสถานะการค้นหา = โชว์คำอธิบายประจำแทน (ดู COMPANY_PICKER_HINT)
+                    Text(
+                        uiState.customerSearchMessage ?: COMPANY_PICKER_HINT,
+                        color = AppColors.TextHint, fontSize = 12.sp,
+                        modifier = Modifier.padding(start = 4.dp, top = 2.dp)
+                    )
                     if (uiState.customerError != null)
                         Text(uiState.customerError, color = AppColors.Error, fontSize = 12.sp,
                             modifier = Modifier.padding(start = 4.dp, top = 2.dp))
