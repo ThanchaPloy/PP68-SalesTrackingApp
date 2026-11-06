@@ -46,45 +46,7 @@ object DatabaseModule {
             // จำกัดให้ล้างได้เฉพาะ DB เก่ากว่าต้นสาย migration (28) ซึ่งไม่มีทางกู้อยู่แล้ว —
             // ส่วนกรณีลืมเขียน migration จะกลายเป็น crash ตอนเปิดแอป เจอในเทสต์ทันที ไม่ใช่ข้อมูลหาย
             .fallbackToDestructiveMigrationFrom(*IntArray(27) { it + 1 })
-            .addMigrations(
-                AppDatabase.MIGRATION_28_29,
-                AppDatabase.MIGRATION_29_30,
-                AppDatabase.MIGRATION_30_31,
-                AppDatabase.MIGRATION_31_32,
-                AppDatabase.MIGRATION_32_33,
-                AppDatabase.MIGRATION_33_34,
-                AppDatabase.MIGRATION_34_35,
-                AppDatabase.MIGRATION_35_36,
-                AppDatabase.MIGRATION_36_37,
-                AppDatabase.MIGRATION_37_38,
-                AppDatabase.MIGRATION_38_39,
-                AppDatabase.MIGRATION_39_40,
-                AppDatabase.MIGRATION_40_41,
-                AppDatabase.MIGRATION_41_42,
-                AppDatabase.MIGRATION_42_43,
-                AppDatabase.MIGRATION_43_44,
-                AppDatabase.MIGRATION_44_45,
-                AppDatabase.MIGRATION_45_46,
-                AppDatabase.MIGRATION_46_47,
-                AppDatabase.MIGRATION_47_48,
-                AppDatabase.MIGRATION_48_49,
-                AppDatabase.MIGRATION_49_50,
-                AppDatabase.MIGRATION_50_51,
-                AppDatabase.MIGRATION_51_52,
-                AppDatabase.MIGRATION_52_53,
-                AppDatabase.MIGRATION_53_54,
-                AppDatabase.MIGRATION_54_55,
-                AppDatabase.MIGRATION_55_56,
-                AppDatabase.MIGRATION_56_57,
-                AppDatabase.MIGRATION_57_58,
-                AppDatabase.MIGRATION_58_59,
-                AppDatabase.MIGRATION_59_60,
-                AppDatabase.MIGRATION_60_61,
-                AppDatabase.MIGRATION_61_62,
-                AppDatabase.MIGRATION_62_63,
-                AppDatabase.MIGRATION_63_64,
-                AppDatabase.MIGRATION_64_65
-            )
+            .addMigrations(*AppDatabase.ALL_MIGRATIONS)
             .build()
     }
 

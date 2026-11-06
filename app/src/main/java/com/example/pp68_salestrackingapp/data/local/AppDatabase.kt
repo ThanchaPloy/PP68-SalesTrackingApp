@@ -755,5 +755,26 @@ abstract class AppDatabase : RoomDatabase() {
                 db.execSQL("ALTER TABLE `contact_person` ADD COLUMN `updated_by` TEXT")
             }
         }
+
+        /**
+         * ลิสต์เดียวที่ทั้ง production (DatabaseModule) และเทส (MigrationChainTest) ใช้ร่วมกัน
+         *
+         * เดิม DatabaseModule ไล่ชื่อ migration เองทีละตัว ถ้าใครเพิ่ม migration ใหม่แล้วลืมเติม
+         * ลงไปตรงนั้น แอปจะ crash ตอนผู้ใช้อัปเดต (หรือแย่กว่านั้นคือโดน fallback ล้าง DB) โดยที่
+         * เทสไม่มีทางจับได้ถ้าเทสถือลิสต์ของตัวเองแยก — รวมเป็นที่เดียวแล้วเทสจึงพิสูจน์สิ่งที่
+         * production ใช้จริง ไม่ใช่สิ่งที่เทสคิดว่า production ใช้
+         */
+        val ALL_MIGRATIONS = arrayOf(
+            MIGRATION_28_29, MIGRATION_29_30, MIGRATION_30_31, MIGRATION_31_32,
+            MIGRATION_32_33, MIGRATION_33_34, MIGRATION_34_35, MIGRATION_35_36,
+            MIGRATION_36_37, MIGRATION_37_38, MIGRATION_38_39, MIGRATION_39_40,
+            MIGRATION_40_41, MIGRATION_41_42, MIGRATION_42_43, MIGRATION_43_44,
+            MIGRATION_44_45, MIGRATION_45_46, MIGRATION_46_47, MIGRATION_47_48,
+            MIGRATION_48_49, MIGRATION_49_50, MIGRATION_50_51, MIGRATION_51_52,
+            MIGRATION_52_53, MIGRATION_53_54, MIGRATION_54_55, MIGRATION_55_56,
+            MIGRATION_56_57, MIGRATION_57_58, MIGRATION_58_59, MIGRATION_59_60,
+            MIGRATION_60_61, MIGRATION_61_62, MIGRATION_62_63, MIGRATION_63_64,
+            MIGRATION_64_65
+        )
     }
 }
