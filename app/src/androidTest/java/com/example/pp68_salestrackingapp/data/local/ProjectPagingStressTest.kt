@@ -37,7 +37,7 @@ class ProjectPagingStressTest {
     }
 
     @Test
-    fun fiftyThousandRowsStillMaterializeOnlyTheRequestedPage() = runBlocking<Unit> {
+    fun largeTableStillMaterializesOnlyTheRequestedPage() = runBlocking<Unit> {
         val projects = (1..ROW_COUNT).map { index ->
             Project(
                 projectId = "P%05d".format(Locale.US, index),
@@ -52,7 +52,10 @@ class ProjectPagingStressTest {
                     Locale.US,
                     (index % 12) + 1,
                     (index % 28) + 1
-                )
+                ),
+                // ต้องเป็นเจ้าของเดียวกับ ownerId ที่ส่งให้คิวรีด้านล่าง ตั้งแต่ getProjectsPaging
+                // เพิ่ม WHERE create_by = :ownerId ไม่งั้นถูกกรองทิ้งทั้ง 50,000 แถว แล้ววัดผลไม่ได้
+                createBy = "U1"
             )
         }
 
@@ -91,7 +94,20 @@ class ProjectPagingStressTest {
 
     private companion object {
         const val TAG = "ProjectPagingStress"
-        const val ROW_COUNT = 50_000
+
+        /**
+         * เดิม 50,000 — ลดลงเพราะเทสนี้ใช้ `inMemoryDatabaseBuilder` ฐานข้อมูลทั้งก้อนจึงอยู่ใน RAM
+         * พร้อมกับ list ของ Project อีก 50,000 ออบเจกต์ บนเครื่องทดสอบจริง (RAM 3.5G ใช้ไปแล้ว 3.3G)
+         * kernel ยิง lowmemorykiller รัวจน process ค้างสนิท (CPU 0% ไม่ขยับ) และ test runner
+         * ตั้ง timeout ไว้ 365 วัน จึงค้างตลอดกาลไม่มีทางหลุดเอง
+         *
+         * ของเดิมไม่เคยเจอปัญหานี้เพราะคิวรีได้ 0 แถวมาตลอด (fixture ไม่มีเจ้าของ ไม่ผ่าน
+         * WHERE create_by = :ownerId) เทสจึงพังที่ assertion ก่อนจะได้ materialize ข้อมูลจริงเลย
+         *
+         * 10,000 แถวยังพิสูจน์เจตนาเดิมได้ครบ: ถ้า paging ทำงานผิดแล้วลากทั้งตารางมา จะเห็น
+         * ทันทีว่าได้ 10,000 แทนที่จะเป็น 60
+         */
+        const val ROW_COUNT = 10_000
         const val PAGE_SIZE = 60
     }
 }

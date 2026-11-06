@@ -26,8 +26,13 @@ class Migration61To62Test {
     fun migrationAddsPlanEditTimeWithoutTouchingPendingRows() {
         helper.createDatabase(TEST_DATABASE, 61).apply {
             execSQL(
-                """INSERT INTO activity_table(appointment_id, user_id, type, planned_date, plan_status, is_synced)
-                   VALUES ('A-OFFLINE', 'U1', 'onsite', '2026-10-10', 'planned', 0)"""
+                // ต้องใส่คอลัมน์ NOT NULL ให้ครบตาม exported schema ของเวอร์ชันต้นทาง ไม่งั้น INSERT
+                // ล้มด้วย SQLiteConstraintException ก่อนถึงขั้นตอน migrate เสียอีก (v61 ยังไม่มี
+                // plan_edit_time_trusted — คอลัมน์นั้นเพิ่งมากับ migration ที่เทสนี้กำลังทดสอบ)
+                """INSERT INTO activity_table(
+                       appointment_id, user_id, type, is_appointment, planned_date,
+                       is_location_verified, plan_status, is_synced)
+                   VALUES ('A-OFFLINE', 'U1', 'onsite', 1, '2026-10-10', 0, 'planned', 0)"""
             )
             close()
         }

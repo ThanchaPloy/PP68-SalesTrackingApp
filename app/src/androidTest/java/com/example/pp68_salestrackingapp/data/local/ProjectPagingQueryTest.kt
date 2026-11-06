@@ -107,7 +107,10 @@ class ProjectPagingQueryTest {
         status: String?,
         score: String?,
         startDate: String,
-        createBy: String? = null
+        // default เป็นเจ้าของเดียวกับที่คิวรีใช้ถาม ไม่ใช่ null — ตั้งแต่ getProjectsPaging เพิ่ม
+        // WHERE create_by = :ownerId (กติกาเห็นเฉพาะของตัวเอง) แถวไร้เจ้าของจะถูกกรองทิ้งหมด
+        // เทสที่ตั้งใจทดสอบการกรองเจ้าของยังส่งค่าเองอยู่แล้ว จึงไม่กระทบเจตนาเดิมของเทสนั้น
+        createBy: String? = OWNER
     ) = Project(
         projectId = id,
         projectName = name,

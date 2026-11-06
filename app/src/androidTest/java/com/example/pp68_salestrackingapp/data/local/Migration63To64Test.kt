@@ -26,8 +26,11 @@ class Migration63To64Test {
     fun migrationAddsCallLogSyncTableAndKeepsExistingDataIntact() {
         helper.createDatabase(TEST_DATABASE, 63).apply {
             execSQL(
-                """INSERT INTO activity_table(appointment_id, user_id, type, planned_date, plan_status, is_synced)
-                   VALUES ('A1', 'U1', 'onsite', '2026-10-10', 'planned', 0)"""
+                // คอลัมน์ NOT NULL ต้องครบตาม exported schema ของ v63 (ดู Migration61To62Test)
+                """INSERT INTO activity_table(
+                       appointment_id, user_id, type, is_appointment, planned_date,
+                       is_location_verified, plan_status, is_synced, plan_edit_time_trusted)
+                   VALUES ('A1', 'U1', 'onsite', 1, '2026-10-10', 0, 'planned', 0, 0)"""
             )
             close()
         }

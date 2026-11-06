@@ -52,7 +52,10 @@ class Phase2DatabaseBaselineTest {
                 companyName = "Customer %05d".format(Locale.US, index),
                 bizPostingGroup = listOf("R", "W", "I", "P")[index % 4],
                 custType = if (index % 2 == 0) "Developer" else "Main Contractor",
-                createdBy = "U${index % 50}",
+                // เดิมกระจายเจ้าของเป็น U0..U49 แต่ getAllCustomers กรองด้วยเจ้าของแล้ว (กติกา
+                // เห็นเฉพาะของตัวเอง) ทำให้อ่านกลับมาได้แค่ 1/50 ของที่เขียนไป = วัด baseline
+                // ของการอ่าน 5,000 แถวไม่ได้จริงตามชื่อเทส จึงให้เป็นเจ้าของเดียวกันทั้งชุด
+                createdBy = OWNER,
                 isLead = index % 5 == 0
             )
         }
