@@ -47,8 +47,12 @@ class CustomerLeadOwnerQueryTest {
     @After
     fun closeDatabase() = database.close()
 
+    // ชื่อฟังก์ชันในไฟล์นี้ห้ามมีเว้นวรรคใน backtick แม้ JVM test จะทำได้ — instrumented test ต้องผ่าน
+    // D8 ซึ่งปฏิเสธชื่อคลาสที่มีเว้นวรรคถ้า DEX ต่ำกว่า 040 (ต้อง Android 15+) และ `= runBlocking {}`
+    // ทำให้ Kotlin สร้าง inner class ตามชื่อฟังก์ชันเสมอ ผลคือ dex ทั้ง source set พังทั้งก้อน
+    // (เทสทุกตัวใน androidTest รันไม่ได้เลย ไม่ใช่แค่ไฟล์นี้) — เจอตอนรัน Migration64To65Test บน API 34
     @Test
-    fun `the company dropdown shows only leads the user owns`() = runBlocking {
+    fun companyDropdownShowsOnlyLeadsTheUserOwns() = runBlocking {
         val ids = dao.getAllLeads(OWNER).first().map { it.custId }
 
         assertTrue("ต้องเห็นของตัวเอง", "C-MINE" in ids)
@@ -57,7 +61,7 @@ class CustomerLeadOwnerQueryTest {
     }
 
     @Test
-    fun `a user with no leads of their own sees an empty list`() = runBlocking {
+    fun userWithNoLeadsOfTheirOwnSeesEmptyList() = runBlocking {
         assertTrue(dao.getAllLeads("U-NOBODY").first().isEmpty())
     }
 
@@ -66,7 +70,7 @@ class CustomerLeadOwnerQueryTest {
      * ต้องยังขึ้นชื่อบริษัทได้ ไม่ใช่ว่างเปล่า
      */
     @Test
-    fun `name lookup is deliberately not filtered by owner`() = runBlocking {
+    fun nameLookupIsDeliberatelyNotFilteredByOwner() = runBlocking {
         val names = dao.getAllForNameLookup().associateBy { it.custId }
 
         assertEquals(3, names.size)
