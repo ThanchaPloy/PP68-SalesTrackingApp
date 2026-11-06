@@ -51,6 +51,19 @@ class CheckInLateTest {
         assertFalse("2026-04-06T14:30:00Z" > "20:00:00")
     }
 
+    // ⚠️ เคสที่เคยพังเงียบที่สุด: แถวที่มาจาก sync ดาวน์โหลดไม่ได้ลงท้ายด้วย Z แต่พก offset มา
+    // หรือไม่มี timezone เลย `Instant.parse` ของ Android รุ่นเก่าอ่านไม่ออกแล้ว catch กลืนคืน false
+    // ป้าย "ช้ากว่าเวลานัด" จึงไม่เคยขึ้นสำหรับแถวส่วนใหญ่ในระบบ ทั้งที่เช็คอินสายจริง
+    @Test
+    fun `a check-in that arrived through sync is judged the same as one from a PATCH response`() {
+        // 10:15 +07:00 = 03:15Z เวลาเดียวกับเคสแรกเป๊ะ ๆ ผลต้องเหมือนกัน
+        assertTrue(isCheckInLate("2026-04-06T10:15:00+07:00", "09:00:00"))
+        assertFalse(isCheckInLate("2026-04-06T08:45:00+07:00", "09:00:00"))
+        // แบบไม่มี timezone ติดมาเลย (ผ่าน view ที่ cast ทิ้ง) — เป็นเวลาไทย
+        assertTrue(isCheckInLate("2026-04-06T10:15:00", "09:00:00"))
+        assertFalse(isCheckInLate("2026-04-06T08:45:00", "09:00:00"))
+    }
+
     @Test
     fun `missing or unparseable values are never reported as late`() {
         assertFalse(isCheckInLate(null, "09:00:00"))

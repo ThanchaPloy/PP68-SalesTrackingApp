@@ -23,15 +23,17 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.Dispatchers
 import javax.inject.Inject
 
-// checkInTime เก็บเป็น ISO instant (UTC) ส่วน plannedTime เก็บเป็นเวลาท้องถิ่น "HH:mm:ss"
+// checkInTime เก็บเป็นสตริง ISO ส่วน plannedTime เก็บเป็นเวลาท้องถิ่น "HH:mm:ss"
 // การเทียบสองค่านี้ด้วย > ตรง ๆ คือการเทียบสตริงคนละรูปแบบ: "2026-04-06T09:15:30Z" ขึ้นต้นด้วย '2'
 // จึงมากกว่า "09:00:00" เสมอ ทำให้นัดก่อน 20:00 ถูกตีว่าสายทุกครั้ง ส่วนนัด 20:00 ขึ้นไปไม่เคยสายเลย
+//
+// ⚠️ เดิมอ่านด้วย `Instant.parse` ตรง ๆ ซึ่งบน Android รุ่นเก่ารับได้เฉพาะรูปแบบลงท้าย `Z` แถวที่มา
+// จาก sync ดาวน์โหลด (ลงท้าย `+07:00` หรือไม่มี timezone เลย) จึงโยน exception แล้วถูก catch กลืน
+// คืน false — ป้าย "ช้ากว่าเวลานัด" ไม่เคยขึ้นเลยทั้งที่เช็คอินสายจริง ดู [parseServerInstant]
 internal fun isCheckInLate(checkInIso: String?, plannedLocalTime: String?): Boolean {
     if (checkInIso.isNullOrBlank() || plannedLocalTime.isNullOrBlank()) return false
+    val actual = com.example.pp68_salestrackingapp.utils.parseServerLocalTime(checkInIso) ?: return false
     return try {
-        val actual = java.time.Instant.parse(checkInIso)
-            .atZone(java.time.ZoneId.systemDefault())
-            .toLocalTime()
         actual.isAfter(java.time.LocalTime.parse(plannedLocalTime.trim()))
     } catch (e: Exception) {
         false

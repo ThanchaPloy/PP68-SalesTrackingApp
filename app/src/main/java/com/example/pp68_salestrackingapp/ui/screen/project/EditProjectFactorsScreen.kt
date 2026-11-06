@@ -253,14 +253,9 @@ private fun factorDisplayValue(fieldKey: String, raw: String?): String {
 }
 
 // changed_at เป็น timestamptz ของ Postgres — โชว์แบบสั้นอ่านง่าย ถ้า parse ไม่ได้ก็โชว์ดิบไปเลย
-private fun formatLogTime(iso: String): String = runCatching {
-    java.time.Instant.parse(iso)
-        .atZone(java.time.ZoneId.systemDefault())
-        .format(java.time.format.DateTimeFormatter.ofPattern("d MMM yyyy HH:mm", java.util.Locale("th", "TH")))
-}.getOrElse {
-    runCatching {
-        java.time.OffsetDateTime.parse(iso)
-            .atZoneSameInstant(java.time.ZoneId.systemDefault())
-            .format(java.time.format.DateTimeFormatter.ofPattern("d MMM yyyy HH:mm", java.util.Locale("th", "TH")))
-    }.getOrElse { iso }
-}
+// (ตรงนี้เคยมีลูกโซ่ Instant → OffsetDateTime ของตัวเอง เป็นที่แรกในแอปที่เจอปัญหาหลายรูปแบบ
+//  ย้ายไปอยู่ใน parseServerInstant แล้ว ซึ่งรองรับแบบไม่มี timezone เพิ่มมาอีกหนึ่ง)
+private fun formatLogTime(iso: String): String =
+    com.example.pp68_salestrackingapp.utils.formatServerTime(
+        iso, "d MMM yyyy HH:mm", java.util.Locale("th", "TH")
+    )

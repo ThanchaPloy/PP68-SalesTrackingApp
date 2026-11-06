@@ -16,11 +16,13 @@ class DraftStore @Inject constructor(@ApplicationContext context: Context) {
     private val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
     private val gson = Gson()
 
+    // บันทึกข้อมูลฉบับร่างตามคีย์ที่ระบุ
     fun <T> save(key: String, draft: T) {
         val envelope = Envelope(savedAt = Instant.now().toString(), json = gson.toJson(draft))
         prefs.edit().putString(key, gson.toJson(envelope)).remove(dismissedKey(key)).apply()
     }
 
+    // โหลดข้อมูลฉบับร่างตามคีย์และชนิดข้อมูลที่ระบุ
     fun <T> load(key: String, clazz: Class<T>): T? {
         val raw = prefs.getString(key, null) ?: return null
         val envelope = runCatching { gson.fromJson(raw, Envelope::class.java) }.getOrNull() ?: return null
@@ -31,8 +33,10 @@ class DraftStore @Inject constructor(@ApplicationContext context: Context) {
         return runCatching { gson.fromJson(envelope.json, clazz) }.getOrNull()
     }
 
+    // ตรวจสอบว่ามีฉบับร่างที่ยังใช้งานได้สำหรับคีย์นี้หรือไม่
     fun exists(key: String): Boolean = peekExists(prefs, gson, key)
 
+    // ลบฉบับร่างและสถานะซ่อนของคีย์ที่ระบุ
     fun clear(key: String) {
         prefs.edit().remove(key).remove(dismissedKey(key)).apply()
     }
@@ -44,11 +48,13 @@ class DraftStore @Inject constructor(@ApplicationContext context: Context) {
         prefs.edit().putBoolean(dismissedKey(key), true).apply()
     }
 
+    // สร้างคีย์สำหรับบันทึกสถานะซ่อนฉบับร่าง
     private fun dismissedKey(key: String) = "$key:dismissed"
 
     /**
      * อ่านฉบับร่างดิบตาม prefix ไว้ย้ายไปเก็บที่อื่น — คืนเฉพาะตัวที่ยังไม่หมดอายุ
-     * มีไว้สำหรับการย้ายร่างนัดหมายไป Room (แผนงาน C.4) ไม่ใช่สำหรับใช้งานปกติ
+     * ใช้ตอนย้ายร่างนัดหมายจากที่เก็บเดิมเข้าตาราง Room เท่านั้น ไม่ใช่สำหรับใช้งานปกติ
+     * ถูกเรียกจาก AppointmentDraftRepository.migrateLegacyDrafts()
      */
     fun rawEntriesWithPrefix(prefix: String): Map<String, String> =
         prefs.all.keys
@@ -82,6 +88,7 @@ class DraftStore @Inject constructor(@ApplicationContext context: Context) {
                 .edit().putBoolean("$key:dismissed", true).apply()
         }
 
+        // ตรวจสอบฉบับร่างใน SharedPreferences โดยไม่สร้าง DraftStore
         private fun peekExists(prefs: android.content.SharedPreferences, gson: Gson, key: String): Boolean {
             if (prefs.getBoolean("$key:dismissed", false)) return false
             val raw = prefs.getString(key, null) ?: return false
@@ -89,9 +96,12 @@ class DraftStore @Inject constructor(@ApplicationContext context: Context) {
             return !isExpired(envelope.savedAt)
         }
 
-        private fun isExpired(savedAtIso: String): Boolean =
-            runCatching { Instant.parse(savedAtIso).isBefore(Instant.now().minus(7, ChronoUnit.DAYS)) }
-                .getOrElse { true }
+        // ตรวจสอบว่าฉบับร่างหมดอายุแล้วหรือไม่
+        // อ่านค่าไม่ออก = ถือว่าหมดอายุ (ทิ้งฉบับร่างที่อ่านไม่ได้ ดีกว่าเอาค่าเพี้ยนไปเติมในฟอร์ม)
+        private fun isExpired(savedAtIso: String): Boolean {
+            val savedAt = parseServerInstant(savedAtIso) ?: return true
+            return savedAt.isBefore(Instant.now().minus(7, ChronoUnit.DAYS))
+        }
     }
 
     private data class Envelope(val savedAt: String, val json: String)

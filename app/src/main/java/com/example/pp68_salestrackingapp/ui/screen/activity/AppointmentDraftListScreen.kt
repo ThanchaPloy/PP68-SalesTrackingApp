@@ -180,7 +180,7 @@ private fun DraftRow(draft: AppointmentDraft, onContinue: () -> Unit, onDelete: 
 
 /** เวลาแบบอ่านง่าย ค่าที่อ่านไม่ออกคืนค่าดิบไป ดีกว่าโชว์ว่างเปล่า */
 private fun relativeTime(iso: String): String {
-    val then = runCatching { Instant.parse(iso) }.getOrNull() ?: return iso
+    val then = com.example.pp68_salestrackingapp.utils.parseServerInstant(iso) ?: return iso
     val minutes = Duration.between(then, Instant.now()).toMinutes()
     return when {
         minutes < 1 -> "เมื่อสักครู่"

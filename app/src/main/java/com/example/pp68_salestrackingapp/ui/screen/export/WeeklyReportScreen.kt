@@ -259,7 +259,6 @@ fun WeeklyReportContent(
                 }
             }
 
-            // â”€â”€ Content â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             when {
                 state.isLoading -> Box(
                     Modifier.fillMaxSize(), contentAlignment = Alignment.Center
@@ -301,7 +300,7 @@ fun WeeklyReportContent(
     }
 }
 
-// â”€â”€ Shared export button â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
 @Composable
 private fun ExportButton(
     label:     String,
@@ -343,7 +342,6 @@ private fun ExportButton(
     }
 }
 
-// â”€â”€ Activity card â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 @Composable
 fun ReportActivityCard(item: ExportActivityItem) {
     var previewPhotoUrl by remember { mutableStateOf<String?>(null) }
@@ -569,22 +567,19 @@ fun ImagePreviewDialog(imageUrl: String, onDismiss: () -> Unit) {
     }
 }
 
-// หนึ่งบรรทัดที่พร้อมวาด พร้อมความสูงที่มันกิน — เก็บไว้ก่อนเพื่อวัดความสูงแถวได้ล่วงหน้า
-// bitmap != null = วาดรูปแทนข้อความ ใส่ไว้ในโมเดลเดิมเพราะการคำนวณความสูงแถวกับการขึ้นหน้าใหม่
-// อิง lineHeight อยู่แล้ว รูปจึงถูกนับรวมโดยไม่ต้องแก้ตรรกะพวกนั้นเลย
 internal data class PdfLine(
     val text: String,
     val x: Float,
     val paint: Paint,
     val lineHeight: Float,
     val bitmap: Bitmap? = null,
-    // ห้ามให้ตัวแบ่งหน้าตัดหลังบรรทัดนี้ — ใช้กับหัวข้อที่ไร้ความหมายถ้าโดนแยกจากของที่มันพูดถึง
+    // ห้ามให้ตัวแบ่งหน้าตัดหลังบรรทัดนี้ 
     val keepWithNext: Boolean = false
 )
 
 // คอลัมน์ผลการขายเริ่มที่ x = 480 และเส้นขอบขวาอยู่ที่ 810 -> กว้างราว 330
 // 3 รูป x 104 + ช่องไฟ = 324 พอดีหนึ่งแถว ส่วนที่เกินขึ้นแถวใหม่เอง
-// หน้าจอบันทึกผลจำกัดไว้ที่ 5 รูปต่อบันทึกอยู่แล้ว ค่านี้จึงครอบคลุมทุกกรณีจริง
+// หน้าจอบันทึกผลจำกัดไว้ที่ 5 รูปต่อบันทึก
 private const val PDF_THUMB_W = 104f
 private const val PDF_THUMB_H = 78f
 private const val PDF_PHOTOS_PER_ROW = 3
@@ -594,10 +589,7 @@ private const val MAX_PDF_PHOTOS = 5
 private const val PDF_PAGE_TOP = 50f
 private const val PDF_PAGE_BOTTOM = 540f
 
-/**
- * รูปที่อยู่แถวเดียวกันถูกเก็บเป็นหลาย PdfLine โดยตัวที่ไม่ใช่ตัวท้ายมี lineHeight = 0 เพื่อให้วาดที่ y
- * เดียวกัน ถ้าตัดหน้าคั่นกลางกลุ่มนี้ รูปจะกระจายคนละหน้า จึงต้องมองเป็นก้อนเดียวที่แบ่งไม่ได้
- */
+
 internal fun List<PdfLine>.leadingBlockSize(): Int {
     var n = 0
     while (n < size && (this[n].lineHeight == 0f || this[n].keepWithNext)) n++
@@ -617,10 +609,6 @@ private fun drawPdfLine(canvas: Canvas, line: PdfLine, cy: Float) {
     }
 }
 
-/**
- * รูปจากมือถือกว้างระดับ 4000px การ decode เต็มความละเอียดทีละหลายรูปต่อหลายสิบแถวจะ OOM
- * ก่อนได้ไฟล์ PDF จึงวัดขนาดด้วย inJustDecodeBounds ก่อน แล้วค่อย decode ด้วย inSampleSize
- */
 private fun decodePdfThumbnail(bytes: ByteArray): Bitmap? = try {
     val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
     BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
@@ -719,8 +707,6 @@ private fun wrapTextLines(text: String, paint: Paint, maxWidth: Float): List<Str
     }
     return if (lines.isEmpty()) listOf(text) else lines
 }
-
-// â”€â”€ Export functions â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 private suspend fun getPhotoBytes(context: Context, photoUrl: String): ByteArray? {
     val formattedUrl = formatPhotoUrl(photoUrl)
@@ -825,7 +811,7 @@ suspend fun exportToExcel(context: Context, fileName: String, activities: List<E
                         item.companyName ?: "",
                         item.contactName ?: "",
                         item.projectName ?: "",
-                        if (item.activityType == "onsite" && item.checkInTime != null) { try { java.time.Instant.parse(item.checkInTime).atZone(java.time.ZoneId.systemDefault()).format(java.time.format.DateTimeFormatter.ofPattern("dd MMM HH:mm")) } catch(e: Exception) { item.checkInTime.take(16).replace("T", " ") } } else "",
+                        if (item.activityType == "onsite" && item.checkInTime != null) com.example.pp68_salestrackingapp.utils.formatServerTime(item.checkInTime, "dd MMM HH:mm") else "",
                         item.checkInStatus ?: "",
                         item.locationName ?: "",
                         item.status,
@@ -889,7 +875,7 @@ suspend fun exportToExcel(context: Context, fileName: String, activities: List<E
                     item.companyName ?: "",
                     item.contactName ?: "",
                     item.projectName ?: "",
-                    if (item.activityType == "onsite" && item.checkInTime != null) { try { java.time.Instant.parse(item.checkInTime).atZone(java.time.ZoneId.systemDefault()).format(java.time.format.DateTimeFormatter.ofPattern("dd MMM HH:mm")) } catch(e: Exception) { item.checkInTime.take(16).replace("T", " ") } } else "",
+                    if (item.activityType == "onsite" && item.checkInTime != null) com.example.pp68_salestrackingapp.utils.formatServerTime(item.checkInTime, "dd MMM HH:mm") else "",
                     item.checkInStatus ?: "",
                     item.locationName ?: "",
                     item.status,
@@ -969,7 +955,7 @@ suspend fun exportToPdf(context: Context, fileName: String, activities: List<Exp
 
 /**
  * สร้างไฟล์ PDF อย่างเดียว ไม่แชร์ — แยกออกมาเพื่อให้เรียกทดสอบได้โดยไม่เด้ง share sheet
- * (ตัวแชร์ต้องมี Activity context และจะค้างเมื่อรันในเทสต์)
+ *
  */
 internal suspend fun buildWeeklyPdf(context: Context, fileName: String, activities: List<ExportActivityItem>): File {
     val doc         = PdfDocument()
@@ -1019,11 +1005,8 @@ internal suspend fun buildWeeklyPdf(context: Context, fileName: String, activiti
             if (item.activityType == "onsite" || item.checkInTime != null) {
                 val checkInStr = buildString {
                     if (item.checkInTime != null) {
-                        val timeFormatted = try {
-                            java.time.Instant.parse(item.checkInTime)
-                                .atZone(java.time.ZoneId.systemDefault())
-                                .format(java.time.format.DateTimeFormatter.ofPattern("dd MMM HH:mm"))
-                        } catch (e: Exception) { item.checkInTime.take(16).replace("T", " ") }
+                        val timeFormatted = com.example.pp68_salestrackingapp.utils
+                            .formatServerTime(item.checkInTime, "dd MMM HH:mm")
                         append("Check-in: $timeFormatted")
                         if (!item.checkInStatus.isNullOrBlank()) append(" (${item.checkInStatus})")
                     } else {
