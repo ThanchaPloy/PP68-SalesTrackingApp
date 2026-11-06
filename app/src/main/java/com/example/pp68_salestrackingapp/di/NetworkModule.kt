@@ -70,8 +70,10 @@ object NetworkModule {
     // มันจะไม่ได้ทดสอบ adapter ตัวจริงเลย กลายเป็นเทสต์ที่ผ่านแต่ไม่กันอะไร
     internal val gson = GsonBuilder()
         .addSerializationExclusionStrategy(object : ExclusionStrategy {
+            // ตัดสินว่าควร Skip Field
             override fun shouldSkipField(f: FieldAttributes) =
                 f.getAnnotation(SerializedName::class.java) == null
+            // ตัดสินว่าควร Skip Class
             override fun shouldSkipClass(clazz: Class<*>) = false
         })
         .registerTypeAdapter(SalesActivity::class.java, salesActivityDeserializer)
@@ -79,10 +81,12 @@ object NetworkModule {
 
     @Provides
     @Singleton
+    // สร้างและส่งมอบ Gson
     fun provideGson(): Gson = gson
 
     @Provides
     @Singleton
+    // สร้างและส่งมอบ การยืนยันตัวตน Interceptor
     fun provideAuthInterceptor(
         tokenManager: TokenManager,
         serverTimeAnchor: com.example.pp68_salestrackingapp.utils.ServerTimeAnchor,
@@ -134,7 +138,9 @@ object NetworkModule {
             // ดักที่นี่จุดเดียวได้ครบทุกเส้นทางของแอป โดยไม่ต้องไปไล่แก้ทุก ViewModel
             //
             // เก็บเฉพาะ method/path/รหัสสถานะ ไม่เอา query string เพราะในนั้นมีรหัสรายการจริง
-            // และไม่แตะ header หรือ body ซึ่งมีทั้ง token และข้อมูลลูกค้า
+            // และไม่แตะ header หรือ body ซึ่งมีทั้ง token และข้อมูลลูกค้า — ยกเว้น X-Request-ID
+            // ที่ server สร้าง/ตอบกลับมาเอง (ดู backend HTTP.kt: install(CallId)) เป็น UUID สุ่ม
+            // ไม่มีความหมายอะไรนอกจาก grep หาบรรทัด log ฝั่ง server ที่ตรงกับ error นี้เจอ
             if (!response.isSuccessful) {
                 runCatching {
                     diagnostics.record(
@@ -142,7 +148,8 @@ object NetworkModule {
                         mapOf(
                             "method" to originalRequest.method,
                             "path" to originalRequest.url.encodedPath,
-                            "http_code" to response.code
+                            "http_code" to response.code,
+                            "request_id" to response.header("X-Request-ID")
                         )
                     )
                 }
@@ -162,6 +169,7 @@ object NetworkModule {
 
     @Provides
     @Singleton
+    // สร้างและส่งมอบ Ok Http Client
     fun provideOkHttpClient(authInterceptor: Interceptor): OkHttpClient {
         val logging = HttpLoggingInterceptor().apply {
             level = if (BuildConfig.DEBUG) HttpLoggingInterceptor.Level.BODY
@@ -182,6 +190,7 @@ object NetworkModule {
     @Provides
     @Singleton
     @PostgRestRetrofit
+    // สร้างและส่งมอบ Postg Rest Retrofit
     fun providePostgRestRetrofit(okHttpClient: OkHttpClient): Retrofit {
         return Retrofit.Builder()
             .baseUrl(POSTGREST_URL)
@@ -193,6 +202,7 @@ object NetworkModule {
     @Provides
     @Singleton
     @LoginRetrofit
+    // สร้างและส่งมอบ การเข้าสู่ระบบ Retrofit
     fun provideLoginRetrofit(okHttpClient: OkHttpClient): Retrofit {
         return Retrofit.Builder()
             .baseUrl(BASE_AUTH_URL)
@@ -203,12 +213,14 @@ object NetworkModule {
 
     @Provides
     @Singleton
+    // สร้างและส่งมอบ Api Service
     fun provideApiService(@PostgRestRetrofit retrofit: Retrofit): ApiService {
         return retrofit.create(ApiService::class.java)
     }
 
     @Provides
     @Singleton
+    // สร้างและส่งมอบ การยืนยันตัวตน Service
     fun provideAuthService(@LoginRetrofit retrofit: Retrofit): AuthService {
         return retrofit.create(AuthService::class.java)
     }
@@ -216,6 +228,7 @@ object NetworkModule {
     @Provides
     @Singleton
     @Named("upload")
+    // สร้างและส่งมอบ การอัปโหลด Retrofit
     fun provideUploadRetrofit(okHttpClient: OkHttpClient): Retrofit {
         return Retrofit.Builder()
             .baseUrl(UPLOAD_URL)
@@ -226,6 +239,7 @@ object NetworkModule {
 
     @Provides
     @Singleton
+    // สร้างและส่งมอบ การอัปโหลด Api Service
     fun provideUploadApiService(@Named("upload") retrofit: Retrofit): UploadApiService {
         return retrofit.create(UploadApiService::class.java)
     }

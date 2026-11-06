@@ -25,6 +25,7 @@ class SyncDiagnostics @Inject constructor(
      * ใช้ตอนบันทึก crash เพราะ process กำลังจะตาย ถ้ารอ apply() เขียนไม่ทัน บันทึกจะหายไป
      */
     @Synchronized
+    // บันทึกเหตุการณ์ของ ส่วนที่เกี่ยวข้อง
     fun record(event: String, fields: Map<String, Any?> = emptyMap(), flush: Boolean = false) {
         val events = readEvents()
         events.put(JSONObject().apply {
@@ -41,6 +42,7 @@ class SyncDiagnostics @Inject constructor(
         if (flush) editor.commit() else editor.apply()
     }
 
+    // ส่งออก ไฟล์
     fun exportFile(): File {
         val payload = JSONObject().apply {
             put("schema_version", 1)
@@ -55,13 +57,16 @@ class SyncDiagnostics @Inject constructor(
         }
     }
 
+    // กำหนดสถานะของ Successful การซิงก์
     fun markSuccessfulSync(at: String = Instant.now().toString()) {
         prefs.edit().putString(KEY_LAST_SUCCESS, at).apply()
     }
 
+    // อ่านเวลาที่ซิงก์สำเร็จล่าสุดจากบันทึกวินิจฉัย
     fun lastSuccessfulSync(): String? = prefs.getString(KEY_LAST_SUCCESS, null)
 
     @Synchronized
+    // อ่าน Events
     private fun readEvents(): JSONArray = try {
         JSONArray(prefs.getString(KEY_EVENTS, "[]") ?: "[]")
     } catch (_: Exception) {
@@ -82,7 +87,10 @@ class SyncDiagnostics @Inject constructor(
             // failure_type ถูก record มาตั้งแต่ต้นแต่ไม่เคยอยู่ในลิสต์นี้ จึงถูกตัดทิ้งเงียบ ๆ ทุกครั้ง
             // json_path คือเส้นทางในข้อความของ Gson เช่น $.items[2].payload.is_latest
             // เก็บเฉพาะชื่อฟิลด์ ไม่เอาค่า เพราะไฟล์นี้ออกนอกเครื่อง
-            "failure_type", "json_path"
+            "failure_type", "json_path",
+            // UUID ที่ backend สร้าง/ตอบกลับทุก response (install(CallId) ใน HTTP.kt) — เอาไป
+            // grep หาบรรทัด log ฝั่ง server ที่ตรงกับ error นี้ได้ตรงเป๊ะ ไม่ต้องเดาจากเวลา
+            "request_id"
         )
     }
 }
