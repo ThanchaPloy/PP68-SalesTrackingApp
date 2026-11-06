@@ -146,5 +146,16 @@ data class SalesActivity(
     /** เวลาด้านบนมาจาก anchor ที่เชื่อถือได้หรือจากนาฬิกาเครื่องล้วน ๆ */
     @ColumnInfo(name = "plan_edit_time_trusted")
     @SerializedName("client_time_trusted")
-    val planEditTimeTrusted: Boolean = false
+    val planEditTimeTrusted: Boolean = false,
+
+    // เวลา/ผู้แก้ไขล่าสุด — อ่านอย่างเดียว เซิร์ฟเวอร์ตั้งค่าเองเสมอ (ดู MIGRATION_ROADMAP.md เฟส 1)
+    // คนละเรื่องกับ plan_edit_at ด้านบน: ตัวนั้นคือ "เวลาที่ผู้ใช้กดแก้แผนในเครื่อง" ที่ส่งขึ้นไปให้
+    // backend ตัดสินกติกา ส่วนสองตัวนี้คือค่าที่ backend เขียนกลับมาว่าแถวนี้ถูกแก้ล่าสุดเมื่อไร โดยใคร
+    @ColumnInfo(name = "updated_at")
+    @SerializedName("updated_at")
+    val updatedAt: String? = null,
+
+    @ColumnInfo(name = "updated_by")
+    @SerializedName("updated_by")
+    val updatedBy: String? = null
 )

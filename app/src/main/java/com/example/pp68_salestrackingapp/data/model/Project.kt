@@ -150,5 +150,19 @@ data class Project(
 
     @ColumnInfo(name = "operation_id")
     @SerializedName("operation_id")
-    val operationId: String? = null
+    val operationId: String? = null,
+
+    /**
+     * ผู้แก้ไขล่าสุด — อ่านอย่างเดียว เซิร์ฟเวอร์ตั้งค่าจาก JWT เสมอ (ดู MIGRATION_ROADMAP.md เฟส 1)
+     *
+     * คู่กับ [updatedAt] ด้านบน แต่วางไว้ท้ายคลาสตามคอนเวนชันเดียวกับ ContactPerson.customerName
+     * เพื่อไม่ให้ลำดับ argument ของผู้เรียกแบบ positional เลื่อน
+     *
+     * ใส่ @SerializedName ได้โดยไม่ทำให้ค่านี้หลุดขึ้น server เพราะทุกทางที่เขียนโครงการ
+     * (CreateRequestPayloads / patchBody ใน SyncManager) ประกอบ Map เองทั้งหมด ไม่ได้ปล่อย
+     * entity ให้ Gson แปลง — และถึงหลุดไป backend ก็ไม่เคยอ่าน updated_by จาก body อยู่แล้ว
+     */
+    @ColumnInfo(name = "updatedBy")
+    @SerializedName("updated_by")
+    val updatedBy: String? = null
 )

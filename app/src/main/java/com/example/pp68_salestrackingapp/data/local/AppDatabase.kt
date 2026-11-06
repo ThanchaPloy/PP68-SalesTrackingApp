@@ -27,7 +27,7 @@ import com.example.pp68_salestrackingapp.data.model.*
         AppointmentDraft::class,
         CallLogSync::class
     ],
-    version = 64,
+    version = 65,
     exportSchema = true
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -732,6 +732,27 @@ abstract class AppDatabase : RoomDatabase() {
                     "CREATE INDEX IF NOT EXISTS `index_call_log_sync_is_synced` " +
                         "ON `call_log_sync` (`is_synced`)"
                 )
+            }
+        }
+
+        /**
+         * Mobile phase 2 — รับ updated_at/updated_by ที่ backend เริ่มส่งมาตั้งแต่เฟส 1
+         * (ดู MIGRATION_ROADMAP.md) เก็บไว้โชว์อย่างเดียว ไม่ได้ใช้ตัดสิน conflict
+         *
+         * additive ล้วน: เพิ่มคอลัมน์ nullable ไม่แตะข้อมูลเดิม ไม่ลบ/เปลี่ยนชื่อคอลัมน์ไหน
+         * ชื่อคอลัมน์ต่างกันต่อตารางโดยตั้งใจ ให้ตรงกับคอนเวนชันเดิมของแต่ละ entity —
+         * project ใช้ camelCase (คู่กับ updatedAt ที่มีอยู่แล้ว) ที่เหลือใช้ snake_case
+         */
+        val MIGRATION_64_65 = object : Migration(64, 65) {
+            // ย้ายโครงสร้างฐานข้อมูลไปยังเวอร์ชันถัดไป
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `project` ADD COLUMN `updatedBy` TEXT")
+                db.execSQL("ALTER TABLE `customer` ADD COLUMN `updated_at` TEXT")
+                db.execSQL("ALTER TABLE `customer` ADD COLUMN `updated_by` TEXT")
+                db.execSQL("ALTER TABLE `activity_table` ADD COLUMN `updated_at` TEXT")
+                db.execSQL("ALTER TABLE `activity_table` ADD COLUMN `updated_by` TEXT")
+                db.execSQL("ALTER TABLE `contact_person` ADD COLUMN `updated_at` TEXT")
+                db.execSQL("ALTER TABLE `contact_person` ADD COLUMN `updated_by` TEXT")
             }
         }
     }

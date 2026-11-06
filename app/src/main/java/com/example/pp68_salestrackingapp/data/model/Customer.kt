@@ -70,5 +70,15 @@ data class Customer(
 
     @ColumnInfo(name = "operation_id")
     @SerializedName("operation_id")
-    val operationId: String? = null
+    val operationId: String? = null,
+
+    // เวลา/ผู้แก้ไขล่าสุด — อ่านอย่างเดียว เซิร์ฟเวอร์ตั้งค่าเองเสมอ (ดู MIGRATION_ROADMAP.md เฟส 1)
+    // วางท้ายคลาสเพื่อไม่ให้ลำดับ argument ของผู้เรียกแบบ positional เลื่อน
+    @ColumnInfo(name = "updated_at")
+    @SerializedName("updated_at")
+    val updatedAt: String? = null,
+
+    @ColumnInfo(name = "updated_by")
+    @SerializedName("updated_by")
+    val updatedBy: String? = null
 )

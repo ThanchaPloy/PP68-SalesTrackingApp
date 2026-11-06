@@ -66,5 +66,15 @@ data class ContactPerson(
     // It is only an offline display snapshot, not a cached ERP customer record.
     @ColumnInfo(name = "customer_name")
     @SerializedName("customer_name")
-    val customerName: String? = null
+    val customerName: String? = null,
+
+    // เวลา/ผู้แก้ไขล่าสุด — อ่านอย่างเดียว เซิร์ฟเวอร์ตั้งค่าเองเสมอ (ดู MIGRATION_ROADMAP.md เฟส 1)
+    // ต่อท้ายตามคอนเวนชันเดียวกับ customerName ด้านบน เพื่อไม่ให้ positional caller เลื่อน
+    @ColumnInfo(name = "updated_at")
+    @SerializedName("updated_at")
+    val updatedAt: String? = null,
+
+    @ColumnInfo(name = "updated_by")
+    @SerializedName("updated_by")
+    val updatedBy: String? = null
 )
