@@ -574,7 +574,17 @@ class SyncManager @Inject constructor(
                     }
                     noteOutcome("customer", customer.custId, response.isSuccessful, response.code(), tracker)
                     if (response.isSuccessful && response.body()?.isNotEmpty() == true) {
-                        customerDao.updateSyncStatus(customer.custId, true)
+                        // เก็บค่าที่ server เป็นเจ้าของจาก response เลย (เหมือน CustomerRepository
+                        // .updateCustomer) — ไม่ adopt ทั้งแถวเพราะ payload ของ /lead_customer
+                        // ไม่การันตีว่ามี is_lead ติดมา เขียนทับดื้อ ๆ แล้ว lead จะหลุดจากดรอปดาวน์
+                        val returned = response.body()!!.first()
+                        customerDao.insertCustomer(
+                            customer.copy(
+                                isSynced  = true,
+                                updatedAt = returned.updatedAt ?: customer.updatedAt,
+                                updatedBy = returned.updatedBy ?: customer.updatedBy
+                            )
+                        )
                     }
                 }
             } catch (e: Exception) {
@@ -832,7 +842,20 @@ class SyncManager @Inject constructor(
                         // ไม่เคยถูกส่งขึ้นไป (ตารางนี้ไม่มี is_synced ของตัวเอง จึงไม่มีใครมาเก็บให้ทีหลัง)
                         val contactOutcome = pushAppointmentContacts(activity.activityId)
                         applyChildOutcome("activity", activity.activityId, contactOutcome, tracker)
-                        activityDao.updateSyncStatus(activity.activityId, contactOutcome.success)
+                        // adopt แถวที่ server ตอบกลับ เพื่อเก็บ updated_at/updated_by ที่ติดมากับ
+                        // response ทันที (เหมือน ActivityRepository.adoptServerActivity) โดยคง
+                        // ฟิลด์ local-only ไว้ และ is_synced ยังขึ้นกับผลของผู้เข้าร่วมเหมือนเดิม
+                        activityDao.insertActivity(
+                            response.body()!!.first().copy(
+                                projectName = activity.projectName,
+                                companyName = activity.companyName,
+                                contactName = activity.contactName,
+                                weeklyNote = activity.weeklyNote,
+                                locationName = activity.locationName,
+                                operationId = activity.operationId,
+                                isSynced = contactOutcome.success
+                            )
+                        )
                     }
                 }
             } catch (e: Exception) {

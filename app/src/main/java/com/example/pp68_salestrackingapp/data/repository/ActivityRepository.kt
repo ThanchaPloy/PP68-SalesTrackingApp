@@ -546,6 +546,31 @@ class ActivityRepository @Inject constructor(
         }
     }
 
+    // เขียนแถวที่ server ตอบกลับมาลงเครื่อง แทนการติ๊ก is_synced เฉย ๆ
+    //
+    // response ของ PATCH มีค่าที่ server เป็นเจ้าของติดมาอยู่แล้ว (updated_at/updated_by ที่ตั้งจาก
+    // JWT ฝั่ง server) ถ้าทิ้ง body แล้วแก้แค่ flag ค่าพวกนี้จะว่างในเครื่องจนกว่าจะถึงรอบ sync
+    // ดาวน์โหลดถัดไป — ซึ่งคือเหตุผลที่ต้องปิด-เปิดแอปใหม่ก่อนจะเห็นค่า ทั้งที่ข้อมูลมาถึงตั้งแต่
+    // วินาทีที่กดบันทึก (ProjectRepository.updateProject ทำถูกอยู่แล้ว ที่นี่ตามให้ตรงกัน)
+    //
+    // ฟิลด์ local-only ต้องคงของเดิมไว้เอง เพราะ server ไม่รู้จักมันและจะส่ง null กลับมาทับ —
+    // แพทเทิร์นเดียวกับ DeltaSyncRepository.applyUpsert ซึ่งเป็นที่เดียวที่ merge แถวนัดหมาย
+    // จาก server ลง Room อย่างถูกต้องมาก่อน
+    private suspend fun adoptServerActivity(id: String, returned: SalesActivity) {
+        val old = activityDao.getActivityById(id)
+        activityDao.insertActivity(
+            returned.copy(
+                projectName = old?.projectName,
+                companyName = old?.companyName,
+                contactName = old?.contactName,
+                weeklyNote = old?.weeklyNote,
+                locationName = old?.locationName,
+                isSynced = true,
+                operationId = old?.operationId
+            )
+        )
+    }
+
     // บันทึกการเช็กอินพร้อมพิกัดและผลการตรวจสอบตำแหน่ง
     suspend fun checkIn(activityId: String, lat: Double, lng: Double, isVerified: Boolean, distanceDeviation: Double? = null): kotlin.Result<Unit> {
         return withContext(Dispatchers.IO) {
@@ -587,7 +612,7 @@ class ActivityRepository @Inject constructor(
                 val response = retrySend(idempotent = true, tag = "updateActivity") { apiService.updateActivity("eq.$resolvedId", updates) }
                 when {
                     response.isSuccessful && response.body()?.isNotEmpty() == true -> {
-                        activityDao.updateSyncStatus(resolvedId, true)
+                        adoptServerActivity(resolvedId, response.body()!!.first())
                         kotlin.Result.success(Unit)
                     }
                     response.code() == 403 -> {
@@ -648,7 +673,7 @@ class ActivityRepository @Inject constructor(
                 val response = retrySend(idempotent = true, tag = "updateActivity") { apiService.updateActivity("eq.$resolvedId", updates) }
                 when {
                     response.isSuccessful && response.body()?.isNotEmpty() == true -> {
-                        activityDao.updateSyncStatus(resolvedId, true)
+                        adoptServerActivity(resolvedId, response.body()!!.first())
                         kotlin.Result.success(Unit)
                     }
                     response.code() == 403 -> {

@@ -201,8 +201,10 @@ class SyncManagerTest {
 
         val result = sync.doSync()
 
-        coVerify(exactly = 1) { activityDao.updateSyncStatus("APT-1", false) }
-        coVerify(exactly = 0) { activityDao.updateSyncStatus("APT-1", true) }
+        // แถวที่เขียนกลับลงเครื่องคือแถวจาก server (เพื่อเก็บ updated_at/updated_by) แต่ธง
+        // is_synced ยังขึ้นกับผลของผู้เข้าร่วมเหมือนเดิม
+        coVerify(exactly = 1) { activityDao.insertActivity(match { !it.isSynced }) }
+        coVerify(exactly = 0) { activityDao.insertActivity(match { it.isSynced }) }
         assertEquals(1, result.failureTypes[SyncFailureType.SERVER])
         assertTrue(result.shouldRetry)
     }
@@ -224,7 +226,7 @@ class SyncManagerTest {
             apiService.deleteAppointmentContacts("eq.APT-1")
             apiService.addAppointmentContacts(match { it.size == 1 && it.first().contactId == "CT-9" })
         }
-        coVerify(exactly = 1) { activityDao.updateSyncStatus("APT-1", true) }
+        coVerify(exactly = 1) { activityDao.insertActivity(match { it.isSynced }) }
     }
 
     // ลบผู้เข้าร่วมออกจนหมดก็ต้องส่งคำสั่งลบขึ้นไป เหมือนฝั่งผู้ติดต่อโครงการ

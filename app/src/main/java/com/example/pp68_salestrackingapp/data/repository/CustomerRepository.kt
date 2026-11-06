@@ -295,7 +295,21 @@ class CustomerRepository @Inject constructor(
                     else apiService.updateCustomer("eq.$resolvedId", updates)
                 }
                 if (response.isSuccessful && response.body()?.isNotEmpty() == true) {
-                    customerDao.updateSyncStatus(resolvedId, true)
+                    // เก็บค่าที่ server เป็นเจ้าของจาก response เลย ไม่ต้องรอรอบ sync ดาวน์โหลดถัดไป
+                    // (ก่อนหน้านี้ติ๊กแค่ is_synced ทำให้ updated_at/updated_by ในเครื่องว่างจนกว่าจะ
+                    // เปิดแอปใหม่ ทั้งที่ค่ามาถึงพร้อม response ตั้งแต่วินาทีที่กดบันทึก)
+                    //
+                    // ⚠️ ไม่ adopt ทั้งแถวแบบฝั่งนัดหมาย — payload ของ /lead_customer ไม่ได้การันตีว่า
+                    // มี is_lead ติดมา (DeltaSyncRepository ต้องยัด isLead = true เองด้วยเหตุนี้)
+                    // ถ้าเขียนทับดื้อ ๆ lead จะกลายเป็นลูกค้าเก่าแล้วหลุดจากดรอปดาวน์ทันที
+                    val returned = response.body()!!.first()
+                    customerDao.insertCustomer(
+                        localCustomer.copy(
+                            isSynced  = true,
+                            updatedAt = returned.updatedAt ?: localCustomer.updatedAt,
+                            updatedBy = returned.updatedBy ?: localCustomer.updatedBy
+                        )
+                    )
                     kotlin.Result.success(Unit)
                 } else if (response.code() == 403) {
                     syncManager.markBlocked("customer", resolvedId)

@@ -65,15 +65,24 @@ class ActivityRepositoryCheckInTest {
     // (เดิมเขียนทีเดียวหลังยิง API — ถ้าเขียนพังตรงนั้นจะไม่เหลืออะไรในเครื่องเลย)
     @Test
     fun `a check-in the server accepted is stored as synced`() = runTest {
+        // ชื่อโครงการเป็นคอลัมน์ที่มีแต่ในเครื่อง server ไม่รู้จักและส่ง null กลับมา
+        coEvery { activityDao.getActivityById("A1") } returns activity.copy(projectName = "โครงการ ก")
         coEvery { apiService.updateActivity(any(), any()) } returns
-            Response.success(listOf(activity))
+            Response.success(listOf(activity.copy(updatedAt = "2026-11-07T10:00:00Z", updatedBy = "99999")))
 
         repo.checkIn("A1", 13.7563, 100.5018, isVerified = true, distanceDeviation = 12.0)
 
-        val saved = slot<SalesActivity>()
+        val saved = mutableListOf<SalesActivity>()
         coVerify { activityDao.insertActivity(capture(saved)) }
-        assertFalse(saved.captured.isSynced)
-        coVerify(exactly = 1) { activityDao.updateSyncStatus("A1", true) }
+        // เขียนลงเครื่องเป็น unsynced ก่อนยิง API
+        assertFalse(saved.first().isSynced)
+        // แล้วรับแถวที่ server ตอบกลับมาเขียนทับ — ค่าที่ server เป็นเจ้าของต้องถึงเครื่องทันที
+        // ไม่ใช่รอรอบ sync ดาวน์โหลดถัดไป (เดิมติ๊กแค่ is_synced แล้วทิ้ง body)
+        assertTrue(saved.last().isSynced)
+        assertEquals("2026-11-07T10:00:00Z", saved.last().updatedAt)
+        assertEquals("99999", saved.last().updatedBy)
+        // ...โดยไม่ลบคอลัมน์ที่มีแต่ในเครื่องทิ้ง
+        assertEquals("โครงการ ก", saved.last().projectName)
     }
 
     // ── การโกหกว่าสำเร็จ: catch ครอบทั้งฟังก์ชันแล้วคืน success ทั้งที่ยังไม่ได้เขียนอะไรลงเครื่อง ──
