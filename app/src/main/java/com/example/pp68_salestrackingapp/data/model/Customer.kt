@@ -52,8 +52,12 @@ data class Customer(
     @ColumnInfo(name = "company_status")
     @SerializedName("customer_status") val companyStatus: Int? = null,
 
+    // ⚠️ delta sync ส่ง key นี้มาจาก to_jsonb(customer)/to_jsonb(lead_customer) ตรง ๆ ไม่ใช่
+    // @SerialName ฝั่ง backend — ถ้าวันหนึ่ง rename คอลัมน์ create_date -> created_at (ดู
+    // backend/MIGRATION_ROADMAP.md เฟส 3) delta sync จะเริ่มส่ง key "created_at" แทนทันที
+    // ไม่มีช่วงเปลี่ยนผ่าน alternate ไว้ล่วงหน้ากันไม่ให้ "ลูกค้าใหม่" รายสัปดาห์/รายเดือนกลายเป็น 0
     @ColumnInfo(name = "created_at")
-    @SerializedName("create_date") val createdAt: String? = null,
+    @SerializedName(value = "create_date", alternate = ["created_at"]) val createdAt: String? = null,
 
     @ColumnInfo(name = "user_id")
     @SerializedName("salesperson_code") val createdBy: String? = null,

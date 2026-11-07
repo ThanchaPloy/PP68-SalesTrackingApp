@@ -4,7 +4,12 @@ import com.google.gson.annotations.SerializedName
 
 data class LoginRequest(
     @SerializedName("emp_code") val empCode: String,
-    @SerializedName("password") val password: String
+    @SerializedName("password") val password: String,
+    // backend เก่าไม่รู้จักฟิลด์นี้ — nullable เสมอ login ต้องทำงานได้แม้ server ไม่อ่านค่านี้เลย
+    // ใช้ให้คนดู DB ดูว่า user ส่วนใหญ่อัปเดต APK แล้วหรือยัง ก่อนตัดสินใจ rename คอลัมน์ในเฟส 3
+    // (backend/MIGRATION_ROADMAP.md)
+    @SerializedName("app_version_code") val appVersionCode: Int =
+        com.example.pp68_salestrackingapp.BuildConfig.VERSION_CODE
 )
 
 data class LoginResponse(

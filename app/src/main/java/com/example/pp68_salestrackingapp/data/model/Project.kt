@@ -141,8 +141,12 @@ data class Project(
     @SerializedName("request_by")
     val requestBy: String? = null,
 
+    // ⚠️ delta sync ส่ง key นี้มาจาก to_jsonb(project) ตรง ๆ ไม่ใช่ @SerialName ฝั่ง backend —
+    // ถ้าวันหนึ่ง rename คอลัมน์ project.create_by -> created_by (ดู backend/MIGRATION_ROADMAP.md
+    // เฟส 3) delta sync จะเริ่มส่ง key "created_by" แทนทันที ไม่มีช่วงเปลี่ยนผ่าน alternate ไว้ล่วงหน้า
+    // กันไม่ให้แอปรุ่นนี้อ่านค่าเจ้าของโครงการไม่เจอแล้วโครงการหายจากรายการ
     @ColumnInfo(name = "create_by")
-    @SerializedName("create_by")
+    @SerializedName(value = "create_by", alternate = ["created_by"])
     val createBy: String? = null,
 
     @ColumnInfo(name = "is_synced")
