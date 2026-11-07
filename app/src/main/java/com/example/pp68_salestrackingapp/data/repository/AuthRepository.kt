@@ -20,6 +20,7 @@ class AuthRepository @Inject constructor(
     private val outboxSyncManager: OutboxSyncManager,
     private val draftRepository: AppointmentDraftRepository
 ) {
+    // เข้าสู่ระบบ บันทึกเซสชัน และเตรียมข้อมูลบัญชีในเครื่อง
     suspend fun login(
         username: String,
         password: String,
@@ -84,7 +85,15 @@ class AuthRepository @Inject constructor(
 
                     kotlin.Result.success(loginResp)
                 } else {
-                    kotlin.Result.failure(Exception("รหัสพนักงานหรือรหัสผ่านไม่ถูกต้อง"))
+                    // ✅ เหมือน register()/changePassword() ด้านล่าง — backend ตอบ { "error": code,
+                    // "message": ข้อความจริงเป็นไทย } ต้องอ่าน "message" ไม่งั้นโชว์ข้อความเดียว
+                    // ("รหัสพนักงานหรือรหัสผ่านไม่ถูกต้อง") ทุกกรณี ทั้งที่จริงๆอาจเป็นบัญชีถูกปิด
+                    // ใช้งานหรือถูกล็อกชั่วคราวจากการใส่รหัสผิดซ้ำๆ ก็ได้ (ดู AuthUseCase.login() ฝั่ง backend)
+                    val errBody = response.errorBody()?.string() ?: ""
+                    val errMsg  = try {
+                        org.json.JSONObject(errBody).getString("message")
+                    } catch (e: Exception) { "รหัสพนักงานหรือรหัสผ่านไม่ถูกต้อง" }
+                    kotlin.Result.failure(Exception(errMsg))
                 }
             } catch (e: Exception) {
                 if (e is CancellationException) throw e
@@ -114,6 +123,7 @@ class AuthRepository @Inject constructor(
         }
     )
 
+    // ลงทะเบียน ส่วนที่เกี่ยวข้อง
     suspend fun register(
         email:    String,
         password: String,
@@ -170,6 +180,7 @@ class AuthRepository @Inject constructor(
         }
     }
 
+    // ดึงข้อมูล ผู้ใช้ Detail
     private suspend fun fetchUserDetail(userId: String): UserDetailResult? {
         return try {
             val userResp = apiService.getUserById("eq.$userId")
@@ -275,16 +286,20 @@ class AuthRepository @Inject constructor(
         }
     }
 
+    // ตรวจว่า ผู้ใช้ Logged ใน
     fun isUserLoggedIn(): Boolean = !tokenManager.getToken().isNullOrEmpty()
 
+    // คืนข้อมูลที่ต้องใช้ในขั้นตอนตั้งค่าบัญชีครั้งแรก
     fun initialSetupInfo(): InitialSetupInfo = tokenManager.getInitialSetupInfo()
 
+    // ยกเลิกขั้นตอนตั้งค่าครั้งแรกและล้างสถานะชั่วคราว
     fun abandonInitialSetup() {
         // Keep Room and localDataOwner intact. A setup-only token cannot upload business data,
         // and deleting the database here could destroy protected offline work.
         tokenManager.clearToken()
     }
 
+    // เปลี่ยนรหัสผ่านและบันทึกเบอร์มือถือเพื่อจบการตั้งค่าครั้งแรก
     suspend fun completeInitialSetup(
         currentPassword: String,
         newPassword: String,
@@ -326,12 +341,15 @@ class AuthRepository @Inject constructor(
 
     val sessionExpired = tokenManager.sessionExpired
 
+    // คืนข้อมูลผู้ใช้ที่กำลังเข้าสู่ระบบ
     fun currentUser(): AuthUser? = tokenManager.getUserData()
 
+    // อัปเดต Local ผู้ใช้
     fun updateLocalUser(user: AuthUser) {
         tokenManager.saveUserData(user)
     }
 
+    // เปลี่ยนรหัสผ่านของผู้ใช้ปัจจุบัน
     suspend fun changePassword(
         oldPassword: String,
         newPassword: String
