@@ -129,7 +129,16 @@ Two files define what actually exists at runtime — check them before assuming 
 
 ### Domain rules
 
-- **Appointment edit/delete/result windows live in one policy object per repo** — `utils/AppointmentPolicy.kt` here and `domain/policy/AppointmentPolicy.kt` in the backend. Both are pure, take a `Clock`, pin `Asia/Bangkok`, and return the same reason codes (`APPOINTMENT_EDIT_WINDOW_CLOSED`, `DELETE_WINDOW_CLOSED`, `ONSITE_CHECKIN_REQUIRED`, `MISSED_ONSITE_RESULT_NOT_ALLOWED`, `APPOINTMENT_TIME_MISSING`, `APPOINTMENT_STATUS_LOCKED`). Their two test files encode the same table; change one side and the other must follow. The rules: plan edits close at the start minute, deletes close at midnight of the appointment day, and an onsite appointment with no check-in cannot be written up after its day. This **replaced** the old "locked within 7 days of the appointment" rule, which was the opposite shape.
+- **Appointment edit/delete/result windows live in one policy object per repo** — `utils/AppointmentPolicy.kt` here and `domain/policy/AppointmentPolicy.kt` in the backend. Both are pure, take a `Clock`, pin `Asia/Bangkok`, and return the same reason codes (`APPOINTMENT_EDIT_WINDOW_CLOSED`, `DELETE_WINDOW_CLOSED`, `ONSITE_CHECKIN_REQUIRED`, `MISSED_ONSITE_RESULT_NOT_ALLOWED`, `APPOINTMENT_TIME_MISSING`, `APPOINTMENT_STATUS_LOCKED`). Their two test files encode the same table; change one side and the other must follow. **The four windows close at four different moments, and that is deliberate** — reading one of them off another is the mistake this table exists to prevent:
+
+  | Action | Open until | Gate |
+  |---|---|---|
+  | Delete the plan | the midnight that **begins** the appointment day (`today.isBefore(date)`) — once it is the appointment day you can no longer delete, only write up a result | `canDelete` |
+  | Edit the plan | the **start minute** of the appointment; equal to the start time already counts as closed. A row with no start time is locked from 00:00 of the appointment day rather than guessed at | `canEdit` |
+  | **Check in** | the midnight that **ends** the appointment day — the widest window of the four. `effectiveStatus` compares **dates only**, never the time, so checking in hours after the planned start is normal and allowed | `effectiveStatus == "planned"`, **not** `canEdit` |
+  | Write up a result on an onsite appointment with no check-in | same as check-in: end of the appointment day, after which it is `MISSED_ONSITE_RESULT_NOT_ALLOWED` and there is no way back in the app | `canCreateResult` |
+
+  Online and call appointments are never "missed" and can be written up at any time — there is no appearance to prove. This **replaced** the old "locked within 7 days of the appointment" rule, which was the opposite shape.
   - Server-side enforcement is behind `APPOINTMENT_POLICY_V2`, **off by default**. While off it only logs what it would have rejected.
   - The server decides "is this a plan edit?" from which fields the PATCH touches (`AppointmentPolicy.PLAN_FIELDS`), never a client flag. Check-in, status changes and the result's project binding share `PATCH /appointment` and must keep working after the start time.
   - The check runs inside the write transaction on a `SELECT … FOR UPDATE` row, so a concurrent reschedule cannot slip between read and write.
