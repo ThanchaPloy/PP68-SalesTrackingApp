@@ -514,6 +514,40 @@ fun CreateAppointmentScreen(
 
             if (state.activityType == "onsite") {
                 FormField(label = "สถานที่ *") {
+                    // ปุ่มลัด: จุดนัดหมายส่วนใหญ่คือที่ตั้งบริษัทหรือหน้าไซต์โครงการอยู่แล้ว
+                    // ปิดปุ่มเมื่อยังไม่ได้เลือก หรือเลือกแล้วแต่ไม่มีพิกัดบันทึกไว้ (ลูกค้าเก่า(dynamic)
+                    // จะไม่มีเสมอ เพราะพิกัดไม่เคยถูกส่งมาถึงแอป)
+                    val companyLoc = state.companyLat to state.companyLng
+                    val projectLoc = state.projectLat to state.projectLng
+                    if (companyLoc.first != null || projectLoc.first != null) {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)
+                        ) {
+                            if (companyLoc.first != null && companyLoc.second != null) {
+                                AssistChip(
+                                    onClick = {
+                                        onEvent(CreateAppointmentEvent.LocationCopied(companyLoc.first, companyLoc.second))
+                                    },
+                                    label = { Text("ใช้พิกัดบริษัท", fontSize = 13.sp) },
+                                    leadingIcon = {
+                                        Icon(Icons.Default.Business, null, modifier = Modifier.size(16.dp))
+                                    }
+                                )
+                            }
+                            if (projectLoc.first != null && projectLoc.second != null) {
+                                AssistChip(
+                                    onClick = {
+                                        onEvent(CreateAppointmentEvent.LocationCopied(projectLoc.first, projectLoc.second))
+                                    },
+                                    label = { Text("ใช้พิกัดโครงการ", fontSize = 13.sp) },
+                                    leadingIcon = {
+                                        Icon(Icons.Default.Place, null, modifier = Modifier.size(16.dp))
+                                    }
+                                )
+                            }
+                        }
+                    }
                     MapPickerField(
                         lat = state.lat,
                         lng = state.lng,

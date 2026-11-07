@@ -120,6 +120,22 @@ class CustomerRepository @Inject constructor(
         }
     }
 
+    /**
+     * อ่านลูกค้าจากในเครื่องอย่างเดียว ไม่ยิงเน็ตเลย — คืน null ถ้าไม่มีแถวนั้นใน Room
+     *
+     * ต่างจาก [getCustomerById] ตรงที่ตัวนั้นจะถอยไปถาม ERP ผ่านเน็ตเมื่อไม่เจอในเครื่อง ซึ่งไม่
+     * เหมาะกับผู้เรียกที่แค่ "อยากได้ถ้ามี" อย่างปุ่มคัดลอกพิกัดในฟอร์มนัดหมาย — ลูกค้าเก่า(dynamic)
+     * ไม่เคยมีพิกัดส่งมาถึงแอปอยู่แล้ว (`/customer/lookup` คืนแค่ code กับ name) การยิงเน็ตไปก็ได้
+     * ค่าว่างกลับมาเหมือนเดิม แลกกับการรอเน็ตทุกครั้งที่ผู้ใช้เลือกบริษัท
+     */
+    suspend fun getLocalCustomerById(id: String): Customer? = withContext(Dispatchers.IO) {
+        runCatching {
+            customerDao.getCustomerById(
+                localIdMappingDao.resolveMappedId(LocalIdMapping.ENTITY_CUSTOMER, id)
+            )
+        }.getOrNull()
+    }
+
     // ดึงข้อมูล ลูกค้า ตาม รหัส
     suspend fun getCustomerById(id: String): kotlin.Result<Customer> {
         return withContext(Dispatchers.IO) {

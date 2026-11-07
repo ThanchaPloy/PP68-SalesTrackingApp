@@ -156,6 +156,85 @@ class CreateAppointmentViewModelTest {
         assertTrue(vm.isDirty())
     }
 
+    // ปุ่ม "ใช้พิกัดบริษัท/โครงการ" คือการแก้ไขของผู้ใช้เต็มตัว ไม่ใช่ auto-fill — ถึงจะเป็นการตั้ง
+    // พิกัดครั้งแรกของฟอร์มก็ตาม เคสนี้เกิดจริงเมื่อเครื่องไม่ได้สิทธิ์ตำแหน่งหรือหา GPS ไม่เจอ:
+    // awaitingInitialLocation จะยังค้างเป็น true อยู่ ถ้าปุ่มนี้ใช้ LocationPicked ร่วมกัน การกดครั้ง
+    // แรกจะถูกดูดเข้า baseline แล้วกดย้อนกลับจะไม่เตือน ทั้งที่ผู้ใช้เพิ่งตั้งจุดนัดหมายไปแล้ว
+    @Test
+    fun `copying a location from the company counts as a user edit even when GPS never fired`() = runTest {
+        configureBaseData()
+        coEvery { activityRepo.getMasterActivities() } returns emptyList()
+
+        val vm = CreateAppointmentViewModel(context, activityRepo, projectRepo, customerRepo, contactRepo, authRepo, draftStore, java.time.Clock.system(java.time.ZoneId.of("Asia/Bangkok")), serverTimeAnchor, draftRepository)
+        advanceUntilIdle()
+        vm.onEvent(CreateAppointmentEvent.CheckDraft)
+        advanceUntilIdle()
+
+        // ไม่มี LocationPicked จาก GPS มาก่อนเลย — กดปุ่มคัดลอกเป็นการตั้งพิกัดครั้งแรก
+        vm.onEvent(CreateAppointmentEvent.LocationCopied(13.7563, 100.5018))
+
+        assertEquals(13.7563, vm.uiState.value.lat!!, 0.000001)
+        assertEquals(100.5018, vm.uiState.value.lng!!, 0.000001)
+        assertTrue(vm.isDirty())
+    }
+
+    // พิกัดที่ให้คัดลอกต้องมาจากบริษัทที่เลือกอยู่จริง และต้องอ่านจากในเครื่องเท่านั้น (ไม่ยิงเน็ต)
+    @Test
+    fun `selecting a company loads its stored coordinates for the copy button`() = runTest {
+        configureBaseData()
+        coEvery { activityRepo.getMasterActivities() } returns emptyList()
+        coEvery { customerRepo.getLocalCustomerById("C1") } returns
+            Customer(custId = "C1", companyName = "Company A", companyLat = 13.5, companyLong = 100.2)
+
+        val vm = CreateAppointmentViewModel(context, activityRepo, projectRepo, customerRepo, contactRepo, authRepo, draftStore, java.time.Clock.system(java.time.ZoneId.of("Asia/Bangkok")), serverTimeAnchor, draftRepository)
+        advanceUntilIdle()
+
+        vm.onEvent(CreateAppointmentEvent.CompanySelected("C1", "Company A"))
+        advanceUntilIdle()
+
+        assertEquals(13.5, vm.uiState.value.companyLat!!, 0.000001)
+        assertEquals(100.2, vm.uiState.value.companyLng!!, 0.000001)
+    }
+
+    // ลูกค้าเก่า(dynamic) ไม่เคยมีพิกัดส่งมาถึงแอป (/customer/lookup คืนแค่ code กับ name) ต้องได้
+    // null เพื่อให้หน้าจอซ่อนปุ่มไว้ ไม่ใช่โชว์ปุ่มที่กดแล้วเงียบหรือพาไปพิกัด 0,0
+    @Test
+    fun `a company with no stored coordinates leaves the copy button with nothing to offer`() = runTest {
+        configureBaseData()
+        coEvery { activityRepo.getMasterActivities() } returns emptyList()
+        coEvery { customerRepo.getLocalCustomerById("ERP-1") } returns null
+
+        val vm = CreateAppointmentViewModel(context, activityRepo, projectRepo, customerRepo, contactRepo, authRepo, draftStore, java.time.Clock.system(java.time.ZoneId.of("Asia/Bangkok")), serverTimeAnchor, draftRepository)
+        advanceUntilIdle()
+
+        vm.onEvent(CreateAppointmentEvent.CompanySelected("ERP-1", "ลูกค้าเก่า ก"))
+        advanceUntilIdle()
+
+        assertNull(vm.uiState.value.companyLat)
+        assertNull(vm.uiState.value.companyLng)
+    }
+
+    // เปลี่ยนบริษัทแล้วพิกัดของบริษัทเดิมต้องไม่ค้าง ไม่งั้นกดปุ่มแล้วได้ที่ตั้งของบริษัทที่เลิกเลือกไปแล้ว
+    @Test
+    fun `switching to a company without coordinates clears the previous company location`() = runTest {
+        configureBaseData()
+        coEvery { activityRepo.getMasterActivities() } returns emptyList()
+        coEvery { customerRepo.getLocalCustomerById("C1") } returns
+            Customer(custId = "C1", companyName = "Company A", companyLat = 13.5, companyLong = 100.2)
+        coEvery { customerRepo.getLocalCustomerById("ERP-1") } returns null
+
+        val vm = CreateAppointmentViewModel(context, activityRepo, projectRepo, customerRepo, contactRepo, authRepo, draftStore, java.time.Clock.system(java.time.ZoneId.of("Asia/Bangkok")), serverTimeAnchor, draftRepository)
+        advanceUntilIdle()
+
+        vm.onEvent(CreateAppointmentEvent.CompanySelected("C1", "Company A"))
+        advanceUntilIdle()
+        vm.onEvent(CreateAppointmentEvent.CompanySelected("ERP-1", "ลูกค้าเก่า ก"))
+        advanceUntilIdle()
+
+        assertNull(vm.uiState.value.companyLat)
+        assertNull(vm.uiState.value.companyLng)
+    }
+
     @Test
     fun `master load failure should fallback to default masters`() = runTest {
         configureBaseData()

@@ -50,6 +50,14 @@ data class CreateAppointmentUiState(
     val lat:                 Double? = null,
     val lng:                 Double? = null,
 
+    // พิกัดที่ "คัดลอกได้" ของบริษัทและโครงการที่เลือกอยู่ — null = ไม่มีพิกัดบันทึกไว้ ปุ่มจะถูกปิด
+    // บริษัทลูกค้าเก่า(dynamic) จะเป็น null เสมอ เพราะ /customer/lookup คืนแค่ code กับ name
+    // ไม่เคยส่งพิกัดมา (ดู CustomerRepository.getLocalCustomerById)
+    val companyLat:          Double? = null,
+    val companyLng:          Double? = null,
+    val projectLat:          Double? = null,
+    val projectLng:          Double? = null,
+
     val selectedContactIds:  Set<String>          = emptySet(),
     val selectedMasterIds:   Set<Int>             = emptySet(),
     val isOtherSelected:     Boolean              = false,
@@ -163,6 +171,15 @@ sealed class CreateAppointmentEvent {
     data class StartTimeSelected(val value: String)         : CreateAppointmentEvent()
     data class EndTimeSelected(val value: String)           : CreateAppointmentEvent()
     data class LocationPicked(val lat: Double?, val lng: Double?) : CreateAppointmentEvent()
+    /**
+     * ผู้ใช้กดปุ่ม "ใช้พิกัดบริษัท/โครงการ" เอง — แยกจาก [LocationPicked] โดยตั้งใจ
+     *
+     * [LocationPicked] ครั้งแรกหลัง checkForDraft ถูกตีความว่าเป็น GPS auto-fill แล้วดูดเข้า
+     * baseline ของฉบับร่าง ถ้าเครื่องไม่ได้สิทธิ์ตำแหน่งหรือหาพิกัดไม่ได้ ธงนั้นจะยังค้างอยู่ การกด
+     * ปุ่มนี้เป็นครั้งแรกจึงจะโดนดูดเข้า baseline ไปด้วย = ฟอร์มไม่ถือว่าถูกแก้ แล้วคำเตือน
+     * "ออกโดยไม่บันทึก" จะไม่ขึ้นทั้งที่ผู้ใช้เพิ่งเปลี่ยนจุดนัดหมายไปแล้ว
+     */
+    data class LocationCopied(val lat: Double?, val lng: Double?) : CreateAppointmentEvent()
     object ShowStartTimePicker  : CreateAppointmentEvent()
     object ShowEndTimePicker    : CreateAppointmentEvent()
     object DismissTimePicker    : CreateAppointmentEvent()
@@ -679,6 +696,19 @@ class CreateAppointmentViewModel @Inject constructor(
         }
     }
 
+    /**
+     * โหลดพิกัดของบริษัทที่เลือกไว้ สำหรับปุ่ม "ใช้พิกัดบริษัท" เท่านั้น
+     *
+     * อ่านจาก Room อย่างเดียว ไม่ยิงเน็ต — บริษัทที่มีพิกัดให้คัดลอกคือ Lead ที่สร้างในแอป ซึ่งอยู่ใน
+     * เครื่องเสมอ ส่วนลูกค้าเก่า(dynamic) ไม่เคยมีพิกัดส่งมาถึงแอป ปุ่มจะถูกปิดเองเพราะได้ null
+     */
+    private fun loadCompanyLocation(custId: String) {
+        viewModelScope.launch {
+            val c = customerRepo.getLocalCustomerById(custId)
+            _uiState.update { it.copy(companyLat = c?.companyLat, companyLng = c?.companyLong) }
+        }
+    }
+
     private fun loadContactsForProject(projectId: String, selectedContactIds: Set<String> = emptySet()) {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoadingContacts = true, contactOptions = emptyList()) }
@@ -687,6 +717,9 @@ class CreateAppointmentViewModel @Inject constructor(
                 // ✅ ทางออกก่อนกำหนดตรงนี้เดิมไม่ปิด isLoadingContacts ผู้ใช้จึงค้างอยู่กับวงกลม
                 // หมุนตลอดไปในช่องผู้ติดต่อ (โหลดโครงการไม่ได้ หรือโครงการไม่ได้ผูกบริษัทไว้)
                 // แทนที่จะได้เห็นว่าเกิดอะไรขึ้น
+                // พิกัดโครงการใช้ได้ทันทีแม้โครงการยังไม่ผูกบริษัท จึงตั้งก่อนทางออกก่อนกำหนดข้างล่าง
+                _uiState.update { it.copy(projectLat = project?.projectLat, projectLng = project?.projectLong) }
+
                 if (project?.custId.isNullOrBlank()) {
                     _uiState.update { it.copy(isLoadingContacts = false, contactOptions = emptyList()) }
                     return@launch
@@ -698,6 +731,7 @@ class CreateAppointmentViewModel @Inject constructor(
                 customerRepo.getCustomerById(custId).onSuccess { c ->
                     _uiState.update { it.copy(selectedCompanyName = c.companyName) }
                 }
+                loadCompanyLocation(custId)
 
                 val category = getCategoryForProjectStatus(status)
                 val filtered = if (category != null) {
@@ -800,6 +834,7 @@ class CreateAppointmentViewModel @Inject constructor(
                         customerRepo.getCustomerById(custId).onSuccess { c ->
                             _uiState.update { it.copy(selectedCompanyName = c.companyName) }
                         }
+                        loadCompanyLocation(custId)
                     }
                 }
             }
@@ -843,7 +878,11 @@ class CreateAppointmentViewModel @Inject constructor(
                            masterOptions = it.allMasterOptions,
                            selectedContactIds = emptySet(),
                            selectedCustomerId = null,
-                           selectedCompanyName = null
+                           selectedCompanyName = null,
+                           // ล้างพิกัดต้นทางด้วย ไม่งั้นปุ่มยังเปิดอยู่แล้วคัดลอกพิกัดของโครงการ
+                           // /บริษัทที่เพิ่งยกเลิกไปแล้ว โดยที่จอไม่ได้บอกว่ากำลังจะได้พิกัดของใคร
+                           projectLat = null, projectLng = null,
+                           companyLat = null, companyLng = null
                        )
                    }
                 } else {
@@ -854,7 +893,10 @@ class CreateAppointmentViewModel @Inject constructor(
                             projectError        = null,
                             selectedContactIds  = emptySet(),
                             selectedMasterIds   = if (it.activityId == null) emptySet() else it.selectedMasterIds,
-                            contactOptions      = emptyList()
+                            contactOptions      = emptyList(),
+                            // ของโครงการเดิม ล้างไว้ก่อน loadContactsForProject จะเติมของใหม่ให้
+                            projectLat = null, projectLng = null,
+                            companyLat = null, companyLng = null
                         )
                     }
                     loadContactsForProject(event.id)
@@ -871,9 +913,12 @@ class CreateAppointmentViewModel @Inject constructor(
                         // เปลี่ยนบริษัท = ผู้ติดต่อที่เลือกไว้ของบริษัทเดิมใช้ไม่ได้แล้ว ต้องล้างทิ้ง
                         // ไม่งั้นจะบันทึกนัดที่ผูกผู้ติดต่อของบริษัทอื่นไปแบบไม่มีใครเห็น
                         selectedContactIds  = emptySet(),
-                        contactOptions      = emptyList()
+                        contactOptions      = emptyList(),
+                        // พิกัดของบริษัทเดิมใช้ไม่ได้แล้วเช่นกัน
+                        companyLat = null, companyLng = null
                     )
                 }
+                if (custId != null) loadCompanyLocation(custId)
                 // ถ้าเลือกโครงการอยู่ ผู้ติดต่อมาจากโครงการนั้นแล้ว ไม่ต้องโหลดทับ
                 if (custId != null && _uiState.value.selectedProjectId == null) {
                     loadContactsForCustomer(custId)
@@ -975,6 +1020,12 @@ class CreateAppointmentViewModel @Inject constructor(
                     awaitingInitialLocation = false
                     draft.absorbIntoBaseline { it.copy(lat = event.lat, lng = event.lng) }
                 }
+            }
+
+            is CreateAppointmentEvent.LocationCopied -> {
+                // ไม่แตะ awaitingInitialLocation และไม่ absorb เข้า baseline — นี่คือการแก้ไขของ
+                // ผู้ใช้เต็มตัว ต้องนับว่าฟอร์มถูกแก้ ดูเหตุผลเต็มที่ตัว event
+                _uiState.update { it.copy(lat = event.lat, lng = event.lng) }
             }
 
             CreateAppointmentEvent.ShowStartTimePicker ->
