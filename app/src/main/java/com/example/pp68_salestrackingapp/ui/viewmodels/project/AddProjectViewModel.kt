@@ -289,7 +289,7 @@ class AddProjectViewModel @Inject constructor(
 
         // พรีฟิลสาขาที่ทำงานอยู่ล่าสุด — เฉพาะตอนสร้างใหม่ (ยังไม่มีการเลือกใดๆ) โหมดแก้ไขจะเขียน
         // ทับค่านี้อีกทีจาก LoadActivity ทีหลัง ไม่ชนกัน
-        val acting = tokenManager.getActingBranch()
+        val acting = tokenManager.actingBranch.value
         if (acting != null && _uiState.value.selectedBillingBranchId == null) {
             val match = filtered.find { it.branchId == acting }
             if (match != null) {

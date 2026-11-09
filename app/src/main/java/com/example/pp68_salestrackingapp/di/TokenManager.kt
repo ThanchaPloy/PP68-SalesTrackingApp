@@ -6,8 +6,11 @@ import com.example.pp68_salestrackingapp.data.model.AuthUser
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.asStateFlow
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -118,11 +121,15 @@ class TokenManager @Inject constructor(
      */
     fun getManagedRegion(): String? = prefs.getString("managed_region", null)
 
+    // reactive เพราะต้องมีหลายที่ฟังพร้อมกัน (หน้า Home, หน้าตั้งค่า, dropdown สร้างโครงการ,
+    // ตัวกรองรายการโครงการ) — SharedPreferences อย่างเดียวไม่แจ้งใครเลยเวลาค่าเปลี่ยนจากอีกหน้า
+    private val _actingBranch = MutableStateFlow(prefs.getString("acting_branch_id", null))
+    val actingBranch: StateFlow<String?> = _actingBranch.asStateFlow()
+
     fun saveActingBranch(branchId: String) {
         prefs.edit().putString("acting_branch_id", branchId).apply()
+        _actingBranch.value = branchId
     }
-
-    fun getActingBranch(): String? = prefs.getString("acting_branch_id", null)
 
     /**
      * เจ้าของข้อมูลที่ค้างอยู่ใน Room ขณะนี้ — ต้องอยู่รอดข้าม [clearToken] โดยตั้งใจ
@@ -162,6 +169,7 @@ class TokenManager @Inject constructor(
             remove("initial_setup_phone_required")
             remove("initial_setup_notice_version")
         }.apply()
+        _actingBranch.value = null
     }
 
     // บันทึก Visit Reminder Enabled

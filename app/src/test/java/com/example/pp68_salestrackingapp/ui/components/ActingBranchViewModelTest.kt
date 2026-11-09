@@ -6,6 +6,7 @@ import com.example.pp68_salestrackingapp.di.TokenManager
 import io.mockk.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.*
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -20,6 +21,9 @@ class ActingBranchViewModelTest {
     private val testDispatcher = StandardTestDispatcher()
     private val tokenManager = mockk<TokenManager>(relaxed = true)
     private val branchRepo = mockk<BranchRepository>(relaxed = true)
+    // TokenManager.actingBranch เป็น StateFlow จริง (reactive) ไม่ใช่ snapshot ครั้งเดียว — จำลองด้วย
+    // MutableStateFlow ของตัวเองแล้วผูก saveActingBranch ให้แก้ตัวเดียวกัน เหมือนพฤติกรรมจริง
+    private val actingBranchFlow = MutableStateFlow<String?>(null)
 
     private val north = listOf(
         Branch("11PL", "สาขาพิษณุโลก", "NORTH"),
@@ -29,6 +33,8 @@ class ActingBranchViewModelTest {
     @Before
     fun setUp() {
         Dispatchers.setMain(testDispatcher)
+        every { tokenManager.actingBranch } returns actingBranchFlow
+        every { tokenManager.saveActingBranch(any()) } answers { actingBranchFlow.value = firstArg() }
     }
 
     @After
@@ -40,7 +46,6 @@ class ActingBranchViewModelTest {
     @Test
     fun `zone manager without an acting branch is asked to pick one`() = runTest {
         every { tokenManager.getManagedRegion() } returns "NORTH"
-        every { tokenManager.getActingBranch() } returns null
         coEvery { branchRepo.observeBranches() } returns north + Branch("13SR", "สาขาสุราษฎร์ธานี", "SOUTH")
 
         val vm = ActingBranchViewModel(tokenManager, branchRepo)
@@ -64,7 +69,7 @@ class ActingBranchViewModelTest {
     @Test
     fun `a zone manager who already picked today is not asked again`() = runTest {
         every { tokenManager.getManagedRegion() } returns "NORTH"
-        every { tokenManager.getActingBranch() } returns "12CM"
+        actingBranchFlow.value = "12CM"
 
         val vm = ActingBranchViewModel(tokenManager, branchRepo)
         advanceUntilIdle()
@@ -79,7 +84,6 @@ class ActingBranchViewModelTest {
     @Test
     fun `no branch list means no dialog at all, never a dead end`() = runTest {
         every { tokenManager.getManagedRegion() } returns "NORTH"
-        every { tokenManager.getActingBranch() } returns null
         coEvery { branchRepo.observeBranches() } returns emptyList()
         coEvery { branchRepo.syncFromRemote() } returns Result.failure(Exception("offline"))
 
@@ -92,7 +96,6 @@ class ActingBranchViewModelTest {
     @Test
     fun `an empty local list is refilled from the server before giving up`() = runTest {
         every { tokenManager.getManagedRegion() } returns "NORTH"
-        every { tokenManager.getActingBranch() } returns null
         coEvery { branchRepo.observeBranches() } returnsMany listOf(emptyList(), north)
         coEvery { branchRepo.syncFromRemote() } returns Result.success(Unit)
 
@@ -106,15 +109,32 @@ class ActingBranchViewModelTest {
     @Test
     fun `picking a branch stores it and closes the dialog`() = runTest {
         every { tokenManager.getManagedRegion() } returns "NORTH"
-        every { tokenManager.getActingBranch() } returns null
         coEvery { branchRepo.observeBranches() } returns north
 
         val vm = ActingBranchViewModel(tokenManager, branchRepo)
         advanceUntilIdle()
 
         vm.select("12CM")
+        advanceUntilIdle()
 
         verify { tokenManager.saveActingBranch("12CM") }
         assertFalse(vm.mustChoose.value)
+    }
+
+    /** เปลี่ยนสาขาจากอีกหน้า (เช่น หน้าตั้งค่า) ต้องสะท้อนทันทีไม่ต้องรีสตาร์ต ViewModel นี้ */
+    @Test
+    fun `switching branch from elsewhere updates this view model reactively`() = runTest {
+        every { tokenManager.getManagedRegion() } returns "NORTH"
+        coEvery { branchRepo.observeBranches() } returns north
+        actingBranchFlow.value = "11PL"
+
+        val vm = ActingBranchViewModel(tokenManager, branchRepo)
+        advanceUntilIdle()
+        assertEquals("สาขาพิษณุโลก", vm.actingBranchName.value)
+
+        actingBranchFlow.value = "12CM"
+        advanceUntilIdle()
+
+        assertEquals("สาขาเชียงใหม่", vm.actingBranchName.value)
     }
 }

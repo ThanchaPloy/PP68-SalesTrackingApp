@@ -224,6 +224,11 @@ private fun HomeScreenContent(
                 modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp)
             )
         }
+        // ผู้จัดการภาค (ZM) เท่านั้น — ไม่โชว์อะไรให้ role อื่น ย้ายมาไว้หน้าแรกแทนที่จะซ่อนอยู่แค่ใน
+        // หน้าตั้งค่า เพราะกลัวคนลืมเปลี่ยนแล้วสร้างโครงการผิดสาขาซ้ำๆ
+        com.example.pp68_salestrackingapp.ui.components.ActingBranchBanner(
+            modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp)
+        )
         when {
             uiState.isLoading -> Box(
                 Modifier.fillMaxSize(),

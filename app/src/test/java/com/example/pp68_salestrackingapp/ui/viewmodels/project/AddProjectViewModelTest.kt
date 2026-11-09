@@ -7,6 +7,7 @@ import com.example.pp68_salestrackingapp.data.repository.*
 import io.mockk.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.*
 import org.junit.*
 import org.junit.Assert.*
@@ -35,7 +36,7 @@ class AddProjectViewModelTest {
         Dispatchers.setMain(testDispatcher)
         every { draftStore.load<Any>(any(), any()) } returns null
         every { tokenManager.getManagedRegion() } returns null
-        every { tokenManager.getActingBranch() } returns null
+        every { tokenManager.actingBranch } returns MutableStateFlow(null)
 
         val user = AuthUser("USR-001", "test@test.com", "sale", "TS-001")
         every { authRepo.currentUser() } returns user
@@ -321,7 +322,7 @@ class AddProjectViewModelTest {
     fun `new project prefills the billing branch last worked under`() = runTest {
         every { authRepo.currentUser() } returns AuthUser("U1", "u@test.com", "ผู้จัดการภาค", "TS-001", empType = "ZM")
         every { tokenManager.getManagedRegion() } returns "NORTH"
-        every { tokenManager.getActingBranch() } returns "N2"
+        every { tokenManager.actingBranch } returns MutableStateFlow("N2")
         coEvery { branchRepo.getBranches() } returns Result.success(listOf(
             Branch("N1", "เหนือ 1", "NORTH"),
             Branch("N2", "เหนือ 2", "NORTH")

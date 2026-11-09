@@ -7,6 +7,7 @@ import app.cash.turbine.test
 import com.example.pp68_salestrackingapp.data.model.AuthUser
 import com.example.pp68_salestrackingapp.data.repository.AuthRepository
 import com.example.pp68_salestrackingapp.data.repository.ProjectRepository
+import com.example.pp68_salestrackingapp.di.TokenManager
 import io.mockk.Runs
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -46,6 +47,7 @@ class ProjectListViewModelTest {
     private val dispatcher = StandardTestDispatcher()
     private val projectRepo = mockk<ProjectRepository>()
     private val authRepo = mockk<AuthRepository>()
+    private val tokenManager = mockk<TokenManager>(relaxed = true)
 
     private lateinit var viewModel: ProjectListViewModel
 
@@ -53,7 +55,8 @@ class ProjectListViewModelTest {
     fun setUp() {
         Dispatchers.setMain(dispatcher)
         every { authRepo.currentUser() } returns AuthUser("U1", "u@test.com", "sale", "T1")
-        every { projectRepo.getProjectsPagingFlow(any(), any(), any(), any(), any()) } returns
+        every { tokenManager.getManagedRegion() } returns null
+        every { projectRepo.getProjectsPagingFlow(any(), any(), any(), any(), any(), any()) } returns
             flowOf(PagingData.empty())
         coEvery { projectRepo.refreshProjects(any()) } returns Result.success(Unit)
     }
@@ -66,7 +69,7 @@ class ProjectListViewModelTest {
     }
 
     private fun initVm() {
-        viewModel = ProjectListViewModel(projectRepo, authRepo)
+        viewModel = ProjectListViewModel(projectRepo, authRepo, tokenManager)
     }
 
     private suspend fun collectPagingGeneration() {
@@ -107,6 +110,32 @@ class ProjectListViewModelTest {
 
         assertEquals("refresh boom", viewModel.error.value)
         assertFalse(viewModel.isLoading.value)
+    }
+
+    /**
+     * ผู้จัดการภาคเห็นเฉพาะโครงการของสาขาที่ "ทำงานอยู่ตอนนี้" — ตัวกรองนี้มาจาก TokenManager.actingBranch
+     * โดยตรง ไม่ใช่ snapshot ตอน init เพื่อให้สลับสาขาจากหน้า Home/ตั้งค่าแล้วรายการเปลี่ยนตามทันที
+     */
+    @Test
+    fun givenZoneManagerWithActingBranch_whenProjectsCollected_thenFiltersByThatBranch() = runTest {
+        every { tokenManager.getManagedRegion() } returns "NORTH"
+        every { tokenManager.actingBranch } returns kotlinx.coroutines.flow.MutableStateFlow("12CM")
+
+        initVm()
+        collectPagingGeneration()
+
+        coVerify { projectRepo.getProjectsPagingFlow(any(), any(), any(), any(), any(), "12CM") }
+    }
+
+    @Test
+    fun givenNonZoneManager_whenProjectsCollected_thenNeverFiltersByBranch() = runTest {
+        every { tokenManager.getManagedRegion() } returns null
+        every { tokenManager.actingBranch } returns kotlinx.coroutines.flow.MutableStateFlow("12CM")
+
+        initVm()
+        collectPagingGeneration()
+
+        coVerify { projectRepo.getProjectsPagingFlow(any(), any(), any(), any(), any(), null) }
     }
 
     @Test
@@ -200,7 +229,7 @@ class ProjectListViewModelTest {
 
     @Test
     fun givenFlowThrows_whenProjectsCollected_thenSetsError() = runTest {
-        every { projectRepo.getProjectsPagingFlow(any(), any(), any(), any(), any()) } returns
+        every { projectRepo.getProjectsPagingFlow(any(), any(), any(), any(), any(), any()) } returns
             flow { throw IllegalStateException("db fail") }
         initVm()
         collectPagingGeneration()

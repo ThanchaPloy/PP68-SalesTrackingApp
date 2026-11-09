@@ -37,6 +37,7 @@ interface ProjectDao {
         AND (:searchQuery = '' OR projectName LIKE '%' || :searchQuery || '%')
         AND (:applyStatusFilter = 0 OR projectStatus IN (:selectedStatuses))
         AND (:applyScoreFilter = 0 OR UPPER(opportunityScore) IN (:selectedScores))
+        AND (:billingBranchFilter IS NULL OR billingBranchId = :billingBranchFilter)
         ORDER BY startDate DESC, projectId ASC
         """
     )
@@ -51,7 +52,10 @@ interface ProjectDao {
         applyStatusFilter: Boolean,
         selectedStatuses: List<String>,
         applyScoreFilter: Boolean,
-        selectedScores: List<String>
+        selectedScores: List<String>,
+        // ผู้จัดการภาคเท่านั้น (null สำหรับ role อื่น) — เห็นเฉพาะโครงการของสาขาที่ "ทำงานอยู่ตอนนี้"
+        // ดู ActingBranchViewModel / ProjectListViewModel
+        billingBranchFilter: String?
     ): PagingSource<Int, Project>
 
     @Query("SELECT * FROM project WHERE custId = :customerId")

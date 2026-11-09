@@ -92,7 +92,9 @@ class ProjectRepository @Inject constructor(
         searchQuery: String,
         tabIndex: Int,
         selectedStatuses: Set<String>,
-        selectedScores: Set<String>
+        selectedScores: Set<String>,
+        // ผู้จัดการภาค (ZM) เท่านั้น — null สำหรับ role อื่นทุกคน (ไม่กรอง)
+        billingBranchFilter: String? = null
     ): Flow<PagingData<Project>> = Pager(
         config = PagingConfig(
             pageSize = PROJECT_PAGE_SIZE,
@@ -112,7 +114,8 @@ class ProjectRepository @Inject constructor(
                 applyStatusFilter = selectedStatuses.isNotEmpty(),
                 selectedStatuses = selectedStatuses.sorted(),
                 applyScoreFilter = selectedScores.isNotEmpty(),
-                selectedScores = selectedScores.map { it.uppercase() }.sorted()
+                selectedScores = selectedScores.map { it.uppercase() }.sorted(),
+                billingBranchFilter = billingBranchFilter
             )
         }
     ).flow

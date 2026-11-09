@@ -65,7 +65,6 @@ fun SettingScreen(
         onRefreshUser = { viewModel.refreshUser() },
         onDismissLogoutError = { viewModel.dismissLogoutError() },
         onRetrySync = { viewModel.retrySync() },
-        onSelectActingBranch = { id, name -> viewModel.selectActingBranch(id, name) },
         onExportDiagnostics = {
             val file = viewModel.exportDiagnostics()
             val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
@@ -89,13 +88,19 @@ fun SettingScreenContent(
     onRefreshUser: () -> Unit = {},
     onDismissLogoutError: () -> Unit = {},
     onRetrySync: () -> Unit = {},
-    onExportDiagnostics: () -> Unit = {},
-    onSelectActingBranch: (String, String) -> Unit = { _, _ -> }
+    onExportDiagnostics: () -> Unit = {}
 ) {
     // State สำหรับควบคุมว่ากำลังแสดงหน้าย่อยไหน
     var activeSubScreen by remember { mutableStateOf(initialSubScreen) }
     var showLanguageDialog by remember { mutableStateOf(false) }
     var showBranchDialog by remember { mutableStateOf(false) }
+    // ผู้จัดการภาค (ZM) เท่านั้น — ViewModel ตัวเดียวกับ banner หน้า Home และ dialog บังคับตอน login
+    // (ดู ActingBranchGate.kt) ไม่มีลอจิกโหลด/เลือกสาขาซ้ำกันหลายชุด
+    val actingBranchViewModel: com.example.pp68_salestrackingapp.ui.components.ActingBranchViewModel =
+        androidx.hilt.navigation.compose.hiltViewModel()
+    val zmBranchOptions by actingBranchViewModel.options.collectAsState()
+    val actingBranchId by actingBranchViewModel.actingBranchId.collectAsState()
+    val actingBranchName by actingBranchViewModel.actingBranchName.collectAsState()
 
     if (uiState.logoutError != null) {
         AlertDialog(
@@ -261,11 +266,11 @@ fun SettingScreenContent(
                         SettingItem(icon = Icons.Default.Lock, label = "เปลี่ยนรหัสผ่าน", onClick = { activeSubScreen = "change_password" })
                         SettingItem(icon = Icons.Default.Notifications, label = "ตั้งค่าการแจ้งเตือน", onClick = { activeSubScreen = "notification_settings" })
                         // ผู้จัดการภาคเท่านั้น — zmBranchOptions ว่างสำหรับ role อื่นทุกคน
-                        if (uiState.zmBranchOptions.isNotEmpty()) {
+                        if (zmBranchOptions.isNotEmpty()) {
                             SettingItem(
                                 icon = Icons.Default.Place,
                                 label = "สาขาที่ทำงานอยู่ตอนนี้",
-                                value = uiState.actingBranchName ?: "ยังไม่ได้เลือก",
+                                value = actingBranchName ?: "ยังไม่ได้เลือก",
                                 onClick = { showBranchDialog = true }
                             )
                         }
@@ -320,21 +325,21 @@ fun SettingScreenContent(
             title = { Text("เลือกสาขาที่ทำงานอยู่ตอนนี้") },
             text = {
                 Column {
-                    uiState.zmBranchOptions.forEach { branch ->
+                    zmBranchOptions.forEach { branch ->
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clickable {
-                                    onSelectActingBranch(branch.branchId, branch.branchName)
+                                    actingBranchViewModel.select(branch.branchId)
                                     showBranchDialog = false
                                 }
                                 .padding(vertical = 12.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             RadioButton(
-                                selected = branch.branchId == uiState.actingBranchId,
+                                selected = branch.branchId == actingBranchId,
                                 onClick = {
-                                    onSelectActingBranch(branch.branchId, branch.branchName)
+                                    actingBranchViewModel.select(branch.branchId)
                                     showBranchDialog = false
                                 }
                             )

@@ -8,6 +8,7 @@ import com.example.pp68_salestrackingapp.data.repository.ProjectRepository
 import com.example.pp68_salestrackingapp.data.repository.AuthRepository
 import com.example.pp68_salestrackingapp.data.model.Project
 import com.example.pp68_salestrackingapp.data.model.AuthUser
+import com.example.pp68_salestrackingapp.di.TokenManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.FlowPreview
@@ -19,7 +20,8 @@ import javax.inject.Inject
 @HiltViewModel
 class ProjectListViewModel @Inject constructor(
     private val repo: ProjectRepository,
-    private val authRepo: AuthRepository
+    private val authRepo: AuthRepository,
+    private val tokenManager: TokenManager
 ) : ViewModel() {
 
     private val _isLoading   = MutableStateFlow(false)
@@ -42,6 +44,12 @@ class ProjectListViewModel @Inject constructor(
     val selectedStatuses: StateFlow<Set<String>> = _selectedStatuses.asStateFlow()
     val selectedScores:   StateFlow<Set<String>> = _selectedScores.asStateFlow()
 
+    // ผู้จัดการภาค (ZM) เท่านั้น — reactive เพราะเปลี่ยนได้ตลอดจากหน้า Home/ตั้งค่า โดยไม่ต้อง
+    // รีสตาร์ตหน้ารายการโครงการ (ดู TokenManager.actingBranch, ActingBranchViewModel)
+    private val _billingBranchFilter: Flow<String?> =
+        if (tokenManager.getManagedRegion() == null) kotlinx.coroutines.flow.flowOf(null)
+        else tokenManager.actingBranch
+
     val projects: Flow<PagingData<Project>> = combine(
         _searchQuery.debounce(300),
         _selectedTabIndex,
@@ -50,8 +58,11 @@ class ProjectListViewModel @Inject constructor(
         // ผูกกับผู้ใช้ด้วย เพื่อให้สลับบัญชีแล้วรายการเปลี่ยนตามโดยไม่ต้องรีสตาร์ตหน้า
         _authUser
     ) { query, tabIndex, statuses, scores, user ->
-        FilterCriteria(query, tabIndex, statuses, scores, user?.userId.orEmpty())
+        FilterCriteriaBase(query, tabIndex, statuses, scores, user?.userId.orEmpty())
     }
+        .combine(_billingBranchFilter) { base, billingBranchFilter ->
+            FilterCriteria(base.query, base.tabIndex, base.statuses, base.scores, base.ownerId, billingBranchFilter)
+        }
         .distinctUntilChanged()
         .flatMapLatest { criteria ->
             // Tab/search/status/score filtering is performed by Room, not on an in-memory full list.
@@ -60,7 +71,8 @@ class ProjectListViewModel @Inject constructor(
                 searchQuery = criteria.query,
                 tabIndex = criteria.tabIndex,
                 selectedStatuses = criteria.statuses,
-                selectedScores = criteria.scores
+                selectedScores = criteria.scores,
+                billingBranchFilter = criteria.billingBranchFilter
             )
         }
         .catch { e ->
@@ -112,11 +124,20 @@ class ProjectListViewModel @Inject constructor(
         refreshDataFromApi()
     }
 
-    private data class FilterCriteria(
+    private data class FilterCriteriaBase(
         val query: String,
         val tabIndex: Int,
         val statuses: Set<String>,
         val scores: Set<String>,
         val ownerId: String
+    )
+
+    private data class FilterCriteria(
+        val query: String,
+        val tabIndex: Int,
+        val statuses: Set<String>,
+        val scores: Set<String>,
+        val ownerId: String,
+        val billingBranchFilter: String?
     )
 }
