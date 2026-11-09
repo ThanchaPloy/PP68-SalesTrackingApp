@@ -206,11 +206,6 @@ fun ProjectListContent(
     ) { padding ->
         Column(modifier = Modifier.fillMaxSize().padding(padding).padding(horizontal = 12.dp)) {
             Spacer(Modifier.height(12.dp))
-            // รายการที่เห็นถูกกรองตามสาขานี้ (ดู ProjectListViewModel._billingBranchFilter) ต้องบอกให้
-            // เห็นตรงนี้ด้วย ไม่ใช่เฉพาะหน้า Home ไม่งั้นดูเหมือนโครงการหาย
-            com.example.pp68_salestrackingapp.ui.components.ActingBranchBanner(
-                modifier = Modifier.padding(bottom = 8.dp)
-            )
             val context = androidx.compose.ui.platform.LocalContext.current
             var hasDraft by remember { mutableStateOf(false) }
             val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
@@ -253,8 +248,13 @@ fun ProjectListContent(
                 ), singleLine = true
             )
             Spacer(Modifier.height(12.dp))
+            // รายการที่เห็นถูกกรองตามสาขานี้ (ดู ProjectListViewModel._billingBranchFilter) ต้องบอกให้
+            // เห็นตรงนี้ด้วย ไม่ใช่เฉพาะหน้า Home ไม่งั้นดูเหมือนโครงการหาย
+            com.example.pp68_salestrackingapp.ui.components.ActingBranchBanner(
+                modifier = Modifier.padding(bottom = 12.dp)
+            )
             Row(
-                modifier = Modifier.fillMaxWidth(), 
+                modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 val tabs = listOf("Active", "Closed", "Inactive")
