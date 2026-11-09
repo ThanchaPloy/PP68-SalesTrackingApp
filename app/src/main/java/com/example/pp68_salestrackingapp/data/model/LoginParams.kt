@@ -24,7 +24,10 @@ data class LoginResponse(
     @SerializedName("password_change_required") val passwordChangeRequired: Boolean = false,
     @SerializedName("phone_required") val phoneRequired: Boolean = false,
     @SerializedName("phone_notice_version") val phoneNoticeVersion: String? = null,
-    @SerializedName("server_time") val serverTime: String? = null
+    @SerializedName("server_time") val serverTime: String? = null,
+    // ภาคที่ผู้จัดการภาค (emp_type='ZM') ดูแล — null สำหรับทุก role อื่น ใช้กรอง dropdown เลือกสาขา
+    // ที่เปิดบิลในหน้าสร้างโครงการ (ดู AddProjectViewModel)
+    @SerializedName("managed_region") val managedRegion: String? = null
 )
 
 data class EmployeeResponseDto(

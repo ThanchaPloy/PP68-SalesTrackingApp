@@ -7,5 +7,6 @@ data class AuthUser(
     val teamId: String? = null,
     val fullName:   String? = null,
     val branchName: String? = null,
-    val empType:    String? = null
+    val empType:    String? = null,
+    val managedRegion: String? = null
 )

@@ -27,12 +27,15 @@ class AddProjectViewModelTest {
     private val branchRepo = mockk<BranchRepository>()
     private val apiService = mockk<ApiService>(relaxed = true)
     private val draftStore = mockk<com.example.pp68_salestrackingapp.utils.DraftStore>(relaxed = true)
+    private val tokenManager = mockk<com.example.pp68_salestrackingapp.di.TokenManager>(relaxed = true)
     private lateinit var viewModel: AddProjectViewModel
 
     @Before
     fun setup() {
         Dispatchers.setMain(testDispatcher)
         every { draftStore.load<Any>(any(), any()) } returns null
+        every { tokenManager.getManagedRegion() } returns null
+        every { tokenManager.getActingBranch() } returns null
 
         val user = AuthUser("USR-001", "test@test.com", "sale", "TS-001")
         every { authRepo.currentUser() } returns user
@@ -62,7 +65,7 @@ class AddProjectViewModelTest {
     }
 
     private fun initViewModel() {
-        viewModel = AddProjectViewModel(projectRepo, customerRepo, contactRepo, authRepo, branchRepo, apiService, draftStore)
+        viewModel = AddProjectViewModel(projectRepo, customerRepo, contactRepo, authRepo, branchRepo, apiService, draftStore, tokenManager)
     }
 
     // ฟอร์มสร้างโครงการใหม่ไม่เคยเรียก captureBaseline() เลย baseline จึงเป็นฟอร์มเปล่า —
@@ -277,6 +280,72 @@ class AddProjectViewModelTest {
         advanceUntilIdle()
 
         assertFalse(viewModel.uiState.value.isBillingBranchRequired)
+    }
+
+    @Test
+    fun `zone manager billing branch options are filtered to the region they manage`() = runTest {
+        every { authRepo.currentUser() } returns AuthUser("U1", "u@test.com", "ผู้จัดการภาค", "TS-001", empType = "ZM")
+        every { tokenManager.getManagedRegion() } returns "NORTH"
+        coEvery { branchRepo.getBranches() } returns Result.success(listOf(
+            Branch("N1", "เหนือ 1", "NORTH"),
+            Branch("N2", "เหนือ 2", "NORTH"),
+            Branch("S1", "ใต้ 1", "SOUTH")
+        ))
+
+        initViewModel()
+        advanceUntilIdle()
+
+        val options = viewModel.uiState.value.billingBranchOptions
+        assertEquals(2, options.size)
+        assertTrue(options.any { it.first == "N1" })
+        assertTrue(options.any { it.first == "N2" })
+        assertFalse(options.any { it.first == "S1" })
+    }
+
+    @Test
+    fun `zone manager not yet assigned a region sees every branch unfiltered`() = runTest {
+        every { authRepo.currentUser() } returns AuthUser("U1", "u@test.com", "ผู้จัดการภาค", "TS-001", empType = "ZM")
+        every { tokenManager.getManagedRegion() } returns null
+        coEvery { branchRepo.getBranches() } returns Result.success(listOf(
+            Branch("N1", "เหนือ 1", "NORTH"),
+            Branch("S1", "ใต้ 1", "SOUTH")
+        ))
+
+        initViewModel()
+        advanceUntilIdle()
+
+        assertEquals(2, viewModel.uiState.value.billingBranchOptions.size)
+    }
+
+    @Test
+    fun `new project prefills the billing branch last worked under`() = runTest {
+        every { authRepo.currentUser() } returns AuthUser("U1", "u@test.com", "ผู้จัดการภาค", "TS-001", empType = "ZM")
+        every { tokenManager.getManagedRegion() } returns "NORTH"
+        every { tokenManager.getActingBranch() } returns "N2"
+        coEvery { branchRepo.getBranches() } returns Result.success(listOf(
+            Branch("N1", "เหนือ 1", "NORTH"),
+            Branch("N2", "เหนือ 2", "NORTH")
+        ))
+
+        initViewModel()
+        advanceUntilIdle()
+
+        assertEquals("N2", viewModel.uiState.value.selectedBillingBranchId)
+        assertEquals("เหนือ 2", viewModel.uiState.value.selectedBillingBranchName)
+    }
+
+    @Test
+    fun `picking a billing branch remembers it as the acting branch for next time`() = runTest {
+        every { authRepo.currentUser() } returns AuthUser("U1", "u@test.com", "ผู้จัดการภาค", "TS-001", empType = "ZM")
+        every { tokenManager.getManagedRegion() } returns "NORTH"
+        coEvery { branchRepo.getBranches() } returns Result.success(listOf(Branch("N1", "เหนือ 1", "NORTH")))
+
+        initViewModel()
+        advanceUntilIdle()
+
+        viewModel.onEvent(AddProjectEvent.BillingBranchSelected("N1", "เหนือ 1"))
+
+        verify { tokenManager.saveActingBranch("N1") }
     }
 
     @Test

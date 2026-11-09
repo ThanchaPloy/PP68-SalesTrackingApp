@@ -120,6 +120,8 @@ fun SalesTrackingApp(initialSettingsScreen: String? = null) {
                 currentTab          = currentTab,
                 onTabChange         = { tab -> navigateToTab(navController, tab) }
             )
+            // ผู้จัดการภาค (ZM) ต้องเลือกสาขาที่ทำงานก่อนใช้งาน — role อื่นไม่เห็นอะไรเลย
+            com.example.pp68_salestrackingapp.ui.components.ActingBranchGate()
         }
 
         composable(Route.CreateActivity.path) {

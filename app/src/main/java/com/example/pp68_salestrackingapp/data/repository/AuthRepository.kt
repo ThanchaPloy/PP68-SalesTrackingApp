@@ -37,7 +37,11 @@ class AuthRepository @Inject constructor(
                     val finalFullName = loginResp.employee?.empName ?: loginResp.fullName
                     val finalRole = loginResp.employee?.empPost ?: loginResp.role ?: ""
                     val finalBranchId = loginResp.employee?.empBrchCode ?: loginResp.branchId ?: ""
-                    val finalEmpType = loginResp.employee?.empPost ?: loginResp.empType
+                    // ✅ bug เดิม: อ่าน empType จาก employee?.empPost (ชื่อตำแหน่งข้อความ ไม่ใช่
+                    // emp_type เลย — EmployeeResponseDto ไม่มีฟิลด์ empType ด้วยซ้ำ) รอดมาได้เพราะ
+                    // backend ไม่เคยส่ง employee object ติดมาจริง (ดู AuthDto.LoginResponse ฝั่ง backend)
+                    // แก้ให้อ่านจาก emp_type จริงเสมอ ก่อนที่ใครจะเผลอเพิ่ม employee object เข้าไป
+                    val finalEmpType = loginResp.empType
                     val pending = outboxSyncManager.pendingSummary()
                     val rejected = outboxSyncManager.rejectedSummary()
                     val conflicts = database.syncConflictDao().countAll()
@@ -65,7 +69,8 @@ class AuthRepository @Inject constructor(
                         teamId     = finalBranchId,
                         fullName   = finalFullName,
                         branchName = null,
-                        empType    = finalEmpType
+                        empType    = finalEmpType,
+                        managedRegion = loginResp.managedRegion
                     )
                     tokenManager.saveUserData(authUser)
                     tokenManager.saveLocalDataOwner(finalUserId)

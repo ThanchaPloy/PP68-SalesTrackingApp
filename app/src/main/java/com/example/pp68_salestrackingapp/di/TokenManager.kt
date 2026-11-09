@@ -88,6 +88,7 @@ class TokenManager @Inject constructor(
             putString("user_name",   user.fullName)
             putString("user_branch", user.branchName)
             putString("emp_type",    user.empType)
+            if (user.managedRegion == null) remove("managed_region") else putString("managed_region", user.managedRegion)
         }.apply()
     }
 
@@ -101,12 +102,27 @@ class TokenManager @Inject constructor(
             teamId     = prefs.getString("user_team",   null),
             fullName   = prefs.getString("user_name",   null),
             branchName = prefs.getString("user_branch", null),
-            empType    = prefs.getString("emp_type",    null)
+            empType    = prefs.getString("emp_type",    null),
+            managedRegion = prefs.getString("managed_region", null)
         )
     }
 
     // ดึงข้อมูล Emp ประเภท
     fun getEmpType(): String? = prefs.getString("emp_type", null)
+
+    /**
+     * ภาคที่ผู้จัดการภาค (ZM) ดูแล และสาขาที่กำลัง "ทำงานในนาม" อยู่ตอนนี้
+     *
+     * สาขาที่เลือกเป็นแค่ session preference ไม่ sync ขึ้น server — เลือก/เปลี่ยนได้ตลอด
+     * ไม่ผูกกับ login ครั้งไหน และต้อง clear ตอน logout/session expire เหมือน field อื่นในเซสชัน
+     */
+    fun getManagedRegion(): String? = prefs.getString("managed_region", null)
+
+    fun saveActingBranch(branchId: String) {
+        prefs.edit().putString("acting_branch_id", branchId).apply()
+    }
+
+    fun getActingBranch(): String? = prefs.getString("acting_branch_id", null)
 
     /**
      * เจ้าของข้อมูลที่ค้างอยู่ใน Room ขณะนี้ — ต้องอยู่รอดข้าม [clearToken] โดยตั้งใจ
@@ -140,6 +156,8 @@ class TokenManager @Inject constructor(
             remove("user_name")
             remove("user_branch")
             remove("emp_type")
+            remove("managed_region")
+            remove("acting_branch_id")
             remove("initial_setup_required")
             remove("initial_setup_phone_required")
             remove("initial_setup_notice_version")

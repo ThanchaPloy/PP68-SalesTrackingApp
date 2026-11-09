@@ -2,6 +2,7 @@ package com.example.pp68_salestrackingapp.data.repository
 
 import com.example.pp68_salestrackingapp.data.local.AppDatabase
 import com.example.pp68_salestrackingapp.data.model.AuthUser
+import com.example.pp68_salestrackingapp.data.model.EmployeeResponseDto
 import com.example.pp68_salestrackingapp.data.model.LoginResponse
 import com.example.pp68_salestrackingapp.data.model.InitialSetupInfo
 import com.example.pp68_salestrackingapp.data.model.SyncRejection
@@ -192,6 +193,58 @@ class AuthRepositoryLoginTest {
 
         assertTrue(confirmed.isSuccess)
         verify(exactly = 1) { database.clearAllTables() }
+    }
+
+    /**
+     * บั๊กเดิม: empType อ่านจาก employee?.empPost (ชื่อตำแหน่งข้อความ ไม่ใช่ emp_type — DTO นี้ไม่มี
+     * ฟิลด์ empType ด้วยซ้ำ) ถ้า backend เคยเริ่มส่ง employee object มา ZM ทุกคนจะมองไม่เห็นว่าตัวเอง
+     * เป็น ZM ทันที (isBillingBranchRequired ปิด) เพราะ emp_post เป็นข้อความอิสระจาก ERP ไม่เคยเท่ากับ
+     * "ZM" — ต้องอ่าน empType จาก LoginResponse.empType เสมอ ไม่ว่า employee object จะมากับ response
+     * หรือไม่ก็ตาม
+     */
+    @Test
+    fun `empType is read from the top-level field, never from the employee object's empPost`() = runTest {
+        every { tokenManager.getUserData() } returns null
+        every { tokenManager.getLocalDataOwner() } returns null
+        coEvery { authService.login(any()) } returns Response.success(
+            LoginResponse(
+                token = "jwt-123",
+                userId = "U1",
+                empType = "ZM",
+                employee = EmployeeResponseDto(
+                    empCode = "U1",
+                    empName = "ทดสอบ",
+                    empPostCode = null,
+                    empPost = "ผู้จัดการภาค",
+                    empBrchCode = null,
+                    empBrchName = null,
+                    branchName = null,
+                    region = null
+                )
+            )
+        )
+        val savedUser = slot<AuthUser>()
+        every { tokenManager.saveUserData(capture(savedUser)) } just Runs
+
+        val result = repo.login("u@test.com", "pw")
+
+        assertTrue(result.isSuccess)
+        assertTrue(savedUser.captured.empType == "ZM")
+    }
+
+    @Test
+    fun `managed_region from the server is saved onto the local session`() = runTest {
+        every { tokenManager.getUserData() } returns null
+        every { tokenManager.getLocalDataOwner() } returns null
+        coEvery { authService.login(any()) } returns Response.success(
+            LoginResponse(token = "jwt-123", userId = "U1", empType = "ZM", managedRegion = "NORTH")
+        )
+        val savedUser = slot<AuthUser>()
+        every { tokenManager.saveUserData(capture(savedUser)) } just Runs
+
+        repo.login("u@test.com", "pw")
+
+        assertTrue(savedUser.captured.managedRegion == "NORTH")
     }
 
     @Test

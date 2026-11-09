@@ -166,7 +166,8 @@ class AddProjectViewModel @Inject constructor(
     private val authRepo:     AuthRepository,
     private val branchRepo:   BranchRepository,
     private val apiService:   ApiService,
-    private val draftStore:   DraftStore
+    private val draftStore:   DraftStore,
+    private val tokenManager: com.example.pp68_salestrackingapp.di.TokenManager
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(AddProjectUiState())
@@ -278,27 +279,38 @@ class AddProjectViewModel @Inject constructor(
         _uiState.update { it.copy(isBillingBranchRequired = authRepo.currentUser()?.empType == "ZM") }
     }
 
+    // ผู้จัดการภาค (ZM) เลือกสาขาที่เปิดบิลได้เฉพาะในภาคที่ตัวเองดูแล — managedRegion เป็น null
+    // (role อื่น หรือ ZM ที่ยังไม่ถูกตั้งค่า) แปลว่าไม่กรอง ให้เห็นทุกสาขาเหมือนเดิม
+    private fun applyRegionFilterAndPrefill(branches: List<com.example.pp68_salestrackingapp.data.model.Branch>) {
+        val managedRegion = tokenManager.getManagedRegion()
+        val filtered = if (managedRegion == null) branches else branches.filter { it.region == managedRegion }
+        val options = filtered.map { b -> b.branchId to b.branchName }
+        _uiState.update { it.copy(billingBranchOptions = options, isLoadingBillingBranches = false) }
+
+        // พรีฟิลสาขาที่ทำงานอยู่ล่าสุด — เฉพาะตอนสร้างใหม่ (ยังไม่มีการเลือกใดๆ) โหมดแก้ไขจะเขียน
+        // ทับค่านี้อีกทีจาก LoadActivity ทีหลัง ไม่ชนกัน
+        val acting = tokenManager.getActingBranch()
+        if (acting != null && _uiState.value.selectedBillingBranchId == null) {
+            val match = filtered.find { it.branchId == acting }
+            if (match != null) {
+                _uiState.update {
+                    it.copy(selectedBillingBranchId = match.branchId, selectedBillingBranchName = match.branchName)
+                }
+            }
+        }
+    }
+
     private fun loadAllBillingBranches() {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoadingBillingBranches = true) }
             try {
                 val result = branchRepo.getBranches()
                 result.onSuccess { branches ->
-                    _uiState.update {
-                        it.copy(
-                            billingBranchOptions     = branches.map { b -> b.branchId to b.branchName },
-                            isLoadingBillingBranches = false
-                        )
-                    }
+                    applyRegionFilterAndPrefill(branches)
                 }.onFailure {
                     branchRepo.syncFromRemote()
                     val cached = branchRepo.observeBranches()
-                    _uiState.update {
-                        it.copy(
-                            billingBranchOptions     = cached.map { b -> b.branchId to b.branchName },
-                            isLoadingBillingBranches = false
-                        )
-                    }
+                    applyRegionFilterAndPrefill(cached)
                 }
             } catch (e: Exception) {
                 _uiState.update { it.copy(isLoadingBillingBranches = false) }
@@ -586,6 +598,9 @@ class AddProjectViewModel @Inject constructor(
                         billingBranchError        = null
                     )
                 }
+                // จำไว้เป็น "สาขาที่ทำงานอยู่ตอนนี้" — พรีฟิลให้เองตอนสร้างโครงการครั้งถัดไป
+                // (session preference ไม่ sync ขึ้น server ดู TokenManager.saveActingBranch)
+                tokenManager.saveActingBranch(event.id.trim())
             }
             is AddProjectEvent.LocationPicked ->
                 _uiState.update {
