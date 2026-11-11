@@ -6,10 +6,12 @@ import androidx.lifecycle.viewModelScope
 import com.example.pp68_salestrackingapp.data.remote.ApiService
 import com.example.pp68_salestrackingapp.data.repository.AuthRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
 data class EditProfileUiState(
@@ -104,7 +106,11 @@ class EditProfileViewModel @Inject constructor(
                     val updatedUser = user.copy(
                         fullName = _uiState.value.fullName.trim()
                     )
-                    authRepo.updateLocalUser(updatedUser)
+                    // updateLocalUser() เขียนดิสก์แบบ .commit() (synchronous) ตอนนี้ — ต้องสลับไป IO
+                    // thread ก่อน ไม่งั้นบล็อก UI thread ตรงนี้ซึ่งรันบน Main โดย default
+                    withContext(Dispatchers.IO) {
+                        authRepo.updateLocalUser(updatedUser)
+                    }
                     _uiState.update { it.copy(isLoading = false, isSaved = true) }
                 } else {
                     _uiState.update {

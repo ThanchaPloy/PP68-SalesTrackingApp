@@ -55,8 +55,12 @@ class TokenManager @Inject constructor(
     }
 
     // บันทึก โทเคน
+    // ⚠️ ต้อง .commit() ไม่ใช่ .apply() — apply() เขียนดิสก์แบบคิวเบื้องหลัง ปกติ Android รอให้เขียน
+    // เสร็จก่อน process ตายจริงผ่าน lifecycle ปกติ แต่บาง OEM (เช่น ColorOS) kill process ทันที
+    // ไม่ผ่าน lifecycle ปกติเวลาผู้ใช้ปัดแอปทิ้งเร็วๆ หลัง login — คิวที่ยังไม่ทันเขียนหายไปเลย
+    // ผลคือ getToken() อ่านได้ null ทั้งที่เพิ่ง login สำเร็จ ต้องบังคับ login ใหม่ทุกรอบ
     fun saveToken(token: String) {
-        prefs.edit().putString("jwt_token", token).apply()
+        prefs.edit().putString("jwt_token", token).commit()
     }
 
     // ดึงข้อมูล โทเคน
@@ -92,7 +96,7 @@ class TokenManager @Inject constructor(
             putString("user_branch", user.branchName)
             putString("emp_type",    user.empType)
             if (user.managedRegion == null) remove("managed_region") else putString("managed_region", user.managedRegion)
-        }.apply()
+        }.commit()
     }
 
     // ดึงข้อมูล ผู้ใช้ ข้อมูล
@@ -141,7 +145,7 @@ class TokenManager @Inject constructor(
      * = งานของคน A ไปติดชื่อคน B
      */
     fun saveLocalDataOwner(userId: String) {
-        prefs.edit().putString("local_data_owner", userId).apply()
+        prefs.edit().putString("local_data_owner", userId).commit()
     }
 
     // ดึงข้อมูล Local ข้อมูล เจ้าของ
