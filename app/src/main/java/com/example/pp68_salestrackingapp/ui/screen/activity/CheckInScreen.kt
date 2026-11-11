@@ -294,8 +294,14 @@ fun CheckInContent(
                             Column {
                                 Text("ตำแหน่งปัจจุบัน", fontSize = 12.sp, color = TextGray)
                                 Text(
-                                    if (currentLat != null && currentLng != null) "Lat: %.5f, Lng: %.5f".format(currentLat, currentLng)
-                                    else "กำลังค้นหาตำแหน่ง...",
+                                    when {
+                                        currentLat != null && currentLng != null -> "Lat: %.5f, Lng: %.5f".format(currentLat, currentLng)
+                                        // ข้อความเดิมเขียนว่า "กำลังค้นหา..." แม้ตอนที่หาไม่สำเร็จแล้วก็ตาม
+                                        // (ด้านบนมีข้อความ error + ปุ่มลองใหม่อยู่แล้ว) ทำให้ดูเหมือนค้างโหลด
+                                        // ทั้งที่จริง fail ไปแล้ว ต้องแยกให้ตรงกับสถานะจริงเหมือนโซนแผนที่
+                                        locationError -> "หาตำแหน่งไม่สำเร็จ"
+                                        else -> "กำลังค้นหาตำแหน่ง..."
+                                    },
                                     fontSize = 14.sp, fontWeight = FontWeight.Medium, color = TextDark
                                 )
                             }
