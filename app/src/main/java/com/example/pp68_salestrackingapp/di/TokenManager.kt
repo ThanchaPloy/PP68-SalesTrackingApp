@@ -36,7 +36,9 @@ class TokenManager @Inject constructor(
         // Setup password fields are deliberately memory-only. If the process dies halfway through,
         // discard the short-lived setup session and require a fresh login.
         if (prefs.getBoolean("initial_setup_required", false)) {
-            if (hadTokenBefore) diagnostics.record("force_relogin", mapOf("reason" to "initial_setup_required"), flush = true)
+            if (hadTokenBefore) {
+                runCatching { diagnostics.record("force_relogin", mapOf("reason" to "initial_setup_required"), flush = true) }
+            }
             clearToken()
         }
     }
@@ -48,11 +50,13 @@ class TokenManager @Inject constructor(
             val currentVersion = com.example.pp68_salestrackingapp.BuildConfig.VERSION_CODE
 
             if (lastVersion != currentVersion) {
-                diagnostics.record(
-                    "force_relogin",
-                    mapOf("reason" to "version_mismatch:$lastVersion->$currentVersion"),
-                    flush = true
-                )
+                runCatching {
+                    diagnostics.record(
+                        "force_relogin",
+                        mapOf("reason" to "version_mismatch:$lastVersion->$currentVersion"),
+                        flush = true
+                    )
+                }
                 // ✅ APK มีการอัปเดตเวอร์ชันใหม่ -> เคลียร์ Session ให้บังคับผู้ใช้ Login ใหม่
                 clearToken()
                 // ⚠️ ใช้ .commit() แทน .apply() เพื่อบังคับเซฟลง Disk ทันที
@@ -64,8 +68,11 @@ class TokenManager @Inject constructor(
             // (NullPointerException จาก property ที่ยัง initialize ไม่ถึง ทำให้โค้ดด้านบนหยุด
             // กลางคันก่อนจะเขียน last_installed_version_code สำเร็จ ทุกเปิดแอปเลยเจอ "เวอร์ชัน
             // ไม่ตรง" ซ้ำไม่รู้จบ กว่าจะรู้ก็ไล่ดูหลายรอบ) เก็บแค่ชนิด exception ไม่เอา message/stack
-            // เพราะไฟล์นี้ออกนอกเครื่อง
-            diagnostics.record("force_relogin_check_failed", mapOf("reason" to (e::class.simpleName ?: "unknown")), flush = true)
+            // เพราะไฟล์นี้ออกนอกเครื่อง — ครอบด้วย runCatching เองด้วย กัน diagnostics พังซ้ำแล้ว
+            // หลุดออกจาก init{} ของ singleton ตัวนี้ (= แอปแครชตั้งแต่เปิด ไม่ใช่แค่ไม่บันทึก log)
+            runCatching {
+                diagnostics.record("force_relogin_check_failed", mapOf("reason" to (e::class.simpleName ?: "unknown")), flush = true)
+            }
         }
     }
 
