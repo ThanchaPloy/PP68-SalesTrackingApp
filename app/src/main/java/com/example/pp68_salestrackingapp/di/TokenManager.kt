@@ -16,15 +16,23 @@ import javax.inject.Singleton
 
 @Singleton
 class TokenManager @Inject constructor(
-    @ApplicationContext context: Context
+    @ApplicationContext context: Context,
+    private val diagnostics: com.example.pp68_salestrackingapp.utils.SyncDiagnostics
 ) {
     private val prefs: SharedPreferences = context.getSharedPreferences("sales_prefs", Context.MODE_PRIVATE)
 
     init {
+        // ชั่วคราว: กำลังไล่บั๊ก "ต้อง login ใหม่ทุกรอบที่เปิดแอป" — ไม่รู้ว่า clearToken() ตรงนี้
+        // ถูกเรียกจริงไหม/เพราะเหตุผลไหน ถ้าไม่เจอใน diagnostics export รอบหน้า แปลว่าปัญหา
+        // ไม่ได้อยู่ที่ init block นี้เลย ตัดทิ้งไปหาที่อื่นต่อได้เลย
+        val hadTokenBefore = prefs.getString("jwt_token", null) != null
         checkAppVersionAndForceRelogin()
         // Setup password fields are deliberately memory-only. If the process dies halfway through,
         // discard the short-lived setup session and require a fresh login.
-        if (prefs.getBoolean("initial_setup_required", false)) clearToken()
+        if (prefs.getBoolean("initial_setup_required", false)) {
+            if (hadTokenBefore) diagnostics.record("force_relogin", mapOf("reason" to "initial_setup_required"), flush = true)
+            clearToken()
+        }
     }
 
     // ตรวจสอบ App เวอร์ชัน And Force Relogin
@@ -34,6 +42,12 @@ class TokenManager @Inject constructor(
             val currentVersion = com.example.pp68_salestrackingapp.BuildConfig.VERSION_CODE
 
             if (lastVersion != currentVersion) {
+                // ชั่วคราว: ดูว่า mismatch นี้เกิดซ้ำทุกรอบไหม (ควรเกิดแค่ครั้งเดียวต่อการอัปเดต)
+                diagnostics.record(
+                    "force_relogin",
+                    mapOf("reason" to "version_mismatch:$lastVersion->$currentVersion"),
+                    flush = true
+                )
                 // ✅ APK มีการอัปเดตเวอร์ชันใหม่ -> เคลียร์ Session ให้บังคับผู้ใช้ Login ใหม่
                 clearToken()
                 // ⚠️ ใช้ .commit() แทน .apply() เพื่อบังคับเซฟลง Disk ทันที

@@ -90,7 +90,9 @@ class SyncDiagnostics @Inject constructor(
             "failure_type", "json_path",
             // UUID ที่ backend สร้าง/ตอบกลับทุก response (install(CallId) ใน HTTP.kt) — เอาไป
             // grep หาบรรทัด log ฝั่ง server ที่ตรงกับ error นี้ได้ตรงเป๊ะ ไม่ต้องเดาจากเวลา
-            "request_id"
+            "request_id",
+            // เหตุผลที่ TokenManager สั่ง clearToken() เอง (ไล่บั๊ก "login ทุกรอบที่เปิดแอป")
+            "reason"
         )
     }
 }
