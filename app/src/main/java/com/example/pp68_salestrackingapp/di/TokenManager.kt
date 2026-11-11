@@ -21,10 +21,16 @@ class TokenManager @Inject constructor(
 ) {
     private val prefs: SharedPreferences = context.getSharedPreferences("sales_prefs", Context.MODE_PRIVATE)
 
+    // ⚠️ ต้องอยู่ "ก่อน" init{} ด้านล่าง — Kotlin รัน property initializer กับ init{} ตามลำดับที่
+    // เขียนในไฟล์ ถ้า property นี้อยู่หลัง init{} จะยังเป็น null ตอน init{} เรียก clearToken() ซึ่ง
+    // แตะ _actingBranch.value แล้ว throw NullPointerException กลางทาง ถูก catch(Exception) ของ
+    // checkAppVersionAndForceRelogin() กลืนเงียบๆ พอดีก่อนถึงบรรทัดเขียน last_installed_version_code
+    // ผลคือเลขเวอร์ชันไม่เคยถูกบันทึกสำเร็จเลยสักครั้ง ทุกเปิดแอปจึงเจอ "เวอร์ชันไม่ตรง" ซ้ำไม่รู้จบ
+    // และโดน clearToken() ลบ token ทุกรอบ (บั๊ก "ต้อง login ใหม่ทุกครั้งที่เปิดแอป")
+    private val _actingBranch = MutableStateFlow(prefs.getString("acting_branch_id", null))
+    val actingBranch: StateFlow<String?> = _actingBranch.asStateFlow()
+
     init {
-        // ชั่วคราว: กำลังไล่บั๊ก "ต้อง login ใหม่ทุกรอบที่เปิดแอป" — ไม่รู้ว่า clearToken() ตรงนี้
-        // ถูกเรียกจริงไหม/เพราะเหตุผลไหน ถ้าไม่เจอใน diagnostics export รอบหน้า แปลว่าปัญหา
-        // ไม่ได้อยู่ที่ init block นี้เลย ตัดทิ้งไปหาที่อื่นต่อได้เลย
         val hadTokenBefore = prefs.getString("jwt_token", null) != null
         checkAppVersionAndForceRelogin()
         // Setup password fields are deliberately memory-only. If the process dies halfway through,
@@ -42,7 +48,6 @@ class TokenManager @Inject constructor(
             val currentVersion = com.example.pp68_salestrackingapp.BuildConfig.VERSION_CODE
 
             if (lastVersion != currentVersion) {
-                // ชั่วคราว: ดูว่า mismatch นี้เกิดซ้ำทุกรอบไหม (ควรเกิดแค่ครั้งเดียวต่อการอัปเดต)
                 diagnostics.record(
                     "force_relogin",
                     mapOf("reason" to "version_mismatch:$lastVersion->$currentVersion"),
@@ -54,7 +59,14 @@ class TokenManager @Inject constructor(
                 // ป้องกันปัญหา "ปัดแอปออกแล้วเซฟไม่ทัน" ทำให้มันเคลียร์ Token ซ้ำในรอบหน้า
                 prefs.edit().putInt("last_installed_version_code", currentVersion).commit()
             }
-        } catch (_: Exception) {}
+        } catch (e: Exception) {
+            // ⚠️ ห้ามกลืนเงียบแบบไม่เหลือร่องรอย — บั๊กจริงเคยซ่อนอยู่หลัง catch นี้พอดี
+            // (NullPointerException จาก property ที่ยัง initialize ไม่ถึง ทำให้โค้ดด้านบนหยุด
+            // กลางคันก่อนจะเขียน last_installed_version_code สำเร็จ ทุกเปิดแอปเลยเจอ "เวอร์ชัน
+            // ไม่ตรง" ซ้ำไม่รู้จบ กว่าจะรู้ก็ไล่ดูหลายรอบ) เก็บแค่ชนิด exception ไม่เอา message/stack
+            // เพราะไฟล์นี้ออกนอกเครื่อง
+            diagnostics.record("force_relogin_check_failed", mapOf("reason" to (e::class.simpleName ?: "unknown")), flush = true)
+        }
     }
 
     // ✅ ยิง event เมื่อ token หมดอายุ/ไม่ถูกต้อง (401 จาก endpoint ที่ต้อง auth) — ให้ NavGraph
@@ -139,11 +151,6 @@ class TokenManager @Inject constructor(
      */
     fun getManagedRegion(): String? = prefs.getString("managed_region", null)
 
-    // reactive เพราะต้องมีหลายที่ฟังพร้อมกัน (หน้า Home, หน้าตั้งค่า, dropdown สร้างโครงการ,
-    // ตัวกรองรายการโครงการ) — SharedPreferences อย่างเดียวไม่แจ้งใครเลยเวลาค่าเปลี่ยนจากอีกหน้า
-    private val _actingBranch = MutableStateFlow(prefs.getString("acting_branch_id", null))
-    val actingBranch: StateFlow<String?> = _actingBranch.asStateFlow()
-
     fun saveActingBranch(branchId: String) {
         prefs.edit().putString("acting_branch_id", branchId).apply()
         _actingBranch.value = branchId
@@ -171,6 +178,11 @@ class TokenManager @Inject constructor(
     }
 
     // ล้าง โทเคน
+    // ⚠️ ต้อง .commit() ไม่ใช่ .apply() — checkAppVersionAndForceRelogin() เรียก clearToken()
+    // แล้วเขียน last_installed_version_code ต่อทันทีด้วย .commit() (synchronous) ถ้า clearToken()
+    // ยังเขียนแบบ .apply() (คิวพื้นหลัง, asynchronous) การเขียนที่คิวไว้อาจเสร็จ "ช้ากว่า" แล้วทับ
+    // ไฟล์ด้วย snapshot เก่าที่ยังไม่รู้จักเลขเวอร์ชันใหม่ ลบเลขเวอร์ชันที่เพิ่งเขียนไปทิ้ง ทำให้
+    // อ่านได้ -1 ทุกรอบถัดไป กลายเป็นบังคับ login ใหม่ซ้ำไม่รู้จบ ทั้งที่ควรเกิดแค่ครั้งเดียว
     fun clearToken() {
         prefs.edit().apply {
             remove("jwt_token")
@@ -186,7 +198,7 @@ class TokenManager @Inject constructor(
             remove("initial_setup_required")
             remove("initial_setup_phone_required")
             remove("initial_setup_notice_version")
-        }.apply()
+        }.commit()
         _actingBranch.value = null
     }
 
